@@ -2,12 +2,14 @@ import { parseHex } from './raw.js';
 import type { RawImage } from './raw.js';
 
 /**
- * DORMANT ON RETRO DIFFUSION, and deliberately kept.
+ * RUNS ON EVERY PROVIDER, including Retro Diffusion.
  *
- * RD applies the master palette server-side via `input_palette`, so the RD path only ever
- * *measures* drift (see palette.ts). This module is the transform-mode counterpart, selected
- * by `supportsPaletteInput: false` — it is exactly what the OpenAI fallback adapter needs on
- * the day RD is deprecated. Deleting it as dead code makes provider death expensive.
+ * This was documented as dormant on RD, on the theory that `input_palette` is applied
+ * server-side and therefore exactly. The first real generation run disproved it: RD lands
+ * within 1/255 of the palette — every drifted colour was exactly -1 in the red channel —
+ * which is close enough to look correct and far enough to fail an exact-match gate. See the
+ * note in cook.ts. It remains the transform-mode workhorse the OpenAI fallback adapter will
+ * need on the day RD is deprecated, and is now load-bearing on the RD path as well.
  *
  * Nearest-colour matching happens in Oklab rather than RGB because RGB distance disagrees
  * with human vision badly enough to swap a sprite's shading ramp for its highlight.

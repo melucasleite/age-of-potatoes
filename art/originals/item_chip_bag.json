@@ -1,9 +1,9 @@
 {
-  "id": "placeholder_item_potato",
+  "id": "item_chip_bag",
   "provider": "retro-diffusion",
   "model": "rd_fast",
-  "seed": 1708768916,
-  "prompt": "a single raw potato, top-down game item icon, chunky readable silhouette, warm earthy tones, no text",
+  "seed": 1047162753,
+  "prompt": "a sealed foil bag of potato chips, game inventory item icon, red and gold bag with crimped top edge, chunky readable silhouette, transparent background, no label, no text",
   "promptStyle": "rd_fast__default",
   "native": {
     "width": 16,
@@ -16,9 +16,9 @@
   "removeBg": true,
   "tileX": false,
   "tileY": false,
-  "palette": "palette/placeholder.json",
+  "palette": "palette/master.json",
   "anchor": "center",
   "atlasGroup": "items",
   "costUsd": 0.017,
-  "generatedAt": "2026-08-12T18:27:07.050Z"
+  "generatedAt": "2026-08-12T19:02:03.273Z"
 }

@@ -1,0 +1,24 @@
+{
+  "id": "status_lamp",
+  "provider": "local",
+  "model": "local:local/status_lamp.png",
+  "seed": null,
+  "prompt": "One 4x4 status lamp, authored from the master palette by art/tools/make-status-lamp.mjs and tinted per state in code. Plan §13: one sprite multiplied by a lamp colour beats five sprites, and it is the only way thirty machines animate state for the cost of one frame.",
+  "promptStyle": null,
+  "native": {
+    "width": 4,
+    "height": 4
+  },
+  "requested": {
+    "width": 4,
+    "height": 4
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "status",
+  "costUsd": 0,
+  "generatedAt": "2026-08-12T19:02:03.273Z"
+}

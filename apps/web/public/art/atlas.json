@@ -1,9 +1,31 @@
 {
   "frames": {
-    "placeholder_item_potato": {
+    "crop_potato_strip": {
       "frame": {
         "x": 0,
         "y": 0,
+        "w": 64,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "crops"
+    },
+    "item_chip_bag": {
+      "frame": {
+        "x": 0,
+        "y": 17,
         "w": 16,
         "h": 16
       },
@@ -22,9 +44,9 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "placeholder_local_crate": {
+    "item_potato": {
       "frame": {
-        "x": 0,
+        "x": 17,
         "y": 17,
         "w": 16,
         "h": 16
@@ -41,8 +63,184 @@
         "w": 16,
         "h": 16
       },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "machine_chip_kitchen": {
+      "frame": {
+        "x": 0,
+        "y": 34,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
       "anchorMode": "bottom-center",
-      "group": "world"
+      "group": "machines"
+    },
+    "machine_sprinkler": {
+      "frame": {
+        "x": 33,
+        "y": 34,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "player_walk_down": {
+      "frame": {
+        "x": 0,
+        "y": 67,
+        "w": 32,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "player"
+    },
+    "player_walk_side": {
+      "frame": {
+        "x": 33,
+        "y": 67,
+        "w": 32,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "player"
+    },
+    "status_lamp": {
+      "frame": {
+        "x": 0,
+        "y": 84,
+        "w": 4,
+        "h": 4
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "sourceSize": {
+        "w": 4,
+        "h": 4
+      },
+      "anchorMode": "center",
+      "group": "status"
+    },
+    "terrain_grass": {
+      "frame": {
+        "x": 0,
+        "y": 89,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "terrain"
+    },
+    "terrain_soil": {
+      "frame": {
+        "x": 17,
+        "y": 89,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "terrain"
+    },
+    "terrain_soil_tilled": {
+      "frame": {
+        "x": 34,
+        "y": 89,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "terrain"
     }
   },
   "meta": {
@@ -50,26 +248,58 @@
     "image": "atlas.png",
     "format": "RGBA8888",
     "size": {
-      "w": 16,
-      "h": 64
+      "w": 128,
+      "h": 128
     },
     "scale": "1",
     "groups": [
       {
-        "group": "items",
+        "group": "crops",
         "x": 0,
         "y": 0,
-        "width": 16,
+        "width": 64,
         "height": 16,
         "count": 1
       },
       {
-        "group": "world",
+        "group": "items",
         "x": 0,
         "y": 17,
-        "width": 16,
+        "width": 33,
         "height": 16,
+        "count": 2
+      },
+      {
+        "group": "machines",
+        "x": 0,
+        "y": 34,
+        "width": 49,
+        "height": 32,
+        "count": 2
+      },
+      {
+        "group": "player",
+        "x": 0,
+        "y": 67,
+        "width": 65,
+        "height": 16,
+        "count": 2
+      },
+      {
+        "group": "status",
+        "x": 0,
+        "y": 84,
+        "width": 4,
+        "height": 4,
         "count": 1
+      },
+      {
+        "group": "terrain",
+        "x": 0,
+        "y": 89,
+        "width": 50,
+        "height": 16,
+        "count": 3
       }
     ]
   }

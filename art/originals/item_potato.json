@@ -1,0 +1,24 @@
+{
+  "id": "item_potato",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1507126622,
+  "prompt": "a single raw potato tuber, lumpy oval shape with rough earthy brown skin and a few dark eye spots, clearly a raw potato and not bread or a bun, brown not golden, game inventory item icon, chunky readable silhouette, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T19:22:25.830Z"
+}

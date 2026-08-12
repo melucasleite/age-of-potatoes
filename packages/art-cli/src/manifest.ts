@@ -21,6 +21,13 @@ export interface AssetEntry {
   tileY?: boolean;
   /** Provider-side background removal. Defaults to true; the point of skipping the magenta sentinel. */
   removeBg?: boolean;
+  /**
+   * Trim to opaque bounds and re-pad by anchor. Defaults to true, which is right for a lone
+   * sprite and *wrong* for a multi-frame strip: trimming a 4-stage crop strip to its overall
+   * bounding box slides every stage off its 16px cell, which is precisely the incoherence
+   * generating the strip in one call was meant to avoid. Set false on any strip.
+   */
+  trim?: boolean;
   /** `provider: "local"` only — path to a hand-authored PNG, relative to art/. */
   source?: string;
 }
@@ -83,6 +90,7 @@ function parseEntry(raw: unknown, index: number): AssetEntry {
   if (typeof entry.tileX === 'boolean') parsed.tileX = entry.tileX;
   if (typeof entry.tileY === 'boolean') parsed.tileY = entry.tileY;
   if (typeof entry.removeBg === 'boolean') parsed.removeBg = entry.removeBg;
+  if (typeof entry.trim === 'boolean') parsed.trim = entry.trim;
   if (typeof entry.source === 'string') parsed.source = entry.source;
 
   if (provider === 'local' && !parsed.source) {

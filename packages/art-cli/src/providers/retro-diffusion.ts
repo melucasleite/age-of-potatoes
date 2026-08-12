@@ -99,6 +99,17 @@ export function createRetroDiffusionAdapter(): ProviderAdapter {
       const { entry, palette, dryRun } = request;
       assertNativeSize(entry, CAPABILITIES);
 
+      // Work item 005: a palette you can forget to pass is a palette that drifts. The whole
+      // consistency strategy rests on `input_palette` going out on every call forever, so a
+      // missing one is a hard refusal rather than a quietly unconstrained generation.
+      if (!palette || palette.length === 0) {
+        throw new Error(
+          `Refusing to generate "${entry.id}" with no input_palette. Point "palette" in ` +
+            `art/manifest.json at art/palette/master.json — generating without it produces ` +
+            `off-palette art that the gate will reject anyway.`,
+        );
+      }
+
       const plan = planSize(entry.width, entry.height);
       if (plan.width > MAX_DIMENSION || plan.height > MAX_DIMENSION) {
         throw new Error(

@@ -1,0 +1,24 @@
+{
+  "id": "terrain_grass",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 630297555,
+  "prompt": "seamless top-down ground tile of short warm green grass, small tufts and clumps, flat even lighting, no objects, no shadows, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": false,
+  "tileX": true,
+  "tileY": true,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "terrain",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T18:43:45.080Z"
+}

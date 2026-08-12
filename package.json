@@ -10,13 +10,15 @@
   "scripts": {
     "dev": "yarn workspace @snack/web dev",
     "build": "yarn workspace @snack/web build",
-    "typecheck": "tsc --build --verbose",
+    "typecheck": "tsc --build --verbose && tsc -p packages/sim/tsconfig.test.json",
     "lint": "yarn workspace @snack/sim lint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "goldens:regen": "node --import ./packages/sim/scripts/node-resolve-hook.mjs ./packages/sim/scripts/regen-goldens.ts",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css}\"",
-    "art": "yarn workspace @snack/art-cli art"
+    "art": "yarn workspace @snack/art-cli art",
+    "art:verify": "node art/tools/verify-palette.mjs"
   },
   "devDependencies": {
     "prettier": "3.9.6",

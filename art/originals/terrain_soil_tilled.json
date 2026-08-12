@@ -1,0 +1,24 @@
+{
+  "id": "terrain_soil_tilled",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 95569839,
+  "prompt": "seamless top-down ground tile of freshly tilled farm soil, dark damp earth raked into straight parallel plough furrows, flat even lighting, no plants, no shadows, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": false,
+  "tileX": true,
+  "tileY": true,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "terrain",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T18:47:23.606Z"
+}

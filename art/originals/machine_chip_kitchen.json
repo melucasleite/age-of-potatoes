@@ -1,0 +1,24 @@
+{
+  "id": "machine_chip_kitchen",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 131637446,
+  "prompt": "a small chip frying kitchen machine, squat metal cabinet in a rustic wooden frame, a funnel hopper on top for potatoes and an open chute at the front, warm farm workshop equipment, low three-quarter view, chunky readable silhouette, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T18:50:51.277Z"
+}

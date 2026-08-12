@@ -1,0 +1,24 @@
+{
+  "id": "player_walk_down",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 886411752,
+  "prompt": "two walk frames of the same farmer character side by side, left to right, both facing the viewer, chunky simple body, wide straw hat, brown overalls, arms at sides, the legs swapped between the two frames, identical character and colours in both frames, evenly spaced in two equal cells, feet on the bottom edge, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 16
+  },
+  "requested": {
+    "width": 128,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "player",
+  "costUsd": 0.018,
+  "generatedAt": "2026-08-12T18:55:46.507Z"
+}

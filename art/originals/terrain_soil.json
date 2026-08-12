@@ -1,0 +1,24 @@
+{
+  "id": "terrain_soil",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1788952707,
+  "prompt": "seamless tiling texture of plain medium brown farm dirt, flat desaturated earth brown like the colour of dry topsoil, subtle slightly darker brown speckles only, no red tones, no maroon, no rust, no orange, no pale washed out patches, uniform coverage edge to edge, perfectly flat even lighting, no vignette, no darkening at the edges, no plants, no objects, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": false,
+  "tileX": true,
+  "tileY": true,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "terrain",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T19:31:43.460Z"
+}
