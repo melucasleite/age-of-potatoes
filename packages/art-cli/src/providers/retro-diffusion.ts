@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { requireSecret } from '../env.js';
+import { GENERATION_TIMEOUT_MS, HttpTransportError, QUOTE_TIMEOUT_MS, postJson } from './http.js';
 import { assertNativeSize } from './types.js';
 import type {
   GenerateRequest,
@@ -11,6 +12,39 @@ import type {
 const ENDPOINT = 'https://api.retrodiffusion.ai/v1/inferences';
 const TOKEN_VAR = 'RETRODIFFUSION_API_KEY';
 const DEFAULT_STYLE = 'rd_fast__default';
+
+/**
+ * Transport attempts per asset, including the first. Two, not five.
+ *
+ * A retry is not free: the provider bills per accepted request, so every attempt after a
+ * failure that reached them is another charge. The reason to retry at all is that the
+ * first charge has *already happened* and the asset is otherwise simply lost — at $0.017
+ * on `rd_fast` a second attempt is the cheapest possible way to end up owning something.
+ * That argument does not extend to a third and fourth attempt, which is why the default
+ * is small and `--retries` exists for the operator who disagrees.
+ */
+export const DEFAULT_ATTEMPTS = 2;
+
+/**
+ * A generation that failed at the transport, after the provider had the job.
+ *
+ * Kept distinct from every other error in this file because it is the only one where the
+ * operator's next question is about their bank balance rather than their prompt. `billed`
+ * is deliberately named as a risk, not a fact: RD exposes no way to check (`/v1/history`,
+ * `/v1/jobs`, `/v1/results` all 404), so "we cannot know, assume yes" is the honest state.
+ */
+export class GenerationLostError extends Error {
+  constructor(
+    message: string,
+    readonly assetId: string,
+    readonly seed: number,
+    readonly billed: boolean,
+    override readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = 'GenerationLostError';
+  }
+}
 
 /**
  * RD Plus/Fast cap at 384px and Pro at 256px. 384 is the ceiling this adapter enforces;
@@ -97,6 +131,7 @@ export function createRetroDiffusionAdapter(): ProviderAdapter {
 
     async generate(request: GenerateRequest): Promise<GenerateResult> {
       const { entry, palette, dryRun } = request;
+      const attempts = Math.max(1, request.attempts ?? DEFAULT_ATTEMPTS);
       assertNativeSize(entry, CAPABILITIES);
 
       // Work item 005: a palette you can forget to pass is a palette that drifts. The whole
@@ -123,7 +158,13 @@ export function createRetroDiffusionAdapter(): ProviderAdapter {
       const promptStyle = entry.promptStyle ?? DEFAULT_STYLE;
       // A seed is always recorded, even when the manifest declares none — without one,
       // "regenerate this one slightly warmer" is a coin flip rather than an edit.
-      const seed = entry.seed ?? Math.floor(Math.random() * 2 ** 31);
+      //
+      // It is also chosen ONCE, out here, above the retry loop. That placement is the
+      // whole retry-safety argument: generation is byte-deterministic on seed, so a retry
+      // carrying the same seed re-requests the exact image the lost attempt was billed
+      // for. A seed rolled inside the loop would turn a duplicate charge into a duplicate
+      // charge for a *different* picture, which is strictly worse than not retrying.
+      const seed = request.seed ?? entry.seed ?? Math.floor(Math.random() * 2 ** 31);
 
       const body: Record<string, unknown> = {
         prompt: entry.prompt,
@@ -140,14 +181,64 @@ export function createRetroDiffusionAdapter(): ProviderAdapter {
       if (dryRun) body.check_cost = true;
       if (palette && palette.length > 0) body.input_palette = await encodePalette(palette);
 
-      const response = await fetch(ENDPOINT, {
-        method: 'POST',
-        headers: { 'X-RD-Token': token, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const payloadJson = JSON.stringify(body);
+      const timeoutMs = dryRun ? QUOTE_TIMEOUT_MS : GENERATION_TIMEOUT_MS;
+      let response: { status: number; body: string } | null = null;
+      let lastTransportError: HttpTransportError | null = null;
 
-      if (!response.ok) {
-        const detail = (await response.text()).slice(0, 500);
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+          response = await postJson(ENDPOINT, payloadJson, { 'X-RD-Token': token }, timeoutMs);
+          break;
+        } catch (error) {
+          if (!(error instanceof HttpTransportError)) throw error;
+          lastTransportError = error;
+          const billed = !dryRun && error.mayHaveBeenBilled;
+          if (attempt < attempts) {
+            console.warn(
+              `  retry ${entry.id.padEnd(24)} attempt ${attempt} failed at ` +
+                `${error.phase}: ${error.message}\n` +
+                `        ${
+                  billed
+                    ? 'the provider had the job, so that attempt was probably charged. Retrying ' +
+                      `with the SAME seed (${seed}) so the duplicate charge at least returns the ` +
+                      'image it paid for.'
+                    : 'nothing was charged — the request never reached the provider. Retrying.'
+                }`,
+            );
+            continue;
+          }
+          throw new GenerationLostError(
+            `Retro Diffusion transport failed for "${entry.id}" after ${attempts} attempt(s), ` +
+              `last failure at ${error.phase}: ${error.message}\n` +
+              (billed
+                ? `  MONEY: the request reached the provider, so this generation was very likely ` +
+                  `BILLED and the image is gone — RD has no history or results endpoint to ` +
+                  `recover it from. Re-run with --only=${entry.id} to buy it again; the seed is ` +
+                  `${seed} and generation is deterministic, so you will get the same picture.`
+                : `  MONEY: nothing was charged — the request never reached the provider.`),
+            entry.id,
+            seed,
+            billed,
+            error,
+          );
+        }
+      }
+
+      if (response === null) {
+        // Unreachable: the loop either breaks with a response or throws. Belt and braces
+        // so a future edit to the loop cannot silently produce a null-image "success".
+        throw new GenerationLostError(
+          `Retro Diffusion produced no response for "${entry.id}".`,
+          entry.id,
+          seed,
+          false,
+          lastTransportError,
+        );
+      }
+
+      if (response.status < 200 || response.status >= 300) {
+        const detail = response.body.slice(0, 500);
         throw new Error(
           `Retro Diffusion returned ${response.status} for "${entry.id}" at ` +
             `${plan.width}x${plan.height}: ${detail}\n` +
@@ -156,7 +247,7 @@ export function createRetroDiffusionAdapter(): ProviderAdapter {
         );
       }
 
-      const payload = (await response.json()) as RetroDiffusionResponse;
+      const payload = JSON.parse(response.body) as RetroDiffusionResponse;
       const images = (payload.base64_images ?? []).map((b64) => Buffer.from(b64, 'base64'));
 
       if (!dryRun && images.length === 0) {

@@ -25,6 +25,21 @@ export interface GenerateRequest {
   palette: readonly string[] | null;
   /** Maps to `check_cost: true` — the request is priced, nothing is spent, no image returns. */
   dryRun: boolean;
+  /**
+   * Overrides both the manifest's seed and the adapter's default random one.
+   *
+   * This is what `--reroll` is made of, and it exists because **generation is
+   * byte-deterministic on seed** (measured, work item 048): same prompt + style + seed +
+   * size returns the identical PNG. So re-running `gen --force` on an unchanged entry pays
+   * full price to receive a file it already has, and "give me a different take" is
+   * expressible *only* as a different seed.
+   */
+  seed?: number;
+  /**
+   * Transport attempts, including the first. Only transport failures are retried — an HTTP
+   * error is a deterministic answer and repeating it just costs more.
+   */
+  attempts?: number;
 }
 
 export interface GenerateResult {

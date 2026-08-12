@@ -4,6 +4,7 @@ import { numberOption, usd } from '../args.js';
 import { loadManifest, resolveArtPath } from '../manifest.js';
 import { loadPalette } from '../post/palette.js';
 import { getAdapter } from '../providers/index.js';
+import { DEFAULT_ATTEMPTS, GenerationLostError } from '../providers/retro-diffusion.js';
 import { ORIGINALS_DIR } from '../paths.js';
 import type { Args } from '../args.js';
 import type { AssetEntry } from '../manifest.js';
@@ -25,9 +26,12 @@ function originalPath(id: string): string {
 
 export async function gen(args: Args): Promise<number> {
   const dryRun = args.flags.has('dry-run');
-  const force = args.flags.has('force');
+  // A reroll is a regeneration by definition, so it implies --force rather than needing it.
+  const reroll = args.flags.has('reroll');
+  const force = args.flags.has('force') || reroll;
   const confirmed = args.flags.has('confirm');
   const maxSpend = numberOption(args, 'max-spend', DEFAULT_MAX_SPEND);
+  const attempts = Math.max(1, numberOption(args, 'retries', DEFAULT_ATTEMPTS - 1) + 1);
   const only = args.options.get('only');
 
   const manifest = loadManifest();
@@ -38,6 +42,15 @@ export async function gen(args: Args): Promise<number> {
   if (only) pending = pending.filter((entry) => entry.id === only);
   const skipped = pending.filter((entry) => !force && existsSync(originalPath(entry.id)));
   pending = pending.filter((entry) => force || !existsSync(originalPath(entry.id)));
+
+  // Rerolled seeds are chosen here, once, and used for BOTH the free quote and the paid
+  // call. Generation is byte-deterministic on seed (work item 048), so `--force` alone
+  // buys the identical PNG at full price — a reroll is only a reroll if the seed moves.
+  const seeds = new Map<string, number>();
+  if (reroll) {
+    for (const entry of pending) seeds.set(entry.id, Math.floor(Math.random() * 2 ** 31));
+  }
+  const seedFor = (id: string): number | undefined => seeds.get(id);
 
   for (const entry of skipped) {
     console.log(
@@ -56,7 +69,13 @@ export async function gen(args: Args): Promise<number> {
 
   for (const entry of pending) {
     const adapter = getAdapter(entry.provider);
-    const result = await adapter.generate({ entry, palette, dryRun: true });
+    const result = await adapter.generate({
+      entry,
+      palette,
+      dryRun: true,
+      seed: seedFor(entry.id),
+      attempts,
+    });
     projected += result.cost;
     if (result.remainingBalance !== null) balance = result.remainingBalance;
     console.log(
@@ -92,10 +111,30 @@ export async function gen(args: Args): Promise<number> {
   // Phase 2 — spend.
   console.log(`\nGenerating ${pending.length} asset(s)...\n`);
   let spent = 0;
+  const failures: { id: string; message: string; billed: boolean }[] = [];
 
   for (const entry of pending) {
     const adapter = getAdapter(entry.provider);
-    const result = await adapter.generate({ entry, palette, dryRun: false });
+    let result;
+    try {
+      result = await adapter.generate({
+        entry,
+        palette,
+        dryRun: false,
+        seed: seedFor(entry.id),
+        attempts,
+      });
+    } catch (error) {
+      // One bad asset must not abandon the run. On a forty-asset batch, throwing here
+      // would discard every remaining generation AND the printed record of what the ones
+      // already bought had cost — which is the number the operator most needs when a run
+      // goes wrong. Collect, report at the end, exit non-zero.
+      const billed = error instanceof GenerationLostError && error.billed;
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push({ id: entry.id, message, billed });
+      console.error(`  FAIL  ${entry.id.padEnd(24)} ${message.split('\n')[0]}`);
+      continue;
+    }
     const image = result.images[0];
     if (!image) throw new Error(`Provider returned no image for "${entry.id}".`);
 
@@ -136,6 +175,21 @@ export async function gen(args: Args): Promise<number> {
 
   console.log(`\n  spent this run: ${usd(spent)}`);
   if (balance !== null) console.log(`  remaining balance: ${usd(balance)}`);
+
+  if (failures.length > 0) {
+    const billed = failures.filter((failure) => failure.billed);
+    console.error(`\n${failures.length} asset(s) failed:\n`);
+    for (const failure of failures) console.error(`  ${failure.id}\n    ${failure.message}\n`);
+    if (billed.length > 0) {
+      console.error(
+        `  ${billed.length} of those reached the provider and were very likely BILLED without ` +
+          `returning an image.\n  The reported balance above already reflects them; the spend ` +
+          `total does not, because no cost was ever returned to count.`,
+      );
+    }
+    return 1;
+  }
+
   console.log('\nOriginals and sidecars are committed to git. They are the source of truth.');
   return 0;
 }

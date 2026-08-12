@@ -4,7 +4,8 @@ The asset pipeline. Three commands, no more. It is a script, not a product — s
 to read in one sitting, and **never imported by the game**.
 
 ```
-yarn art gen [--dry-run] [--force] [--confirm] [--max-spend=<usd>] [--only=<id>]
+yarn art gen [--dry-run] [--force] [--reroll] [--confirm] [--max-spend=<usd>]
+             [--retries=<n>] [--only=<id>]
 yarn art pack [--max-page=<px>]
 yarn art review
 ```
@@ -46,6 +47,24 @@ the whole run before spending anything, whether or not you passed `--dry-run`. A
 total above `--max-spend` (default $0.10) stops the run until you pass `--confirm`, and a
 projection above the reported balance stops it unconditionally. `balance_cost` and
 `remaining_balance` are printed after every run.
+
+**`--force` is not a reroll — it re-buys the identical picture.** Generation is
+byte-deterministic on seed (measured, work item 048: same prompt + style + seed + size
+returns the same PNG bit for bit). So `gen --force` on an unchanged entry spends full price
+to overwrite a file with itself. **`--reroll` is the one that gets you a different take**:
+it implies `--force` and rolls a fresh seed per asset, quoting and generating with that same
+seed so the printed price matches the call. Recorded in the sidecar either way.
+
+**A request that times out is still billed.** `node:https` with an explicit 15-minute
+timeout replaces the global `fetch` here for exactly that reason — undici's default headers
+timeout is 300s and RD's measured latency is 134–309s on **every** tier, `rd_fast` included.
+When the client gave up first, RD charged anyway and the image was unrecoverable: there is
+no history, jobs or results endpoint. `--retries=<n>` (default 1) retries transport failures
+only, **with the same seed**, so if the lost attempt was charged the retry at least returns
+the image that was paid for. HTTP errors are never retried — they are a deterministic
+answer, and repeating one just buys the same 500 twice. Failures are collected per asset
+rather than aborting the run, and a failure that reached the provider is reported as
+probably-billed, separately from one that never left the machine.
 
 ## Five things the live API taught us that no document had right
 

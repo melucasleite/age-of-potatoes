@@ -5,8 +5,12 @@ import { review } from './commands/review.js';
 
 const USAGE = `snack-mogul art pipeline
 
-  yarn art gen [--dry-run] [--force] [--confirm] [--max-spend=<usd>] [--only=<id>]
+  yarn art gen [--dry-run] [--force] [--reroll] [--confirm] [--max-spend=<usd>]
+               [--retries=<n>] [--only=<id>]
       Manifest -> provider -> art/originals/. --dry-run prices the run for free.
+      --force re-buys the SAME image (generation is deterministic on seed);
+      --reroll re-buys a DIFFERENT one by rolling a new seed. --retries=<n> sets
+      extra transport attempts after a timeout (default 1, same seed each time).
 
   yarn art pack [--max-page=<px>]
       Post-process originals -> one atlas page + atlas.json + typed TS manifest.
