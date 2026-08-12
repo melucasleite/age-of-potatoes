@@ -1,0 +1,67 @@
+# The gate. One job, one Node version, no matrix.
+#
+# It runs exactly what a human runs: `yarn lint`, `yarn typecheck`, `yarn build`,
+# `yarn test`. The last of those replays the golden determinism fixtures, which is the
+# check this workflow exists for — accidental non-determinism fails the build on the day it
+# is introduced, attributable to the commit that introduced it.
+#
+# NO SECRETS. `RETRODIFFUSION_API_KEY` and `OPENAI_API_TOKEN` are art-pipeline credentials;
+# the art pipeline never runs in CI and the atlas is committed, so the build never touches
+# the network for assets (plan §15). Do not add repository secrets to this workflow and do
+# not read `.env` from it.
+#
+# Deliberately absent, and each one is a decision rather than an oversight:
+#   - No cross-runtime (Deno) leg. Plan §12 drops it — it validated a replay validator that
+#     is no longer being built.
+#   - No Node version matrix, no coverage thresholds, no mutation testing, no bundle-size
+#     gate, no Lighthouse, no e2e browser tests.
+#   - No performance job. Plan §13's 5,000-item trip-wire is a manual check at minor
+#     versions; it needs real hardware, and a headless runner would only produce a number
+#     nobody can trust.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# A second push to the same branch cancels the first — the gate only has to be true for the
+# commit that is actually there.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint, typecheck, build, test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          # Pinned to the major the repo develops on. The golden replay runs TypeScript
+          # under bare Node, which needs native type stripping and `module.registerHooks`.
+          node-version: '24'
+          cache: yarn
+
+      - name: Install
+        run: yarn install --frozen-lockfile
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Typecheck
+        run: yarn typecheck
+
+      - name: Build
+        run: yarn build
+
+      - name: Test
+        run: yarn test

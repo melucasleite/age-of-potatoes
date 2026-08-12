@@ -8,7 +8,10 @@
     "rootDir": ".",
     "declaration": false,
     "declarationMap": false,
-    "types": ["vitest/globals"]
+    // "node" is here for the golden fixture harness only — it reads fixture files and
+    // spawns a second process to prove a replay survives a fresh interpreter. The sim's own
+    // build (tsconfig.json) is unaffected, and `lib` still has no "DOM".
+    "types": ["vitest/globals", "node"]
   },
   "include": ["src/**/*", "test/**/*"]
 }

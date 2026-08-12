@@ -1,0 +1,501 @@
+{
+  "name": "rng-streams",
+  "description": "Two plots planted and harvested in different corners of the field, so the field-init, crop-growth, and harvest streams have each advanced by a different amount. A change to stream derivation shows up here as a mismatch instead of as quietly different crop rolls.",
+  "seed": 424242,
+  "ticks": 4327,
+  "expectedHash": "fc6b27d4",
+  "commands": [
+    {
+      "tick": 0,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 15,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 26,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 27,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 27,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 27,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 27,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 10,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 27,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 10,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 27,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 11,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 27,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 11,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 27,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 11,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 28,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 28,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 28,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 28,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 10
+      }
+    },
+    {
+      "tick": 28,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 10
+      }
+    },
+    {
+      "tick": 28,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 11
+      }
+    },
+    {
+      "tick": 28,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 11
+      }
+    },
+    {
+      "tick": 28,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 11
+      }
+    },
+    {
+      "tick": 2086,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 2086,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 2086,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 2086,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 10
+      }
+    },
+    {
+      "tick": 2086,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 10
+      }
+    },
+    {
+      "tick": 2086,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 11
+      }
+    },
+    {
+      "tick": 2086,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 11
+      }
+    },
+    {
+      "tick": 2086,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 11
+      }
+    },
+    {
+      "tick": 2087,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 2107,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2108,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 2128,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2129,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2129,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2129,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 10,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2129,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2129,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 10,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2129,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2129,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2129,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 10,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2130,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2130,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2130,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 10,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2130,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 2130,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 10,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 2130,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 2130,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 2130,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 10,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4063,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4063,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4063,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 10,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4063,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4063,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 10,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4063,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4063,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4063,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 10,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4064,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4094,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4095,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4125,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4126,
+      "command": {
+        "type": "SellItem",
+        "item": 2,
+        "count": 46
+      }
+    }
+  ]
+}

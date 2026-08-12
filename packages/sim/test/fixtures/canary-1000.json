@@ -1,0 +1,87 @@
+{
+  "name": "canary-1000",
+  "description": "Plan §17's canary: 1,000 ticks from a fixed seed and a fixed command list. Plant, water, walk west to the roadside stand, sell, walk back, water again. The same script test/sim.test.ts pins inline, so the two must always agree.",
+  "seed": 1234,
+  "ticks": 1000,
+  "expectedHash": "e69e038b",
+  "commands": [
+    {
+      "tick": 0,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 11,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 1,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 11
+      }
+    },
+    {
+      "tick": 2,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 11,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 11
+      }
+    },
+    {
+      "tick": 3,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 33,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 40,
+      "command": {
+        "type": "SellItem",
+        "item": 1,
+        "count": 2
+      }
+    },
+    {
+      "tick": 41,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 71,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 90,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 11
+      }
+    }
+  ]
+}
