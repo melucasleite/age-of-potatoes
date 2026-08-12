@@ -15,8 +15,6 @@
 //
 // Nothing outside this package may mutate `WorldState` directly. Send a `Command`.
 
-export const SIM_VERSION = '0.1.0';
-
 // --- units ------------------------------------------------------------------------
 export {
   BEATS_PER_MINUTE,
@@ -179,6 +177,43 @@ export {
   hashState,
   hashStateUint32,
 } from './hash';
+
+// --- saves ------------------------------------------------------------------------
+// `SIM_VERSION` is the sim's code version fused with `BALANCE_HASH`: balance data is
+// save-compatibility surface exactly as much as code is (plan §12), so changing one price in
+// `data.ts` changes the version key a save records itself against. The storage driver lives
+// in `apps/web/src/storage` — `indexedDB` does not type-check in this package, by design.
+export {
+  CURRENT_FORMAT_VERSION,
+  MIGRATIONS,
+  SIM_CODE_VERSION,
+  SIM_VERSION,
+  SaveCorruptError,
+  SaveError,
+  SaveFormatTooNewError,
+  SaveMigrationMissingError,
+  checkSimVersion,
+  deserialize,
+  fromPayload,
+  migrate,
+  parseEnvelope,
+  restoreWorld,
+  serialize,
+  toPayload,
+} from './save/index';
+export type {
+  MigrationOutcome,
+  RestoredWorld,
+  SaveCropTile,
+  SaveEnvelope,
+  SaveInventorySlot,
+  SaveMachine,
+  SaveMigration,
+  SavePayload,
+  SaveStats,
+  SaveStream,
+  SimVersionCheck,
+} from './save/index';
 
 // --- the render projection --------------------------------------------------------
 export { LampState, createWorldView, growthStage, view } from './view';

@@ -118,6 +118,15 @@ call would make the digest cost grow with the session rather than the world.
 `findNonIntegerFields(state)` returns every hashed field that has gone fractional. A
 non-empty result is a bug in units, not in the hash.
 
+## Saves
+
+`serialize(state)` produces a plain-JSON `SaveEnvelope`; `restoreWorld(value)` parses,
+migrates, and deserializes one. `SIM_VERSION` is the code version fused with `BALANCE_HASH`,
+because balance data is save-compatibility surface exactly as much as code is. The rules —
+released migrations are never edited, one real fixture is kept per released version forever —
+are in [`src/save/README.md`](src/save/README.md). The IndexedDB driver lives in
+`apps/web/src/storage`, because `indexedDB` does not type-check in this package.
+
 ## Layout
 
 | File          | What lives there                                                    |
@@ -131,6 +140,7 @@ non-empty result is a bug in units, not in the hash.
 | `stats.ts`    | Leaderboard accumulators                                            |
 | `hash.ts`     | FNV-1a and the canonical serialization                              |
 | `view.ts`     | The render projection                                               |
+| `save/`       | The save envelope, canonical payload, migrations, and `SIM_VERSION` |
 | `index.ts`    | The public surface                                                  |
 
 Balance data lives in this package on purpose: it is save-compatibility surface exactly as
