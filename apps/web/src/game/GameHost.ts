@@ -23,8 +23,7 @@ import { hudStore } from '@/hud/store';
 
 import { CommandQueue } from './input/commands';
 import type { HoverTile, InputHost } from './input/context';
-import { KeyboardInput } from './input/keyboard';
-import { PointerInput } from './input/pointer';
+import { InputSystem } from './input/system';
 import { ToolMode } from './input/tools';
 import { Camera } from './render/camera';
 import { clock } from './render/hud';
@@ -102,8 +101,11 @@ export class GameHost implements InputHost {
   private lastView: WorldView | null = null;
 
   readonly queue = new CommandQueue();
-  private readonly keyboard: KeyboardInput;
-  private readonly pointer: PointerInput;
+  /**
+   * Pointer, keyboard, the gesture chrome, and the cursor state they share. One object so
+   * that the host's only obligations are attach, detach, and one call per frame.
+   */
+  private readonly input: InputSystem;
   private resizeObserver: ResizeObserver | null = null;
 
   private accumulatorMs = 0;
@@ -134,8 +136,7 @@ export class GameHost implements InputHost {
     this.container = container;
     this.state = options.initialState ?? createWorld(options.seed ?? DEFAULT_SEED);
     this.seed = this.state.worldSeed;
-    this.keyboard = new KeyboardInput(this);
-    this.pointer = new PointerInput(this);
+    this.input = new InputSystem(this);
   }
 
   /**
@@ -154,6 +155,11 @@ export class GameHost implements InputHost {
   get canvas(): HTMLCanvasElement {
     // Only ever read from listeners, which are attached after the canvas exists.
     return this.app!.canvas;
+  }
+
+  /** The element the canvas sits in. Gesture chrome is absolutely positioned inside it. */
+  get overlayRoot(): HTMLElement {
+    return this.container;
   }
 
   latestView(): WorldView | null {
@@ -261,8 +267,7 @@ export class GameHost implements InputHost {
     // Listeners are attached and detached in this one lifecycle pair, never elsewhere. A
     // leaked `keydown` listener from a double-mount means the player walks at double
     // speed and the cause is invisible.
-    this.keyboard.attach();
-    this.pointer.attach();
+    this.input.attach();
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.container);
@@ -281,8 +286,7 @@ export class GameHost implements InputHost {
       this.rafId = 0;
     }
 
-    this.keyboard.detach();
-    this.pointer.detach();
+    this.input.detach();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.queue.clear();
@@ -359,6 +363,13 @@ export class GameHost implements InputHost {
     );
     app.render();
     const renderMs = performance.now() - renderStart;
+
+    // Gesture chrome, positioned by inverting the transform that was ACTUALLY APPLIED —
+    // so it goes after `render()`, which is where the camera gets applied. Driven from
+    // this loop rather than from `pointermove` because the camera follows the player: a
+    // rubber band anchored to tiles has to keep up while you walk, mouse or no mouse.
+    // One clock in this application, and this is it.
+    this.input.update();
 
     // After `render()`, so the camera rect it culls and pans against is the one that was
     // actually applied this frame rather than last frame's.

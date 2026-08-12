@@ -1,4 +1,4 @@
-// Keyboard: a held direction, plus tool selection that never leaves the renderer.
+// Keyboard: a held direction, the zoom ladder, the build menu, and tool selection.
 //
 // Plan §12: player movement is a HELD DIRECTION, never a position delta. `SetMoveDirection`
 // says which way the stick is pushed and the sim owns how far that goes in a tick.
@@ -9,10 +9,23 @@
 // ONLY, never once per frame. Walking north for ten seconds must add ONE trace entry, not
 // six hundred. A per-frame emission would bloat the trace to nothing-per-second and make
 // the diff between two sessions unreadable, which is the whole value of having it.
+//
+// EVERYTHING ELSE IN THIS FILE IS UI STATE AND ENTERS NOTHING. Zoom is not a command and
+// is never traced or hashed (§12, and the header of `packages/sim/src/commands.ts` says so
+// by name). Nor is the build menu, the armed tool, the placement rotation, or the crop a
+// new zone will be assigned. A replay must not depend on which panel was open.
+//
+// THE BUILD MENU IS MODAL OVER EXACTLY TWO THINGS — the digits and the arrow keys — and it
+// stops the player walking while it is up. That last part is a deliberate courtesy rather
+// than an implementation limit: arrows move the menu cursor while it is open, so leaving
+// WASD live would let you walk away from a menu you are reading using one hand while the
+// other browses. Opening the menu emits one `SetMoveDirection None`, which is honest — the
+// character really does stop.
 
 import { Direction } from '@snack/sim';
 
 import type { InputHost } from './context';
+import type { InputSystem } from './system';
 import { TOOL_ORDER, ToolMode } from './tools';
 
 const DIRECTION_KEYS: Readonly<Record<string, Direction>> = {
@@ -32,7 +45,10 @@ export class KeyboardInput {
   private emitted: Direction = Direction.None;
   private attached = false;
 
-  constructor(private readonly host: InputHost) {}
+  constructor(
+    private readonly host: InputHost,
+    private readonly system: InputSystem,
+  ) {}
 
   attach(): void {
     if (this.attached) return;
@@ -57,12 +73,29 @@ export class KeyboardInput {
     this.emitted = Direction.None;
   }
 
+  /** Called when the menu opens: the character stops, once, honestly. */
+  stopWalking(): void {
+    this.releaseAll();
+  }
+
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (event.repeat) return; // Auto-repeat is not a state edge.
+
+    // Space is the camera's modifier. Held, it turns any left-drag into a pan gesture that
+    // paints nothing — see the header of `pointer.ts` for why that seat is kept warm.
+    if (event.code === 'Space') {
+      event.preventDefault();
+      this.system.spaceHeld = true;
+      return;
+    }
+
+    if (this.system.menuOpen && this.handleMenuKey(event)) return;
 
     const direction = DIRECTION_KEYS[event.code];
     if (direction !== undefined) {
       event.preventDefault();
+      // Arrows drive the menu cursor while it is open, and WASD is stilled with it.
+      if (this.system.menuOpen) return;
       if (!this.held.includes(event.code)) this.held.push(event.code);
       this.syncDirection();
       return;
@@ -74,17 +107,81 @@ export class KeyboardInput {
       this.host.setTool(tool);
       return;
     }
-    if (event.code === 'Escape') {
-      this.host.setTool(ToolMode.Hand);
-      return;
-    }
-    if (event.code === 'F3' || event.code === 'Backquote') {
-      event.preventDefault();
-      this.host.toggleOverlay();
+
+    switch (event.code) {
+      case 'KeyB':
+        event.preventDefault();
+        this.system.toggleBuildMenu();
+        return;
+      case 'KeyR':
+        this.system.rotatePlacement();
+        return;
+      case 'KeyC':
+        this.system.cycleZoneCrop();
+        return;
+      case 'Equal':
+      case 'NumpadAdd':
+        event.preventDefault();
+        this.system.stepZoom(1);
+        return;
+      case 'Minus':
+      case 'NumpadSubtract':
+        event.preventDefault();
+        this.system.stepZoom(-1);
+        return;
+      case 'Escape':
+        // Three meanings, in the order the player most likely wants them: close the menu,
+        // abandon the drag, put the tool down. Each step is one press.
+        if (this.system.menuOpen) this.system.closeBuildMenu();
+        else if (this.system.dragging) this.system.cancelDrag();
+        else this.host.setTool(ToolMode.Hand);
+        return;
+      case 'F3':
+      case 'Backquote':
+        event.preventDefault();
+        this.host.toggleOverlay();
+        return;
+      default:
+        return;
     }
   };
 
+  /** Returns true when the menu swallowed the key. */
+  private handleMenuKey(event: KeyboardEvent): boolean {
+    switch (event.code) {
+      case 'ArrowUp':
+      case 'KeyW':
+        event.preventDefault();
+        this.system.moveMenuCursor(-1);
+        return true;
+      case 'ArrowDown':
+      case 'KeyS':
+        event.preventDefault();
+        this.system.moveMenuCursor(1);
+        return true;
+      case 'Enter':
+      case 'NumpadEnter':
+        event.preventDefault();
+        this.system.armMenuCursor();
+        return true;
+      default:
+        break;
+    }
+
+    const digit = digitOf(event.code);
+    if (digit !== null && digit >= 1) {
+      event.preventDefault();
+      this.system.jumpMenuCursor(digit);
+      return true;
+    }
+    return false;
+  }
+
   private readonly onKeyUp = (event: KeyboardEvent): void => {
+    if (event.code === 'Space') {
+      this.system.spaceHeld = false;
+      return;
+    }
     if (DIRECTION_KEYS[event.code] === undefined) return;
     const index = this.held.indexOf(event.code);
     if (index >= 0) this.held.splice(index, 1);
@@ -96,6 +193,7 @@ export class KeyboardInput {
   };
 
   private readonly releaseAll = (): void => {
+    this.system.spaceHeld = false;
     if (this.held.length === 0 && this.emitted === Direction.None) return;
     this.held.length = 0;
     this.syncDirection();
@@ -111,8 +209,14 @@ export class KeyboardInput {
   }
 }
 
+function digitOf(code: string): number | null {
+  if (!code.startsWith('Digit')) return null;
+  const digit = Number(code.slice(5));
+  return Number.isInteger(digit) ? digit : null;
+}
+
 function numberKeyToTool(code: string): ToolMode | null {
-  const digit = code.startsWith('Digit') ? Number(code.slice(5)) : NaN;
-  if (!Number.isInteger(digit)) return null;
+  const digit = digitOf(code);
+  if (digit === null) return null;
   return TOOL_ORDER[digit - 1] ?? null;
 }

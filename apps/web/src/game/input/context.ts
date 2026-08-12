@@ -4,6 +4,12 @@
 // transform, push a `Command`, and set UI state. It cannot reach `WorldState`, because
 // there is nothing here that exposes it — that is the boundary made structural rather
 // than remembered.
+//
+// It grew by exactly one member in v0.2: `overlayRoot`, the element the gesture chrome
+// mounts into. Everything else the drag gestures need — the armed crop, the placement
+// rotation, the build menu's cursor — lives inside `InputSystem` rather than here, because
+// none of it is a capability the host grants. Widening this interface for each new piece of
+// cursor state is how a narrow seam stops being one.
 
 import type { WorldView } from '@snack/sim';
 
@@ -20,6 +26,11 @@ export interface InputHost {
   readonly canvas: HTMLCanvasElement;
   readonly camera: Camera;
   readonly queue: CommandQueue;
+  /**
+   * The element the canvas lives in. Gesture chrome — the rubber band, the placement
+   * ghost, the build menu — is absolutely positioned inside it, over the canvas.
+   */
+  readonly overlayRoot: HTMLElement;
   /** The most recent projection, or null before the first frame. */
   latestView(): WorldView | null;
   getTool(): ToolMode;
