@@ -16,7 +16,11 @@ import {
   WORLD_TILES_WIDE,
 } from '@snack/sim';
 
+import { BeltItemLayer, buildItemPage } from './belt-items';
+import type { ItemPage } from './belt-items';
+import { BeltStructureLayer } from './belt-structure';
 import type { Camera } from './camera';
+import { GrabberLayer } from './grabbers';
 import { Hud } from './hud';
 import { createLayers, destroyLayers, LAYER_ORDER } from './layers';
 import type { Layers } from './layers';
@@ -25,16 +29,33 @@ import { TerrainBaker } from './terrain';
 import type { TerrainSource } from './terrain';
 import { ART } from './textures';
 import type { ArtSet } from './textures';
+import { ZoneOverlay } from './zones';
 
 export const WORLD_WIDTH_PX = WORLD_TILES_WIDE * TILE_PX;
 export const WORLD_HEIGHT_PX = WORLD_TILES_HIGH * TILE_PX;
 const FIELD_TILE_COUNT = FIELD_TILES_WIDE * FIELD_TILES_HIGH;
 const DROPLET_POOL = 64;
 
+/**
+ * Everything drawn for one machine.
+ *
+ * Seven small sprites rather than one big one, because the alternative is an art frame per
+ * combination of state — and the chip line has five machines × seven lamp states × four
+ * upgrade levels. Composited in code it is one grey box plus decals, and §15's Grade C for
+ * machine work-loop animation stops mattering.
+ */
 export interface MachineVisual {
   body: Sprite;
   lamp: Sprite;
   wrench: Sprite;
+  /** Work progress, as a bar along the machine's base. */
+  progress: Sprite;
+  /** Input buffer fill, as a column up the machine's left edge. */
+  hopper: Sprite;
+  /** What is waiting in the output buffer, so a blocked machine says WHAT is blocked. */
+  outputPip: Sprite;
+  /** Total upgrade level, as a short chrome strip. Bolt-on shine for a tuned machine. */
+  dials: Sprite;
 }
 
 export interface Droplet {
@@ -59,12 +80,21 @@ export interface WorldScene {
   readonly soil: Sprite[];
   readonly crops: Sprite[];
   readonly readyMarks: Sprite[];
+  readonly compost: Sprite[];
   readonly machines: Map<number, MachineVisual>;
   readonly player: Sprite;
   readonly hover: Sprite;
   readonly droplets: Droplet[];
   readonly hud: Hud;
   readonly overlay: DevOverlay;
+
+  // --- the factory ------------------------------------------------------------------
+  /** One texture source for every belt-rideable good. See `belt-items.ts`. */
+  readonly itemPage: ItemPage;
+  readonly beltStructures: BeltStructureLayer;
+  readonly beltItems: BeltItemLayer;
+  readonly grabbers: GrabberLayer;
+  readonly zoneOverlay: ZoneOverlay;
 
   // --- renderer-local, WRITE-ONLY state (plan §12) --------------------------------
   // Interpolated positions live here, are never read back into the sim, never
@@ -140,11 +170,13 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     WORLD_HEIGHT_PX + TILE_PX * 2,
   );
 
+  // The zone-paint pass, filled in at last: the seam existed for [[018]], and [[018]] is
+  // now content rather than surgery, exactly as intended.
+  const zoneOverlay = new ZoneOverlay(art);
+
   const source: TerrainSource = {
     ground: (tileX, tileY) => art.get(groundNameAt(tileX, tileY)),
-    // The zone-paint pass. Empty in v0.1: the seam exists so [[018]] is content, not
-    // surgery. Returning null everywhere costs one bake of a transparent texture.
-    overlay: () => null,
+    overlay: (tileX, tileY) => zoneOverlay.paints(tileX, tileY),
   };
 
   const terrain = new TerrainBaker(app.renderer, source, WORLD_TILES_WIDE, WORLD_TILES_HIGH);
@@ -160,7 +192,9 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   const soil: Sprite[] = [];
   const crops: Sprite[] = [];
   const readyMarks: Sprite[] = [];
+  const compost: Sprite[] = [];
   const wetTexture = art.get(ART.soilWet);
+  const compostTexture = art.get(ART.uiCompost);
 
   for (let i = 0; i < FIELD_TILE_COUNT; i++) {
     const tileX = FIELD_ORIGIN_X + (i % FIELD_TILES_WIDE);
@@ -175,12 +209,22 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     layers.groundEntities.attach(wet);
     soil.push(wet);
 
-    const crop = new Sprite(art.get(ART.cropStage(1)));
+    const crop = new Sprite(art.get(ART.cropStage(1, 1)));
     crop.position.set(tileX * TILE_PX, tileY * TILE_PX);
     crop.visible = false;
     contentRoot.addChild(crop);
     layers.groundEntities.attach(crop);
     crops.push(crop);
+
+    // Compost sits UNDER the crop layer's ready marks and over the soil: it is litter on
+    // the ground, not a plant, and plan §4's "nothing ever vanishes" only reads if you can
+    // see the thing that did not vanish.
+    const heap = new Sprite(compostTexture);
+    heap.position.set(tileX * TILE_PX, tileY * TILE_PX);
+    heap.visible = false;
+    contentRoot.addChild(heap);
+    layers.groundEntities.attach(heap);
+    compost.push(heap);
 
     const mark = new Sprite(art.get(ART.uiReady));
     mark.anchor.set(0.5, 1);
@@ -212,6 +256,30 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     droplets.push({ sprite, life: 0, vx: 0, vy: 0 });
   }
 
+  // --- the factory ------------------------------------------------------------------
+  //
+  // Built here rather than lazily on the first belt, because the item page is a render
+  // pass and the belt tier textures are three more: doing that mid-frame the first time a
+  // player places a belt is a visible hitch at exactly the moment they are paying attention.
+
+  const itemPage = buildItemPage(app.renderer, art);
+
+  const beltStructures = new BeltStructureLayer(app.renderer, art, (sprite) => {
+    contentRoot.addChild(sprite);
+    layers.beltStructures.attach(sprite);
+  });
+
+  const beltItems = new BeltItemLayer(itemPage, WORLD_WIDTH_PX, WORLD_HEIGHT_PX);
+  contentRoot.addChild(beltItems.container);
+  layers.beltItems.attach(beltItems.container);
+
+  const grabbers = new GrabberLayer(art, itemPage, (visual) => {
+    contentRoot.addChild(visual.base, visual.hand, visual.cargo);
+    layers.machines.attach(visual.base);
+    layers.player.attach(visual.hand);
+    layers.player.attach(visual.cargo);
+  });
+
   const hud = new Hud();
   const overlay = new DevOverlay();
   screenRoot.addChild(hud.root, overlay.root);
@@ -229,12 +297,18 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     soil,
     crops,
     readyMarks,
+    compost,
     machines: new Map(),
     player,
     hover,
     droplets,
     hud,
     overlay,
+    itemPage,
+    beltStructures,
+    beltItems,
+    grabbers,
+    zoneOverlay,
     prevXSub: 0,
     prevYSub: 0,
     currXSub: 0,
@@ -282,6 +356,12 @@ export function applyDayNight(scene: WorldScene, tick: number): void {
 export function destroyWorldScene(scene: WorldScene): void {
   scene.hud.destroy();
   scene.overlay.destroy();
+  // The particle container before the item page: the page owns the shared texture source
+  // every particle points at, and freeing it first hands the container dead frames.
+  scene.beltItems.destroy();
+  scene.beltStructures.destroy();
+  scene.grabbers.destroy();
+  scene.itemPage.destroy();
   scene.terrain.destroy();
   destroyLayers(scene.layers);
   scene.dayNight.destroy();

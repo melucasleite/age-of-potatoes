@@ -12,13 +12,23 @@
 import { TILE_PX } from './pixel';
 
 import { Sprite } from 'pixi.js';
-import { Direction, LampState, MachineKind, SUBTILE } from '@snack/sim';
+import {
+  Direction,
+  LampState,
+  MachineKind,
+  SUBTILE,
+  WiltStage,
+  itemSpec,
+  machineSpec,
+} from '@snack/sim';
 import type { MachineView, WorldView } from '@snack/sim';
 
 import { TOOL_INFO, ToolMode, toolMachineKind } from '../input/tools';
 import type { HoverTile } from '../input/context';
 import { tileAtView } from '../input/picking';
+import { beltItemAtTile } from './belt-items';
 import { money } from './hud';
+import { lampAlpha, lampTint } from './lamps';
 import { ART } from './textures';
 import { applyDayNight, WORLD_HEIGHT_PX, WORLD_WIDTH_PX } from './world';
 import type { MachineVisual, WorldScene } from './world';
@@ -60,8 +70,11 @@ export function render(
 ): void {
   if (!scene.primed) recordTick(scene, view);
 
-  // 1. Terrain. Nothing re-bakes on a frame with no edits — the dev overlay's "chunks
-  //    baked" reads 0 in steady state, and a number that stays non-zero is a bug.
+  // 1. Terrain. The zone diff runs FIRST so a tile painted this frame is queued before the
+  //    drain, and lands one frame later rather than one frame plus one paint later.
+  //    Nothing re-bakes on a frame with no edits — the dev overlay's "chunks baked" reads 0
+  //    in steady state, and a number that stays non-zero is a bug.
+  scene.zoneOverlay.sync(view, (tileX, tileY) => scene.terrain.markTileDirty(tileX, tileY));
   scene.terrain.drainDirty();
 
   // 2. Player, interpolated for display only.
@@ -82,21 +95,29 @@ export function render(
 
   // 4. Cull analytically from the camera rect. Culling is opt-in in Pixi v8 (§13): it
   //    moved out of the render loop, so nothing is culled unless you cull it.
-  scene.terrain.cull(scene.camera.cameraRect());
+  const rect = scene.camera.cameraRect();
+  scene.terrain.cull(rect);
 
   // 5. The field.
   updateField(scene, view, deltaMs);
 
-  // 6. Machines.
+  // 6. The factory. Belt surfaces scroll their UVs, belt items are derived fresh into a
+  //    pooled particle buffer sized to `rect` — not to the world — and grabber arms read
+  //    their swing straight out of the projection.
+  scene.beltStructures.update(view, alpha, rect);
+  scene.beltItems.update(view, alpha, rect);
+  scene.grabbers.update(view, rect);
+
+  // 7. Machines.
   updateMachines(scene, view);
 
-  // 7. Hover highlight — renderer state, never a command (§12).
+  // 8. Hover highlight — renderer state, never a command (§12).
   updateHover(scene, view, ui);
 
-  // 8. Day/night: one colour matrix on the world root.
+  // 9. Day/night: one colour matrix on the world root.
   applyDayNight(scene, view.tick);
 
-  // 9. Chrome.
+  // 10. Chrome.
   const t = scene.camera.transform;
   scene.overlay.layout(t.viewWidth);
   scene.hud.update(view, ui.tool, { status: statusFor(view, ui) });
@@ -125,6 +146,11 @@ function updateField(scene: WorldScene, view: WorldView, deltaMs: number): void 
     }
     scene.lastMoisture[i] = moisture;
 
+    // Compost is litter, not a plant: it shows whether or not anything is growing here,
+    // because the tile it is lying on is usually the tile whose crop just collapsed.
+    const heap = scene.compost[i]!;
+    heap.visible = (field.compost[i] ?? 0) > 0;
+
     const crop = scene.crops[i]!;
     const cropId = field.crop[i] ?? 0;
     if (cropId === 0) {
@@ -135,7 +161,17 @@ function updateField(scene: WorldScene, view: WorldView, deltaMs: number): void 
 
     const stage = Math.max(1, field.stage[i] ?? 1);
     crop.visible = true;
-    crop.texture = scene.art.get(ART.cropStage(stage));
+    crop.texture = scene.art.get(ART.cropStage(cropId, stage));
+
+    // Wilt reads as COLOUR AND POSTURE, not as a badge. A drooping crop yellows and sags a
+    // pixel; a turned one goes grey-brown and sags two. Per-sprite tint is a batched vertex
+    // attribute in v8 — this costs nothing and breaks nothing, unlike the day/night pass,
+    // which is one filter on the root for exactly the opposite reason.
+    const wilt = field.wilt[i] ?? WiltStage.Fresh;
+    const tileTop = (field.originY + Math.floor(i / field.tilesWide)) * TILE_PX;
+    crop.tint =
+      wilt === WiltStage.Wilted ? 0x9a8c6a : wilt === WiltStage.Wilting ? 0xd8cf7a : 0xffffff;
+    crop.y = tileTop + (wilt === WiltStage.Wilted ? 2 : wilt === WiltStage.Wilting ? 1 : 0);
 
     const ready = field.ready[i] === 1;
     const mark = scene.readyMarks[i]!;
@@ -143,10 +179,13 @@ function updateField(scene: WorldScene, view: WorldView, deltaMs: number): void 
     if (ready) {
       // A small bob, offset per tile so a ripe field shimmers rather than pulsing in
       // lockstep. Purely decorative and purely local.
-      mark.y =
-        (field.originY + Math.floor(i / field.tilesWide)) * TILE_PX +
-        Math.round(Math.sin(now / 260 + i * 0.7) * 1.5) -
-        1;
+      mark.y = tileTop + Math.round(Math.sin(now / 260 + i * 0.7) * 1.5) - 1;
+      // The same star in three shades: art's own colour when ripe, amber going, brown once
+      // it is Day-Old. One glance across the field sorts "harvest now" from "harvest first"
+      // without a single number — and the fresh case tints by white, so whatever the art
+      // pipeline eventually ships is left exactly as drawn.
+      mark.tint =
+        wilt === WiltStage.Wilted ? 0xa88a5a : wilt === WiltStage.Wilting ? 0xe8c86a : 0xffffff;
     }
   }
 
@@ -199,6 +238,7 @@ function updateDroplets(scene: WorldScene, deltaMs: number): void {
 
 function updateMachines(scene: WorldScene, view: WorldView): void {
   const seen = new Set<number>();
+  const now = performance.now();
 
   for (let i = 0; i < view.machines.length; i++) {
     const m = view.machines[i]!;
@@ -210,68 +250,121 @@ function updateMachines(scene: WorldScene, view: WorldView): void {
       scene.machines.set(m.id, visual);
     }
 
-    visual.body.position.set(m.tileX * TILE_PX, m.tileY * TILE_PX);
-    visual.body.texture = scene.art.get(machineTexture(m.kind));
+    const left = m.tileX * TILE_PX;
+    const top = m.tileY * TILE_PX;
+    const width = m.tilesWide * TILE_PX;
+    const height = m.tilesHigh * TILE_PX;
 
-    const lampX = (m.tileX + m.tilesWide) * TILE_PX - 5;
-    const lampY = m.tileY * TILE_PX + 1;
+    visual.body.position.set(left, top);
+    visual.body.texture = scene.art.get(ART.machine(m.kind));
+
+    // The lamp: ONE white sprite, tinted. See `lamps.ts` for why there is not one per state.
+    const lampX = left + width - 5;
+    const lampY = top + 1;
     visual.lamp.position.set(lampX, lampY);
     visual.lamp.visible = m.lamp !== LampState.Off;
-    if (visual.lamp.visible) visual.lamp.texture = scene.art.get(lampTexture(m.lamp));
+    visual.lamp.tint = lampTint(m.lamp);
+    visual.lamp.alpha = lampAlpha(m.lamp, now);
 
     visual.wrench.position.set(lampX - 8, lampY);
     visual.wrench.visible = m.wrenchDue === 1;
+
+    // Progress along the base. A bar rather than an animated body: §15 rates machine
+    // work-loop animation Grade C for AI generation, and the plan's answer is to bend
+    // toward compositing in code — which also makes a stalled machine unmistakable,
+    // because the bar simply stops.
+    const running = m.lamp === LampState.Running && m.progressPermille > 0;
+    visual.progress.visible = running;
+    if (running) {
+      visual.progress.position.set(left + 1, top + height - 2);
+      visual.progress.scale.set(((width - 2) * m.progressPermille) / 1000, 1);
+    }
+
+    // Input buffer as a column up the left edge: an amber lamp says "starved", and this
+    // says how nearly. Grows upward, because a filling hopper that drains downward reads
+    // as the wrong thing entirely.
+    const hopper = m.inputCapacity > 0 ? Math.min(1, m.inputCount / m.inputCapacity) : 0;
+    visual.hopper.visible = hopper > 0;
+    if (hopper > 0) {
+      const bar = Math.max(1, Math.round((height - 4) * hopper));
+      visual.hopper.position.set(left, top + height - 2 - bar);
+      visual.hopper.scale.set(1, bar);
+    }
+
+    // What is waiting in the output buffer, so a red lamp names its own cargo. Bobs, so a
+    // full output catches the eye from across the yard.
+    const holding = m.outputCount > 0 && m.outputItem !== 0;
+    visual.outputPip.visible = holding;
+    if (holding) {
+      visual.outputPip.texture = scene.itemPage.texture(m.outputItem);
+      visual.outputPip.position.set(
+        left + width / 2,
+        top - 3 + Math.round(Math.sin(now / 300 + m.id) * 1.5),
+      );
+    }
+
+    // Upgrade chrome: one pixel of shine per dial level, capped by the strip's own length.
+    const dialTotal = m.speedLevel + m.efficiencyLevel + m.capacityLevel;
+    visual.dials.visible = dialTotal > 0;
+    if (dialTotal > 0) {
+      visual.dials.position.set(left + 1, top);
+      visual.dials.scale.set(Math.min(width - 2, dialTotal * 2), 1);
+    }
   }
 
   for (const [id, visual] of scene.machines) {
     if (seen.has(id)) continue;
-    visual.body.destroy();
-    visual.lamp.destroy();
-    visual.wrench.destroy();
+    destroyMachineVisual(visual);
     scene.machines.delete(id);
   }
 }
 
 function createMachineVisual(scene: WorldScene, m: MachineView): MachineVisual {
-  const body = new Sprite(scene.art.get(machineTexture(m.kind)));
+  const body = new Sprite(scene.art.get(ART.machine(m.kind)));
   scene.contentRoot.addChild(body);
   scene.layers.machines.attach(body);
 
-  const lamp = new Sprite(scene.art.get(ART.lampRunning));
+  const pixel = scene.art.get(ART.uiPixel);
+
+  const progress = new Sprite(pixel);
+  progress.tint = 0x9ef0a8;
+  progress.visible = false;
+
+  const hopper = new Sprite(pixel);
+  hopper.tint = 0xe8b53d;
+  hopper.alpha = 0.9;
+  hopper.visible = false;
+
+  const dials = new Sprite(pixel);
+  dials.tint = 0x8fe6ff;
+  dials.visible = false;
+
+  const lamp = new Sprite(scene.art.get(ART.lamp));
   lamp.visible = false;
-  scene.contentRoot.addChild(lamp);
-  scene.layers.worldUi.attach(lamp);
 
   const wrench = new Sprite(scene.art.get(ART.uiWrench));
   wrench.visible = false;
-  scene.contentRoot.addChild(wrench);
-  scene.layers.worldUi.attach(wrench);
 
-  return { body, lamp, wrench };
-}
+  const outputPip = new Sprite(scene.itemPage.texture(m.outputItem));
+  outputPip.anchor.set(0.5, 1);
+  outputPip.visible = false;
 
-function machineTexture(kind: number): string {
-  if (kind === MachineKind.ChipKitchen) return ART.machineChipKitchen;
-  if (kind === MachineKind.Sprinkler) return ART.machineSprinkler;
-  return ART.machineSellBin;
-}
-
-/** One lamp grammar for every machine in the game (§5). */
-function lampTexture(lamp: number): string {
-  switch (lamp) {
-    case LampState.Running:
-      return ART.lampRunning;
-    case LampState.Starved:
-      return ART.lampStarved;
-    case LampState.Blocked:
-      return ART.lampBlocked;
-    case LampState.UtilityMissing:
-      return ART.lampUtility;
-    case LampState.Jammed:
-      return ART.lampJammed;
-    default:
-      return ART.lampHalted;
+  for (const sprite of [progress, hopper, dials, lamp, wrench, outputPip]) {
+    scene.contentRoot.addChild(sprite);
+    scene.layers.worldUi.attach(sprite);
   }
+
+  return { body, lamp, wrench, progress, hopper, outputPip, dials };
+}
+
+function destroyMachineVisual(visual: MachineVisual): void {
+  visual.body.destroy();
+  visual.lamp.destroy();
+  visual.wrench.destroy();
+  visual.progress.destroy();
+  visual.hopper.destroy();
+  visual.outputPip.destroy();
+  visual.dials.destroy();
 }
 
 function facingTexture(facing: number): string {
@@ -327,6 +420,12 @@ export function statusFor(view: WorldView, ui: RenderUiState): string {
   const query = tileAtView(view, ui.hover.tileX, ui.hover.tileY);
   if (!query.insideWorld) return 'outside the lot';
   if (query.machine !== null) return machineStatus(query.machine);
+
+  // Belt items are picked SIM-SIDE, by tile — never by hit-testing a particle, which has
+  // no interactivity to hit-test. See `belt-items.ts`.
+  const riding = beltItemAtTile(view, ui.hover.tileX, ui.hover.tileY);
+  if (riding !== null) return `${itemName(riding.item)} on the belt`;
+
   if (!query.isField)
     return toolMachineKind(tool) === null ? 'bare ground' : 'ground: clear to build';
   if (!query.withinReach) return 'too far — walk closer';
@@ -335,20 +434,34 @@ export function statusFor(view: WorldView, ui: RenderUiState): string {
   return query.dry ? 'bare soil, dry' : 'bare soil';
 }
 
+/** Item names for the status ribbon. The sim's slug, made readable. */
+function itemName(item: number): string {
+  const spec = itemSpec(item as never);
+  return spec === null ? 'goods' : spec.slug.split('-').join(' ');
+}
+
+function machineName(kind: number): string {
+  const spec = machineSpec(kind as never);
+  return spec === null ? 'machine' : spec.slug.split('-').join(' ');
+}
+
 function machineStatus(m: MachineView): string {
+  const name = machineName(m.kind);
   switch (m.lamp) {
     case LampState.Jammed:
-      return 'jammed — right-click to whack it';
+      return `${name} jammed — right-click to whack it`;
     case LampState.Halted:
-      return 'worn out — right-click to repair';
+      return `${name} worn out — right-click to repair`;
+    // The two halves of plan §5's grammar, said out loud: red means look downstream, amber
+    // means look upstream. Naming the actual item is what turns a red lamp into an errand.
     case LampState.Blocked:
-      return 'output full — take the chips';
+      return `${name} full of ${itemName(m.outputItem)} — take some`;
     case LampState.Starved:
-      return 'empty — feed it potatoes';
+      return `${name} wants ${itemName(m.inputItem)}`;
     case LampState.UtilityMissing:
       return 'barrel dry — click to refill';
     case LampState.Running:
-      return m.kind === MachineKind.Sprinkler ? 'sprinkler running' : 'cooking';
+      return m.kind === MachineKind.Sprinkler ? 'sprinkler running' : `${name} running`;
     default:
       return 'the roadside stand — click to sell';
   }

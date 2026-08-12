@@ -20,11 +20,26 @@ import type { WorldRect } from './camera';
 // how a re-bake loop gets noticed the day it appears rather than at the next profiling
 // session.
 
+/**
+ * One tinted decal in the overlay pass.
+ *
+ * The overlay carries a tint and an alpha where the ground pass does not, because a zone's
+ * colour is a property of the ZONE and not of the art: one white fill texture and one white
+ * edge texture per side serve every zone the player ever paints, at any colour, and the
+ * whole thing is still baked into the chunk once and then costs nothing.
+ */
+export interface OverlayPaint {
+  texture: Texture;
+  /** Multiplied into the decal. `0xffffff` leaves it alone. */
+  tint: number;
+  alpha: number;
+}
+
 /** What to draw at a world tile, per pass. `null` means "nothing on this pass". */
 export interface TerrainSource {
   ground(tileX: number, tileY: number): Texture | null;
-  /** The zone-paint pass. Empty in v0.1 — the seam exists, the feature is [[018]]. */
-  overlay(tileX: number, tileY: number): Texture | null;
+  /** The zone-paint pass: fill and boundary decals, or null on an unpainted tile. */
+  overlay(tileX: number, tileY: number): readonly OverlayPaint[] | null;
 }
 
 interface Chunk {
@@ -182,12 +197,25 @@ export class TerrainBaker {
       for (let tx = 0; tx < CHUNK_TILES; tx++) {
         const tileX = baseX + tx;
         if (tileX >= this.worldTilesWide) break;
-        const texture =
-          pass === 'ground' ? this.source.ground(tileX, tileY) : this.source.overlay(tileX, tileY);
-        if (texture === null) continue;
-        const sprite = new Sprite(texture);
-        sprite.position.set(tx * TILE_PX, ty * TILE_PX);
-        scratch.addChild(sprite);
+        if (pass === 'ground') {
+          const texture = this.source.ground(tileX, tileY);
+          if (texture === null) continue;
+          const sprite = new Sprite(texture);
+          sprite.position.set(tx * TILE_PX, ty * TILE_PX);
+          scratch.addChild(sprite);
+          continue;
+        }
+
+        const paints = this.source.overlay(tileX, tileY);
+        if (paints === null) continue;
+        for (let i = 0; i < paints.length; i++) {
+          const paint = paints[i]!;
+          const sprite = new Sprite(paint.texture);
+          sprite.position.set(tx * TILE_PX, ty * TILE_PX);
+          sprite.tint = paint.tint;
+          sprite.alpha = paint.alpha;
+          scratch.addChild(sprite);
+        }
       }
     }
 
