@@ -1,0 +1,575 @@
+/*
+ * HUD chrome. Every colour below is from art/palette/master.json — the same 40 hand-authored
+ * colours every cooked pixel in the game is quantised to. The HUD is DOM rather than canvas,
+ * so nothing enforces that; it is a discipline. A UI painted in off-palette colours reads as
+ * a different game sitting on top of this one, which is exactly what a HUD must not do.
+ *
+ * Palette names used here, from master.json's swatch roles:
+ *   ink #14100e · umber #2b2119 · stone_dark #46392f · stone_mid #6d5c4d
+ *   stone_light #9a8873 · bone #cbb99b · paper #efe2c6
+ *   gold ramp #8a6234 #b58b4d #d9b475 #f5d382   (money — "starch" ramp, aptly)
+ *   grass #35571f #4e7c2e #74a340 #a3c65c        (a rate going the right way)
+ *   red #5e1c1a #9e2f27 #d94f36 #ef8f68          (over budget, out of money, jammed)
+ *   water #163348 #2c6a8d #4fa3d1 #9fdcef        (the countdown)
+ *   lamp accents #5fd44a #f2a93b
+ *
+ * Corners are notched rather than rounded. A 6px border-radius on a 16px-tile pixel game is
+ * the single fastest way to make the UI look like it was bolted on from a component library.
+ */
+
+.root {
+  position: absolute;
+  inset: 0;
+  /* The HUD must never eat a click meant for the lot. Only controls opt back in. */
+  pointer-events: none;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #efe2c6;
+  user-select: none;
+  z-index: 10;
+}
+
+.corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.topLeft {
+  top: 14px;
+  left: 14px;
+}
+.topRight {
+  top: 14px;
+  right: 14px;
+  align-items: flex-end;
+}
+/*
+ * The lower-left corner is deliberately left EMPTY. The audio layer's click-to-start gate
+ * lives there ([[014]]), and a control the player must press once before anything makes a
+ * sound should not be underneath the toolbelt.
+ */
+.bottomRight {
+  bottom: 14px;
+  right: 14px;
+  align-items: flex-end;
+}
+.bottomCentre {
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  gap: 8px;
+}
+
+/* --- the card ------------------------------------------------------------------- */
+
+.card {
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  /* A chunky bevel drawn entirely in inset shadows, because clip-path discards outer ones. */
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f,
+    inset 0 4px 0 -3px #6d5c4d;
+  clip-path: polygon(
+    5px 0,
+    calc(100% - 5px) 0,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    5px 100%,
+    0 calc(100% - 5px),
+    0 5px
+  );
+  padding: 12px 14px;
+}
+
+.label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9a8873;
+}
+
+.rule {
+  height: 2px;
+  margin: 10px 0;
+  background: #14100e;
+  box-shadow: 0 1px 0 #46392f;
+}
+
+/* --- the Ticker ----------------------------------------------------------------- */
+
+.ticker {
+  min-width: 268px;
+}
+
+.moneyRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.money {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #f5d382;
+  text-shadow:
+    0 2px 0 #8a6234,
+    0 3px 0 #14100e;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The counter ticks; it does not slide. The class is added by the animation frame that
+ * actually changed a digit and removed when the number settles — so the movement is
+ * legible as counting, never as a value quietly sliding to a new place while you blink.
+ */
+.moneyTicking {
+  animation: tick 90ms steps(2, end);
+}
+
+@keyframes tick {
+  from {
+    transform: translateY(-2px);
+    filter: brightness(1.4);
+  }
+  to {
+    transform: none;
+    filter: none;
+  }
+}
+
+.delta {
+  font-size: 13px;
+  font-weight: 700;
+  color: #a3c65c;
+  opacity: 0;
+  transition: opacity 220ms linear;
+  font-variant-numeric: tabular-nums;
+}
+.deltaShow {
+  opacity: 1;
+}
+.deltaDown {
+  color: #ef8f68;
+}
+
+.rateRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.rate {
+  font-size: 15px;
+  font-weight: 700;
+  color: #a3c65c;
+  font-variant-numeric: tabular-nums;
+}
+.rateDown {
+  color: #ef8f68;
+}
+.rateIdle {
+  color: #6d5c4d;
+}
+
+.clock {
+  font-size: 11px;
+  color: #9a8873;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the unlock countdown ------------------------------------------------------- */
+
+.unlockHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.unlockName {
+  font-size: 14px;
+  font-weight: 700;
+  color: #efe2c6;
+}
+
+.unlockPrice {
+  font-size: 14px;
+  font-weight: 700;
+  color: #d9b475;
+  font-variant-numeric: tabular-nums;
+}
+
+.unlockBlurb {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #9a8873;
+}
+
+.track {
+  position: relative;
+  height: 10px;
+  margin-top: 8px;
+  background: #14100e;
+  box-shadow: inset 0 0 0 1px #46392f;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: repeating-linear-gradient(90deg, #d9b475 0px, #d9b475 3px, #b58b4d 3px, #b58b4d 4px);
+  box-shadow: inset 0 2px 0 #f5d382;
+  transition: width 220ms linear;
+}
+
+.fillReady {
+  background: repeating-linear-gradient(90deg, #74a340 0px, #74a340 3px, #4e7c2e 3px, #4e7c2e 4px);
+  box-shadow: inset 0 2px 0 #a3c65c;
+}
+
+.etaRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.eta {
+  font-size: 13px;
+  font-weight: 700;
+  color: #9fdcef;
+}
+.etaReady {
+  color: #5fd44a;
+}
+.etaUnknown {
+  color: #6d5c4d;
+}
+
+.owned {
+  font-size: 10px;
+  color: #6d5c4d;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* --- the pouch ------------------------------------------------------------------ */
+
+.pouch {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.pouchEmpty {
+  color: #6d5c4d;
+  font-size: 11px;
+}
+
+.stack {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.stackCount {
+  font-size: 15px;
+  font-weight: 700;
+  color: #efe2c6;
+  font-variant-numeric: tabular-nums;
+}
+
+.stackLabel {
+  font-size: 11px;
+  color: #9a8873;
+}
+
+.stackValue {
+  font-size: 10px;
+  color: #8a6234;
+}
+
+.pouchDivider {
+  width: 2px;
+  align-self: stretch;
+  background: #14100e;
+  box-shadow: 1px 0 0 #46392f;
+}
+
+/* --- the toolbelt --------------------------------------------------------------- */
+
+.belt {
+  display: flex;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  clip-path: none;
+}
+
+.slot {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 74px;
+  padding: 6px 8px 7px;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  color: #cbb99b;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+  transition: transform 70ms steps(2, end);
+}
+
+.slot:hover {
+  transform: translateY(-2px);
+  color: #efe2c6;
+}
+
+.slotActive {
+  color: #14100e;
+  background: linear-gradient(180deg, #f5d382 0%, #d9b475 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #8a6234;
+  transform: translateY(-3px);
+}
+
+.slotBroke {
+  color: #6d5c4d;
+}
+.slotBroke .slotCost {
+  color: #d94f36;
+}
+
+.slotKey {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  opacity: 0.75;
+}
+
+.slotName {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.slotCost {
+  font-size: 10px;
+  color: #b58b4d;
+  font-variant-numeric: tabular-nums;
+}
+
+.slotActive .slotCost {
+  color: #5e1c1a;
+}
+
+/* --- the status ribbon ---------------------------------------------------------- */
+
+/*
+ * Hover feedback — "too far, walk closer". It changes on pointer move, so it never touches
+ * React: the host writes the string into the live channel and an animation frame puts it in
+ * this node's textContent (§13's bypass rule, and this is its second customer).
+ */
+.ribbon {
+  padding: 5px 14px 6px;
+  font-size: 12px;
+  color: #cbb99b;
+  background: rgba(20, 16, 14, 0.82);
+  box-shadow: inset 0 0 0 2px #14100e;
+  clip-path: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+  white-space: nowrap;
+}
+
+/* --- the Clipboard -------------------------------------------------------------- */
+
+/*
+ * Paper, not a panel. It is the one warm-light surface in a dark HUD, which is what makes
+ * three lines of small text read as something worth reading rather than more telemetry.
+ */
+.clipboard {
+  position: relative;
+  width: 292px;
+  padding: 18px 14px 12px;
+  color: #46392f;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(109, 92, 77, 0) 0px,
+      rgba(109, 92, 77, 0) 21px,
+      rgba(109, 92, 77, 0.22) 21px,
+      rgba(109, 92, 77, 0.22) 22px
+    ),
+    linear-gradient(180deg, #efe2c6 0%, #cbb99b 100%);
+  box-shadow:
+    inset 0 0 0 2px #9a8873,
+    inset 0 0 0 4px #efe2c6;
+  clip-path: polygon(
+    5px 0,
+    calc(100% - 5px) 0,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    5px 100%,
+    0 calc(100% - 5px),
+    0 5px
+  );
+  transform: rotate(-0.5deg);
+}
+
+.clip {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 62px;
+  height: 13px;
+  background: linear-gradient(180deg, #d94f36 0%, #9e2f27 100%);
+  box-shadow: inset 0 0 0 2px #5e1c1a;
+}
+
+.clipboardLabel {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6d5c4d;
+  margin-bottom: 6px;
+}
+
+.notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.note {
+  display: flex;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  background: #4e7c2e;
+  box-shadow: 0 0 0 1px rgba(20, 16, 14, 0.45);
+}
+.dotNudge {
+  background: #f2a93b;
+}
+.dotWarn {
+  background: #9e2f27;
+}
+
+/* --- the dev overlay ------------------------------------------------------------ */
+
+.perf {
+  min-width: 232px;
+  padding: 10px 12px;
+  font-size: 11px;
+  color: #a3c65c;
+  background: rgba(20, 16, 14, 0.88);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #35571f;
+  clip-path: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+}
+
+.perfRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.perfKey {
+  color: #6d5c4d;
+}
+
+.perfValue {
+  color: #a3c65c;
+}
+
+/* Over budget. The number is the alarm; there is no separate alarm. */
+.perfOver {
+  color: #d94f36;
+  font-weight: 700;
+}
+
+.perfHint {
+  margin-top: 6px;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #46392f;
+}
+
+/* --- small screens -------------------------------------------------------------- */
+
+/*
+ * The clipboard gives way before the toolbelt does. The centred stack grows toward it, and
+ * an observation you cannot read is worth less than a tool you cannot click.
+ */
+@media (max-width: 1040px) {
+  .clipboard {
+    display: none;
+  }
+  .money {
+    font-size: 24px;
+  }
+  .slot {
+    min-width: 58px;
+  }
+  .slotName {
+    font-size: 11px;
+  }
+}

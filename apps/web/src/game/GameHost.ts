@@ -13,13 +13,22 @@ import { Application } from 'pixi.js';
 import type { WorldState, WorldView } from '@snack/sim';
 import { TICK_MS, createWorld, createWorldView, step, view } from '@snack/sim';
 
+import { createAudioLayer } from '../audio';
+
+// Leaf modules, not the `@/hud` barrel. The barrel re-exports `HudRoot`, and importing it
+// here would pull the entire React HUD tree into the game chunk to obtain three constants.
+import { HUD_PUBLISH_EVERY_TICKS } from '@/hud/cadence';
+import { perf } from '@/hud/perf';
+import { hudStore } from '@/hud/store';
+
 import { CommandQueue } from './input/commands';
 import type { HoverTile, InputHost } from './input/context';
 import { KeyboardInput } from './input/keyboard';
 import { PointerInput } from './input/pointer';
 import { ToolMode } from './input/tools';
 import { Camera } from './render/camera';
-import { recordTick, render } from './render/index';
+import { clock } from './render/hud';
+import { recordTick, render, statusFor } from './render/index';
 import { loadArt } from './render/textures';
 import type { ArtSet } from './render/textures';
 import { createWorldScene, destroyWorldScene } from './render/world';
@@ -106,6 +115,21 @@ export class GameHost implements InputHost {
   /** Renderer state. Created before the app so input can hold a stable reference. */
   readonly camera = new Camera();
 
+  /**
+   * The Music Box. It READS the projection and never calls back into the sim — see the
+   * header of `src/audio/index.ts` for why that direction is not negotiable.
+   */
+  private readonly audio = createAudioLayer();
+
+  /**
+   * The HUD's ownership token. StrictMode mounts, unmounts and remounts, so two hosts exist
+   * briefly and the dying one must not be able to reset the store under the live one — the
+   * store checks this identity on every call and ignores strangers.
+   */
+  private readonly hudToken = {};
+  /** Ticks since the last HUD publish. The cadence is counted in ticks, never in ms. */
+  private ticksSincePublish = 0;
+
   constructor(container: HTMLElement, options: GameHostOptions = {}) {
     this.container = container;
     this.state = options.initialState ?? createWorld(options.seed ?? DEFAULT_SEED);
@@ -142,14 +166,23 @@ export class GameHost implements InputHost {
 
   setTool(tool: ToolMode): void {
     this.tool = tool;
+    // Published immediately rather than at the next cadence tick. React owns things that
+    // change when the PLAYER does something, and 150 ms between pressing 2 and the
+    // watering can lighting up reads as the UI not having heard you. The world's numbers
+    // can wait for the throttle; a keypress cannot.
+    hudStore.publishTool(this.hudToken, tool, this.state.moneyCents);
   }
 
   setHover(tile: HoverTile | null): void {
     this.hover = tile;
   }
 
+  /**
+   * F3 / backtick. Toggles the React dev overlay ([[013]]); the in-canvas one stays hidden
+   * and keeps doing the one job only it can do, which is counting GL draw calls.
+   */
   toggleOverlay(): void {
-    this.scene?.overlay.toggle();
+    perf.toggle();
   }
 
   // --- lifecycle ---------------------------------------------------------------------
@@ -214,6 +247,17 @@ export class GameHost implements InputHost {
     this.resize();
     scene.overlay.installDrawCallCounter(app.renderer);
 
+    // The React HUD subsumes the in-canvas one ([[013]]). The Pixi panel stays constructed
+    // and one flag away from working — its own header always described it as the fallback —
+    // but it draws nothing and, hidden, updates nothing.
+    scene.hud.root.visible = false;
+
+    // Claim the store and publish once immediately, so the HUD comes up with the world
+    // rather than 150 ms after it.
+    hudStore.claim(this.hudToken, (tool) => this.setTool(tool));
+    perf.reset();
+    hudStore.publishWorld(this.hudToken, view(this.state, this.viewBuffer), this.tool);
+
     // Listeners are attached and detached in this one lifecycle pair, never elsewhere. A
     // leaked `keydown` listener from a double-mount means the player walks at double
     // speed and the cause is invisible.
@@ -242,6 +286,10 @@ export class GameHost implements InputHost {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.queue.clear();
+    this.audio.dispose();
+    // Only takes effect if this host is the one holding the token. A StrictMode-orphaned
+    // host disposing after its replacement started is a no-op, which is the whole point.
+    hudStore.release(this.hudToken);
 
     // Wait for a half-finished `start()` before tearing anything down, and swallow its
     // rejection: a failed init is not a reason for cleanup to throw.
@@ -312,6 +360,10 @@ export class GameHost implements InputHost {
     app.render();
     const renderMs = performance.now() - renderStart;
 
+    // After `render()`, so the camera rect it culls and pans against is the one that was
+    // actually applied this frame rather than last frame's.
+    this.audio.observe(projection, this.camera.cameraRect());
+
     scene.overlay.readAndResetDrawCalls();
     scene.overlay.push({
       frameMs: deltaMs,
@@ -322,6 +374,36 @@ export class GameHost implements InputHost {
       sprites: scene.contentRoot.children.length,
     });
     scene.overlay.refresh(deltaMs);
+
+    // --- the HUD boundary --------------------------------------------------------------
+    //
+    // Timing is taken HERE, from outside `step()`, because `performance` does not exist
+    // inside `packages/sim` — its tsconfig has no DOM lib, so a timer in there is a type
+    // error rather than a code-review convention. Not a workaround; the boundary working.
+    perf.push({
+      frameMs: deltaMs,
+      simMs,
+      renderMs,
+      ticks,
+      drawCalls: scene.overlay.lastDrawCalls,
+      sprites: scene.contentRoot.children.length,
+      chunksBaked: scene.terrain.bakedLastFrame,
+    });
+
+    // The live channel: written every frame, notifying nobody. rAF-driven writers in the
+    // HUD put these straight into DOM nodes, which is what keeps a clock and a hover
+    // readout off React's critical path entirely (§13).
+    hudStore.live.clock = clock(projection.tick);
+    hudStore.live.status = statusFor(projection, { hover: this.hover, tool: this.tool });
+
+    // The snapshot: every third tick, ≈6.7 Hz. Counted in TICKS, driven by the loop that
+    // is already here — introducing a `setInterval` for this would put a second clock in
+    // an app whose whole architecture rests on having exactly one.
+    this.ticksSincePublish += ticks;
+    if (this.ticksSincePublish >= HUD_PUBLISH_EVERY_TICKS) {
+      this.ticksSincePublish = 0;
+      hudStore.publishWorld(this.hudToken, projection, this.tool);
+    }
 
     this.rafId = requestAnimationFrame(this.frame);
   };

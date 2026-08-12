@@ -311,7 +311,12 @@ function updateHover(scene: WorldScene, view: WorldView, ui: RenderUiState): voi
   scene.hover.alpha = 0.85;
 }
 
-function statusFor(view: WorldView, ui: RenderUiState): string {
+/**
+ * The hover/reach readout. Exported so the host can put it on the HUD's live channel —
+ * it changes on pointer move, so it goes to a DOM node by ref and never through React
+ * (§13, and [[013]]'s status ribbon).
+ */
+export function statusFor(view: WorldView, ui: RenderUiState): string {
   const tool = ui.tool;
   const cost = TOOL_INFO[tool].costCents;
   if (cost > 0 && view.moneyCents < cost) {
