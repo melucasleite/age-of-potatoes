@@ -1,0 +1,363 @@
+{
+  "name": "withering",
+  "description": "Six potatoes planted, watered once, and then left. Ticks past maturity, past the 30-active-minute in-ground grace, and past the wilting window so the crop turns; one tile is harvested as Day-Old and sold at half list, and the rest are left long enough to collapse into Compost, which is then swept up off the bare tiles. Pins the whole withering timeline, including the rule that nothing is ever worth zero.",
+  "seed": 31337,
+  "ticks": 60212,
+  "expectedHash": "1c9f9ebf",
+  "commands": [
+    {
+      "tick": 0,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 18,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 56,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 57,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 57,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 58,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 60,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 61,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 61,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 62,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 66,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 67,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 67,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 68,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 73,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 74,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 74,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 75,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 80,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 81,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 81,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 82,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 87,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 88,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 88,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 46089,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 46110,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 46111,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 60112,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 60114,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 60115,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 60116,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 60120,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 60121,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 60122,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 60127,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 60128,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 60129,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 60134,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 60135,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 60136,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 60141,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 60142,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 60143,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 60174,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 60210,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 60211,
+      "command": {
+        "type": "SellItem",
+        "item": 8,
+        "count": 3
+      }
+    }
+  ]
+}

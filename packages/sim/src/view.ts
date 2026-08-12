@@ -26,11 +26,14 @@ import {
   FIELD_TILE_COUNT,
   MOISTURE_DRY_THRESHOLD,
   MOISTURE_MAX,
-  MachineKind,
+  MachineRole,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
+  WiltStage,
   cropSpec,
+  grabberSpec,
   machineSpec,
+  wiltStageForAge,
 } from './data';
 import type { CropTile, WorldState } from './state';
 import {
@@ -40,6 +43,7 @@ import {
   lifetimeNetEarningsCents,
   totalManualTouches,
 } from './stats';
+import { effectiveInputCapacity, effectiveOutputCapacity } from './upgrades';
 import { beatIndex, clampInt, divFloor, permille } from './units';
 
 /**
@@ -87,6 +91,14 @@ export interface FieldView {
   /** 1 when the tile reads as dry to the player. */
   dry: number[];
   fertility: number[];
+  /** `WiltStage` per tile: 0 fresh, 1 drooping, 2 turned. */
+  wilt: number[];
+  /** Ticks the tile has stood mature, for the "going Day-Old" countdown in the HUD. */
+  readyAge: number[];
+  /** Compost lying on the tile, waiting to be picked up. */
+  compost: number[];
+  /** Owning zone id, or 0. Drives the chunked zone-paint bake. */
+  zone: number[];
 }
 
 export interface MachineView {
@@ -104,6 +116,69 @@ export interface MachineView {
   tankPermille: number;
   inputCount: number;
   outputCount: number;
+  /** Effective buffer sizes, after the Capacity dial. */
+  inputCapacity: number;
+  outputCapacity: number;
+  /** `ItemId` the machine eats and makes, or 0. Saves the HUD a spec lookup. */
+  inputItem: number;
+  outputItem: number;
+  /** 0..3 on each dial, so the renderer can bolt on chrome exhausts and bigger hoppers. */
+  speedLevel: number;
+  efficiencyLevel: number;
+  capacityLevel: number;
+}
+
+/**
+ * One belt segment and the items riding it.
+ *
+ * `itemDist` and `itemType` are PARALLEL ARRAYS, not objects, because the renderer wants
+ * columns: it walks them straight into a pooled particle buffer. Both are trimmed to
+ * `itemCount` on every projection, so a belt that empties does not leave stale tails.
+ */
+export interface BeltView {
+  id: number;
+  tileX: number;
+  tileY: number;
+  dir: number;
+  lengthTiles: number;
+  tier: number;
+  itemCount: number;
+  /** Subtiles from the belt's start, ascending. */
+  itemDist: number[];
+  /** `ItemId` per entry, same index. */
+  itemType: number[];
+}
+
+export interface GrabberView {
+  id: number;
+  tileX: number;
+  tileY: number;
+  dir: number;
+  tier: number;
+  /** `ItemId` filter, or 0 for unfiltered. */
+  filter: number;
+  /** `ItemId` in the hand, or 0. */
+  held: number;
+  /** How far through the current swing, for the arm animation. */
+  swingPermille: number;
+  opCount: number;
+}
+
+/** A zone card's live readout, already reduced. Plan §5's "47/60 planted · 12 mature · 3 dry". */
+export interface ZoneView {
+  id: number;
+  name: string;
+  crop: number;
+  priority: number;
+  /** 1 when auto-replant is armed. */
+  autoReplant: number;
+  tiles: number;
+  planted: number;
+  mature: number;
+  wilting: number;
+  wilted: number;
+  dry: number;
+  compost: number;
 }
 
 export interface InventoryView {
@@ -145,7 +220,12 @@ export interface WorldView {
   player: PlayerView;
   field: FieldView;
   machines: MachineView[];
+  belts: BeltView[];
+  grabbers: GrabberView[];
+  zones: ZoneView[];
   inventory: InventoryView[];
+  /** Researched tech node ids, sorted. Copied, so the HUD cannot mutate the world's list. */
+  unlocked: string[];
   stats: StatsView;
 }
 
@@ -171,9 +251,17 @@ export function createWorldView(): WorldView {
       ready: new Array<number>(FIELD_TILE_COUNT).fill(0),
       dry: new Array<number>(FIELD_TILE_COUNT).fill(0),
       fertility: new Array<number>(FIELD_TILE_COUNT).fill(0),
+      wilt: new Array<number>(FIELD_TILE_COUNT).fill(0),
+      readyAge: new Array<number>(FIELD_TILE_COUNT).fill(0),
+      compost: new Array<number>(FIELD_TILE_COUNT).fill(0),
+      zone: new Array<number>(FIELD_TILE_COUNT).fill(0),
     },
     machines: [],
+    belts: [],
+    grabbers: [],
+    zones: [],
     inventory: [],
+    unlocked: [],
     stats: {
       centiActiveHours: 0,
       lifetimeNetEarningsCents: 0,
@@ -210,7 +298,11 @@ export function view(state: WorldState, out: WorldView = createWorldView()): Wor
 
   projectField(state, out);
   projectMachines(state, out);
+  projectBelts(state, out);
+  projectGrabbers(state, out);
+  projectZones(state, out);
   projectInventory(state, out);
+  projectUnlocked(state, out);
   projectStats(state, out);
 
   return out;
@@ -232,6 +324,10 @@ function projectField(state: WorldState, out: WorldView): void {
     field.ready[i] = ready ? 1 : 0;
     field.dry[i] = tile.moisture < MOISTURE_DRY_THRESHOLD ? 1 : 0;
     field.fertility[i] = tile.fertility;
+    field.wilt[i] = ready ? wiltStageForAge(tile.readyAge) : WiltStage.Fresh;
+    field.readyAge[i] = tile.readyAge;
+    field.compost[i] = tile.compost;
+    field.zone[i] = tile.zone;
   }
 
   field.crop.length = state.field.length;
@@ -240,6 +336,10 @@ function projectField(state: WorldState, out: WorldView): void {
   field.ready.length = state.field.length;
   field.dry.length = state.field.length;
   field.fertility.length = state.field.length;
+  field.wilt.length = state.field.length;
+  field.readyAge.length = state.field.length;
+  field.compost.length = state.field.length;
+  field.zone.length = state.field.length;
 }
 
 /** Bare soil is stage 0, ready is the crop's last stage, and growth fills the middle. */
@@ -279,6 +379,13 @@ function projectMachines(state: WorldState, out: WorldView): void {
         tankPermille: 0,
         inputCount: 0,
         outputCount: 0,
+        inputCapacity: 0,
+        outputCapacity: 0,
+        inputItem: 0,
+        outputItem: 0,
+        speedLevel: 0,
+        efficiencyLevel: 0,
+        capacityLevel: 0,
       };
       out.machines.push(mv);
     }
@@ -300,9 +407,191 @@ function projectMachines(state: WorldState, out: WorldView): void {
       spec === null || spec.tankCapacityMl <= 0 ? 0 : permille(machine.tankMl, spec.tankCapacityMl);
     mv.inputCount = machine.inputCount;
     mv.outputCount = machine.outputCount;
+    mv.inputCapacity = spec === null ? 0 : effectiveInputCapacity(spec, machine);
+    mv.outputCapacity = spec === null ? 0 : effectiveOutputCapacity(spec, machine);
+    mv.inputItem = spec === null || spec.inputItem === null ? 0 : spec.inputItem;
+    mv.outputItem = spec === null || spec.outputItem === null ? 0 : spec.outputItem;
+    mv.speedLevel = machine.speedLevel;
+    mv.efficiencyLevel = machine.efficiencyLevel;
+    mv.capacityLevel = machine.capacityLevel;
   }
 
   out.machines.length = count;
+}
+
+/**
+ * Belts, items and all.
+ *
+ * The item arrays are reused and trimmed rather than rebuilt: at three belt tiers and a
+ * mature base this is the hottest loop in the projection, and it is the one place where
+ * "plain data in reused buffers" earns its keep twenty times a second.
+ */
+function projectBelts(state: WorldState, out: WorldView): void {
+  const count = state.belts.length;
+
+  for (let i = 0; i < count; i++) {
+    const belt = state.belts[i]!;
+
+    let bv = out.belts[i];
+    if (bv === undefined) {
+      bv = {
+        id: 0,
+        tileX: 0,
+        tileY: 0,
+        dir: 0,
+        lengthTiles: 0,
+        tier: 0,
+        itemCount: 0,
+        itemDist: [],
+        itemType: [],
+      };
+      out.belts.push(bv);
+    }
+
+    bv.id = belt.id;
+    bv.tileX = belt.tileX;
+    bv.tileY = belt.tileY;
+    bv.dir = belt.dir;
+    bv.lengthTiles = belt.lengthTiles;
+    bv.tier = belt.tier;
+
+    const items = belt.items.length;
+    for (let j = 0; j < items; j++) {
+      const entry = belt.items[j]!;
+      bv.itemDist[j] = entry.dist;
+      bv.itemType[j] = entry.item;
+    }
+    bv.itemDist.length = items;
+    bv.itemType.length = items;
+    bv.itemCount = items;
+  }
+
+  out.belts.length = count;
+}
+
+function projectGrabbers(state: WorldState, out: WorldView): void {
+  const count = state.grabbers.length;
+
+  for (let i = 0; i < count; i++) {
+    const grabber = state.grabbers[i]!;
+    const spec = grabberSpec(grabber.tier);
+
+    let gv = out.grabbers[i];
+    if (gv === undefined) {
+      gv = {
+        id: 0,
+        tileX: 0,
+        tileY: 0,
+        dir: 0,
+        tier: 0,
+        filter: 0,
+        held: 0,
+        swingPermille: 0,
+        opCount: 0,
+      };
+      out.grabbers.push(gv);
+    }
+
+    gv.id = grabber.id;
+    gv.tileX = grabber.tileX;
+    gv.tileY = grabber.tileY;
+    gv.dir = grabber.dir;
+    gv.tier = grabber.tier;
+    gv.filter = grabber.filter;
+    gv.held = grabber.held;
+    gv.swingPermille =
+      spec === null || spec.swingTicks <= 0
+        ? 0
+        : permille(spec.swingTicks - grabber.cooldown, spec.swingTicks);
+    gv.opCount = grabber.opCount;
+  }
+
+  out.grabbers.length = count;
+}
+
+/**
+ * Zone cards, with their readouts already counted.
+ *
+ * One pass over the field per projection rather than one per zone: the counts are gathered
+ * into the view objects in a single sweep, keyed by the tile's owner. Zones are few and the
+ * field is small, but the shape is the one that stays cheap when the map is 64×64.
+ */
+function projectZones(state: WorldState, out: WorldView): void {
+  const count = state.zones.length;
+
+  for (let i = 0; i < count; i++) {
+    const zone = state.zones[i]!;
+
+    let zv = out.zones[i];
+    if (zv === undefined) {
+      zv = {
+        id: 0,
+        name: '',
+        crop: 0,
+        priority: 0,
+        autoReplant: 0,
+        tiles: 0,
+        planted: 0,
+        mature: 0,
+        wilting: 0,
+        wilted: 0,
+        dry: 0,
+        compost: 0,
+      };
+      out.zones.push(zv);
+    }
+
+    zv.id = zone.id;
+    zv.name = zone.name;
+    zv.crop = zone.crop;
+    zv.priority = zone.priority;
+    zv.autoReplant = zone.autoReplant ? 1 : 0;
+    zv.tiles = 0;
+    zv.planted = 0;
+    zv.mature = 0;
+    zv.wilting = 0;
+    zv.wilted = 0;
+    zv.dry = 0;
+    zv.compost = 0;
+  }
+
+  out.zones.length = count;
+  if (count === 0) return;
+
+  for (let i = 0; i < state.field.length; i++) {
+    const tile = state.field[i]!;
+    if (tile.zone === 0) continue;
+
+    let zv: ZoneView | undefined;
+    for (let j = 0; j < count; j++) {
+      const candidate = out.zones[j]!;
+      if (candidate.id === tile.zone) {
+        zv = candidate;
+        break;
+      }
+    }
+    if (zv === undefined) continue;
+
+    zv.tiles += 1;
+    zv.compost += tile.compost;
+    if (tile.moisture < MOISTURE_DRY_THRESHOLD) zv.dry += 1;
+    if (tile.crop === CropId.None) continue;
+
+    zv.planted += 1;
+    if (tile.growth < tile.growthTarget) continue;
+
+    const stage = wiltStageForAge(tile.readyAge);
+    if (stage === WiltStage.Wilted) zv.wilted += 1;
+    else if (stage === WiltStage.Wilting) zv.wilting += 1;
+    else zv.mature += 1;
+  }
+}
+
+function projectUnlocked(state: WorldState, out: WorldView): void {
+  for (let i = 0; i < state.unlocked.length; i++) {
+    out.unlocked[i] = state.unlocked[i]!;
+  }
+  out.unlocked.length = state.unlocked.length;
 }
 
 function lampFor(state: WorldState, index: number): LampState {
@@ -313,12 +602,14 @@ function lampFor(state: WorldState, index: number): LampState {
   if (machine.jammed) return LampState.Jammed;
   if (machine.condition <= 0) return LampState.Halted;
 
-  if (machine.kind === MachineKind.Sprinkler) {
+  if (spec.role === MachineRole.Sprinkler) {
     return machine.tankMl <= 0 ? LampState.UtilityMissing : LampState.Running;
   }
 
   if (spec.workPerOperation <= 0) return LampState.Off;
-  if (machine.outputCount >= spec.outputCapacity) return LampState.Blocked;
+  // Blocked before starved: a machine that is both is a downstream problem, and plan §5's
+  // grammar says a red lamp means look downstream while amber means look upstream.
+  if (machine.outputCount >= effectiveOutputCapacity(spec, machine)) return LampState.Blocked;
   if (machine.inputCount <= 0) return LampState.Starved;
   return LampState.Running;
 }

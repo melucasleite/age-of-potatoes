@@ -60,11 +60,22 @@ export type { RngState } from './rng';
 
 // --- balance data -----------------------------------------------------------------
 export {
+  AUTO_REPLANT_PERIOD_TICKS,
   BALANCE_HASH,
+  BELT_ITEM_SPACING_SUBTILES,
+  BELT_MAX_LENGTH_TILES,
+  BELT_SPECS,
+  BeltTier,
+  CAPACITY_BONUS_PER_LEVEL,
+  COMPOST_AFTER_TICKS,
+  COMPOST_PER_CROP,
   CONDITION_EFFECT_THRESHOLD,
   CONDITION_MAX,
   CROP_SPECS,
   CropId,
+  DAY_OLD_DENOMINATOR,
+  DAY_OLD_NUMERATOR,
+  EFFICIENCY_WEAR_CUT_PERCENT_PER_LEVEL,
   FERTILITY_MAX,
   FERTILITY_MIN,
   FIELD_ORIGIN_X,
@@ -72,7 +83,9 @@ export {
   FIELD_TILES_HIGH,
   FIELD_TILES_WIDE,
   FIELD_TILE_COUNT,
+  GRABBER_SPECS,
   GROWTH_PER_WATERED_TICK,
+  GrabberTier,
   HAND_POUR_ML,
   HAND_REACH_SUBTILES,
   ITEM_SPECS,
@@ -81,31 +94,115 @@ export {
   MOISTURE_DRY_THRESHOLD,
   MOISTURE_MAX,
   MachineKind,
+  MachineRole,
   NET_WORTH_SAMPLE_LIMIT,
   NET_WORTH_SAMPLE_PERIOD_TICKS,
   REPAIR_PER_TOUCH,
+  SPEED_RATE_BONUS_PERCENT_PER_LEVEL,
+  SPEED_WEAR_PENALTY_PERCENT_PER_LEVEL,
   SPRINKLER_POUR_ML,
   SPRINKLER_PERIOD_TICKS,
   SPRINKLER_RADIUS_TILES,
   STARTING_MONEY_CENTS,
   STARTING_SEEDS,
+  UPGRADE_COST_PERCENT_BY_LEVEL,
+  UPGRADE_MAX_LEVEL,
+  UpgradeDial,
+  WILT_GRACE_TICKS,
+  WILT_WINDOW_TICKS,
+  WORK_RATE_SCALE,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
+  WiltStage,
+  ZONE_NAME_MAX_LENGTH,
+  ZONE_PAINT_MAX_SPAN,
+  ZONE_PRIORITY_DEFAULT,
+  ZONE_PRIORITY_MAX,
+  ZONE_PRIORITY_MIN,
+  beltSpec,
   cropSpec,
+  dayOldPriceCents,
+  grabberSpec,
+  isPurchasable,
   itemSpec,
   listPriceCents,
   machineSpec,
+  wiltStageForAge,
 } from './data';
-export type { CropSpec, ItemSpec, MachineSpec } from './data';
+export type { BeltSpec, CropSpec, GrabberSpec, ItemSpec, MachineSpec } from './data';
+
+// --- the tech tree ----------------------------------------------------------------
+// Nodes unlock VERBS and carry no numbers; upgrade dials scale NUMBERS and unlock nothing.
+// The two halves of the anti-double-dip rule (plan §3), enforced by the shapes themselves.
+export {
+  MilestoneKind,
+  TECH_NODES,
+  TechBranch,
+  TechId,
+  hasTech,
+  insertUnlocked,
+  milestoneMet,
+  prerequisitesMet,
+  techNode,
+  techSatisfied,
+} from './tech';
+export type { TechNode } from './tech';
+
+// --- per-machine upgrades ---------------------------------------------------------
+export {
+  acceptsUpgrades,
+  effectiveInputCapacity,
+  effectiveOutputCapacity,
+  effectiveTankCapacityMl,
+  effectiveWear,
+  effectiveWorkRate,
+  setUpgradeLevel,
+  upgradeCostCents,
+  upgradeLevel,
+} from './upgrades';
+
+// --- belts, grabbers, and zones ---------------------------------------------------
+export {
+  advanceBelts,
+  advanceGrabbers,
+  beltTakeFromTile,
+  grabberDestTile,
+  grabberSourceTile,
+} from './belts';
+export {
+  PaintMode,
+  advanceZones,
+  clipRectToField,
+  createZoneCounts,
+  paintZoneRect,
+  pruneEmptyZones,
+} from './zones';
+export type { TileRect, ZoneCounts } from './zones';
 
 // --- world state ------------------------------------------------------------------
 export {
   Direction,
   WORLD_STATE_VERSION,
   addItem,
+  beltAt,
+  beltById,
+  beltCoversTile,
+  beltEndDist,
+  beltIndexOfTile,
+  beltInsert,
+  beltTileAtIndex,
+  beltTileIndexForDist,
+  clipZoneName,
   computeNetWorthCents,
   createWorld,
+  directionStepX,
+  directionStepY,
   fieldIndex,
+  fieldTileX,
+  fieldTileY,
+  grabberAt,
+  grabberById,
+  isCompassDirection,
   isFieldTile,
   isInsideWorld,
   isTileReady,
@@ -114,40 +211,68 @@ export {
   machineById,
   machineCentreSubtiles,
   machineCoversTile,
+  oppositeDirection,
+  plantCrop,
   removeItem,
+  removeZone,
+  spawnBelt,
+  spawnGrabber,
   spawnMachine,
+  spawnZone,
   streamFor,
   tileAt,
+  tileOccupied,
+  zoneById,
+  zoneTileCount,
 } from './state';
 export type {
+  Belt,
+  BeltItem,
   CropTile,
+  Grabber,
   InventorySlot,
   Machine,
   PlayerState,
   TraceEntry,
   WorldState,
+  Zone,
 } from './state';
 
 // --- commands ---------------------------------------------------------------------
 export { appendTrace } from './commands';
 export type {
+  BuyItemCommand,
   Command,
   CommandType,
+  CreateZoneCommand,
   HarvestTileCommand,
   LoadMachineCommand,
+  MoveMachineCommand,
+  PaintZoneCommand,
+  PlaceBeltCommand,
+  PlaceGrabberCommand,
   PlaceMachineCommand,
   PlantTileCommand,
   RefillHopperCommand,
+  RemoveBeltCommand,
+  RemoveGrabberCommand,
+  RenameZoneCommand,
   RepairMachineCommand,
+  ResearchTechCommand,
   SellItemCommand,
+  SetGrabberFilterCommand,
   SetMoveDirectionCommand,
+  SetZoneAutoReplantCommand,
+  SetZoneCropCommand,
+  SetZonePriorityCommand,
   UnloadMachineCommand,
+  UpgradeMachineCommand,
   WaterTileCommand,
   WhackJamCommand,
 } from './commands';
 
 // --- the tick ---------------------------------------------------------------------
-export { KNOWN_MACHINE_KINDS, step, stepMany } from './tick';
+export { CHIP_LINE_KINDS, KNOWN_MACHINE_KINDS, step, stepMany } from './tick';
 export type { TickInput } from './tick';
 
 // --- stats ------------------------------------------------------------------------
@@ -161,6 +286,7 @@ export {
   pushNetWorthSample,
   recordEarnings,
   recordManualTouch,
+  recordRefund,
   recordSpend,
   recordWaterDrawn,
   totalManualTouches,
@@ -204,24 +330,31 @@ export {
 export type {
   MigrationOutcome,
   RestoredWorld,
+  SaveBelt,
+  SaveBeltItem,
   SaveCropTile,
   SaveEnvelope,
+  SaveGrabber,
   SaveInventorySlot,
   SaveMachine,
   SaveMigration,
   SavePayload,
   SaveStats,
   SaveStream,
+  SaveZone,
   SimVersionCheck,
 } from './save/index';
 
 // --- the render projection --------------------------------------------------------
 export { LampState, createWorldView, growthStage, view } from './view';
 export type {
+  BeltView,
   FieldView,
+  GrabberView,
   InventoryView,
   MachineView,
   PlayerView,
   StatsView,
   WorldView,
+  ZoneView,
 } from './view';

@@ -3,7 +3,7 @@
   "description": "A long session that exercises all eleven Command variants. Hand-farms to $100, buys a Chip Kitchen, feeds it, buys and refills a sprinkler, repairs both, and wears the kitchen down past the effect threshold until it jams and has to be whacked. Every command here was applied, not attempted — the list is the world’s own input trace.",
   "seed": 8123,
   "ticks": 22967,
-  "expectedHash": "668a53ef",
+  "expectedHash": "61130449",
   "commands": [
     {
       "tick": 0,

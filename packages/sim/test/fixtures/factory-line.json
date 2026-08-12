@@ -1,0 +1,11269 @@
+{
+  "name": "factory-line",
+  "description": "A full era-1-to-era-2 run on one seed: hand-farms the field for cash, researches the fabrication branch and the Workshop Charter, builds Washer → belts → Slicer → Fryer → Seasoner → Bagger with five grabber arms between them, paints and renames a Grow Zone, buys a Speed dial on the Fryer, feeds the line by hand, sells the bags, then researches the seed hopper and arms auto-replant. Exercises every Command variant added with the factory. Every command here was applied, not attempted — the list is the world’s own input trace.",
+  "seed": 70707,
+  "ticks": 33389,
+  "expectedHash": "d99d30b0",
+  "commands": [
+    {
+      "tick": 0,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 28,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 29,
+      "command": {
+        "type": "BuyItem",
+        "item": 1,
+        "count": 32
+      }
+    },
+    {
+      "tick": 30,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 36,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 74,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 75,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 75,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 76,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 79,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 79,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 84,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 84,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 89,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 89,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 94,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 94,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 99,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 99,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 100,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 101,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 121,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 123,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 124,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 124,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 125,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 126,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 126,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 129,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 129,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 134,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 134,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 139,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 139,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 144,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 144,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 145,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 146,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 166,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 170,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 171,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 171,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 172,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 173,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 173,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 176,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 176,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 181,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 181,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 186,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 186,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 191,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 191,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 192,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 193,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 213,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 218,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 219,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 219,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 220,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 221,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 221,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 224,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 224,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 229,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 229,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 234,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 234,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 239,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 239,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 240,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 241,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 261,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 266,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 267,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 267,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 268,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 269,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 269,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 272,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 272,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 277,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 277,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 282,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 282,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 287,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 287,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 288,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 289,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 309,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 314,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 315,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 315,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 316,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 317,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 317,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 320,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 320,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 325,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 325,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 330,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 330,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 335,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 335,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 336,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2537,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 2557,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 2578,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2579,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2580,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 2581,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2584,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2589,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2594,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2599,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2600,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2601,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 2621,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 2623,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2624,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2625,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 2626,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2629,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2634,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2639,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2644,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2645,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2646,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 2666,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 2670,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2671,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 2672,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 2673,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 2676,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 2681,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 2686,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 2691,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 2692,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2693,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 2713,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 2718,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2719,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 2720,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 2721,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 2724,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 2729,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 2734,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 2739,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 2740,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2741,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 2761,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 2766,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2767,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 2768,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 2769,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 2772,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 2777,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 2782,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 2787,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 2788,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2789,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 2809,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 2814,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2815,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 2816,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 2817,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 2820,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 2825,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 2830,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 2835,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 2836,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2837,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 2867,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 2882,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2883,
+      "command": {
+        "type": "SellItem",
+        "item": 2,
+        "count": 98
+      }
+    },
+    {
+      "tick": 2884,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 2,
+        "tileX": 0,
+        "tileY": 12
+      }
+    },
+    {
+      "tick": 2885,
+      "command": {
+        "type": "ResearchTech",
+        "techId": "agronomy-cane"
+      }
+    },
+    {
+      "tick": 2886,
+      "command": {
+        "type": "ResearchTech",
+        "techId": "agronomy-corn"
+      }
+    },
+    {
+      "tick": 2887,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 2893,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 2929,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2930,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2930,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2931,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 2934,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2934,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2939,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2939,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2944,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2944,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2949,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2949,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2954,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2954,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 2955,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2956,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 2976,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 2978,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 2979,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2979,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2980,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 2981,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2981,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2984,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2984,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2989,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2989,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2994,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2994,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 2999,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 2999,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 3000,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3001,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3021,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3025,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3026,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3026,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3027,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3028,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3028,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3031,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3031,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3036,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3036,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3041,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3041,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3046,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3046,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3047,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3048,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3068,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3073,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3074,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3074,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3075,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3076,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3076,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3079,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3079,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3084,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3084,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3089,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3089,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3094,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3094,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3095,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3096,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3116,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3121,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3122,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3122,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3123,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3124,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3124,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3127,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3127,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3132,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3132,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3137,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3137,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3142,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3142,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3143,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3144,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3164,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3169,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3170,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3170,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3171,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3172,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3172,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3175,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3175,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3180,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3180,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3185,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3185,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3190,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 3190,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3191,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3192,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3212,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 3233,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3235,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3255,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3256,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3276,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3278,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3280,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3300,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3301,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3321,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3325,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3327,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3347,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3348,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3368,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3373,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3375,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3395,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3396,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3416,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3421,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3423,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3443,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3444,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3464,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3469,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3471,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3491,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3492,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3522,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3537,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3538,
+      "command": {
+        "type": "BuyItem",
+        "item": 1,
+        "count": 36
+      }
+    },
+    {
+      "tick": 3539,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3545,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 3581,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3582,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 3583,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3586,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 3591,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 3596,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 3601,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 3606,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 3607,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3608,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3628,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3630,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3631,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 3632,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3633,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 3636,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 3641,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 3646,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 3651,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 3652,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3653,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3673,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3677,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3678,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3679,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3680,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3683,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3688,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3693,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3698,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 3699,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3700,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3720,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3725,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3726,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3727,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3728,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3731,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3736,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3741,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3746,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 3747,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3748,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3768,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3773,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3774,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3775,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3776,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3779,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3784,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3789,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3794,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 3795,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3796,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3816,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3821,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3822,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3823,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3824,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3827,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3832,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3837,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3842,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 3843,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3844,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3864,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 3885,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3887,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3907,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3908,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3928,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3930,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3932,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3952,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3953,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 3973,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3977,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3979,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3999,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4000,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4020,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4025,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4027,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4047,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4048,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4068,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4073,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4075,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4095,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4096,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4116,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4121,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4123,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4143,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4144,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4174,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4189,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4190,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4196,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 4232,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4233,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4234,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4237,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4242,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4247,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4252,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4257,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4258,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4259,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4279,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4281,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4282,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4283,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4284,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4287,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4292,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4297,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4302,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4303,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4304,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4324,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4328,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4329,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4330,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4331,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4334,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4339,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4344,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4349,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4350,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4351,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4371,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4376,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4377,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4378,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4379,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4382,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4387,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4392,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4397,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4398,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4399,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4419,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4424,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4425,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 4426,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4427,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 4430,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 4435,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 4440,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 4445,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 4446,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4447,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4467,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4472,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4473,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 4474,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4475,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 4478,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 4483,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 4488,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 4493,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 4494,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4495,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4515,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 4536,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4538,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4558,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4559,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4579,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4581,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4583,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4597,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4603,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4604,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4624,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4628,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4630,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4644,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4650,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4651,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4671,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4676,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4678,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4682,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4687,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 4698,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4699,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4719,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4724,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4726,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4746,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4747,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4767,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4772,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4774,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4794,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4795,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4825,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4840,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4841,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4847,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 4883,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4884,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4885,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4888,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4893,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4898,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4903,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4908,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 4909,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4910,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4930,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4932,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4933,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4934,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4935,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4938,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4943,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4948,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 4948,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4953,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 4954,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4955,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 4975,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4979,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4980,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4981,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4982,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4985,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4990,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 4995,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 4995,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5000,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5001,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5002,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5022,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5027,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5028,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5029,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5030,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5033,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5033,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5038,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5038,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5043,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5048,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5049,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5050,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5070,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5075,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5076,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5077,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5078,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5081,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5086,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5091,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5096,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5097,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5098,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5118,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5123,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5124,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5125,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5126,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5129,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5134,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5139,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5144,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5145,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5146,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5166,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 5187,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5188,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5189,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5190,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5193,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5198,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5203,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5208,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5209,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5210,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5230,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5232,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5233,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5234,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5235,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5238,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5243,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5253,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5254,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5255,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5275,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5279,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5280,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5281,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5282,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5285,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5290,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5300,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5301,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5302,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5322,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5327,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5328,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5329,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5330,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5343,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5348,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5349,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5350,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5370,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5375,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5376,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5377,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5378,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5381,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5386,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5391,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5396,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5397,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5398,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5418,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5423,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5424,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5425,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5426,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5429,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5434,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5439,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5444,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5445,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5446,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5476,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5491,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5492,
+      "command": {
+        "type": "SellItem",
+        "item": 2,
+        "count": 15
+      }
+    },
+    {
+      "tick": 5493,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5499,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 5535,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5536,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5536,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5537,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5540,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5540,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5545,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5545,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5550,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5550,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5555,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5555,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5560,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5560,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 5561,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5562,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5582,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5584,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5585,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5585,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5586,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5587,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5587,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5590,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5590,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5595,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5595,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5600,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5605,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5605,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 5606,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5607,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5627,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5631,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5632,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5632,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5633,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5634,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5634,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5637,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5637,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5642,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5642,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5647,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5652,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5652,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 5653,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5654,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5674,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5679,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5680,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5680,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5681,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5682,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5682,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5685,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5690,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5695,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5695,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5700,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5700,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 5701,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5702,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5722,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5727,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5728,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5728,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5729,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5730,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5730,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5733,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5733,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5738,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5738,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5743,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5743,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5748,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5748,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 5749,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5750,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5770,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5775,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5776,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5776,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5777,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 5778,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5778,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5781,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5781,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5786,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5786,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5791,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5791,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5796,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 5796,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 5797,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5798,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 5836,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 5854,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 5855,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 7106,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 7107,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 7108,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 8359,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 8360,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 8361,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 9612,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 9613,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 9614,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 10865,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 10866,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 10880,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 10919,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 10920,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 10921,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 10924,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 10929,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 10934,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 10939,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 10944,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 10945,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 10946,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 10966,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 10968,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 10969,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 10970,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 10971,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 10974,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 10979,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 10984,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 10989,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 10990,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 10991,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11011,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11015,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11016,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11017,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11018,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11021,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11026,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11031,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11036,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11037,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11038,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11058,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11063,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11064,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11065,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11066,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11069,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11074,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11079,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11084,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11085,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11086,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11106,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11111,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11112,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11113,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11114,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11117,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11122,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11127,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11132,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11133,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11134,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11154,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11159,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11160,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11161,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11162,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11165,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11170,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11175,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11180,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11181,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11182,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11212,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11227,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11228,
+      "command": {
+        "type": "SellItem",
+        "item": 3,
+        "count": 80
+      }
+    },
+    {
+      "tick": 11229,
+      "command": {
+        "type": "SellItem",
+        "item": 2,
+        "count": 17
+      }
+    },
+    {
+      "tick": 11230,
+      "command": {
+        "type": "ResearchTech",
+        "techId": "fabrication-wash-and-slice"
+      }
+    },
+    {
+      "tick": 11231,
+      "command": {
+        "type": "ResearchTech",
+        "techId": "fabrication-fryer"
+      }
+    },
+    {
+      "tick": 11232,
+      "command": {
+        "type": "ResearchTech",
+        "techId": "fabrication-finishing"
+      }
+    },
+    {
+      "tick": 11233,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 4,
+        "tileX": 0,
+        "tileY": 1
+      }
+    },
+    {
+      "tick": 11233,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 5,
+        "tileX": 8,
+        "tileY": 1
+      }
+    },
+    {
+      "tick": 11233,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 6,
+        "tileX": 11,
+        "tileY": 1
+      }
+    },
+    {
+      "tick": 11233,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 7,
+        "tileX": 14,
+        "tileY": 1
+      }
+    },
+    {
+      "tick": 11233,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 8,
+        "tileX": 14,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11234,
+      "command": {
+        "type": "MoveMachine",
+        "machineId": 7,
+        "tileX": 14,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 11235,
+      "command": {
+        "type": "CreateZone",
+        "rect": {
+          "x": 4,
+          "y": 4,
+          "w": 4,
+          "h": 4
+        },
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11236,
+      "command": {
+        "type": "PaintZone",
+        "zoneId": 1,
+        "rect": {
+          "x": 8,
+          "y": 4,
+          "w": 2,
+          "h": 4
+        },
+        "mode": "add"
+      }
+    },
+    {
+      "tick": 11236,
+      "command": {
+        "type": "PaintZone",
+        "zoneId": 1,
+        "rect": {
+          "x": 4,
+          "y": 7,
+          "w": 2,
+          "h": 1
+        },
+        "mode": "remove"
+      }
+    },
+    {
+      "tick": 11236,
+      "command": {
+        "type": "SetZoneCrop",
+        "zoneId": 1,
+        "crop": 2
+      }
+    },
+    {
+      "tick": 11236,
+      "command": {
+        "type": "SetZoneCrop",
+        "zoneId": 1,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11236,
+      "command": {
+        "type": "SetZonePriority",
+        "zoneId": 1,
+        "priority": 8
+      }
+    },
+    {
+      "tick": 11236,
+      "command": {
+        "type": "RenameZone",
+        "zoneId": 1,
+        "name": "North Field"
+      }
+    },
+    {
+      "tick": 11237,
+      "command": {
+        "type": "ResearchTech",
+        "techId": "charter-workshop"
+      }
+    },
+    {
+      "tick": 11238,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11244,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 11280,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11281,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11281,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 11282,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11285,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11285,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 11290,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11290,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 11295,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11295,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 11300,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11300,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 11305,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11305,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 11306,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11307,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11327,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11329,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11330,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11330,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 11331,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11332,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11332,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 11335,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11335,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 11340,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11340,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 11345,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11345,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 11350,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11350,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 11351,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11352,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11372,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11376,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11377,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11377,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11378,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11379,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11379,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11382,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11382,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11387,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11387,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11392,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11392,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11397,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11397,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 11398,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11399,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11419,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11424,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11425,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11425,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11426,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11427,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11427,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11430,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11430,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11435,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11435,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11440,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11440,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11445,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11445,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 11446,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11447,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11467,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11472,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11473,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11473,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11474,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11475,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11475,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11478,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11478,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11483,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11483,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11488,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11488,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11493,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11493,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 11494,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11495,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11515,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11520,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11521,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11521,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11522,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 11523,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11523,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11526,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11526,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11531,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11531,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11536,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11536,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11541,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 11541,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 11542,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11543,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 11581,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 11599,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 11600,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 11601,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 12852,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 12853,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 12854,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 14105,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 14106,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 14107,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 15358,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 15359,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 15360,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 16611,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 16612,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 16626,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 16665,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16666,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 16667,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 16670,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 16675,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 16680,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 16685,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 16690,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 16691,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16692,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 16712,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 16714,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16715,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 16716,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 16717,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 16720,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 16725,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 16730,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 16735,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 16736,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16737,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 16757,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 16761,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16762,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 16763,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 16764,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 16767,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 16772,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 16777,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 16782,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 16783,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16784,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 16804,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 16809,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16810,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 16811,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 16812,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 16815,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 16820,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 16825,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 16830,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 16831,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16832,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 16852,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 16857,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16858,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 16859,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 16860,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 16863,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 16868,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 16873,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 16878,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 16879,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16880,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 16900,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 16905,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16906,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 16907,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 16908,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 16911,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 16916,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 16921,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 16926,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 16927,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16928,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 16958,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 16973,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 16974,
+      "command": {
+        "type": "SellItem",
+        "item": 3,
+        "count": 80
+      }
+    },
+    {
+      "tick": 16975,
+      "command": {
+        "type": "SellItem",
+        "item": 2,
+        "count": 19
+      }
+    },
+    {
+      "tick": 16976,
+      "command": {
+        "type": "ResearchTech",
+        "techId": "logistics-belts"
+      }
+    },
+    {
+      "tick": 16977,
+      "command": {
+        "type": "ResearchTech",
+        "techId": "commerce-upgrade-bench"
+      }
+    },
+    {
+      "tick": 16978,
+      "command": {
+        "type": "ResearchTech",
+        "techId": "logistics-belts-fast"
+      }
+    },
+    {
+      "tick": 16979,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 16985,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 17021,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17022,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17022,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 17023,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 17026,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17026,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 17031,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17031,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 17036,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17036,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 17041,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17041,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 17046,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17046,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 17047,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17048,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 17068,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 17070,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17071,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17071,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 17072,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 17073,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17073,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 17076,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17076,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 17081,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17081,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 17086,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17086,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 17091,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17091,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 17092,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17093,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 17113,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 17117,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17118,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17118,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 17119,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 17120,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17120,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 17123,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17123,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 17128,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17128,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 17133,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17133,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 17138,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17138,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 17139,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17140,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 17160,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 17165,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17166,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17166,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 17167,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 17168,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17168,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 17171,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17171,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 17176,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17176,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 17181,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17181,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 17186,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17186,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 17187,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17188,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 17208,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 17213,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17214,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17214,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 17215,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 17216,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17216,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 17219,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17219,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 17224,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17224,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 17229,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17229,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 17234,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17234,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 17235,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17236,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 17256,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 17261,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17262,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17262,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 17263,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 17264,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17264,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 17267,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17267,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 17272,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17272,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 17277,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17277,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 17282,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 17282,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 17283,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17284,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 17322,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 17340,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 17341,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 17342,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 18593,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 18594,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 18595,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 19846,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 19847,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 19848,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 21099,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 21100,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 21101,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 22352,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 22353,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 22367,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 22406,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22407,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22408,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 22411,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22416,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22421,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22426,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22431,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22432,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22433,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 22453,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 22455,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22456,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 22457,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 22458,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 22461,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 22466,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 22471,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 22476,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 22477,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22478,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 22498,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 22502,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22503,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 22504,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 22505,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 22508,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 22513,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 22518,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 22523,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 22524,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22525,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 22545,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 22550,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22551,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 22552,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 22553,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 22556,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 22561,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 22566,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 22571,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 22572,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22573,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 22593,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 22598,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22599,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 22600,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 22601,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 22604,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 22609,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 22614,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 22619,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 22620,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22621,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 22641,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 22646,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22647,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 22648,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 22649,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 22652,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 22657,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 22662,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 22667,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 22668,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22669,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 22699,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 22714,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22715,
+      "command": {
+        "type": "SellItem",
+        "item": 3,
+        "count": 80
+      }
+    },
+    {
+      "tick": 22716,
+      "command": {
+        "type": "SellItem",
+        "item": 2,
+        "count": 16
+      }
+    },
+    {
+      "tick": 22717,
+      "command": {
+        "type": "PlaceBelt",
+        "tier": 1,
+        "tileX": 3,
+        "tileY": 1,
+        "dir": 2,
+        "lengthTiles": 2
+      }
+    },
+    {
+      "tick": 22717,
+      "command": {
+        "type": "PlaceBelt",
+        "tier": 1,
+        "tileX": 5,
+        "tileY": 1,
+        "dir": 2,
+        "lengthTiles": 2
+      }
+    },
+    {
+      "tick": 22717,
+      "command": {
+        "type": "PlaceBelt",
+        "tier": 2,
+        "tileX": 0,
+        "tileY": 0,
+        "dir": 2,
+        "lengthTiles": 3
+      }
+    },
+    {
+      "tick": 22718,
+      "command": {
+        "type": "RemoveBelt",
+        "beltId": 3
+      }
+    },
+    {
+      "tick": 22719,
+      "command": {
+        "type": "PlaceGrabber",
+        "tier": 1,
+        "tileX": 2,
+        "tileY": 1,
+        "dir": 2,
+        "filter": 0
+      }
+    },
+    {
+      "tick": 22719,
+      "command": {
+        "type": "PlaceGrabber",
+        "tier": 1,
+        "tileX": 7,
+        "tileY": 1,
+        "dir": 2,
+        "filter": 0
+      }
+    },
+    {
+      "tick": 22719,
+      "command": {
+        "type": "PlaceGrabber",
+        "tier": 1,
+        "tileX": 10,
+        "tileY": 1,
+        "dir": 2,
+        "filter": 0
+      }
+    },
+    {
+      "tick": 22719,
+      "command": {
+        "type": "PlaceGrabber",
+        "tier": 1,
+        "tileX": 13,
+        "tileY": 1,
+        "dir": 2,
+        "filter": 0
+      }
+    },
+    {
+      "tick": 22719,
+      "command": {
+        "type": "PlaceGrabber",
+        "tier": 1,
+        "tileX": 14,
+        "tileY": 3,
+        "dir": 3,
+        "filter": 0
+      }
+    },
+    {
+      "tick": 22719,
+      "command": {
+        "type": "PlaceGrabber",
+        "tier": 2,
+        "tileX": 0,
+        "tileY": 0,
+        "dir": 2,
+        "filter": 6
+      }
+    },
+    {
+      "tick": 22720,
+      "command": {
+        "type": "SetGrabberFilter",
+        "grabberId": 6,
+        "filter": 7
+      }
+    },
+    {
+      "tick": 22721,
+      "command": {
+        "type": "RemoveGrabber",
+        "grabberId": 6
+      }
+    },
+    {
+      "tick": 22722,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 22766,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 22815,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22816,
+      "command": {
+        "type": "UpgradeMachine",
+        "machineId": 5,
+        "dial": 1
+      }
+    },
+    {
+      "tick": 22817,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 22861,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 22910,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22911,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 22917,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 22953,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22954,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 22954,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22955,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 22958,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 22958,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22963,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 22963,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22968,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 22968,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22973,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 22973,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22978,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 4,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 22978,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 22979,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 22980,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 23000,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 23002,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23003,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23003,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 23004,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 23005,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23005,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 23008,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23008,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 23013,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23013,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 23018,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23018,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 23023,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 5,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23023,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 23024,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23025,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 23045,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 23049,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23050,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23050,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 23051,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 23052,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23052,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 23055,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23055,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 23060,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23060,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 23065,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23065,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 23070,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 6,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23070,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 23071,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23072,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 23092,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 23097,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23098,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23098,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 23099,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 23100,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23100,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 23103,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23103,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 23108,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23108,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 23113,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23113,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 23118,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 7,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23118,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 23119,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23120,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 23140,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 23145,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23146,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23146,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 23147,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 23148,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23148,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 23151,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23151,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 23156,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23156,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 23161,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23161,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 23166,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 8,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23166,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 23167,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23168,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 23188,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 23193,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23194,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 4,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23194,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 23195,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 23196,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 5,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23196,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 23199,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 6,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23199,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 23204,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 7,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23204,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 23209,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 8,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23209,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 23214,
+      "command": {
+        "type": "PlantTile",
+        "tileX": 9,
+        "tileY": 9,
+        "crop": 1
+      }
+    },
+    {
+      "tick": 23214,
+      "command": {
+        "type": "WaterTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 23215,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23216,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 23254,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 23272,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 23273,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 23274,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 24525,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 24526,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 24527,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 25778,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 25779,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 25780,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 27031,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 27032,
+      "command": {
+        "type": "RepairMachine",
+        "machineId": 2
+      }
+    },
+    {
+      "tick": 27033,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 28284,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 28285,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 28299,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 28338,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28339,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 28340,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 28343,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 28348,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 28353,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 28358,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 28363,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 4
+      }
+    },
+    {
+      "tick": 28364,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28365,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 28385,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 28387,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28388,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 28389,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 28390,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 28393,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 28398,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 28403,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 28408,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 28409,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28410,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 28430,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 28434,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28435,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 28436,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 28437,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 28440,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 28445,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 28450,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 28455,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 6
+      }
+    },
+    {
+      "tick": 28456,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28457,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 28477,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 28482,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28483,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 28484,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 28485,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 28488,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 28493,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 28498,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 28503,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 7
+      }
+    },
+    {
+      "tick": 28504,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28505,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 28525,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 28530,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28531,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 28532,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 28533,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 28536,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 28541,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 28546,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 28551,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 28552,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28553,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 28573,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 28578,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28579,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 4,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 28580,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 28581,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 5,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 28584,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 6,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 28589,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 7,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 28594,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 8,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 28599,
+      "command": {
+        "type": "HarvestTile",
+        "tileX": 9,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 28600,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28601,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 28631,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 28646,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28647,
+      "command": {
+        "type": "SellItem",
+        "item": 3,
+        "count": 80
+      }
+    },
+    {
+      "tick": 28648,
+      "command": {
+        "type": "SellItem",
+        "item": 2,
+        "count": 15
+      }
+    },
+    {
+      "tick": 28649,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 28657,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 1
+      }
+    },
+    {
+      "tick": 28706,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 28707,
+      "command": {
+        "type": "LoadMachine",
+        "machineId": 3,
+        "count": 20
+      }
+    },
+    {
+      "tick": 31708,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 31775,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 31787,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 31788,
+      "command": {
+        "type": "UnloadMachine",
+        "machineId": 7,
+        "count": 20
+      }
+    },
+    {
+      "tick": 31789,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 4
+      }
+    },
+    {
+      "tick": 31848,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 31885,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 31886,
+      "command": {
+        "type": "SellItem",
+        "item": 3,
+        "count": 20
+      }
+    },
+    {
+      "tick": 31887,
+      "command": {
+        "type": "ResearchTech",
+        "techId": "agronomy-seed-hopper"
+      }
+    },
+    {
+      "tick": 31888,
+      "command": {
+        "type": "SetZoneAutoReplant",
+        "zoneId": 1,
+        "on": true
+      }
+    }
+  ]
+}

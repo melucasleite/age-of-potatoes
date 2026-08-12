@@ -92,6 +92,59 @@ only lightly validated. The trace is here because seed + trace is a bug report t
 reproduces exactly — the single most valuable debugging asset a solo dev can have — and it
 costs an append-only array.
 
+## The factory
+
+**The production line.** `Washer → Slicer → Fryer → Seasoner → Bagger`, each a machine with
+its own input and output buffers, integer work-points, and per-operation wear. The canonical
+ratio is **1:1:2:1:1** and the Fryer's doubled cycle time is deliberate — an under-fed line
+leaves a Slicer visibly idle, and "build a second Fryer" is meant to be every player's first
+ratio lesson, taught by a bored machine rather than by a compost pile. `test/factory.test.ts`
+pins that ratio; do not "optimise" it.
+
+The monolithic **Chip Kitchen** from v0.1 is still buildable, still needs no research, and
+still turns a potato straight into a bag. It is strictly slower than the line, which is what
+makes it the honest early-game answer rather than a legacy wart.
+
+Machines are dispatched on `MachineSpec.role`, not on kind, so adding a converter is a data
+change rather than an edit to `tick.ts`.
+
+**Belts.** A belt segment is a sorted list of `(distanceAlongBelt, itemTypeId)` — plan §13,
+and load-bearing. Items are not entities: they have no ids and no renderer counterparts, and
+the renderer derives particle positions from the list every frame. That is what makes
+`ParticleContainer` (no interactivity, no children, no filters) survivable, because picking a
+belt item is a sim-side lookup rather than a sprite hit-test. **Do not replace this with
+per-item entities.** Segments are straight; corners are two segments meeting, and a head item
+hands off to whatever belt starts where its own ends.
+
+**Grabbers** are the only bridge between belts and machine buffers: an arm takes from the tile
+behind it and puts into the tile ahead. A blocked arm stands there holding the item, which is
+the readable version of "look downstream".
+
+**Zones** are painted plans, not machines. Membership lives on the tile (`CropTile.zone`), so
+a tile belongs to at most one zone and painting over a neighbour reassigns rather than
+overlaps. **A drag is ONE command** — `CreateZone` and `PaintZone` carry a rect, so a
+sixty-tile paint is one trace entry instead of sixty, which is what keeps replays small and an
+eventual undo one step per player action. The auto-replant toggle is rejected by the reducer
+until the seed hopper is researched: locked in the simulation, not just in the UI.
+
+**Withering.** A matured tile accrues `readyAge`, one per tick, inside `step()` — so freshness
+counts active factory minutes and nothing else, and a closed tab ages no crop because time
+does not pass. Grace is ~30 active minutes, then a five-minute telegraphed droop, then the
+crop turns and harvests as a **Day-Old** good at `floor(list / 2)`. Left longer it collapses
+into **Compost** on the tile, which the player can still pick up. There is no path out of a
+crop tile that pays zero, and there is no roll anywhere in it — a crop that wilted on a die
+roll would teach nothing.
+
+**The tree and the dials.** `tech.ts` unlocks **verbs** (crops, machines, belt tiers, the
+auto-replant toggle) and carries no numeric field anywhere in `TechNode`. `upgrades.ts` scales
+**numbers** (Speed, Efficiency, Capacity) and unlocks nothing. That split is plan §3's
+anti-double-dip rule, and it is enforced by the shapes themselves rather than by convention —
+adding a "+20% fryer speed" node would require changing the `TechNode` interface, which is
+exactly the friction the rule wants. `test/factory.test.ts` asserts the key set.
+
+Gates are money-only except the three Charters, which add a _visible_ milestone read off a
+counter the HUD already shows. There are no hidden behavioural gates.
+
 ## One-way doors
 
 Per plan §12, these were settled in v0.1 and cannot be revisited once worlds exist:
@@ -129,19 +182,23 @@ are in [`src/save/README.md`](src/save/README.md). The IndexedDB driver lives in
 
 ## Layout
 
-| File          | What lives there                                                    |
-| ------------- | ------------------------------------------------------------------- |
-| `units.ts`    | Base units, conversions, integer arithmetic helpers, the beat grid  |
-| `rng.ts`      | Vendored xoshiro128\*\*, splitmix32, per-system stream derivation   |
-| `data.ts`     | Balance data — crops, items, machines, prices — plus `BALANCE_HASH` |
-| `state.ts`    | `WorldState`, `createWorld`, and the accessors over it              |
-| `commands.ts` | The `Command` union and the append-only trace                       |
-| `tick.ts`     | `step()` and the fixed system order                                 |
-| `stats.ts`    | Leaderboard accumulators                                            |
-| `hash.ts`     | FNV-1a and the canonical serialization                              |
-| `view.ts`     | The render projection                                               |
-| `save/`       | The save envelope, canonical payload, migrations, and `SIM_VERSION` |
-| `index.ts`    | The public surface                                                  |
+| File          | What lives there                                                           |
+| ------------- | -------------------------------------------------------------------------- |
+| `units.ts`    | Base units, conversions, integer arithmetic helpers, the beat grid         |
+| `rng.ts`      | Vendored xoshiro128\*\*, splitmix32, per-system stream derivation          |
+| `data.ts`     | Balance data — crops, items, machines, belts, prices — plus `BALANCE_HASH` |
+| `tech.ts`     | The tech tree. Unlocks verbs; carries no numbers                           |
+| `upgrades.ts` | The three per-machine dials. Scales numbers; unlocks nothing               |
+| `state.ts`    | `WorldState`, `createWorld`, and the accessors over it                     |
+| `belts.ts`    | Belt movement, hand-off, and grabber arms                                  |
+| `zones.ts`    | Zone painting, readouts, and the seed hopper                               |
+| `commands.ts` | The `Command` union and the append-only trace                              |
+| `tick.ts`     | `step()` and the fixed system order                                        |
+| `stats.ts`    | Leaderboard accumulators                                                   |
+| `hash.ts`     | FNV-1a and the canonical serialization                                     |
+| `view.ts`     | The render projection                                                      |
+| `save/`       | The save envelope, canonical payload, migrations, and `SIM_VERSION`        |
+| `index.ts`    | The public surface                                                         |
 
 Balance data lives in this package on purpose: it is save-compatibility surface exactly as
 much as code is, so it is versioned with the sim and folded into `BALANCE_HASH`.

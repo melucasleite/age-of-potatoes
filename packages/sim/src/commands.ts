@@ -18,8 +18,9 @@
 // Every variant is a plain serializable object with integer payloads. No floats, no
 // objects with behaviour, nothing that needs a constructor to come back from JSON.
 
-import type { CropId, ItemId, MachineKind } from './data';
+import type { BeltTier, CropId, GrabberTier, ItemId, MachineKind, UpgradeDial } from './data';
 import type { Direction, TraceEntry, WorldState } from './state';
+import type { PaintMode, TileRect } from './zones';
 
 /** Hold a direction, or `Direction.None` to stop. */
 export interface SetMoveDirectionCommand {
@@ -96,6 +97,130 @@ export interface SellItemCommand {
   count: number;
 }
 
+/** Buy seeds and consumables at the roadside stand, at list. */
+export interface BuyItemCommand {
+  type: 'BuyItem';
+  item: ItemId;
+  count: number;
+}
+
+/**
+ * Pick a machine up and put it down somewhere else. Free, forever (plan §4): misplacement
+ * is genre-baseline QoL and must never be a fine. Buffers and condition travel with it.
+ */
+export interface MoveMachineCommand {
+  type: 'MoveMachine';
+  machineId: number;
+  tileX: number;
+  tileY: number;
+}
+
+/** Buy one level on one of a machine's three dials. Numbers only, never a new verb. */
+export interface UpgradeMachineCommand {
+  type: 'UpgradeMachine';
+  machineId: number;
+  dial: UpgradeDial;
+}
+
+/** Research a tech node: money, prerequisites, and — for Charters — a visible milestone. */
+export interface ResearchTechCommand {
+  type: 'ResearchTech';
+  techId: string;
+}
+
+// --- belts and grabbers -------------------------------------------------------------
+
+/** Lay one straight belt segment. Corners are two segments meeting, not a curve. */
+export interface PlaceBeltCommand {
+  type: 'PlaceBelt';
+  tier: BeltTier;
+  tileX: number;
+  tileY: number;
+  dir: Direction;
+  lengthTiles: number;
+}
+
+/** Take a belt back up. Refunds in full and returns whatever was riding it. */
+export interface RemoveBeltCommand {
+  type: 'RemoveBelt';
+  beltId: number;
+}
+
+export interface PlaceGrabberCommand {
+  type: 'PlaceGrabber';
+  tier: GrabberTier;
+  tileX: number;
+  tileY: number;
+  dir: Direction;
+  /** 0 for unfiltered. Mk1 arms reject anything else. */
+  filter: number;
+}
+
+/** Retune a filtered arm without rebuying it. */
+export interface SetGrabberFilterCommand {
+  type: 'SetGrabberFilter';
+  grabberId: number;
+  filter: number;
+}
+
+export interface RemoveGrabberCommand {
+  type: 'RemoveGrabber';
+  grabberId: number;
+}
+
+// --- zones --------------------------------------------------------------------------
+//
+// ONE DRAG IS ONE COMMAND. The rect is the payload precisely so that a sixty-tile paint is
+// one trace entry rather than sixty — replays stay small, bug reports stay readable, and an
+// eventual undo is one step per player action. The in-progress rubber band is renderer-only
+// and emits nothing; a cancelled drag emits nothing at all.
+
+/** Start a new zone from a completed drag. */
+export interface CreateZoneCommand {
+  type: 'CreateZone';
+  rect: TileRect;
+  crop: CropId;
+}
+
+/** Add to or erase from an existing zone. Tiles owned by another zone are reassigned. */
+export interface PaintZoneCommand {
+  type: 'PaintZone';
+  zoneId: number;
+  rect: TileRect;
+  mode: PaintMode;
+}
+
+export interface SetZoneCropCommand {
+  type: 'SetZoneCrop';
+  zoneId: number;
+  crop: CropId;
+}
+
+export interface SetZonePriorityCommand {
+  type: 'SetZonePriority';
+  zoneId: number;
+  priority: number;
+}
+
+export interface RenameZoneCommand {
+  type: 'RenameZone';
+  zoneId: number;
+  name: string;
+}
+
+/**
+ * Arm or disarm auto-replant.
+ *
+ * REJECTED BY THE REDUCER until the seed hopper is researched, so the locked toggle is
+ * locked in the simulation rather than only in the UI — a disabled button is a suggestion,
+ * and this is the rule.
+ */
+export interface SetZoneAutoReplantCommand {
+  type: 'SetZoneAutoReplant';
+  zoneId: number;
+  on: boolean;
+}
+
 export type Command =
   | SetMoveDirectionCommand
   | WaterTileCommand
@@ -107,7 +232,22 @@ export type Command =
   | RefillHopperCommand
   | RepairMachineCommand
   | WhackJamCommand
-  | SellItemCommand;
+  | SellItemCommand
+  | BuyItemCommand
+  | MoveMachineCommand
+  | UpgradeMachineCommand
+  | ResearchTechCommand
+  | PlaceBeltCommand
+  | RemoveBeltCommand
+  | PlaceGrabberCommand
+  | SetGrabberFilterCommand
+  | RemoveGrabberCommand
+  | CreateZoneCommand
+  | PaintZoneCommand
+  | SetZoneCropCommand
+  | SetZonePriorityCommand
+  | RenameZoneCommand
+  | SetZoneAutoReplantCommand;
 
 export type CommandType = Command['type'];
 

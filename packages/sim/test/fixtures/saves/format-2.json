@@ -1,0 +1,980 @@
+{
+  "formatVersion": 2,
+  "simVersion": "0.2.0+c090bf36",
+  "worldSeed": 70707,
+  "tick": 29100,
+  "payload": {
+    "belts": [
+      {
+        "dir": 2,
+        "id": 1,
+        "items": [
+          {
+            "dist": 198,
+            "item": 4
+          },
+          {
+            "dist": 294,
+            "item": 4
+          },
+          {
+            "dist": 390,
+            "item": 4
+          },
+          {
+            "dist": 486,
+            "item": 4
+          }
+        ],
+        "lengthTiles": 2,
+        "moveAccum": 60,
+        "tier": 1,
+        "tileX": 3,
+        "tileY": 1
+      },
+      {
+        "dir": 2,
+        "id": 2,
+        "items": [
+          {
+            "dist": 73,
+            "item": 4
+          },
+          {
+            "dist": 169,
+            "item": 4
+          }
+        ],
+        "lengthTiles": 2,
+        "moveAccum": 60,
+        "tier": 1,
+        "tileX": 5,
+        "tileY": 1
+      }
+    ],
+    "field": [
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 1
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 1,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 2,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      },
+      {
+        "compost": 0,
+        "crop": 0,
+        "fertility": 3,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "readyAge": 0,
+        "zone": 0
+      }
+    ],
+    "grabbers": [
+      {
+        "cooldown": 7,
+        "dir": 2,
+        "filter": 0,
+        "held": 4,
+        "id": 1,
+        "opCount": 12,
+        "tier": 1,
+        "tileX": 2,
+        "tileY": 1
+      },
+      {
+        "cooldown": 7,
+        "dir": 2,
+        "filter": 0,
+        "held": 4,
+        "id": 2,
+        "opCount": 5,
+        "tier": 1,
+        "tileX": 7,
+        "tileY": 1
+      },
+      {
+        "cooldown": 0,
+        "dir": 2,
+        "filter": 0,
+        "held": 0,
+        "id": 3,
+        "opCount": 4,
+        "tier": 1,
+        "tileX": 10,
+        "tileY": 1
+      },
+      {
+        "cooldown": 2,
+        "dir": 2,
+        "filter": 0,
+        "held": 6,
+        "id": 4,
+        "opCount": 1,
+        "tier": 1,
+        "tileX": 13,
+        "tileY": 1
+      },
+      {
+        "cooldown": 8,
+        "dir": 3,
+        "filter": 0,
+        "held": 0,
+        "id": 5,
+        "opCount": 1,
+        "tier": 1,
+        "tileX": 14,
+        "tileY": 3
+      }
+    ],
+    "inventory": [
+      {
+        "count": 76,
+        "item": 1
+      },
+      {
+        "count": 60,
+        "item": 2
+      }
+    ],
+    "machines": [
+      {
+        "capacityLevel": 0,
+        "condition": 1000,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "id": 1,
+        "inputCount": 0,
+        "investedCents": 0,
+        "jammed": false,
+        "kind": 1,
+        "opCount": 0,
+        "outputCount": 0,
+        "progress": 0,
+        "speedLevel": 0,
+        "tankMl": 0,
+        "tileX": 2,
+        "tileY": 12
+      },
+      {
+        "capacityLevel": 0,
+        "condition": 900,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "id": 2,
+        "inputCount": 0,
+        "investedCents": 10000,
+        "jammed": false,
+        "kind": 2,
+        "opCount": 320,
+        "outputCount": 0,
+        "progress": 0,
+        "speedLevel": 0,
+        "tankMl": 0,
+        "tileX": 0,
+        "tileY": 12
+      },
+      {
+        "capacityLevel": 0,
+        "condition": 987,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "id": 3,
+        "inputCount": 7,
+        "investedCents": 6000,
+        "jammed": false,
+        "kind": 4,
+        "opCount": 13,
+        "outputCount": 0,
+        "progress": 300,
+        "speedLevel": 0,
+        "tankMl": 0,
+        "tileX": 0,
+        "tileY": 1
+      },
+      {
+        "capacityLevel": 0,
+        "condition": 992,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "id": 4,
+        "inputCount": 1,
+        "investedCents": 8000,
+        "jammed": false,
+        "kind": 5,
+        "opCount": 4,
+        "outputCount": 0,
+        "progress": 2200,
+        "speedLevel": 0,
+        "tankMl": 0,
+        "tileX": 8,
+        "tileY": 1
+      },
+      {
+        "capacityLevel": 0,
+        "condition": 994,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "id": 5,
+        "inputCount": 2,
+        "investedCents": 21000,
+        "jammed": false,
+        "kind": 6,
+        "opCount": 2,
+        "outputCount": 0,
+        "progress": 1130,
+        "speedLevel": 1,
+        "tankMl": 0,
+        "tileX": 11,
+        "tileY": 1
+      },
+      {
+        "capacityLevel": 0,
+        "condition": 998,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "id": 6,
+        "inputCount": 0,
+        "investedCents": 9000,
+        "jammed": false,
+        "kind": 7,
+        "opCount": 1,
+        "outputCount": 0,
+        "progress": 0,
+        "speedLevel": 0,
+        "tankMl": 0,
+        "tileX": 14,
+        "tileY": 1
+      },
+      {
+        "capacityLevel": 0,
+        "condition": 1000,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "id": 7,
+        "inputCount": 1,
+        "investedCents": 12000,
+        "jammed": false,
+        "kind": 8,
+        "opCount": 0,
+        "outputCount": 0,
+        "progress": 200,
+        "speedLevel": 0,
+        "tankMl": 0,
+        "tileX": 14,
+        "tileY": 4
+      }
+    ],
+    "moneyCents": 335000,
+    "nextBeltId": 4,
+    "nextGrabberId": 7,
+    "nextMachineId": 8,
+    "nextZoneId": 2,
+    "player": {
+      "facing": 1,
+      "moveAccum": 0,
+      "moveDir": 0,
+      "xSub": 321,
+      "ySub": 571
+    },
+    "stats": {
+      "itemsHarvestedByHand": 580,
+      "itemsProducedByMachine": 340,
+      "itemsSold": 500,
+      "lifetimeEarnedCents": 676000,
+      "lifetimeSpentCents": 346000,
+      "longestHandsFreeTicks": 2244,
+      "netWorthCents": 425914,
+      "netWorthSamples": [
+        5400, 3600, 3600, 17700, 19900, 40200, 74450, 108700, 143700, 177950, 92600, 126850, 161100,
+        197100, 236400, 113400, 149400, 183650, 217900, 259900, 280100, 314350, 348600, 382850,
+        423182
+      ],
+      "nextNetWorthSampleTick": 30000,
+      "peakNetWorthCents": 425914,
+      "ticksElapsed": 29100,
+      "ticksSinceManualTouch": 393,
+      "touches": {
+        "handCarry": 49,
+        "handHarvest": 216,
+        "handPlant": 216,
+        "handRepair": 15,
+        "handWater": 324,
+        "hopperRefill": 0,
+        "jamWhack": 0
+      },
+      "waterDrawnMl": 648000
+    },
+    "streams": [
+      {
+        "id": "crop-growth",
+        "s0": 2842451774,
+        "s1": 978730015,
+        "s2": 1305045809,
+        "s3": 4281202685
+      },
+      {
+        "id": "field-init",
+        "s0": 247917117,
+        "s1": 2171752669,
+        "s2": 3618601985,
+        "s3": 4194557213
+      },
+      {
+        "id": "harvest",
+        "s0": 3067840391,
+        "s1": 2790855729,
+        "s2": 1853823641,
+        "s3": 1866873557
+      }
+    ],
+    "tick": 29100,
+    "unlocked": [
+      "agronomy-cane",
+      "agronomy-corn",
+      "charter-workshop",
+      "commerce-upgrade-bench",
+      "fabrication-finishing",
+      "fabrication-fryer",
+      "fabrication-wash-and-slice",
+      "logistics-belts",
+      "logistics-belts-fast"
+    ],
+    "version": 2,
+    "worldSeed": 70707,
+    "zones": [
+      {
+        "autoReplant": false,
+        "crop": 1,
+        "id": 1,
+        "name": "North Field",
+        "priority": 8,
+        "replantCooldown": 0
+      }
+    ]
+  }
+}

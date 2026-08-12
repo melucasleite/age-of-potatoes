@@ -7,14 +7,18 @@
 // the golden fixtures, and any eventual Worker transport all stand on.
 //
 // Collections are ordered for deterministic iteration: the field is a flat row-major
-// array, machines are an array kept sorted by id, and inventory is kept sorted by item id.
-// Nothing here is iterated with `for...in`, and nothing depends on object key insertion
-// order — integer-like keys sort ascending while string keys keep insertion order, and
-// that mixed rule will eventually reorder entity iteration on somebody's engine.
+// array; machines, belts, grabbers, and zones are arrays kept sorted by id; inventory is
+// kept sorted by item id; the unlock list is kept sorted by node id. Nothing here is
+// iterated with `for...in`, and nothing depends on object key insertion order — integer-like
+// keys sort ascending while string keys keep insertion order, and that mixed rule will
+// eventually reorder entity iteration on somebody's engine.
 
 import {
+  BELT_ITEM_SPACING_SUBTILES,
+  type BeltTier,
   CONDITION_MAX,
   CropId,
+  type CropSpec,
   FERTILITY_MAX,
   FERTILITY_MIN,
   FIELD_ORIGIN_X,
@@ -22,12 +26,17 @@ import {
   FIELD_TILES_HIGH,
   FIELD_TILES_WIDE,
   FIELD_TILE_COUNT,
+  type GrabberTier,
   ItemId,
   MachineKind,
   STARTING_MONEY_CENTS,
   STARTING_SEEDS,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
+  ZONE_NAME_MAX_LENGTH,
+  ZONE_PRIORITY_DEFAULT,
+  beltSpec,
+  grabberSpec,
   listPriceCents,
   machineSpec,
 } from './data';
@@ -42,13 +51,22 @@ import {
 import { type WorldStats, createStats } from './stats';
 import { SUBTILE, divFloor, tileCentreSubtiles } from './units';
 
-/** The save-format shape version. Migrations are a chain of pure functions, never edits. */
-export const WORLD_STATE_VERSION = 1;
+/**
+ * The save-format shape version.
+ *
+ * 1 — v0.1: field, machines, inventory, stats.
+ * 2 — the factory: belts, grabbers, zones, tech unlocks, machine upgrade dials, and the
+ *     per-tile withering clock. Migrations are a chain of pure functions, never edits.
+ */
+export const WORLD_STATE_VERSION = 2;
 
 /**
  * A held direction, not a delta. Input tells the sim *which way the player is holding*,
  * and the sim owns how fast that moves them — otherwise input frequency leaks into world
  * state and a laggy frame becomes a slower character.
+ *
+ * Belts and grabbers reuse the same four compass values for which way they face. `None` is
+ * not a legal facing for either.
  */
 export const Direction = {
   None: 0,
@@ -59,6 +77,36 @@ export const Direction = {
 } as const;
 
 export type Direction = (typeof Direction)[keyof typeof Direction];
+
+/** The tile step one compass direction represents. `None` is the zero vector. */
+export function directionStepX(dir: Direction): number {
+  if (dir === Direction.East) return 1;
+  if (dir === Direction.West) return -1;
+  return 0;
+}
+
+export function directionStepY(dir: Direction): number {
+  if (dir === Direction.South) return 1;
+  if (dir === Direction.North) return -1;
+  return 0;
+}
+
+export function isCompassDirection(dir: number): boolean {
+  return (
+    dir === Direction.North ||
+    dir === Direction.East ||
+    dir === Direction.South ||
+    dir === Direction.West
+  );
+}
+
+export function oppositeDirection(dir: Direction): Direction {
+  if (dir === Direction.North) return Direction.South;
+  if (dir === Direction.South) return Direction.North;
+  if (dir === Direction.East) return Direction.West;
+  if (dir === Direction.West) return Direction.East;
+  return Direction.None;
+}
 
 export interface PlayerState {
   /** Position in subtiles. */
@@ -89,8 +137,18 @@ export interface CropTile {
   growthTarget: number;
   /** 0..MOISTURE_MAX. Growth accrues only while this is above zero. */
   moisture: number;
-  /** 1..3 stars. Decides yield. Decay-with-harvests arrives with soil types at v0.2. */
+  /** 1..3 stars. Decides yield. Decay-with-harvests arrives with soil types. */
   fertility: number;
+  /**
+   * Ticks this tile has stood mature and unharvested. THE ONLY CLOCK WITHERING HAS. It
+   * advances inside `step()`, so it counts active factory minutes and nothing else — a
+   * closed tab ages no crop, because time does not pass (plan §4, §6).
+   */
+  readyAge: number;
+  /** Compost left by a crop that was never picked. Nothing vanishes (plan §4). */
+  compost: number;
+  /** The zone that claims this tile, or 0. A tile belongs to at most one zone. */
+  zone: number;
 }
 
 export interface Machine {
@@ -113,6 +171,82 @@ export interface Machine {
   jammed: boolean;
   /** Ticks until this machine's next periodic action, for machines that have one. */
   cooldown: number;
+  /** Purchase price plus every upgrade bought since. What net worth invoices it at. */
+  investedCents: number;
+  /** 0..UPGRADE_MAX_LEVEL on each dial. Numbers only — dials never unlock a verb. */
+  speedLevel: number;
+  efficiencyLevel: number;
+  capacityLevel: number;
+}
+
+/**
+ * One item riding a belt.
+ *
+ * PLAN §13's REPRESENTATION, AND IT IS LOAD-BEARING: a belt is a sorted list of
+ * `(distanceAlongBelt, itemTypeId)` and nothing else. The renderer derives screen positions
+ * from this list into a pooled particle buffer every frame — a rendered item is a query
+ * result, not an object. There is no persistent particle per sim item, no id per item, and
+ * no sync bookkeeping, which is exactly what makes `ParticleContainer` (no interactivity,
+ * no children) survivable: picking a belt item is a sim-side lookup, not a sprite hit-test.
+ */
+export interface BeltItem {
+  /** Subtiles from the belt's start. Strictly ascending within a belt. */
+  dist: number;
+  item: ItemId;
+}
+
+export interface Belt {
+  id: number;
+  /** The first tile of the segment. */
+  tileX: number;
+  tileY: number;
+  /** Which way goods travel. Always a compass direction, never `None`. */
+  dir: Direction;
+  /** Tiles covered, including the first. Segments are straight; corners are two belts. */
+  lengthTiles: number;
+  tier: BeltTier;
+  /** Sorted ascending by `dist`, never closer together than the tier's item spacing. */
+  items: BeltItem[];
+  /** Sub-subtile movement remainder, in hundredths — the same trick the player uses. */
+  moveAccum: number;
+}
+
+export interface Grabber {
+  id: number;
+  tileX: number;
+  tileY: number;
+  /** The way the arm faces: it takes from behind and puts down ahead. */
+  dir: Direction;
+  tier: GrabberTier;
+  /** Only move this item, or 0 for "anything". Mk1 arms cannot hold one. */
+  filter: number;
+  /** What the hand is holding, or 0. */
+  held: number;
+  /** Ticks left in the current swing. */
+  cooldown: number;
+  /** Items delivered, lifetime. A diagnostic, and a trophy stat. */
+  opCount: number;
+}
+
+/**
+ * A painted Grow Zone.
+ *
+ * A ZONE IS A PLAN, NOT A MACHINE (plan §5). Membership lives on the tiles (`CropTile.zone`)
+ * rather than in a rect list here, because tiles belong to at most one zone and a flat
+ * per-tile owner id is what makes "47/60 planted" unambiguous and O(1) to maintain.
+ */
+export interface Zone {
+  id: number;
+  /** Player-facing, clipped to `ZONE_NAME_MAX_LENGTH`. Cosmetic, and hashed anyway. */
+  name: string;
+  /** What the player intends to grow here. `CropId.None` means undecided. */
+  crop: CropId;
+  /** 0..9. Higher goes first when the seed hopper decides which zone to serve. */
+  priority: number;
+  /** Rejected until the seed hopper is researched — locked in the sim, not just the UI. */
+  autoReplant: boolean;
+  /** Ticks until this zone's next auto-replant attempt. */
+  replantCooldown: number;
 }
 
 /** One entry of the append-only input trace. */
@@ -140,6 +274,25 @@ export interface WorldState {
   /** Sorted ascending by id. */
   machines: Machine[];
   nextMachineId: number;
+
+  /** Sorted ascending by id. */
+  belts: Belt[];
+  nextBeltId: number;
+
+  /** Sorted ascending by id. */
+  grabbers: Grabber[];
+  nextGrabberId: number;
+
+  /** Sorted ascending by id. */
+  zones: Zone[];
+  nextZoneId: number;
+
+  /**
+   * Researched tech node ids, sorted ascending. Sorted rather than insertion-ordered so
+   * two worlds that bought the same nodes in a different order hash identically — they are
+   * the same world, and the digest has to agree.
+   */
+  unlocked: string[];
 
   /**
    * Per-system generator states, derived lazily on first draw. Lazy is deliberate: a world
@@ -189,6 +342,13 @@ export function createWorld(seed: number): WorldState {
     field: [],
     machines: [],
     nextMachineId: 1,
+    belts: [],
+    nextBeltId: 1,
+    grabbers: [],
+    nextGrabberId: 1,
+    zones: [],
+    nextZoneId: 1,
+    unlocked: [],
     streams: {},
     stats,
     trace: [],
@@ -202,6 +362,9 @@ export function createWorld(seed: number): WorldState {
       growthTarget: 0,
       moisture: 0,
       fertility: nextRange(fieldRng, FERTILITY_MIN, FERTILITY_MAX),
+      readyAge: 0,
+      compost: 0,
+      zone: 0,
     });
   }
 
@@ -239,11 +402,89 @@ export function spawnMachine(
     opCount: 0,
     jammed: false,
     cooldown: 0,
+    investedCents: spec.priceCents,
+    speedLevel: 0,
+    efficiencyLevel: 0,
+    capacityLevel: 0,
   };
   state.nextMachineId += 1;
   // Ids only increase, so appending keeps the array sorted by id.
   state.machines.push(machine);
   return machine;
+}
+
+/** Place a belt without charging for it. */
+export function spawnBelt(
+  state: WorldState,
+  tier: BeltTier,
+  tileX: number,
+  tileY: number,
+  dir: Direction,
+  lengthTiles: number,
+): Belt | null {
+  if (beltSpec(tier) === null) return null;
+
+  const belt: Belt = {
+    id: state.nextBeltId,
+    tileX,
+    tileY,
+    dir,
+    lengthTiles,
+    tier,
+    items: [],
+    moveAccum: 0,
+  };
+  state.nextBeltId += 1;
+  state.belts.push(belt);
+  return belt;
+}
+
+/** Place a grabber without charging for it. */
+export function spawnGrabber(
+  state: WorldState,
+  tier: GrabberTier,
+  tileX: number,
+  tileY: number,
+  dir: Direction,
+  filter: number,
+): Grabber | null {
+  if (grabberSpec(tier) === null) return null;
+
+  const grabber: Grabber = {
+    id: state.nextGrabberId,
+    tileX,
+    tileY,
+    dir,
+    tier,
+    filter,
+    held: 0,
+    cooldown: 0,
+    opCount: 0,
+  };
+  state.nextGrabberId += 1;
+  state.grabbers.push(grabber);
+  return grabber;
+}
+
+/** Create an empty zone. Painting tiles into it is a separate step. */
+export function spawnZone(state: WorldState, crop: CropId): Zone {
+  const id = state.nextZoneId;
+  const zone: Zone = {
+    id,
+    name: clipZoneName(`Zone ${String(id)}`),
+    crop,
+    priority: ZONE_PRIORITY_DEFAULT,
+    autoReplant: false,
+    replantCooldown: 0,
+  };
+  state.nextZoneId += 1;
+  state.zones.push(zone);
+  return zone;
+}
+
+/** Clip rather than reject: a long name is a typo, not a reason to eat the command. */
+export function clipZoneName(name: string): string {
+  return name.length <= ZONE_NAME_MAX_LENGTH ? name : name.slice(0, ZONE_NAME_MAX_LENGTH);
 }
 
 // --- streams ----------------------------------------------------------------------
@@ -277,6 +518,15 @@ export function fieldIndex(tileX: number, tileY: number): number {
   return (tileY - FIELD_ORIGIN_Y) * FIELD_TILES_WIDE + (tileX - FIELD_ORIGIN_X);
 }
 
+/** The world tile a field index sits on. The inverse of `fieldIndex`. */
+export function fieldTileX(index: number): number {
+  return FIELD_ORIGIN_X + (index % FIELD_TILES_WIDE);
+}
+
+export function fieldTileY(index: number): number {
+  return FIELD_ORIGIN_Y + divFloor(index, FIELD_TILES_WIDE);
+}
+
 export function tileAt(state: WorldState, tileX: number, tileY: number): CropTile | null {
   const index = fieldIndex(tileX, tileY);
   if (index < 0) return null;
@@ -289,6 +539,24 @@ export function isInsideWorld(tileX: number, tileY: number): boolean {
 
 export function isTileReady(tile: CropTile): boolean {
   return tile.crop !== CropId.None && tile.growth >= tile.growthTarget;
+}
+
+/**
+ * Put a crop in the ground and roll its growth variance.
+ *
+ * The one place a tile is planted, so hand-planting and the seed hopper draw from the same
+ * stream in the same way. Seed accounting is the caller's job — the hopper spends from the
+ * player's stock and a hand-plant does too, but a future greenhouse might not.
+ */
+export function plantCrop(state: WorldState, tile: CropTile, spec: CropSpec): void {
+  // Per-tile growth variance, so a field ripens in waves rather than all at once.
+  const span = divFloor(spec.growthTicks * spec.growthVariancePermille, 1000);
+  const jitter = nextRange(streamFor(state, SystemIds.CropGrowth), -span, span);
+
+  tile.crop = spec.id;
+  tile.growth = 0;
+  tile.growthTarget = spec.growthTicks + jitter;
+  tile.readyAge = 0;
 }
 
 // --- machines ---------------------------------------------------------------------
@@ -329,6 +597,144 @@ export function machineCentreSubtiles(machine: Machine): { xSub: number; ySub: n
     xSub: tileCentreSubtiles(machine.tileX) + divFloor((wide - 1) * SUBTILE, 2),
     ySub: tileCentreSubtiles(machine.tileY) + divFloor((high - 1) * SUBTILE, 2),
   };
+}
+
+// --- belts and grabbers -----------------------------------------------------------
+
+export function beltById(state: WorldState, id: number): Belt | null {
+  for (let i = 0; i < state.belts.length; i++) {
+    const belt = state.belts[i]!;
+    if (belt.id === id) return belt;
+  }
+  return null;
+}
+
+/** How far along a belt an item can travel, in subtiles. */
+export function beltEndDist(belt: Belt): number {
+  return belt.lengthTiles * SUBTILE - 1;
+}
+
+/** Which tile of a belt a distance falls on, as an index from its start. */
+export function beltTileIndexForDist(belt: Belt, dist: number): number {
+  const index = divFloor(dist, SUBTILE);
+  if (index < 0) return 0;
+  return index >= belt.lengthTiles ? belt.lengthTiles - 1 : index;
+}
+
+/** The world tile at a given index along a belt. */
+export function beltTileAtIndex(belt: Belt, index: number): { tileX: number; tileY: number } {
+  return {
+    tileX: belt.tileX + directionStepX(belt.dir) * index,
+    tileY: belt.tileY + directionStepY(belt.dir) * index,
+  };
+}
+
+/** The index of a world tile along a belt, or -1 if the belt does not cover it. */
+export function beltIndexOfTile(belt: Belt, tileX: number, tileY: number): number {
+  const dx = directionStepX(belt.dir);
+  const dy = directionStepY(belt.dir);
+  const offset = dx !== 0 ? (tileX - belt.tileX) * dx : (tileY - belt.tileY) * dy;
+  if (offset < 0 || offset >= belt.lengthTiles) return -1;
+  // The other axis has to match exactly, or a parallel belt one row over would answer.
+  if (dx !== 0 && tileY !== belt.tileY) return -1;
+  if (dy !== 0 && tileX !== belt.tileX) return -1;
+  return offset;
+}
+
+export function beltCoversTile(belt: Belt, tileX: number, tileY: number): boolean {
+  return beltIndexOfTile(belt, tileX, tileY) >= 0;
+}
+
+export function beltAt(state: WorldState, tileX: number, tileY: number): Belt | null {
+  for (let i = 0; i < state.belts.length; i++) {
+    const belt = state.belts[i]!;
+    if (beltCoversTile(belt, tileX, tileY)) return belt;
+  }
+  return null;
+}
+
+/**
+ * Insert an item at `dist`, keeping the list sorted and the spacing legal.
+ *
+ * Returns false and changes nothing when the slot is occupied — which is what a backed-up
+ * belt looks like from the outside, and the reason a grabber holding an item is a jam the
+ * player can see rather than an item that disappeared.
+ */
+export function beltInsert(belt: Belt, dist: number, item: ItemId): boolean {
+  if (dist < 0 || dist > beltEndDist(belt)) return false;
+
+  let insertAt = belt.items.length;
+  for (let i = 0; i < belt.items.length; i++) {
+    const existing = belt.items[i]!;
+    const gap = existing.dist - dist;
+    const spacing = gap < 0 ? -gap : gap;
+    if (spacing < BELT_ITEM_SPACING_SUBTILES) return false;
+    if (existing.dist > dist) {
+      insertAt = i;
+      break;
+    }
+  }
+
+  belt.items.splice(insertAt, 0, { dist, item });
+  return true;
+}
+
+export function grabberById(state: WorldState, id: number): Grabber | null {
+  for (let i = 0; i < state.grabbers.length; i++) {
+    const grabber = state.grabbers[i]!;
+    if (grabber.id === id) return grabber;
+  }
+  return null;
+}
+
+export function grabberAt(state: WorldState, tileX: number, tileY: number): Grabber | null {
+  for (let i = 0; i < state.grabbers.length; i++) {
+    const grabber = state.grabbers[i]!;
+    if (grabber.tileX === tileX && grabber.tileY === tileY) return grabber;
+  }
+  return null;
+}
+
+/** True when anything at all already occupies a tile. */
+export function tileOccupied(state: WorldState, tileX: number, tileY: number): boolean {
+  return (
+    machineAt(state, tileX, tileY) !== null ||
+    beltAt(state, tileX, tileY) !== null ||
+    grabberAt(state, tileX, tileY) !== null
+  );
+}
+
+// --- zones ------------------------------------------------------------------------
+
+export function zoneById(state: WorldState, id: number): Zone | null {
+  for (let i = 0; i < state.zones.length; i++) {
+    const zone = state.zones[i]!;
+    if (zone.id === id) return zone;
+  }
+  return null;
+}
+
+/** How many field tiles a zone owns. */
+export function zoneTileCount(state: WorldState, zoneId: number): number {
+  let count = 0;
+  for (let i = 0; i < state.field.length; i++) {
+    if (state.field[i]!.zone === zoneId) count += 1;
+  }
+  return count;
+}
+
+/** Drop a zone and release its tiles. Called when the last tile is painted away. */
+export function removeZone(state: WorldState, zoneId: number): void {
+  for (let i = 0; i < state.field.length; i++) {
+    const tile = state.field[i]!;
+    if (tile.zone === zoneId) tile.zone = 0;
+  }
+  for (let i = 0; i < state.zones.length; i++) {
+    if (state.zones[i]!.id === zoneId) {
+      state.zones.splice(i, 1);
+      return;
+    }
+  }
 }
 
 // --- inventory --------------------------------------------------------------------
@@ -376,11 +782,14 @@ export function removeItem(state: WorldState, item: ItemId, count: number): bool
 // --- money ------------------------------------------------------------------------
 
 /**
- * Net worth: cash, plus inventory at list, plus machines at invoice scaled by condition.
+ * Net worth: cash, plus inventory at list, plus machines at invoice scaled by condition,
+ * plus everything sitting in a buffer or riding a belt.
  *
  * Every board is net-worth-accounted (plan §6) so that investing during a scoring window
- * is neutral while letting machines rust is a visible loss. Growing crops are deliberately
- * not counted — they are not inventory until they are harvested.
+ * is neutral while letting machines rust is a visible loss. Upgrade spend counts through
+ * `investedCents` for the same reason: an upgraded Fryer is worth more than a bare one, and
+ * a board that said otherwise would punish the player for buying the dial. Growing crops
+ * are deliberately not counted — they are not inventory until they are harvested.
  */
 export function computeNetWorthCents(state: WorldState): number {
   let total = state.moneyCents;
@@ -394,13 +803,29 @@ export function computeNetWorthCents(state: WorldState): number {
     const machine = state.machines[i]!;
     const spec = machineSpec(machine.kind);
     if (spec === null) continue;
-    total += divFloor(spec.priceCents * machine.condition, CONDITION_MAX);
+    total += divFloor(machine.investedCents * machine.condition, CONDITION_MAX);
     if (spec.outputItem !== null) {
       total += listPriceCents(spec.outputItem) * machine.outputCount;
     }
     if (spec.inputItem !== null) {
       total += listPriceCents(spec.inputItem) * machine.inputCount;
     }
+  }
+
+  for (let i = 0; i < state.belts.length; i++) {
+    const belt = state.belts[i]!;
+    const spec = beltSpec(belt.tier);
+    if (spec !== null) total += spec.priceCentsPerTile * belt.lengthTiles;
+    for (let j = 0; j < belt.items.length; j++) {
+      total += listPriceCents(belt.items[j]!.item);
+    }
+  }
+
+  for (let i = 0; i < state.grabbers.length; i++) {
+    const grabber = state.grabbers[i]!;
+    const spec = grabberSpec(grabber.tier);
+    if (spec !== null) total += spec.priceCents;
+    if (grabber.held !== 0) total += listPriceCents(grabber.held as ItemId);
   }
 
   return total;

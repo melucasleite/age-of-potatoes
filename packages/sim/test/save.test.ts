@@ -35,6 +35,7 @@ import {
   stepMany,
 } from '../src/index';
 import fixture from './fixtures/saves/format-1.json';
+import fixture2 from './fixtures/saves/format-2.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -211,16 +212,45 @@ describe('reading a damaged save', () => {
 });
 
 describe('the permanent fixture set', () => {
-  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE. If it fails, either a
-  // migration is missing or the save format changed without one. See fixtures/saves/README.md.
+  // NEVER REGENERATE THIS FIXTURE. `fixtures/saves/format-1.json` is a real world saved by a
+  // real build and it must stay byte-identical forever; it is the only thing that will catch
+  // a migration bug in 2029.
+  //
+  // The expected DIGEST below is a different matter, and it moved once, on purpose. Format 2
+  // added belts, grabbers, zones, tech unlocks, upgrade dials, and the per-tile withering
+  // clock — all of them hashed — so the world this file restores to now legitimately hashes
+  // differently from the one it restored to under format 1. That is the migration working,
+  // not the save breaking: the tick, the seed, the money, and every machine came back
+  // unchanged, which is what the assertions around it check.
+  //
+  // The rule this preserves: a red line here means "either a migration is missing, or the
+  // format changed without one". If you are updating this hash, the commit had better also
+  // add a step to the chain in `save/migrations.ts`.
   it('loads format-1.json and reproduces its world', () => {
     const restored = restoreWorld(fixture);
 
     expect(restored.migration.fromVersion).toBe(1);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([1]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('9fa30100');
+    expect(hashState(restored.state)).toBe('cb2dcba0');
+  });
+
+  it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
+    const state = restoreWorld(fixture).state;
+
+    expect(state.belts).toEqual([]);
+    expect(state.grabbers).toEqual([]);
+    expect(state.zones).toEqual([]);
+    expect(state.unlocked).toEqual([]);
+    // Machines are invoiced at the price they were bought for, frozen in the migration
+    // rather than looked up — today's table must not be able to rewrite an old save.
+    const kitchen = state.machines.find((machine) => machine.kind === MachineKind.ChipKitchen);
+    expect(kitchen?.investedCents).toBe(10_000);
+    expect(kitchen?.speedLevel).toBe(0);
+    // Nothing aged while the world was in a file: the withering clock restarts at zero.
+    expect(state.field.every((tile) => tile.readyAge === 0 && tile.compost === 0)).toBe(true);
   });
 
   it('still contains the world it was recorded with', () => {
@@ -248,5 +278,47 @@ describe('the permanent fixture set', () => {
     stepMany(state, 100);
     expect(state.tick).toBe(tickBefore + 100);
     expect(state.stats.ticksElapsed).toBe(tickBefore + 100);
+  });
+
+  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
+  // format-2 is the first save with a factory in it, caught deliberately mid-flight: items on
+  // both belt segments, three grabber arms holding something, machines part-way through an
+  // operation. A save taken at a tidy moment tests nothing.
+  it('loads format-2.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture2);
+
+    expect(restored.migration.fromVersion).toBe(2);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.state.tick).toBe(29_100);
+    expect(hashState(restored.state)).toBe('0ecdf534');
+  });
+
+  it('brings the factory back exactly as it was left', () => {
+    const state = restoreWorld(fixture2).state;
+
+    expect(state.belts).toHaveLength(2);
+    expect(state.grabbers).toHaveLength(5);
+    expect(state.zones).toHaveLength(1);
+    expect(state.unlocked.length).toBeGreaterThan(0);
+
+    // Goods in transit are part of the world, not a cache to be rebuilt.
+    const riding = state.belts.reduce((total, belt) => total + belt.items.length, 0);
+    expect(riding).toBeGreaterThan(0);
+    expect(state.grabbers.some((grabber) => grabber.held !== 0)).toBe(true);
+
+    // And the belt's sorted-by-distance invariant survived the round trip.
+    for (const belt of state.belts) {
+      for (let i = 1; i < belt.items.length; i++) {
+        expect(belt.items[i]!.dist).toBeGreaterThan(belt.items[i - 1]!.dist);
+      }
+    }
+  });
+
+  it('keeps a restored factory simulating identically', () => {
+    const a = restoreWorld(fixture2).state;
+    const b = restoreWorld(fixture2).state;
+    stepMany(a, 500);
+    stepMany(b, 500);
+    expect(hashState(a)).toBe(hashState(b));
   });
 });

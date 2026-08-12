@@ -130,6 +130,17 @@ export function recordSpend(stats: WorldStats, amountCents: number): void {
   stats.lifetimeSpentCents += amountCents;
 }
 
+/**
+ * Undo a spend — picking a belt back up, scrapping a machine.
+ *
+ * Deliberately NOT `recordEarnings`. Lifetime net earnings is First Ten's stat, and a
+ * player who buys and re-sells the same belt a thousand times must land exactly where they
+ * started rather than farming the board with a mouse.
+ */
+export function recordRefund(stats: WorldStats, amountCents: number): void {
+  stats.lifetimeSpentCents -= amountCents;
+}
+
 export function recordWaterDrawn(stats: WorldStats, volumeMl: number): void {
   stats.waterDrawnMl += volumeMl;
 }

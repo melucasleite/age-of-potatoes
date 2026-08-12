@@ -118,6 +118,9 @@ export function hashStateUint32(state: WorldState): number {
     d.num(tile.growthTarget);
     d.num(tile.moisture);
     d.num(tile.fertility);
+    d.num(tile.readyAge);
+    d.num(tile.compost);
+    d.num(tile.zone);
   }
 
   d.text('machines');
@@ -137,6 +140,69 @@ export function hashStateUint32(state: WorldState): number {
     d.num(machine.opCount);
     d.bool(machine.jammed);
     d.num(machine.cooldown);
+    d.num(machine.investedCents);
+    d.num(machine.speedLevel);
+    d.num(machine.efficiencyLevel);
+    d.num(machine.capacityLevel);
+  }
+
+  // Belts carry their items inline. The list is already sorted by distance and that order
+  // is a world invariant, not a presentation choice, so the digest reads it as it stands.
+  d.text('belts');
+  d.num(state.belts.length);
+  d.num(state.nextBeltId);
+  for (let i = 0; i < state.belts.length; i++) {
+    const belt = state.belts[i]!;
+    d.num(belt.id);
+    d.num(belt.tileX);
+    d.num(belt.tileY);
+    d.num(belt.dir);
+    d.num(belt.lengthTiles);
+    d.num(belt.tier);
+    d.num(belt.moveAccum);
+    d.num(belt.items.length);
+    for (let j = 0; j < belt.items.length; j++) {
+      const entry = belt.items[j]!;
+      d.num(entry.dist);
+      d.num(entry.item);
+    }
+  }
+
+  d.text('grabbers');
+  d.num(state.grabbers.length);
+  d.num(state.nextGrabberId);
+  for (let i = 0; i < state.grabbers.length; i++) {
+    const grabber = state.grabbers[i]!;
+    d.num(grabber.id);
+    d.num(grabber.tileX);
+    d.num(grabber.tileY);
+    d.num(grabber.dir);
+    d.num(grabber.tier);
+    d.num(grabber.filter);
+    d.num(grabber.held);
+    d.num(grabber.cooldown);
+    d.num(grabber.opCount);
+  }
+
+  d.text('zones');
+  d.num(state.zones.length);
+  d.num(state.nextZoneId);
+  for (let i = 0; i < state.zones.length; i++) {
+    const zone = state.zones[i]!;
+    d.num(zone.id);
+    d.text(zone.name);
+    d.num(zone.crop);
+    d.num(zone.priority);
+    d.bool(zone.autoReplant);
+    d.num(zone.replantCooldown);
+  }
+
+  // Already sorted in `WorldState`, for exactly this reason: two worlds that bought the
+  // same nodes in a different order are the same world and must agree here.
+  d.text('unlocked');
+  d.num(state.unlocked.length);
+  for (let i = 0; i < state.unlocked.length; i++) {
+    d.text(state.unlocked[i]!);
   }
 
   // Sorted keys, not enumeration order — integer-like keys sort ascending while string
@@ -231,6 +297,25 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].condition`, machine.condition);
     check(`machines[${i}].opCount`, machine.opCount);
     check(`machines[${i}].cooldown`, machine.cooldown);
+    check(`machines[${i}].investedCents`, machine.investedCents);
+  }
+
+  for (let i = 0; i < state.field.length; i++) {
+    const tile = state.field[i]!;
+    check(`field[${i}].readyAge`, tile.readyAge);
+    check(`field[${i}].compost`, tile.compost);
+  }
+
+  for (let i = 0; i < state.belts.length; i++) {
+    const belt = state.belts[i]!;
+    check(`belts[${i}].moveAccum`, belt.moveAccum);
+    for (let j = 0; j < belt.items.length; j++) {
+      check(`belts[${i}].items[${j}].dist`, belt.items[j]!.dist);
+    }
+  }
+
+  for (let i = 0; i < state.grabbers.length; i++) {
+    check(`grabbers[${i}].cooldown`, state.grabbers[i]!.cooldown);
   }
 
   const streamKeys = Object.keys(state.streams).sort();

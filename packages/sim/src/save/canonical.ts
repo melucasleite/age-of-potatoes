@@ -27,14 +27,17 @@
 // `WorldState` and inside the hash; recomputing them on load would produce a world that
 // hashes differently from the one that was saved, which is the definition of a broken save.
 
-import { CropId, ItemId, MachineKind } from '../data';
+import { BeltTier, CropId, GrabberTier, ItemId, MachineKind } from '../data';
 import type { RngState } from '../rng';
 import {
+  type Belt,
   type CropTile,
+  type Grabber,
   type Machine,
   type PlayerState,
   type TraceEntry,
   type WorldState,
+  type Zone,
   Direction,
 } from '../state';
 import type { ManualTouchCounts, WorldStats } from '../stats';
@@ -56,26 +59,72 @@ export interface SaveInventorySlot {
 }
 
 export interface SaveCropTile {
+  compost: number;
   crop: number;
   fertility: number;
   growth: number;
   growthTarget: number;
   moisture: number;
+  readyAge: number;
+  zone: number;
 }
 
 export interface SaveMachine {
+  capacityLevel: number;
   condition: number;
   cooldown: number;
+  efficiencyLevel: number;
   id: number;
   inputCount: number;
+  investedCents: number;
   jammed: boolean;
   kind: number;
   opCount: number;
   outputCount: number;
   progress: number;
+  speedLevel: number;
   tankMl: number;
   tileX: number;
   tileY: number;
+}
+
+/** One item on a belt: how far along it is, and what it is. Nothing else exists. */
+export interface SaveBeltItem {
+  dist: number;
+  item: number;
+}
+
+export interface SaveBelt {
+  dir: number;
+  id: number;
+  /** Ascending by `dist`, exactly as the belt holds them. */
+  items: SaveBeltItem[];
+  lengthTiles: number;
+  moveAccum: number;
+  tier: number;
+  tileX: number;
+  tileY: number;
+}
+
+export interface SaveGrabber {
+  cooldown: number;
+  dir: number;
+  filter: number;
+  held: number;
+  id: number;
+  opCount: number;
+  tier: number;
+  tileX: number;
+  tileY: number;
+}
+
+export interface SaveZone {
+  autoReplant: boolean;
+  crop: number;
+  id: number;
+  name: string;
+  priority: number;
+  replantCooldown: number;
 }
 
 /** One RNG stream, with its system id folded in — an array entry, not a map key. */
@@ -114,19 +163,27 @@ export interface SaveStats {
   waterDrawnMl: number;
 }
 
-/** `WorldState` minus the trace, in canonical form. */
+/** `WorldState` minus the trace, in canonical form. Keys are alphabetical, always. */
 export interface SavePayload {
+  belts: SaveBelt[];
   field: SaveCropTile[];
+  grabbers: SaveGrabber[];
   inventory: SaveInventorySlot[];
   machines: SaveMachine[];
   moneyCents: number;
+  nextBeltId: number;
+  nextGrabberId: number;
   nextMachineId: number;
+  nextZoneId: number;
   player: SavePlayer;
   stats: SaveStats;
   streams: SaveStream[];
   tick: number;
+  /** Researched node ids, sorted. Strings on purpose — they outlive any index. */
+  unlocked: string[];
   version: number;
   worldSeed: number;
+  zones: SaveZone[];
 }
 
 // --- writing ----------------------------------------------------------------------
@@ -141,11 +198,14 @@ export function toPayload(state: WorldState): SavePayload {
   for (let i = 0; i < state.field.length; i++) {
     const tile = state.field[i]!;
     field.push({
+      compost: tile.compost,
       crop: tile.crop,
       fertility: tile.fertility,
       growth: tile.growth,
       growthTarget: tile.growthTarget,
       moisture: tile.moisture,
+      readyAge: tile.readyAge,
+      zone: tile.zone,
     });
   }
 
@@ -159,20 +219,76 @@ export function toPayload(state: WorldState): SavePayload {
   for (let i = 0; i < state.machines.length; i++) {
     const machine = state.machines[i]!;
     machines.push({
+      capacityLevel: machine.capacityLevel,
       condition: machine.condition,
       cooldown: machine.cooldown,
+      efficiencyLevel: machine.efficiencyLevel,
       id: machine.id,
       inputCount: machine.inputCount,
+      investedCents: machine.investedCents,
       jammed: machine.jammed,
       kind: machine.kind,
       opCount: machine.opCount,
       outputCount: machine.outputCount,
       progress: machine.progress,
+      speedLevel: machine.speedLevel,
       tankMl: machine.tankMl,
       tileX: machine.tileX,
       tileY: machine.tileY,
     });
   }
+
+  const belts: SaveBelt[] = [];
+  for (let i = 0; i < state.belts.length; i++) {
+    const belt = state.belts[i]!;
+    const items: SaveBeltItem[] = [];
+    for (let j = 0; j < belt.items.length; j++) {
+      const entry = belt.items[j]!;
+      items.push({ dist: entry.dist, item: entry.item });
+    }
+    belts.push({
+      dir: belt.dir,
+      id: belt.id,
+      items,
+      lengthTiles: belt.lengthTiles,
+      moveAccum: belt.moveAccum,
+      tier: belt.tier,
+      tileX: belt.tileX,
+      tileY: belt.tileY,
+    });
+  }
+
+  const grabbers: SaveGrabber[] = [];
+  for (let i = 0; i < state.grabbers.length; i++) {
+    const grabber = state.grabbers[i]!;
+    grabbers.push({
+      cooldown: grabber.cooldown,
+      dir: grabber.dir,
+      filter: grabber.filter,
+      held: grabber.held,
+      id: grabber.id,
+      opCount: grabber.opCount,
+      tier: grabber.tier,
+      tileX: grabber.tileX,
+      tileY: grabber.tileY,
+    });
+  }
+
+  const zones: SaveZone[] = [];
+  for (let i = 0; i < state.zones.length; i++) {
+    const zone = state.zones[i]!;
+    zones.push({
+      autoReplant: zone.autoReplant,
+      crop: zone.crop,
+      id: zone.id,
+      name: zone.name,
+      priority: zone.priority,
+      replantCooldown: zone.replantCooldown,
+    });
+  }
+
+  const unlocked: string[] = [];
+  for (let i = 0; i < state.unlocked.length; i++) unlocked.push(state.unlocked[i]!);
 
   // Sorted keys, never enumeration order. Two worlds that acquired the same streams in a
   // different order must serialize identically, exactly as they already hash identically.
@@ -189,11 +305,16 @@ export function toPayload(state: WorldState): SavePayload {
   for (let i = 0; i < stats.netWorthSamples.length; i++) samples.push(stats.netWorthSamples[i]!);
 
   return {
+    belts,
     field,
+    grabbers,
     inventory,
     machines,
     moneyCents: state.moneyCents,
+    nextBeltId: state.nextBeltId,
+    nextGrabberId: state.nextGrabberId,
     nextMachineId: state.nextMachineId,
+    nextZoneId: state.nextZoneId,
     player: {
       facing: state.player.facing,
       moveAccum: state.player.moveAccum,
@@ -227,8 +348,10 @@ export function toPayload(state: WorldState): SavePayload {
     },
     streams,
     tick: state.tick,
+    unlocked,
     version: state.version,
     worldSeed: state.worldSeed,
+    zones,
   };
 }
 
@@ -303,12 +426,53 @@ function list(source: Record<string, unknown>, key: string, path: string): unkno
   return value;
 }
 
-const CROP_IDS: readonly number[] = [CropId.None, CropId.RussetPotato];
-const ITEM_IDS: readonly number[] = [ItemId.PotatoSeed, ItemId.RussetPotato, ItemId.BaggedChips];
+const CROP_IDS: readonly number[] = [
+  CropId.None,
+  CropId.RussetPotato,
+  CropId.SugarCane,
+  CropId.Corn,
+  CropId.ChiliPepper,
+];
+const ITEM_IDS: readonly number[] = [
+  ItemId.PotatoSeed,
+  ItemId.RussetPotato,
+  ItemId.BaggedChips,
+  ItemId.WashedPotato,
+  ItemId.PotatoSlices,
+  ItemId.PlainChips,
+  ItemId.SeasonedChips,
+  ItemId.DayOldPotato,
+  ItemId.Compost,
+  ItemId.CaneSeed,
+  ItemId.SugarCane,
+  ItemId.DayOldCane,
+  ItemId.CornSeed,
+  ItemId.Corn,
+  ItemId.DayOldCorn,
+  ItemId.ChiliSeed,
+  ItemId.ChiliPepper,
+  ItemId.DayOldChili,
+];
+/** A grabber's filter and its hand both accept 0 for "nothing", on top of the real ids. */
+const ITEM_IDS_OR_NONE: readonly number[] = [0, ...ITEM_IDS];
 const MACHINE_KINDS: readonly number[] = [
   MachineKind.SellBin,
   MachineKind.ChipKitchen,
   MachineKind.Sprinkler,
+  MachineKind.Washer,
+  MachineKind.Slicer,
+  MachineKind.Fryer,
+  MachineKind.Seasoner,
+  MachineKind.Bagger,
+];
+const BELT_TIERS: readonly number[] = [BeltTier.Basic, BeltTier.Fast, BeltTier.Express];
+const GRABBER_TIERS: readonly number[] = [GrabberTier.Mk1, GrabberTier.Mk2, GrabberTier.Long];
+/** Belts and grabbers face a compass direction. `None` is not a legal facing for either. */
+const FACINGS: readonly number[] = [
+  Direction.North,
+  Direction.East,
+  Direction.South,
+  Direction.West,
 ];
 const DIRECTIONS: readonly number[] = [
   Direction.None,
@@ -361,6 +525,9 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       growthTarget: int(tile, 'growthTarget', path),
       moisture: int(tile, 'moisture', path),
       fertility: int(tile, 'fertility', path),
+      readyAge: int(tile, 'readyAge', path),
+      compost: int(tile, 'compost', path),
+      zone: int(tile, 'zone', path),
     });
   }
 
@@ -382,8 +549,86 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       opCount: int(machine, 'opCount', path),
       jammed: bool(machine, 'jammed', path),
       cooldown: int(machine, 'cooldown', path),
+      investedCents: int(machine, 'investedCents', path),
+      speedLevel: int(machine, 'speedLevel', path),
+      efficiencyLevel: int(machine, 'efficiencyLevel', path),
+      capacityLevel: int(machine, 'capacityLevel', path),
     });
   }
+
+  const beltsRaw = list(p, 'belts', 'payload');
+  const belts: Belt[] = [];
+  for (let i = 0; i < beltsRaw.length; i++) {
+    const path = `payload.belts[${String(i)}]`;
+    const belt = record(beltsRaw[i], path);
+    const itemsRaw = list(belt, 'items', path);
+    const items: Belt['items'] = [];
+    for (let j = 0; j < itemsRaw.length; j++) {
+      const itemPath = `${path}.items[${String(j)}]`;
+      const entry = record(itemsRaw[j], itemPath);
+      items.push({
+        dist: int(entry, 'dist', itemPath),
+        item: idInt(entry, 'item', itemPath, ITEM_IDS) as ItemId,
+      });
+    }
+    belts.push({
+      id: int(belt, 'id', path),
+      tileX: int(belt, 'tileX', path),
+      tileY: int(belt, 'tileY', path),
+      dir: idInt(belt, 'dir', path, FACINGS) as Direction,
+      lengthTiles: int(belt, 'lengthTiles', path),
+      tier: idInt(belt, 'tier', path, BELT_TIERS) as BeltTier,
+      items,
+      moveAccum: int(belt, 'moveAccum', path),
+    });
+  }
+
+  const grabbersRaw = list(p, 'grabbers', 'payload');
+  const grabbers: Grabber[] = [];
+  for (let i = 0; i < grabbersRaw.length; i++) {
+    const path = `payload.grabbers[${String(i)}]`;
+    const grabber = record(grabbersRaw[i], path);
+    grabbers.push({
+      id: int(grabber, 'id', path),
+      tileX: int(grabber, 'tileX', path),
+      tileY: int(grabber, 'tileY', path),
+      dir: idInt(grabber, 'dir', path, FACINGS) as Direction,
+      tier: idInt(grabber, 'tier', path, GRABBER_TIERS) as GrabberTier,
+      filter: idInt(grabber, 'filter', path, ITEM_IDS_OR_NONE),
+      held: idInt(grabber, 'held', path, ITEM_IDS_OR_NONE),
+      cooldown: int(grabber, 'cooldown', path),
+      opCount: int(grabber, 'opCount', path),
+    });
+  }
+
+  const zonesRaw = list(p, 'zones', 'payload');
+  const zones: Zone[] = [];
+  for (let i = 0; i < zonesRaw.length; i++) {
+    const path = `payload.zones[${String(i)}]`;
+    const zone = record(zonesRaw[i], path);
+    zones.push({
+      id: int(zone, 'id', path),
+      name: str(zone, 'name', path),
+      crop: idInt(zone, 'crop', path, CROP_IDS) as CropId,
+      priority: int(zone, 'priority', path),
+      autoReplant: bool(zone, 'autoReplant', path),
+      replantCooldown: int(zone, 'replantCooldown', path),
+    });
+  }
+
+  // Unknown node ids are kept rather than rejected: a save written by a newer balance patch
+  // that this build then reads has already passed the formatVersion gate, and dropping a
+  // node the player paid for would be worse than carrying a string nothing looks up.
+  const unlockedRaw = list(p, 'unlocked', 'payload');
+  const unlocked: string[] = [];
+  for (let i = 0; i < unlockedRaw.length; i++) {
+    const value = unlockedRaw[i];
+    if (typeof value !== 'string') {
+      fail(`payload.unlocked[${String(i)}]`, 'expected a string node id');
+    }
+    unlocked.push(value);
+  }
+  unlocked.sort();
 
   const streamsRaw = list(p, 'streams', 'payload');
   const streams: Record<string, RngState> = {};
@@ -450,6 +695,13 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     field,
     machines,
     nextMachineId: int(p, 'nextMachineId', 'payload'),
+    belts,
+    nextBeltId: int(p, 'nextBeltId', 'payload'),
+    grabbers,
+    nextGrabberId: int(p, 'nextGrabberId', 'payload'),
+    zones,
+    nextZoneId: int(p, 'nextZoneId', 'payload'),
+    unlocked,
     streams,
     stats,
     trace: restoredTrace,

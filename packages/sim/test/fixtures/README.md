@@ -40,16 +40,23 @@ its name to `FIXTURE_NAMES` in `test/goldens.ts`, and generate its hash once.
 
 ## What each fixture is for
 
-| Fixture            | Seed     |  Ticks | Guards                                                                                                                                                                                                          |
-| ------------------ | -------- | -----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `empty-world.json` | 20260812 |  1,000 | World generation and everything that advances with no player at all: moisture drain, the net-worth sampler, the clock.                                                                                          |
-| `canary-1000.json` | 1234     |  1,000 | Plan §17's canary — a fixed seed and fixed command list. The same script `sim.test.ts` pins inline, so they must agree.                                                                                         |
-| `rng-streams.json` | 424242   |  4,327 | Two plots in different corners, so `field-init`, `crop-growth`, and `harvest` have each advanced by a different amount. A change to stream derivation surfaces here instead of as quietly different crop rolls. |
-| `all-verbs.json`   | 8123     | 22,967 | All eleven `Command` variants, over a long session: hand-farming, a Chip Kitchen, a sprinkler, repairs, and a jam worn in over 130 operations and then whacked out.                                             |
+| Fixture             | Seed     |  Ticks | Guards                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------- | -------- | -----: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `empty-world.json`  | 20260812 |  1,000 | World generation and everything that advances with no player at all: moisture drain, the net-worth sampler, the clock.                                                                                                                                                                                                                                                                                                                   |
+| `canary-1000.json`  | 1234     |  1,000 | Plan §17's canary — a fixed seed and fixed command list. The same script `sim.test.ts` pins inline, so they must agree.                                                                                                                                                                                                                                                                                                                  |
+| `rng-streams.json`  | 424242   |  4,327 | Two plots in different corners, so `field-init`, `crop-growth`, and `harvest` have each advanced by a different amount. A change to stream derivation surfaces here instead of as quietly different crop rolls.                                                                                                                                                                                                                          |
+| `all-verbs.json`    | 8123     | 22,967 | The original eleven `Command` variants, over a long session: hand-farming, a Chip Kitchen, a sprinkler, repairs, and a jam worn in over 130 operations and then whacked out.                                                                                                                                                                                                                                                             |
+| `factory-line.json` | 70707    | 33,389 | A full era-1-to-era-2 run: hand-farms for cash, researches the fabrication branch and the Workshop Charter, builds `Washer → belt → belt → Slicer → Fryer → Seasoner → Bagger` with five grabber arms, paints and renames a Grow Zone, buys a Speed dial, and runs twenty potatoes all the way to twenty bags. Guards the whole factory: belt movement and hand-off, grabber swings, tech gating, upgrade arithmetic, and zone painting. |
+| `withering.json`    | 31337    | 60,212 | Six potatoes planted and abandoned. Ticks past the 30-active-minute grace, past the wilting window, through a Day-Old harvest, and on to the compost collapse. Guards the entire withering timeline and the rule that no path out of a crop tile pays zero.                                                                                                                                                                              |
 
 `golden.test.ts` asserts that the set as a whole covers every `Command` variant, and
-`REQUIRED_COMMAND_COVERAGE` in `test/goldens.ts` is typed so that adding a twelfth variant
-to the union fails `yarn typecheck` until a fixture exercises it.
+`REQUIRED_COMMAND_COVERAGE` in `test/goldens.ts` is typed so that adding one more variant to
+the union fails `yarn typecheck` until a fixture exercises it. That is deliberately annoying:
+a verb no fixture applies is a verb the determinism gate does not guard.
+
+The two factory fixtures were authored by scripting a bot against `step()` and dumping the
+world's own `state.trace` — so every command in them is one that actually applied, not one
+that was attempted and silently rejected.
 
 ## What is deliberately not here
 

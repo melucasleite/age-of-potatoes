@@ -21,11 +21,15 @@ export type { MigrationOutcome, SaveMigration } from './migrations';
 export { SIM_CODE_VERSION, SIM_VERSION, checkSimVersion } from './version';
 export type { SimVersionCheck } from './version';
 export {
+  type SaveBelt,
+  type SaveBeltItem,
   type SaveCropTile,
+  type SaveGrabber,
   type SaveInventorySlot,
   type SaveMachine,
   type SaveStats,
   type SaveStream,
+  type SaveZone,
   fromPayload,
   toPayload,
 } from './canonical';

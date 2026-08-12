@@ -44,7 +44,14 @@ export interface GoldenFixture {
  * Deliberately a written list rather than a directory scan: which worlds are pinned is a
  * decision, and a scan would silently drop a fixture that failed to be committed.
  */
-export const FIXTURE_NAMES = ['empty-world', 'canary-1000', 'rng-streams', 'all-verbs'] as const;
+export const FIXTURE_NAMES = [
+  'empty-world',
+  'canary-1000',
+  'rng-streams',
+  'all-verbs',
+  'factory-line',
+  'withering',
+] as const;
 
 export type FixtureName = (typeof FIXTURE_NAMES)[number];
 
@@ -68,6 +75,21 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   RepairMachine: true,
   WhackJam: true,
   SellItem: true,
+  BuyItem: true,
+  MoveMachine: true,
+  UpgradeMachine: true,
+  ResearchTech: true,
+  PlaceBelt: true,
+  RemoveBelt: true,
+  PlaceGrabber: true,
+  SetGrabberFilter: true,
+  RemoveGrabber: true,
+  CreateZone: true,
+  PaintZone: true,
+  SetZoneCrop: true,
+  SetZonePriority: true,
+  RenameZone: true,
+  SetZoneAutoReplant: true,
 };
 
 /**
