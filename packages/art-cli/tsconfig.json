@@ -1,0 +1,17 @@
+{
+  // Node-only, and the absence of "DOM" here is the mirror image of packages/sim's:
+  // this package may touch the filesystem and sharp but must never be reachable from
+  // the browser bundle. See plan §11 — sharp has an open ERR_DLOPEN_FAILED libvips
+  // bug under Turbopack on Vercel, which is why atlases are committed, not built.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}

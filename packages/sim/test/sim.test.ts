@@ -1,0 +1,245 @@
+// Structural gates for the simulation core.
+//
+// These are the cheap checks that catch a broken determinism guarantee the day it breaks.
+// The standing golden fixtures and the CI job that runs them belong to work item 003; this
+// file is the seed they grow from.
+
+import { describe, expect, it } from 'vitest';
+
+import {
+  type Command,
+  type WorldState,
+  CropId,
+  Direction,
+  FIELD_ORIGIN_X,
+  FIELD_ORIGIN_Y,
+  ItemId,
+  MachineKind,
+  createWorld,
+  createWorldView,
+  deriveStream,
+  findNonIntegerFields,
+  hashState,
+  itemCount,
+  nextUint32,
+  step,
+  stepMany,
+  tileAt,
+  view,
+} from '../src/index';
+
+/**
+ * A fixed script: plant, water, walk to the sell bin, sell, walk back. Enough to move the
+ * player, draw from two RNG streams, touch money, and exercise five command variants.
+ */
+function scriptedCommands(tick: number): Command[] {
+  switch (tick) {
+    case 0:
+      return [{ type: 'PlantTile', tileX: 8, tileY: 11, crop: CropId.RussetPotato }];
+    case 1:
+      return [{ type: 'WaterTile', tileX: 8, tileY: 11 }];
+    case 2:
+      return [
+        { type: 'PlantTile', tileX: 7, tileY: 11, crop: CropId.RussetPotato },
+        { type: 'WaterTile', tileX: 7, tileY: 11 },
+      ];
+    case 3:
+      return [{ type: 'SetMoveDirection', dir: Direction.West }];
+    case 33:
+      return [{ type: 'SetMoveDirection', dir: Direction.None }];
+    case 40:
+      return [{ type: 'SellItem', item: ItemId.PotatoSeed, count: 2 }];
+    case 41:
+      return [{ type: 'SetMoveDirection', dir: Direction.East }];
+    case 71:
+      return [{ type: 'SetMoveDirection', dir: Direction.None }];
+    case 90:
+      return [{ type: 'WaterTile', tileX: 8, tileY: 11 }];
+    default:
+      return [];
+  }
+}
+
+function runScript(seed: number, ticks: number): WorldState {
+  const state = createWorld(seed);
+  for (let i = 0; i < ticks; i++) {
+    step(state, { tick: state.tick, commands: scriptedCommands(state.tick) });
+  }
+  return state;
+}
+
+describe('determinism', () => {
+  it('produces the same hash for the same seed and command list', () => {
+    expect(hashState(runScript(1234, 1000))).toBe(hashState(runScript(1234, 1000)));
+  });
+
+  it('pins the scripted run to a known hash', () => {
+    // If this changes, either the sim changed on purpose or determinism broke by accident.
+    // There is no third option, which is the entire point of the fixture.
+    expect(hashState(runScript(1234, 1000))).toBe('e69e038b');
+  });
+
+  it('gives different seeds different worlds', () => {
+    expect(hashState(createWorld(1))).not.toBe(hashState(createWorld(2)));
+  });
+
+  it('gives the same seed identical empty worlds', () => {
+    expect(hashState(createWorld(7))).toBe(hashState(createWorld(7)));
+  });
+
+  it('survives a JSON round trip', () => {
+    const state = runScript(99, 500);
+    const revived = JSON.parse(JSON.stringify(state)) as WorldState;
+    expect(hashState(revived)).toBe(hashState(state));
+  });
+
+  it('keeps every hashed field an integer', () => {
+    expect(findNonIntegerFields(runScript(1234, 1000))).toEqual([]);
+  });
+
+  it('makes a stray float visible', () => {
+    const state = runScript(1234, 200);
+    const clean = hashState(state);
+    state.field[0]!.moisture = 12.5;
+    expect(hashState(state)).not.toBe(clean);
+    expect(findNonIntegerFields(state)).toEqual(['field[0].moisture = 12.5']);
+  });
+});
+
+describe('rng streams', () => {
+  it('leaves existing streams untouched when a new consumer is registered', () => {
+    const before = hashState(runScript(1234, 1000));
+
+    // A throwaway system nobody had thought of yet, drawn from hard.
+    const newcomer = deriveStream(1234, 'crop-disease' as never);
+    for (let i = 0; i < 64; i++) nextUint32(newcomer);
+
+    expect(hashState(runScript(1234, 1000))).toBe(before);
+  });
+
+  it('derives independent streams per system', () => {
+    const growth = deriveStream(42, 'crop-growth' as never);
+    const harvest = deriveStream(42, 'harvest' as never);
+    expect(nextUint32(growth)).not.toBe(nextUint32(harvest));
+  });
+});
+
+describe('the trace', () => {
+  it('holds exactly the applied commands, in application order', () => {
+    const state = runScript(1234, 100);
+    const applied = state.trace.map((entry) => `${entry.tick}:${entry.command.type}`);
+
+    expect(applied).toEqual([
+      '0:PlantTile',
+      '1:WaterTile',
+      '2:PlantTile',
+      '2:WaterTile',
+      '3:SetMoveDirection',
+      '33:SetMoveDirection',
+      '40:SellItem',
+      '41:SetMoveDirection',
+      '71:SetMoveDirection',
+      '90:WaterTile',
+    ]);
+  });
+
+  it('does not record rejected commands', () => {
+    const state = createWorld(5);
+    // Way out of reach, and there is no field tile there anyway.
+    step(state, { tick: 0, commands: [{ type: 'WaterTile', tileX: 0, tileY: 0 }] });
+    expect(state.trace).toHaveLength(0);
+  });
+});
+
+describe('the v0.1 loop', () => {
+  it('grows, harvests, and sells a potato', () => {
+    const state = createWorld(2026);
+    const tileX = FIELD_ORIGIN_X + 4;
+    const tileY = FIELD_ORIGIN_Y + 7;
+
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'PlantTile', tileX, tileY, crop: CropId.RussetPotato }],
+    });
+    expect(tileAt(state, tileX, tileY)?.crop).toBe(CropId.RussetPotato);
+
+    // Keep it watered until it is ready. Growth accrues only on watered ticks.
+    for (let i = 0; i < 3000; i++) {
+      if (i % 100 === 0) {
+        step(state, { tick: state.tick, commands: [{ type: 'WaterTile', tileX, tileY }] });
+      } else {
+        stepMany(state, 1);
+      }
+    }
+
+    const potatoesBefore = itemCount(state, ItemId.RussetPotato);
+    step(state, { tick: state.tick, commands: [{ type: 'HarvestTile', tileX, tileY }] });
+    const harvested = itemCount(state, ItemId.RussetPotato) - potatoesBefore;
+    expect(harvested).toBeGreaterThan(0);
+
+    // Walk west to the sell bin. 30 ticks at 4 tiles/s covers exactly six tiles.
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'SetMoveDirection', dir: Direction.West }],
+    });
+    stepMany(state, 29);
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'SetMoveDirection', dir: Direction.None }],
+    });
+
+    const moneyBefore = state.moneyCents;
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'SellItem', item: ItemId.RussetPotato, count: harvested }],
+    });
+    expect(state.moneyCents).toBeGreaterThan(moneyBefore);
+    expect(state.stats.lifetimeEarnedCents).toBeGreaterThan(0);
+  });
+
+  it('waters a patch from a filled sprinkler and bills the water to the refill', () => {
+    const state = createWorld(77);
+    state.moneyCents = 100_000;
+
+    const tileX = FIELD_ORIGIN_X - 1;
+    const tileY = FIELD_ORIGIN_Y + 1;
+    state.player.xSub = tileX * 256 + 128;
+    state.player.ySub = tileY * 256 + 128;
+
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'PlaceMachine', kind: MachineKind.Sprinkler, tileX, tileY }],
+    });
+    const sprinkler = state.machines[state.machines.length - 1]!;
+    expect(sprinkler.kind).toBe(MachineKind.Sprinkler);
+
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'RefillHopper', machineId: sprinkler.id }],
+    });
+    expect(state.stats.waterDrawnMl).toBeGreaterThan(0);
+    expect(state.stats.touches.hopperRefill).toBe(1);
+
+    const drawnAfterRefill = state.stats.waterDrawnMl;
+    stepMany(state, 5);
+    expect(tileAt(state, FIELD_ORIGIN_X, tileY)?.moisture).toBeGreaterThan(0);
+    // Pouring from its own barrel is not a second draw on the reservoir.
+    expect(state.stats.waterDrawnMl).toBe(drawnAfterRefill);
+  });
+});
+
+describe('the view seam', () => {
+  it('returns plain data that does not alias live state', () => {
+    const state = runScript(11, 300);
+    const buffer = createWorldView();
+    const projected = view(state, buffer);
+
+    const before = projected.field.moisturePermille[0];
+    state.field[0]!.moisture = 0;
+    expect(projected.field.moisturePermille[0]).toBe(before);
+
+    // Plain enough to survive the trip a Worker would put it through.
+    expect(() => JSON.stringify(projected)).not.toThrow();
+    expect(view(state, buffer)).toBe(buffer);
+  });
+});

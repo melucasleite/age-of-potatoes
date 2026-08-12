@@ -19,8 +19,11 @@ dist/
 build/
 *.tsbuildinfo
 
-# Asset pipeline — generated, rebuildable from committed originals
+# Asset pipeline — generated, rebuildable from committed originals.
+# art/originals/ and art/local/ are deliberately NOT here: they are the source of
+# truth the day a provider is decommissioned. See packages/art-cli/README.md.
 art/build/
+art/cooked/
 art/review/
 
 # OS / editor

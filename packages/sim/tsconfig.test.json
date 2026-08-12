@@ -1,0 +1,14 @@
+{
+  // Tests are typechecked but never emitted, so they stay out of the composite build and
+  // out of dist. `yarn workspace @snack/sim typecheck` runs this after the real build.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "rootDir": ".",
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["vitest/globals"]
+  },
+  "include": ["src/**/*", "test/**/*"]
+}

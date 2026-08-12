@@ -1,0 +1,37 @@
+{
+  "palette": "palette/placeholder.json",
+  "assets": [
+    {
+      "id": "placeholder_item_potato",
+      "provider": "retro-diffusion",
+      "width": 16,
+      "height": 16,
+      "prompt": "a single raw potato, top-down game item icon, chunky readable silhouette, warm earthy tones, no text",
+      "promptStyle": "rd_fast__default",
+      "anchor": "center",
+      "atlasGroup": "items",
+      "removeBg": true
+    },
+    {
+      "id": "placeholder_machine_fryer",
+      "provider": "retro-diffusion",
+      "width": 32,
+      "height": 32,
+      "prompt": "a small industrial deep fryer machine seen from a low three-quarter angle, chunky readable silhouette, warm earthy tones, no text",
+      "promptStyle": "rd_fast__default",
+      "anchor": "bottom-center",
+      "atlasGroup": "machines",
+      "removeBg": true
+    },
+    {
+      "id": "placeholder_local_crate",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "hand-authored wooden crate, drawn by a human in a pixel editor",
+      "anchor": "bottom-center",
+      "atlasGroup": "world",
+      "source": "local/placeholder_local_crate.png"
+    }
+  ]
+}

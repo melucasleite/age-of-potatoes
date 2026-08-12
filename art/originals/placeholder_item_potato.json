@@ -1,0 +1,24 @@
+{
+  "id": "placeholder_item_potato",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1708768916,
+  "prompt": "a single raw potato, top-down game item icon, chunky readable silhouette, warm earthy tones, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/placeholder.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T18:27:07.050Z"
+}

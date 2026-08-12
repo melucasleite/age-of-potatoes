@@ -1,0 +1,18 @@
+{
+  "name": "@snack/art-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Asset pipeline: manifest -> provider -> committed originals -> one atlas + typed manifest. Node-only; never imported by the game.",
+  "scripts": {
+    "art": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "sharp": "0.34.4"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "tsx": "4.20.6"
+  }
+}

@@ -11,7 +11,7 @@ graduates into Factorio-style belts, inserter arms, pumps, and pipes.
 ## The idea
 
 The loop never changes — **Tend → Convert → Sell → Improve**. What changes over the life of
-a save is *who owns each verb*: your hands, your tools, then your machines. Every system
+a save is _who owns each verb_: your hands, your tools, then your machines. Every system
 has a manual tier, an assisted tier, and an automated tier, and each automation unlock
 retires a tool with a small ceremony. Your first watering can ends up bronzed on a plaque
 with the number of tiles you personally watered.
@@ -40,12 +40,12 @@ Then run your dev server and open `/play`.
 
 ## Layout
 
-| Path | What lives there |
-| --- | --- |
-| `packages/sim` | The deterministic simulation. Pure TypeScript, zero dependencies, no DOM. |
-| `packages/art-cli` | Asset pipeline: AI generation → post-processing → atlas packing. |
-| `apps/web` | Next.js shell, PixiJS renderer, input, HUD, audio. |
-| `art/` | Master palette, manifest, and committed generated originals. |
+| Path               | What lives there                                                          |
+| ------------------ | ------------------------------------------------------------------------- |
+| `packages/sim`     | The deterministic simulation. Pure TypeScript, zero dependencies, no DOM. |
+| `packages/art-cli` | Asset pipeline: AI generation → post-processing → atlas packing.          |
+| `apps/web`         | Next.js shell, PixiJS renderer, input, HUD, audio.                        |
+| `art/`             | Master palette, manifest, and committed generated originals.              |
 
 ## Contributing
 

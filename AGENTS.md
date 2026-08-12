@@ -26,7 +26,7 @@ the last bits, which desyncs replays.
 **Integer units everywhere in the sim.** `SUBTILE = 256` per tile, money in **cents**,
 machine progress in integer work-points, fluids in millilitres. No floats in sim state.
 The reason is not paranoia about compilers — it is that float determinism holds only if
-the exact operation *sequence* survives, and a routine refactor that reorders `(a*b)+c`
+the exact operation _sequence_ survives, and a routine refactor that reorders `(a*b)+c`
 silently invalidates every stored replay. Integers make refactoring safe.
 
 **Cosmetic randomness lives in the renderer.** Particle jitter, idle animation offsets,
@@ -47,7 +47,7 @@ fails the build if that atlas spills to a second page. Status lamps must not sha
 atlas with machine sprites unless that atlas is also pinned to one page.
 
 **Every state mutation goes through a `Command` applied at a specific tick.** No debug
-buttons, no cheats, no out-of-band mutation. Camera pan, hover, and menu state are *not*
+buttons, no cheats, no out-of-band mutation. Camera pan, hover, and menu state are _not_
 commands and never enter the sim.
 
 ## Toolchain
@@ -55,7 +55,7 @@ commands and never enter the sim.
 - **yarn 1.22 (classic)** — always yarn, never npm.
 - **TypeScript 6.0.3**, not 7. TS 7 shipped without a stable programmatic API until 7.1
   and typescript-eslint cannot consume it — but lint rules are what enforce sim purity.
-- Next.js 16.3 (App Router, Turbopack), React 19.2, PixiJS 8.19 as a *library* with no
+- Next.js 16.3 (App Router, Turbopack), React 19.2, PixiJS 8.19 as a _library_ with no
   game framework, vitest 4.
 - Node's native TS stripping cannot run `enum` — use `as const` objects instead.
 

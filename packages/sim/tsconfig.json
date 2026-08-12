@@ -1,0 +1,16 @@
+{
+  // The simulation is pure TypeScript and must stay that way. Note the absence of
+  // "DOM" in lib: that is deliberate and load-bearing — it makes `window`,
+  // `document`, and `performance` fail to type-check inside this package, so sim
+  // purity is enforced by the compiler rather than by discipline. See work item
+  // 002 and plan §12.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "composite": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["dist", "node_modules"]
+}

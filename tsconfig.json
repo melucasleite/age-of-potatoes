@@ -1,0 +1,8 @@
+{
+  // Solution file for `tsc --build` at the repo root. It compiles nothing itself; it just
+  // names the composite projects to build. Add a reference here when a package gains
+  // "composite": true — `apps/web` typechecks through `next build` and its own
+  // `yarn workspace @snack/web typecheck`, so it is deliberately not referenced.
+  "files": [],
+  "references": [{ "path": "./packages/sim" }]
+}

@@ -1,0 +1,76 @@
+{
+  "frames": {
+    "placeholder_item_potato": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "placeholder_local_crate": {
+      "frame": {
+        "x": 0,
+        "y": 17,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "bottom-center",
+      "group": "world"
+    }
+  },
+  "meta": {
+    "app": "@snack/art-cli",
+    "image": "atlas.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 16,
+      "h": 64
+    },
+    "scale": "1",
+    "groups": [
+      {
+        "group": "items",
+        "x": 0,
+        "y": 0,
+        "width": 16,
+        "height": 16,
+        "count": 1
+      },
+      {
+        "group": "world",
+        "x": 0,
+        "y": 17,
+        "width": 16,
+        "height": 16,
+        "count": 1
+      }
+    ]
+  }
+}

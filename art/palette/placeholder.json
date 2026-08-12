@@ -1,0 +1,5 @@
+{
+  "name": "placeholder",
+  "note": "NOT the master palette. Eight colours to develop the pipeline against. Work item 005 authors art/palette/master.json by hand (32-48 colours) and repoints art/manifest.json at it.",
+  "colors": ["#1b1710", "#3b2f22", "#7a5a35", "#c08b4a", "#e8c87a", "#4a6b33", "#7fae5a", "#d9d2c0"]
+}

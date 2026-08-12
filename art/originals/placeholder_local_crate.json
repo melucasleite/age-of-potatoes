@@ -1,0 +1,24 @@
+{
+  "id": "placeholder_local_crate",
+  "provider": "local",
+  "model": "local:local/placeholder_local_crate.png",
+  "seed": null,
+  "prompt": "hand-authored wooden crate, drawn by a human in a pixel editor",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/placeholder.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "world",
+  "costUsd": 0,
+  "generatedAt": "2026-08-12T18:29:32.721Z"
+}

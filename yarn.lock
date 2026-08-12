@@ -2,17 +2,233 @@
 # yarn lockfile v1
 
 
-"@emnapi/runtime@^1.11.1":
+"@emnapi/runtime@^1.11.1", "@emnapi/runtime@^1.5.0":
   version "1.11.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@emnapi/runtime/-/runtime-1.11.3.tgz#84257ae3b0531eb2aec1ffa23d70700da007ba95"
   integrity sha1-hCV647BTHrKuwf+iPXBwDaAHupU=
   dependencies:
     tslib "^2.4.0"
 
-"@img/colour@^1.1.0":
+"@esbuild/aix-ppc64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/aix-ppc64/-/aix-ppc64-0.25.12.tgz#80fcbe36130e58b7670511e888b8e88a259ed76c"
+  integrity sha1-gPy+NhMOWLdnBRHoiLjoiiWe12w=
+
+"@esbuild/android-arm64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/android-arm64/-/android-arm64-0.25.12.tgz#8aa4965f8d0a7982dc21734bf6601323a66da752"
+  integrity sha1-iqSWX40KeYLcIXNL9mATI6Ztp1I=
+
+"@esbuild/android-arm@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/android-arm/-/android-arm-0.25.12.tgz#300712101f7f50f1d2627a162e6e09b109b6767a"
+  integrity sha1-MAcSEB9/UPHSYnoWLm4JsQm2dno=
+
+"@esbuild/android-x64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/android-x64/-/android-x64-0.25.12.tgz#87dfb27161202bdc958ef48bb61b09c758faee16"
+  integrity sha1-h9+ycWEgK9yVjvSLthsJx1j67hY=
+
+"@esbuild/darwin-arm64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/darwin-arm64/-/darwin-arm64-0.25.12.tgz#79197898ec1ff745d21c071e1c7cc3c802f0c1fd"
+  integrity sha1-eRl4mOwf90XSHAceHHzDyALwwf0=
+
+"@esbuild/darwin-x64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/darwin-x64/-/darwin-x64-0.25.12.tgz#146400a8562133f45c4d2eadcf37ddd09718079e"
+  integrity sha1-FGQAqFYhM/RcTS6tzzfd0JcYB54=
+
+"@esbuild/freebsd-arm64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/freebsd-arm64/-/freebsd-arm64-0.25.12.tgz#1c5f9ba7206e158fd2b24c59fa2d2c8bb47ca0fe"
+  integrity sha1-HF+bpyBuFY/SskxZ+i0si7R8oP4=
+
+"@esbuild/freebsd-x64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/freebsd-x64/-/freebsd-x64-0.25.12.tgz#ea631f4a36beaac4b9279fa0fcc6ca29eaeeb2b3"
+  integrity sha1-6mMfSja+qsS5J5+g/MbKKerusrM=
+
+"@esbuild/linux-arm64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/linux-arm64/-/linux-arm64-0.25.12.tgz#e1066bce58394f1b1141deec8557a5f0a22f5977"
+  integrity sha1-4QZrzlg5TxsRQd7shVel8KIvWXc=
+
+"@esbuild/linux-arm@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/linux-arm/-/linux-arm-0.25.12.tgz#452cd66b20932d08bdc53a8b61c0e30baf4348b9"
+  integrity sha1-RSzWayCTLQi9xTqLYcDjC69DSLk=
+
+"@esbuild/linux-ia32@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/linux-ia32/-/linux-ia32-0.25.12.tgz#b24f8acc45bcf54192c7f2f3be1b53e6551eafe0"
+  integrity sha1-sk+KzEW89UGSx/LzvhtT5lUer+A=
+
+"@esbuild/linux-loong64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/linux-loong64/-/linux-loong64-0.25.12.tgz#f9cfffa7fc8322571fbc4c8b3268caf15bd81ad0"
+  integrity sha1-+c//p/yDIlcfvEyLMmjK8VvYGtA=
+
+"@esbuild/linux-mips64el@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/linux-mips64el/-/linux-mips64el-0.25.12.tgz#575a14bd74644ffab891adc7d7e60d275296f2cd"
+  integrity sha1-V1oUvXRkT/q4ka3H1+YNJ1KW8s0=
+
+"@esbuild/linux-ppc64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/linux-ppc64/-/linux-ppc64-0.25.12.tgz#75b99c70a95fbd5f7739d7692befe60601591869"
+  integrity sha1-dbmccKlfvV93OddpK+/mBgFZGGk=
+
+"@esbuild/linux-riscv64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/linux-riscv64/-/linux-riscv64-0.25.12.tgz#2e3259440321a44e79ddf7535c325057da875cd6"
+  integrity sha1-LjJZRAMhpE553fdTXDJQV9qHXNY=
+
+"@esbuild/linux-s390x@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/linux-s390x/-/linux-s390x-0.25.12.tgz#17676cabbfe5928da5b2a0d6df5d58cd08db2663"
+  integrity sha1-F2dsq7/lko2lsqDW311YzQjbJmM=
+
+"@esbuild/linux-x64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/linux-x64/-/linux-x64-0.25.12.tgz#0583775685ca82066d04c3507f09524d3cd7a306"
+  integrity sha1-BYN3VoXKggZtBMNQfwlSTTzXowY=
+
+"@esbuild/netbsd-arm64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/netbsd-arm64/-/netbsd-arm64-0.25.12.tgz#f04c4049cb2e252fe96b16fed90f70746b13f4a4"
+  integrity sha1-8ExAScsuJS/paxb+2Q9wdGsT9KQ=
+
+"@esbuild/netbsd-x64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/netbsd-x64/-/netbsd-x64-0.25.12.tgz#77da0d0a0d826d7c921eea3d40292548b258a076"
+  integrity sha1-d9oNCg2CbXySHuo9QCklSLJYoHY=
+
+"@esbuild/openbsd-arm64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/openbsd-arm64/-/openbsd-arm64-0.25.12.tgz#6296f5867aedef28a81b22ab2009c786a952dccd"
+  integrity sha1-Ypb1hnrt7yioGyKrIAnHhqlS3M0=
+
+"@esbuild/openbsd-x64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/openbsd-x64/-/openbsd-x64-0.25.12.tgz#f8d23303360e27b16cf065b23bbff43c14142679"
+  integrity sha1-+NIzAzYOJ7Fs8GWyO7/0PBQUJnk=
+
+"@esbuild/openharmony-arm64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/openharmony-arm64/-/openharmony-arm64-0.25.12.tgz#49e0b768744a3924be0d7fd97dd6ce9b2923d88d"
+  integrity sha1-SeC3aHRKOSS+DX/ZfdbOmykj2I0=
+
+"@esbuild/sunos-x64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/sunos-x64/-/sunos-x64-0.25.12.tgz#a6ed7d6778d67e528c81fb165b23f4911b9b13d6"
+  integrity sha1-pu19Z3jWflKMgfsWWyP0kRubE9Y=
+
+"@esbuild/win32-arm64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/win32-arm64/-/win32-arm64-0.25.12.tgz#9ac14c378e1b653af17d08e7d3ce34caef587323"
+  integrity sha1-msFMN44bZTrxfQjn0840yu9YcyM=
+
+"@esbuild/win32-ia32@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/win32-ia32/-/win32-ia32-0.25.12.tgz#918942dcbbb35cc14fca39afb91b5e6a3d127267"
+  integrity sha1-kYlC3LuzXMFPyjmvuRteaj0Scmc=
+
+"@esbuild/win32-x64@0.25.12":
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@esbuild/win32-x64/-/win32-x64-0.25.12.tgz#9bdad8176be7811ad148d1f8772359041f46c6c5"
+  integrity sha1-m9rYF2vngRrRSNH4dyNZBB9GxsU=
+
+"@eslint-community/eslint-utils@^4.8.0", "@eslint-community/eslint-utils@^4.9.1":
+  version "4.10.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@eslint-community/eslint-utils/-/eslint-utils-4.10.1.tgz#8911bd72b2c3640a543609e0400b8c4d2e7e7cb6"
+  integrity sha1-iRG9crLDZApUNgngQAuMTS5+fLY=
+  dependencies:
+    eslint-visitor-keys "^3.4.3"
+
+"@eslint-community/regexpp@^4.12.2":
+  version "4.12.2"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@eslint-community/regexpp/-/regexpp-4.12.2.tgz#bccdf615bcf7b6e8db830ec0b8d21c9a25de597b"
+  integrity sha1-vM32Fbz3tujbgw7AuNIcmiXeWXs=
+
+"@eslint/config-array@^0.23.5":
+  version "0.23.5"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@eslint/config-array/-/config-array-0.23.5.tgz#56e86d243049195d8acc0c06a1b3dfdc3fa3de95"
+  integrity sha1-VuhtJDBJGV2KzAwGobPf3D+j3pU=
+  dependencies:
+    "@eslint/object-schema" "^3.0.5"
+    debug "^4.3.1"
+    minimatch "^10.2.4"
+
+"@eslint/config-helpers@^0.7.0":
+  version "0.7.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@eslint/config-helpers/-/config-helpers-0.7.0.tgz#09ee4aa07b73f059ec2d4c74bf4b2ff02b322377"
+  integrity sha1-Ce5KoHtz8FnsLUx0v0sv8CsyI3c=
+  dependencies:
+    "@eslint/core" "^1.2.1"
+
+"@eslint/core@^1.2.1":
+  version "1.2.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@eslint/core/-/core-1.2.1.tgz#c1da7cd1b82fa8787f98b5629fb811848a1b63ce"
+  integrity sha1-wdp80bgvqHh/mLVin7gRhIobY84=
+  dependencies:
+    "@types/json-schema" "^7.0.15"
+
+"@eslint/object-schema@^3.0.5":
+  version "3.0.5"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@eslint/object-schema/-/object-schema-3.0.5.tgz#88e9bf4d11d2b19c082e78ebe7ce88724a5eb091"
+  integrity sha1-iOm/TRHSsZwILnjr586IckpesJE=
+
+"@eslint/plugin-kit@^0.7.2":
+  version "0.7.2"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@eslint/plugin-kit/-/plugin-kit-0.7.2.tgz#4b0962f3f2c7ce8bc98b3ecfe34525c09d2cb729"
+  integrity sha1-Swli8/LHzovJiz7P40UlwJ0styk=
+  dependencies:
+    "@eslint/core" "^1.2.1"
+    levn "^0.4.1"
+
+"@humanfs/core@^0.19.2":
+  version "0.19.2"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@humanfs/core/-/core-0.19.2.tgz#a8272ca03b2acf492670222b2320b6c421bfde60"
+  integrity sha1-qCcsoDsqz0kmcCIrIyC2xCG/3mA=
+  dependencies:
+    "@humanfs/types" "^0.15.0"
+
+"@humanfs/node@^0.16.6":
+  version "0.16.8"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@humanfs/node/-/node-0.16.8.tgz#8f800cccc13f4f8cd3116e2d9c0a94939da3e3ed"
+  integrity sha1-j4AMzME/T4zTEW4tnAqUk52j4+0=
+  dependencies:
+    "@humanfs/core" "^0.19.2"
+    "@humanfs/types" "^0.15.0"
+    "@humanwhocodes/retry" "^0.4.0"
+
+"@humanfs/types@^0.15.0":
+  version "0.15.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@humanfs/types/-/types-0.15.0.tgz#f2a09f62012390b2bff3fc6fb248ddec8c09a090"
+  integrity sha1-8qCfYgEjkLK/8/xvskjd7IwJoJA=
+
+"@humanwhocodes/module-importer@^1.0.1":
+  version "1.0.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@humanwhocodes/module-importer/-/module-importer-1.0.1.tgz#af5b2691a22b44be847b0ca81641c5fb6ad0172c"
+  integrity sha1-r1smkaIrRL6EewyoFkHF+2rQFyw=
+
+"@humanwhocodes/retry@^0.4.0", "@humanwhocodes/retry@^0.4.2":
+  version "0.4.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@humanwhocodes/retry/-/retry-0.4.3.tgz#c2b9d2e374ee62c586d3adbea87199b1d7a7a6ba"
+  integrity sha1-wrnS43TuYsWG062+qHGZsdenpro=
+
+"@img/colour@^1.0.0", "@img/colour@^1.1.0":
   version "1.1.0"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/colour/-/colour-1.1.0.tgz#b0c2c2fa661adf75effd6b4964497cd80010bb9d"
   integrity sha1-sMLC+mYa33Xv/WtJZEl82AAQu50=
+
+"@img/sharp-darwin-arm64@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-darwin-arm64/-/sharp-darwin-arm64-0.34.4.tgz#8a0dcac9e621ff533fbf2e830f6a977b38d67a0c"
+  integrity sha1-ig3KyeYh/1M/vy6DD2qXezjWegw=
+  optionalDependencies:
+    "@img/sharp-libvips-darwin-arm64" "1.2.3"
 
 "@img/sharp-darwin-arm64@0.35.3":
   version "0.35.3"
@@ -20,6 +236,13 @@
   integrity sha1-iydAiEvFixJ/wwIEeaASlPoQlcs=
   optionalDependencies:
     "@img/sharp-libvips-darwin-arm64" "1.3.2"
+
+"@img/sharp-darwin-x64@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-darwin-x64/-/sharp-darwin-x64-0.34.4.tgz#0ba2bd9dbf07f7300fab73305b787e66156f7752"
+  integrity sha1-C6K9nb8H9zAPq3MwW3h+ZhVvd1I=
+  optionalDependencies:
+    "@img/sharp-libvips-darwin-x64" "1.2.3"
 
 "@img/sharp-darwin-x64@0.35.3":
   version "0.35.3"
@@ -35,25 +258,50 @@
   dependencies:
     "@img/sharp-wasm32" "0.35.3"
 
+"@img/sharp-libvips-darwin-arm64@1.2.3":
+  version "1.2.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-darwin-arm64/-/sharp-libvips-darwin-arm64-1.2.3.tgz#f43c9aa3b74fd307e4318da63ebbe0ed4c34e744"
+  integrity sha1-9Dyao7dP0wfkMY2mPrvg7Uw050Q=
+
 "@img/sharp-libvips-darwin-arm64@1.3.2":
   version "1.3.2"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-darwin-arm64/-/sharp-libvips-darwin-arm64-1.3.2.tgz#227b41ffc6c99612bceaba56f994a1933d779573"
   integrity sha1-IntB/8bJlhK86rpW+ZShkz13lXM=
+
+"@img/sharp-libvips-darwin-x64@1.2.3":
+  version "1.2.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-darwin-x64/-/sharp-libvips-darwin-x64-1.2.3.tgz#c42ff786d4a1f42ef8929dba4a989dd5df6417f0"
+  integrity sha1-xC/3htSh9C74kp26Spid1d9kF/A=
 
 "@img/sharp-libvips-darwin-x64@1.3.2":
   version "1.3.2"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-darwin-x64/-/sharp-libvips-darwin-x64-1.3.2.tgz#694903ec410c00945ce5b0c26dac83d7184c8b86"
   integrity sha1-aUkD7EEMAJRc5bDCbayD1xhMi4Y=
 
+"@img/sharp-libvips-linux-arm64@1.2.3":
+  version "1.2.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linux-arm64/-/sharp-libvips-linux-arm64-1.2.3.tgz#c9073e5c4b629ee417f777db21c552910d84ed77"
+  integrity sha1-yQc+XEtinuQX93fbIcVSkQ2E7Xc=
+
 "@img/sharp-libvips-linux-arm64@1.3.2":
   version "1.3.2"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linux-arm64/-/sharp-libvips-linux-arm64-1.3.2.tgz#49ddf156728666a21deed0716f3bb72bb351179e"
   integrity sha1-Sd3xVnKGZqId7tBxbzu3K7NRF54=
 
+"@img/sharp-libvips-linux-arm@1.2.3":
+  version "1.2.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linux-arm/-/sharp-libvips-linux-arm-1.2.3.tgz#3cbc333fd6b8f224a14d69b03a1dd11df897c799"
+  integrity sha1-PLwzP9a48iShTWmwOh3RHfiXx5k=
+
 "@img/sharp-libvips-linux-arm@1.3.2":
   version "1.3.2"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linux-arm/-/sharp-libvips-linux-arm-1.3.2.tgz#e60e088c806bde1ac28be648b60c3465f41c18a7"
   integrity sha1-5g4IjIBr3hrCi+ZItgw0ZfQcGKc=
+
+"@img/sharp-libvips-linux-ppc64@1.2.3":
+  version "1.2.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linux-ppc64/-/sharp-libvips-linux-ppc64-1.2.3.tgz#68e0e0076299f43d838468675674fabcc7161d16"
+  integrity sha1-aODgB2KZ9D2DhGhnVnT6vMcWHRY=
 
 "@img/sharp-libvips-linux-ppc64@1.3.2":
   version "1.3.2"
@@ -65,25 +313,52 @@
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linux-riscv64/-/sharp-libvips-linux-riscv64-1.3.2.tgz#bf008a6779d9be2b56a4df67b753941f767c957d"
   integrity sha1-vwCKZ3nZvitWpN9nt1OUH3Z8lX0=
 
+"@img/sharp-libvips-linux-s390x@1.2.3":
+  version "1.2.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linux-s390x/-/sharp-libvips-linux-s390x-1.2.3.tgz#7da9ab11a50c0ca905979f0aae14a4ccffab27b2"
+  integrity sha1-famrEaUMDKkFl58KrhSkzP+rJ7I=
+
 "@img/sharp-libvips-linux-s390x@1.3.2":
   version "1.3.2"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linux-s390x/-/sharp-libvips-linux-s390x-1.3.2.tgz#9583814b8db58889c85bad9e5e0b7825257ff394"
   integrity sha1-lYOBS421iInIW62eXgt4JSV/85Q=
+
+"@img/sharp-libvips-linux-x64@1.2.3":
+  version "1.2.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linux-x64/-/sharp-libvips-linux-x64-1.2.3.tgz#3b162d6b190cf77926819040e09fb15eec42135e"
+  integrity sha1-OxYtaxkM93kmgZBA4J+xXuxCE14=
 
 "@img/sharp-libvips-linux-x64@1.3.2":
   version "1.3.2"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linux-x64/-/sharp-libvips-linux-x64-1.3.2.tgz#abc9a3114495b705ba20b7c1568b9eecd62aebbb"
   integrity sha1-q8mjEUSVtwW6ILfBVoue7NYq67s=
 
+"@img/sharp-libvips-linuxmusl-arm64@1.2.3":
+  version "1.2.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linuxmusl-arm64/-/sharp-libvips-linuxmusl-arm64-1.2.3.tgz#ac99576630dd8e33cb598d7c4586f6e0655912ea"
+  integrity sha1-rJlXZjDdjjPLWY18RYb24GVZEuo=
+
 "@img/sharp-libvips-linuxmusl-arm64@1.3.2":
   version "1.3.2"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linuxmusl-arm64/-/sharp-libvips-linuxmusl-arm64-1.3.2.tgz#e58fb14a7879f15d9e70a982870f384f39a832a2"
   integrity sha1-5Y+xSnh58V2ecKmChw84TzmoMqI=
 
+"@img/sharp-libvips-linuxmusl-x64@1.2.3":
+  version "1.2.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linuxmusl-x64/-/sharp-libvips-linuxmusl-x64-1.2.3.tgz#93e9495af7bf6c4e0d41dd71d0196c35c3753a1c"
+  integrity sha1-k+lJWve/bE4NQd1x0BlsNcN1Ohw=
+
 "@img/sharp-libvips-linuxmusl-x64@1.3.2":
   version "1.3.2"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-libvips-linuxmusl-x64/-/sharp-libvips-linuxmusl-x64-1.3.2.tgz#5611480fcb7465dd5316044db53ad7a843ed4af8"
   integrity sha1-VhFID8t0Zd1TFgRNtTrXqEPtSvg=
+
+"@img/sharp-linux-arm64@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linux-arm64/-/sharp-linux-arm64-0.34.4.tgz#0570ff1a4fa6e1d6779456fca8b5e8c18a6a9cf2"
+  integrity sha1-BXD/Gk+m4dZ3lFb8qLXowYpqnPI=
+  optionalDependencies:
+    "@img/sharp-libvips-linux-arm64" "1.2.3"
 
 "@img/sharp-linux-arm64@0.35.3":
   version "0.35.3"
@@ -92,12 +367,26 @@
   optionalDependencies:
     "@img/sharp-libvips-linux-arm64" "1.3.2"
 
+"@img/sharp-linux-arm@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linux-arm/-/sharp-linux-arm-0.34.4.tgz#5f020d933f54f3fc49203d32c3b7dd0ec11ffcdb"
+  integrity sha1-XwINkz9U8/xJID0yw7fdDsEf/Ns=
+  optionalDependencies:
+    "@img/sharp-libvips-linux-arm" "1.2.3"
+
 "@img/sharp-linux-arm@0.35.3":
   version "0.35.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linux-arm/-/sharp-linux-arm-0.35.3.tgz#c8da500c4016893a89d46e9832d08a06eef77f27"
   integrity sha1-yNpQDEAWiTqJ1G6YMtCKBu73fyc=
   optionalDependencies:
     "@img/sharp-libvips-linux-arm" "1.3.2"
+
+"@img/sharp-linux-ppc64@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linux-ppc64/-/sharp-linux-ppc64-0.34.4.tgz#8d5775f6dc7e30ea3a1efa43798b7690bb5cb344"
+  integrity sha1-jVd19tx+MOo6HvpDeYt2kLtcs0Q=
+  optionalDependencies:
+    "@img/sharp-libvips-linux-ppc64" "1.2.3"
 
 "@img/sharp-linux-ppc64@0.35.3":
   version "0.35.3"
@@ -113,12 +402,26 @@
   optionalDependencies:
     "@img/sharp-libvips-linux-riscv64" "1.3.2"
 
+"@img/sharp-linux-s390x@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linux-s390x/-/sharp-linux-s390x-0.34.4.tgz#740aa5b369188ee2c1913b1015e7f830f4dfdb50"
+  integrity sha1-dAqls2kYjuLBkTsQFef4MPTf21A=
+  optionalDependencies:
+    "@img/sharp-libvips-linux-s390x" "1.2.3"
+
 "@img/sharp-linux-s390x@0.35.3":
   version "0.35.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linux-s390x/-/sharp-linux-s390x-0.35.3.tgz#e8294817d7da495541a4a870f56e6b5d0f8643cd"
   integrity sha1-6ClIF9faSVVBpKhw9W5rXQ+GQ80=
   optionalDependencies:
     "@img/sharp-libvips-linux-s390x" "1.3.2"
+
+"@img/sharp-linux-x64@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linux-x64/-/sharp-linux-x64-0.34.4.tgz#573ce4196b2d0771bba32acc13a37b7adc9b6212"
+  integrity sha1-VzzkGWstB3G7oyrME6N7etybYhI=
+  optionalDependencies:
+    "@img/sharp-libvips-linux-x64" "1.2.3"
 
 "@img/sharp-linux-x64@0.35.3":
   version "0.35.3"
@@ -127,6 +430,13 @@
   optionalDependencies:
     "@img/sharp-libvips-linux-x64" "1.3.2"
 
+"@img/sharp-linuxmusl-arm64@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linuxmusl-arm64/-/sharp-linuxmusl-arm64-0.34.4.tgz#3c91bc8348cc3b42b43c6fca14f9dbb5cb47bd0d"
+  integrity sha1-PJG8g0jMO0K0PG/KFPnbtctHvQ0=
+  optionalDependencies:
+    "@img/sharp-libvips-linuxmusl-arm64" "1.2.3"
+
 "@img/sharp-linuxmusl-arm64@0.35.3":
   version "0.35.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linuxmusl-arm64/-/sharp-linuxmusl-arm64-0.35.3.tgz#9cfee4ecc3d41ab9a274e019dfe7b4062840510c"
@@ -134,12 +444,26 @@
   optionalDependencies:
     "@img/sharp-libvips-linuxmusl-arm64" "1.3.2"
 
+"@img/sharp-linuxmusl-x64@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linuxmusl-x64/-/sharp-linuxmusl-x64-0.34.4.tgz#33de7d476ac9e2db7ef654331b54cc679b806bda"
+  integrity sha1-M959R2rJ4tt+9lQzG1TMZ5uAa9o=
+  optionalDependencies:
+    "@img/sharp-libvips-linuxmusl-x64" "1.2.3"
+
 "@img/sharp-linuxmusl-x64@0.35.3":
   version "0.35.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-linuxmusl-x64/-/sharp-linuxmusl-x64-0.35.3.tgz#204d0678c8c3b15300d9a26ecb9c0dcda11ca5de"
   integrity sha1-IE0GeMjDsVMA2aJuy5wNzaEcpd4=
   optionalDependencies:
     "@img/sharp-libvips-linuxmusl-x64" "1.3.2"
+
+"@img/sharp-wasm32@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-wasm32/-/sharp-wasm32-0.34.4.tgz#d617f7b3f851f899802298f360667c20605c0198"
+  integrity sha1-1hf3s/hR+JmAIpjzYGZ8IGBcAZg=
+  dependencies:
+    "@emnapi/runtime" "^1.5.0"
 
 "@img/sharp-wasm32@0.35.3":
   version "0.35.3"
@@ -155,15 +479,30 @@
   dependencies:
     "@img/sharp-wasm32" "0.35.3"
 
+"@img/sharp-win32-arm64@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-win32-arm64/-/sharp-win32-arm64-0.34.4.tgz#38e2c8a88826eac647f7c3f99efefb39897a8f5c"
+  integrity sha1-OOLIqIgm6sZH98P5nv77OYl6j1w=
+
 "@img/sharp-win32-arm64@0.35.3":
   version "0.35.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-win32-arm64/-/sharp-win32-arm64-0.35.3.tgz#f3554d45cbe24532a0adea736ec57658f74a2911"
   integrity sha1-81VNRcviRTKgrepzbsV2WPdKKRE=
 
+"@img/sharp-win32-ia32@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-win32-ia32/-/sharp-win32-ia32-0.34.4.tgz#003a7eb0fdaba600790c3007cfd756e41a9cf749"
+  integrity sha1-ADp+sP2rpgB5DDAHz9dW5Bqc90k=
+
 "@img/sharp-win32-ia32@0.35.3":
   version "0.35.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-win32-ia32/-/sharp-win32-ia32-0.35.3.tgz#0942b2643bcb57e48419fe4119de84078ae0ac74"
   integrity sha1-CUKyZDvLV+SEGf5BGd6EB4rgrHQ=
+
+"@img/sharp-win32-x64@0.34.4":
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@img/sharp-win32-x64/-/sharp-win32-x64-0.34.4.tgz#b19f1f88ace8bfc20784a0ad31767f3438e025d1"
+  integrity sha1-sZ8fiKzov8IHhKCtMXZ/NDjgJdE=
 
 "@img/sharp-win32-x64@0.35.3":
   version "0.35.3"
@@ -335,10 +674,20 @@
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@types/earcut/-/earcut-3.0.0.tgz#c21ab8372c47f8af1bec63cb36eecb6917b6c5b6"
   integrity sha1-whq4NyxH+K8b7GPLNu7LaRe2xbY=
 
-"@types/estree@^1.0.0":
+"@types/esrecurse@^4.3.1":
+  version "4.3.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@types/esrecurse/-/esrecurse-4.3.1.tgz#6f636af962fbe6191b830bd676ba5986926bccec"
+  integrity sha1-b2Nq+WL75hkbgwvWdrpZhpJrzOw=
+
+"@types/estree@^1.0.0", "@types/estree@^1.0.6", "@types/estree@^1.0.8":
   version "1.0.9"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@types/estree/-/estree-1.0.9.tgz#cf3f0e876d7bee15a93ab925b82bf570a3904a24"
   integrity sha1-zz8Oh2177hWpOrkluCv1cKOQSiQ=
+
+"@types/json-schema@^7.0.15":
+  version "7.0.15"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@types/json-schema/-/json-schema-7.0.15.tgz#596a1747233694d50f6ad8a7869fcb6f56cf5841"
+  integrity sha1-WWoXRyM2lNUPatinhp/Lb1bPWEE=
 
 "@types/node@24.3.0":
   version "24.3.0"
@@ -358,6 +707,102 @@
   integrity sha1-uhI6ddTCpRFYaXFgpOov9wqmvzY=
   dependencies:
     csstype "^3.0.2"
+
+"@typescript-eslint/eslint-plugin@8.67.0":
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@typescript-eslint/eslint-plugin/-/eslint-plugin-8.67.0.tgz#52f9f0e47d5a7571c4336e69bfeea581509ef2cf"
+  integrity sha1-Uvnw5H1adXHEM25pv+6lgVCe8s8=
+  dependencies:
+    "@eslint-community/regexpp" "^4.12.2"
+    "@typescript-eslint/scope-manager" "8.67.0"
+    "@typescript-eslint/type-utils" "8.67.0"
+    "@typescript-eslint/utils" "8.67.0"
+    "@typescript-eslint/visitor-keys" "8.67.0"
+    ignore "^7.0.5"
+    natural-compare "^1.4.0"
+    ts-api-utils "^2.5.0"
+
+"@typescript-eslint/parser@8.67.0":
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@typescript-eslint/parser/-/parser-8.67.0.tgz#0158022ec9927e0afcd58a8cc2ad57e01d892f5c"
+  integrity sha1-AVgCLsmSfgr81YqMwq1X4B2JL1w=
+  dependencies:
+    "@typescript-eslint/scope-manager" "8.67.0"
+    "@typescript-eslint/types" "8.67.0"
+    "@typescript-eslint/typescript-estree" "8.67.0"
+    "@typescript-eslint/visitor-keys" "8.67.0"
+    debug "^4.4.3"
+
+"@typescript-eslint/project-service@8.67.0":
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@typescript-eslint/project-service/-/project-service-8.67.0.tgz#1552db007ca9206a1c6c7acf49e210bd17a8c56f"
+  integrity sha1-FVLbAHypIGocbHrPSeIQvReoxW8=
+  dependencies:
+    "@typescript-eslint/tsconfig-utils" "^8.67.0"
+    "@typescript-eslint/types" "^8.67.0"
+    debug "^4.4.3"
+
+"@typescript-eslint/scope-manager@8.67.0":
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@typescript-eslint/scope-manager/-/scope-manager-8.67.0.tgz#4d4c2da09560d10dd7d947cba2d29d14d25af16d"
+  integrity sha1-TUwtoJVg0Q3X2UfLotKdFNJa8W0=
+  dependencies:
+    "@typescript-eslint/types" "8.67.0"
+    "@typescript-eslint/visitor-keys" "8.67.0"
+
+"@typescript-eslint/tsconfig-utils@8.67.0", "@typescript-eslint/tsconfig-utils@^8.67.0":
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@typescript-eslint/tsconfig-utils/-/tsconfig-utils-8.67.0.tgz#f45a3eba6b9132fb47141ec03ce2f275f1ea991d"
+  integrity sha1-9Fo+umuRMvtHFB7APOLydfHqmR0=
+
+"@typescript-eslint/type-utils@8.67.0":
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@typescript-eslint/type-utils/-/type-utils-8.67.0.tgz#96bed105275559df3bcf0449b73a6414d35c59ce"
+  integrity sha1-lr7RBSdVWd87zwRJtzpkFNNcWc4=
+  dependencies:
+    "@typescript-eslint/types" "8.67.0"
+    "@typescript-eslint/typescript-estree" "8.67.0"
+    "@typescript-eslint/utils" "8.67.0"
+    debug "^4.4.3"
+    ts-api-utils "^2.5.0"
+
+"@typescript-eslint/types@8.67.0", "@typescript-eslint/types@^8.67.0":
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@typescript-eslint/types/-/types-8.67.0.tgz#4a8d00cc1faba5c14feabc60f85b7a32652f34b6"
+  integrity sha1-So0AzB+rpcFP6rxg+Ft6MmUvNLY=
+
+"@typescript-eslint/typescript-estree@8.67.0":
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@typescript-eslint/typescript-estree/-/typescript-estree-8.67.0.tgz#116c3a47c06119c5a050e8851861d6497dd64bc2"
+  integrity sha1-EWw6R8BhGcWgUOiFGGHWSX3WS8I=
+  dependencies:
+    "@typescript-eslint/project-service" "8.67.0"
+    "@typescript-eslint/tsconfig-utils" "8.67.0"
+    "@typescript-eslint/types" "8.67.0"
+    "@typescript-eslint/visitor-keys" "8.67.0"
+    debug "^4.4.3"
+    minimatch "^10.2.2"
+    semver "^7.7.3"
+    tinyglobby "^0.2.15"
+    ts-api-utils "^2.5.0"
+
+"@typescript-eslint/utils@8.67.0":
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@typescript-eslint/utils/-/utils-8.67.0.tgz#3e478a3d69d330a1fc50c12746cc2ee0732ccfcd"
+  integrity sha1-PkeKPWnTMKH8UMEnRswu4HMsz80=
+  dependencies:
+    "@eslint-community/eslint-utils" "^4.9.1"
+    "@typescript-eslint/scope-manager" "8.67.0"
+    "@typescript-eslint/types" "8.67.0"
+    "@typescript-eslint/typescript-estree" "8.67.0"
+
+"@typescript-eslint/visitor-keys@8.67.0":
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@typescript-eslint/visitor-keys/-/visitor-keys-8.67.0.tgz#601d40af9acf82a28da2286f3edafc69bba9017f"
+  integrity sha1-YB1Ar5rPgqKNoihvPtr8abupAX8=
+  dependencies:
+    "@typescript-eslint/types" "8.67.0"
+    eslint-visitor-keys "^5.0.0"
 
 "@vitest/expect@4.1.10":
   version "4.1.10"
@@ -429,15 +874,47 @@
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/@xmldom/xmldom/-/xmldom-0.8.13.tgz#00d1dd940b218dff2e49309d410d8bb212159225"
   integrity sha1-ANHdlAshjf8uSTCdQQ2LshIVkiU=
 
+acorn-jsx@^5.3.2:
+  version "5.3.2"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/acorn-jsx/-/acorn-jsx-5.3.2.tgz#7ed5bb55908b3b2f1bc55c6af1653bada7f07937"
+  integrity sha1-ftW7VZCLOy8bxVxq8WU7rafweTc=
+
+acorn@^8.16.0:
+  version "8.18.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/acorn/-/acorn-8.18.0.tgz#4faf01b2d6d326bfeed97aea1f52220b5f4c1940"
+  integrity sha1-T68BstbTJr/u2XrqH1IiC19MGUA=
+
+ajv@^6.14.0:
+  version "6.15.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/ajv/-/ajv-6.15.0.tgz#07e982c74626167aa7a2495c53817892d7139492"
+  integrity sha1-B+mCx0YmFnqnoklcU4F4ktcTlJI=
+  dependencies:
+    fast-deep-equal "^3.1.1"
+    fast-json-stable-stringify "^2.0.0"
+    json-schema-traverse "^0.4.1"
+    uri-js "^4.2.2"
+
 assertion-error@^2.0.1:
   version "2.0.1"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/assertion-error/-/assertion-error-2.0.1.tgz#f641a196b335690b1070bf00b6e7593fec190bf7"
   integrity sha1-9kGhlrM1aQsQcL8AtudZP+wZC/c=
 
+balanced-match@^4.0.2:
+  version "4.0.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/balanced-match/-/balanced-match-4.0.4.tgz#bfb10662feed8196a2c62e7c68e17720c274179a"
+  integrity sha1-v7EGYv7tgZaixi58aOF3IMJ0F5o=
+
 baseline-browser-mapping@^2.9.19:
   version "2.11.13"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/baseline-browser-mapping/-/baseline-browser-mapping-2.11.13.tgz#660073103c1bee93e54df55f117b7528adf6af19"
   integrity sha1-ZgBzEDwb7pPlTfVfEXt1KK32rxk=
+
+brace-expansion@^5.0.8:
+  version "5.0.9"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/brace-expansion/-/brace-expansion-5.0.9.tgz#7c72438809b5fa5babf54199a1f1c281a6984fcf"
+  integrity sha1-fHJDiAm1+lur9UGZofHCgaaYT88=
+  dependencies:
+    balanced-match "^4.0.2"
 
 caniuse-lite@^1.0.30001579:
   version "1.0.30001809"
@@ -459,12 +936,33 @@ convert-source-map@^2.0.0:
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/convert-source-map/-/convert-source-map-2.0.0.tgz#4b560f649fc4e918dd0ab75cf4961e8bc882d82a"
   integrity sha1-S1YPZJ/E6RjdCrdc9JYei8iC2Co=
 
+cross-spawn@^7.0.6:
+  version "7.0.6"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/cross-spawn/-/cross-spawn-7.0.6.tgz#8a58fe78f00dcd70c370451759dfbfaf03e8ee9f"
+  integrity sha1-ilj+ePANzXDDcEUXWd+/rwPo7p8=
+  dependencies:
+    path-key "^3.1.0"
+    shebang-command "^2.0.0"
+    which "^2.0.1"
+
 csstype@^3.0.2:
   version "3.2.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/csstype/-/csstype-3.2.3.tgz#ec48c0f3e993e50648c86da559e2610995cf989a"
   integrity sha1-7EjA8+mT5QZIyG2lWeJhCZXPmJo=
 
-detect-libc@^2.0.3, detect-libc@^2.1.2:
+debug@^4.3.1, debug@^4.3.2, debug@^4.4.3:
+  version "4.4.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/debug/-/debug-4.4.3.tgz#c6ae432d9bd9662582fce08709b038c58e9e3d6a"
+  integrity sha1-xq5DLZvZZiWC/OCHCbA4xY6ePWo=
+  dependencies:
+    ms "^2.1.3"
+
+deep-is@^0.1.3:
+  version "0.1.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/deep-is/-/deep-is-0.1.4.tgz#a6f2dce612fadd2ef1f519b73551f17e85199831"
+  integrity sha1-pvLc5hL63S7x9Rm3NVHxfoUZmDE=
+
+detect-libc@^2.0.3, detect-libc@^2.1.0, detect-libc@^2.1.2:
   version "2.1.2"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/detect-libc/-/detect-libc-2.1.2.tgz#689c5dcdc1900ef5583a4cb9f6d7b473742074ad"
   integrity sha1-aJxdzcGQDvVYOky59te0c3QgdK0=
@@ -479,12 +977,138 @@ es-module-lexer@^2.0.0:
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/es-module-lexer/-/es-module-lexer-2.3.1.tgz#5bf2df06999dbbe5f006a5f46a11fb9f5b7b391b"
   integrity sha1-W/LfBpmdu+XwBqX0ahH7n1t7ORs=
 
+esbuild@~0.25.0:
+  version "0.25.12"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/esbuild/-/esbuild-0.25.12.tgz#97a1d041f4ab00c2fce2f838d2b9969a2d2a97a5"
+  integrity sha1-l6HQQfSrAML84vg40rmWmi0ql6U=
+  optionalDependencies:
+    "@esbuild/aix-ppc64" "0.25.12"
+    "@esbuild/android-arm" "0.25.12"
+    "@esbuild/android-arm64" "0.25.12"
+    "@esbuild/android-x64" "0.25.12"
+    "@esbuild/darwin-arm64" "0.25.12"
+    "@esbuild/darwin-x64" "0.25.12"
+    "@esbuild/freebsd-arm64" "0.25.12"
+    "@esbuild/freebsd-x64" "0.25.12"
+    "@esbuild/linux-arm" "0.25.12"
+    "@esbuild/linux-arm64" "0.25.12"
+    "@esbuild/linux-ia32" "0.25.12"
+    "@esbuild/linux-loong64" "0.25.12"
+    "@esbuild/linux-mips64el" "0.25.12"
+    "@esbuild/linux-ppc64" "0.25.12"
+    "@esbuild/linux-riscv64" "0.25.12"
+    "@esbuild/linux-s390x" "0.25.12"
+    "@esbuild/linux-x64" "0.25.12"
+    "@esbuild/netbsd-arm64" "0.25.12"
+    "@esbuild/netbsd-x64" "0.25.12"
+    "@esbuild/openbsd-arm64" "0.25.12"
+    "@esbuild/openbsd-x64" "0.25.12"
+    "@esbuild/openharmony-arm64" "0.25.12"
+    "@esbuild/sunos-x64" "0.25.12"
+    "@esbuild/win32-arm64" "0.25.12"
+    "@esbuild/win32-ia32" "0.25.12"
+    "@esbuild/win32-x64" "0.25.12"
+
+escape-string-regexp@^4.0.0:
+  version "4.0.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/escape-string-regexp/-/escape-string-regexp-4.0.0.tgz#14ba83a5d373e3d311e5afca29cf5bfad965bf34"
+  integrity sha1-FLqDpdNz49MR5a/KKc9b+tllvzQ=
+
+eslint-scope@^9.1.2:
+  version "9.1.2"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/eslint-scope/-/eslint-scope-9.1.2.tgz#b9de6ace2fab1cff24d2e58d85b74c8fcea39802"
+  integrity sha1-ud5qzi+rHP8k0uWNhbdMj86jmAI=
+  dependencies:
+    "@types/esrecurse" "^4.3.1"
+    "@types/estree" "^1.0.8"
+    esrecurse "^4.3.0"
+    estraverse "^5.2.0"
+
+eslint-visitor-keys@^3.4.3:
+  version "3.4.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/eslint-visitor-keys/-/eslint-visitor-keys-3.4.3.tgz#0cd72fe8550e3c2eae156a96a4dddcd1c8ac5800"
+  integrity sha1-DNcv6FUOPC6uFWqWpN3c0cisWAA=
+
+eslint-visitor-keys@^5.0.0, eslint-visitor-keys@^5.0.1:
+  version "5.0.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/eslint-visitor-keys/-/eslint-visitor-keys-5.0.1.tgz#9e3c9489697824d2d4ce3a8ad12628f91e9f59be"
+  integrity sha1-njyUiWl4JNLUzjqK0SYo+R6fWb4=
+
+eslint@^10.8.1:
+  version "10.8.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/eslint/-/eslint-10.8.1.tgz#fb37d514c19b6dd5b2d6b70169fd26fddfa97967"
+  integrity sha1-+zfVFMGbbdWy1rcBaf0m/d+peWc=
+  dependencies:
+    "@eslint-community/eslint-utils" "^4.8.0"
+    "@eslint-community/regexpp" "^4.12.2"
+    "@eslint/config-array" "^0.23.5"
+    "@eslint/config-helpers" "^0.7.0"
+    "@eslint/core" "^1.2.1"
+    "@eslint/plugin-kit" "^0.7.2"
+    "@humanfs/node" "^0.16.6"
+    "@humanwhocodes/module-importer" "^1.0.1"
+    "@humanwhocodes/retry" "^0.4.2"
+    "@types/estree" "^1.0.6"
+    ajv "^6.14.0"
+    cross-spawn "^7.0.6"
+    debug "^4.3.2"
+    escape-string-regexp "^4.0.0"
+    eslint-scope "^9.1.2"
+    eslint-visitor-keys "^5.0.1"
+    espree "^11.2.0"
+    esquery "^1.7.0"
+    esutils "^2.0.2"
+    fast-deep-equal "^3.1.3"
+    file-entry-cache "^8.0.0"
+    find-up "^5.0.0"
+    glob-parent "^6.0.2"
+    ignore "^5.2.0"
+    imurmurhash "^0.1.4"
+    is-glob "^4.0.0"
+    json-stable-stringify-without-jsonify "^1.0.1"
+    minimatch "^10.2.5"
+    natural-compare "^1.4.0"
+    optionator "^0.9.3"
+
+espree@^11.2.0:
+  version "11.2.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/espree/-/espree-11.2.0.tgz#01d5e47dc332aaba3059008362454a8cc34ccaa5"
+  integrity sha1-AdXkfcMyqrowWQCDYkVKjMNMyqU=
+  dependencies:
+    acorn "^8.16.0"
+    acorn-jsx "^5.3.2"
+    eslint-visitor-keys "^5.0.1"
+
+esquery@^1.7.0:
+  version "1.7.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/esquery/-/esquery-1.7.0.tgz#08d048f261f0ddedb5bae95f46809463d9c9496d"
+  integrity sha1-CNBI8mHw3e21uulfRoCUY9nJSW0=
+  dependencies:
+    estraverse "^5.1.0"
+
+esrecurse@^4.3.0:
+  version "4.3.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/esrecurse/-/esrecurse-4.3.0.tgz#7ad7964d679abb28bee72cec63758b1c5d2c9921"
+  integrity sha1-eteWTWeauyi+5yzsY3WLHF0smSE=
+  dependencies:
+    estraverse "^5.2.0"
+
+estraverse@^5.1.0, estraverse@^5.2.0:
+  version "5.3.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/estraverse/-/estraverse-5.3.0.tgz#2eea5290702f26ab8fe5370370ff86c965d21123"
+  integrity sha1-LupSkHAvJquP5TcDcP+GyWXSESM=
+
 estree-walker@^3.0.3:
   version "3.0.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/estree-walker/-/estree-walker-3.0.3.tgz#67c3e549ec402a487b4fc193d1953a524752340d"
   integrity sha1-Z8PlSexAKkh7T8GT0ZU6UkdSNA0=
   dependencies:
     "@types/estree" "^1.0.0"
+
+esutils@^2.0.2:
+  version "2.0.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/esutils/-/esutils-2.0.3.tgz#74d2eb4de0b8da1293711910d50775b9b710ef64"
+  integrity sha1-dNLrTeC42hKTcRkQ1Qd1ubcQ72Q=
 
 eventemitter3@^5.0.1:
   version "5.0.4"
@@ -496,15 +1120,65 @@ expect-type@^1.3.0:
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/expect-type/-/expect-type-1.4.0.tgz#24edf7f0cc69a44d008567ba4594ab96f3c3a3d6"
   integrity sha1-JO338MxppE0AhWe6RZSrlvPDo9Y=
 
+fast-deep-equal@^3.1.1, fast-deep-equal@^3.1.3:
+  version "3.1.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz#3a7d56b559d6cbc3eb512325244e619a65c6c525"
+  integrity sha1-On1WtVnWy8PrUSMlJE5hmmXGxSU=
+
+fast-json-stable-stringify@^2.0.0:
+  version "2.1.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/fast-json-stable-stringify/-/fast-json-stable-stringify-2.1.0.tgz#874bf69c6f404c2b5d99c481341399fd55892633"
+  integrity sha1-h0v2nG9ATCtdmcSBNBOZ/VWJJjM=
+
+fast-levenshtein@^2.0.6:
+  version "2.0.6"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/fast-levenshtein/-/fast-levenshtein-2.0.6.tgz#3d8a5c66883a16a30ca8643e851f19baa7797917"
+  integrity sha1-PYpcZog6FqMMqGQ+hR8Zuqd5eRc=
+
 fdir@^6.5.0:
   version "6.5.0"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/fdir/-/fdir-6.5.0.tgz#ed2ab967a331ade62f18d077dae192684d50d350"
   integrity sha1-7Sq5Z6MxreYvGNB32uGSaE1Q01A=
 
+file-entry-cache@^8.0.0:
+  version "8.0.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/file-entry-cache/-/file-entry-cache-8.0.0.tgz#7787bddcf1131bffb92636c69457bbc0edd6d81f"
+  integrity sha1-d4e93PETG/+5JjbGlFe7wO3W2B8=
+  dependencies:
+    flat-cache "^4.0.0"
+
+find-up@^5.0.0:
+  version "5.0.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/find-up/-/find-up-5.0.0.tgz#4c92819ecb7083561e4f4a240a86be5198f536fc"
+  integrity sha1-TJKBnstwg1YeT0okCoa+UZj1Nvw=
+  dependencies:
+    locate-path "^6.0.0"
+    path-exists "^4.0.0"
+
+flat-cache@^4.0.0:
+  version "4.0.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/flat-cache/-/flat-cache-4.0.1.tgz#0ece39fcb14ee012f4b0410bd33dd9c1f011127c"
+  integrity sha1-Ds45/LFO4BL0sEEL0z3ZwfAREnw=
+  dependencies:
+    flatted "^3.2.9"
+    keyv "^4.5.4"
+
+flatted@^3.2.9:
+  version "3.4.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/flatted/-/flatted-3.4.4.tgz#aeeca2a506303f0cee61c59e6c9f2a88d2f29fc6"
+  integrity sha1-ruyipQYwPwzuYcWebJ8qiNLyn8Y=
+
 fsevents@~2.3.3:
   version "2.3.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/fsevents/-/fsevents-2.3.3.tgz#cac6407785d03675a2a5e1a5305c697b347d90d6"
   integrity sha1-ysZAd4XQNnWipeGlMFxpezR9kNY=
+
+get-tsconfig@^4.7.5:
+  version "4.14.2"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/get-tsconfig/-/get-tsconfig-4.14.2.tgz#233fa627fed9ca399996bc895982b3ffe7015352"
+  integrity sha1-Iz+mJ/7ZyjmZlryJWYKz/+cBU1I=
+  dependencies:
+    resolve-pkg-maps "^1.0.0"
 
 gifuct-js@^2.1.2:
   version "2.1.2"
@@ -513,10 +1187,49 @@ gifuct-js@^2.1.2:
   dependencies:
     js-binary-schema-parser "^2.0.3"
 
+glob-parent@^6.0.2:
+  version "6.0.2"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/glob-parent/-/glob-parent-6.0.2.tgz#6d237d99083950c79290f24c7642a3de9a28f9e3"
+  integrity sha1-bSN9mQg5UMeSkPJMdkKj3poo+eM=
+  dependencies:
+    is-glob "^4.0.3"
+
 idb@8.0.3:
   version "8.0.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/idb/-/idb-8.0.3.tgz#c91e558f15a8d53f1d7f53a094d226fc3ad71fd9"
   integrity sha1-yR5VjxWo1T8df1OglNIm/DrXH9k=
+
+ignore@^5.2.0:
+  version "5.3.2"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/ignore/-/ignore-5.3.2.tgz#3cd40e729f3643fd87cb04e50bf0eb722bc596f5"
+  integrity sha1-PNQOcp82Q/2HywTlC/DrcivFlvU=
+
+ignore@^7.0.5:
+  version "7.0.6"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/ignore/-/ignore-7.0.6.tgz#6a57aaef4c90df27ac3590875d29e8f11988c88e"
+  integrity sha1-aleq70yQ3yesNZCHXSno8RmIyI4=
+
+imurmurhash@^0.1.4:
+  version "0.1.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/imurmurhash/-/imurmurhash-0.1.4.tgz#9218b9b2b928a238b13dc4fb6b6d576f231453ea"
+  integrity sha1-khi5srkoojixPcT7a21XbyMUU+o=
+
+is-extglob@^2.1.1:
+  version "2.1.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/is-extglob/-/is-extglob-2.1.1.tgz#a88c02535791f02ed37c76a1b9ea9773c833f8c2"
+  integrity sha1-qIwCU1eR8C7TfHahueqXc8gz+MI=
+
+is-glob@^4.0.0, is-glob@^4.0.3:
+  version "4.0.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/is-glob/-/is-glob-4.0.3.tgz#64f61e42cbbb2eec2071a9dac0b28ba1e65d5084"
+  integrity sha1-ZPYeQsu7LuwgcanawLKLoeZdUIQ=
+  dependencies:
+    is-extglob "^2.1.1"
+
+isexe@^2.0.0:
+  version "2.0.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/isexe/-/isexe-2.0.0.tgz#e8fbf374dc556ff8947a10dcb0572d633f2cfa10"
+  integrity sha1-6PvzdNxVb/iUehDcsFctYz8s+hA=
 
 ismobilejs@^1.1.1:
   version "1.1.1"
@@ -527,6 +1240,36 @@ js-binary-schema-parser@^2.0.3:
   version "2.0.3"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/js-binary-schema-parser/-/js-binary-schema-parser-2.0.3.tgz#3d7848748e8586e63b34e8911b643f59cfb6396e"
   integrity sha1-PXhIdI6FhuY7NOiRG2Q/Wc+2OW4=
+
+json-buffer@3.0.1:
+  version "3.0.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/json-buffer/-/json-buffer-3.0.1.tgz#9338802a30d3b6605fbe0613e094008ca8c05a13"
+  integrity sha1-kziAKjDTtmBfvgYT4JQAjKjAWhM=
+
+json-schema-traverse@^0.4.1:
+  version "0.4.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/json-schema-traverse/-/json-schema-traverse-0.4.1.tgz#69f6a87d9513ab8bb8fe63bdb0979c448e684660"
+  integrity sha1-afaofZUTq4u4/mO9sJecRI5oRmA=
+
+json-stable-stringify-without-jsonify@^1.0.1:
+  version "1.0.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/json-stable-stringify-without-jsonify/-/json-stable-stringify-without-jsonify-1.0.1.tgz#9db7b59496ad3f3cfef30a75142d2d930ad72651"
+  integrity sha1-nbe1lJatPzz+8wp1FC0tkwrXJlE=
+
+keyv@^4.5.4:
+  version "4.5.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/keyv/-/keyv-4.5.4.tgz#a879a99e29452f942439f2a405e3af8b31d4de93"
+  integrity sha1-qHmpnilFL5QkOfKkBeOvizHU3pM=
+  dependencies:
+    json-buffer "3.0.1"
+
+levn@^0.4.1:
+  version "0.4.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/levn/-/levn-0.4.1.tgz#ae4562c007473b932a6200d403268dd2fffc6ade"
+  integrity sha1-rkViwAdHO5MqYgDUAyaN0v/8at4=
+  dependencies:
+    prelude-ls "^1.2.1"
+    type-check "~0.4.0"
 
 lightningcss-android-arm64@1.33.0:
   version "1.33.0"
@@ -602,6 +1345,13 @@ lightningcss@^1.33.0:
     lightningcss-win32-arm64-msvc "1.33.0"
     lightningcss-win32-x64-msvc "1.33.0"
 
+locate-path@^6.0.0:
+  version "6.0.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/locate-path/-/locate-path-6.0.0.tgz#55321eb309febbc59c4801d931a72452a681d286"
+  integrity sha1-VTIeswn+u8WcSAHZMackUqaB0oY=
+  dependencies:
+    p-locate "^5.0.0"
+
 magic-string@^0.30.21:
   version "0.30.21"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/magic-string/-/magic-string-0.30.21.tgz#56763ec09a0fa8091df27879fd94d19078c00d91"
@@ -609,10 +1359,27 @@ magic-string@^0.30.21:
   dependencies:
     "@jridgewell/sourcemap-codec" "^1.5.5"
 
+minimatch@^10.2.2, minimatch@^10.2.4, minimatch@^10.2.5:
+  version "10.2.6"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/minimatch/-/minimatch-10.2.6.tgz#fd956bbe0b77241e9f15ac5dccb1c638060968ef"
+  integrity sha1-/ZVrvgt3JB6fFaxdzLHGOAYJaO8=
+  dependencies:
+    brace-expansion "^5.0.8"
+
+ms@^2.1.3:
+  version "2.1.3"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/ms/-/ms-2.1.3.tgz#574c8138ce1d2b5861f0b44579dbadd60c6615b2"
+  integrity sha1-V0yBOM4dK1hh8LRFedut1gxmFbI=
+
 nanoid@^3.3.16, nanoid@^3.3.17:
   version "3.3.18"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/nanoid/-/nanoid-3.3.18.tgz#f66a2de1199ffde0fcf21c8a5f13106b1c081913"
   integrity sha1-9mot4Rmf/eD88hyKXxMQaxwIGRM=
+
+natural-compare@^1.4.0:
+  version "1.4.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/natural-compare/-/natural-compare-1.4.0.tgz#4abebfeed7541f2c27acfb29bdbbd15c8d5ba4f7"
+  integrity sha1-Sr6/7tdUHywnrPspvbvRXI1bpPc=
 
 next@16.3.0:
   version "16.3.0"
@@ -641,10 +1408,46 @@ obug@^2.1.1:
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/obug/-/obug-2.1.4.tgz#9090d8a548a522517915d2aa6aae907197ac6cf8"
   integrity sha1-kJDYpUilIlF5FdKqaq6QcZesbPg=
 
+optionator@^0.9.3:
+  version "0.9.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/optionator/-/optionator-0.9.4.tgz#7ea1c1a5d91d764fb282139c88fe11e182a3a734"
+  integrity sha1-fqHBpdkddk+yghOciP4R4YKjpzQ=
+  dependencies:
+    deep-is "^0.1.3"
+    fast-levenshtein "^2.0.6"
+    levn "^0.4.1"
+    prelude-ls "^1.2.1"
+    type-check "^0.4.0"
+    word-wrap "^1.2.5"
+
+p-limit@^3.0.2:
+  version "3.1.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/p-limit/-/p-limit-3.1.0.tgz#e1daccbe78d0d1388ca18c64fea38e3e57e3706b"
+  integrity sha1-4drMvnjQ0TiMoYxk/qOOPlfjcGs=
+  dependencies:
+    yocto-queue "^0.1.0"
+
+p-locate@^5.0.0:
+  version "5.0.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/p-locate/-/p-locate-5.0.0.tgz#83c8315c6785005e3bd021839411c9e110e6d834"
+  integrity sha1-g8gxXGeFAF470CGDlBHJ4RDm2DQ=
+  dependencies:
+    p-limit "^3.0.2"
+
 parse-svg-path@^0.2.0:
   version "0.2.0"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/parse-svg-path/-/parse-svg-path-0.2.0.tgz#38bc8747e7aa32327ae2579c331b161c4867a167"
   integrity sha1-OLyHR+eqMjJ64lecMxsWHEhnoWc=
+
+path-exists@^4.0.0:
+  version "4.0.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/path-exists/-/path-exists-4.0.0.tgz#513bdbe2d3b95d7762e8c1137efa195c6c61b5b3"
+  integrity sha1-UTvb4tO5XXdi6METfvoZXGxhtbM=
+
+path-key@^3.1.0:
+  version "3.1.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/path-key/-/path-key-3.1.1.tgz#581f6ade658cbba65a0d3380de7753295054f375"
+  integrity sha1-WB9q3mWMu6ZaDTOA3ndTKVBU83U=
 
 pathe@^2.0.3:
   version "2.0.3"
@@ -695,10 +1498,20 @@ postcss@^8.5.25:
     picocolors "^1.1.1"
     source-map-js "^1.2.1"
 
+prelude-ls@^1.2.1:
+  version "1.2.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/prelude-ls/-/prelude-ls-1.2.1.tgz#debc6489d7a6e6b0e7611888cec880337d316396"
+  integrity sha1-3rxkidem5rDnYRiIzsiAM30xY5Y=
+
 prettier@3.9.6:
   version "3.9.6"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/prettier/-/prettier-3.9.6.tgz#b3ea5146515d40fc53f18aa63f74dfab1e10dbf6"
   integrity sha1-s+pRRlFdQPxT8YqmP3Tfqx4Q2/Y=
+
+punycode@^2.1.0:
+  version "2.3.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/punycode/-/punycode-2.3.1.tgz#027422e2faec0b25e1549c3e1bd8309b9133b6e5"
+  integrity sha1-AnQi4vrsCyXhVJw+G9gwm5EztuU=
 
 react-dom@19.2.8:
   version "19.2.8"
@@ -711,6 +1524,11 @@ react@19.2.8:
   version "19.2.8"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/react/-/react-19.2.8.tgz#a80663dbb58d69c6fe3fd291d3cb324e8a7dff2d"
   integrity sha1-qAZj27WNacb+P9KR08syTop9/y0=
+
+resolve-pkg-maps@^1.0.0:
+  version "1.0.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/resolve-pkg-maps/-/resolve-pkg-maps-1.0.0.tgz#616b3dc2c57056b5588c31cdf4b3d64db133720f"
+  integrity sha1-YWs9wsVwVrVYjDHN9LPWTbEzcg8=
 
 rolldown@~1.2.1:
   version "1.2.4"
@@ -740,10 +1558,42 @@ scheduler@^0.27.0:
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/scheduler/-/scheduler-0.27.0.tgz#0c4ef82d67d1e5c1e359e8fc76d3a87f045fe5bd"
   integrity sha1-DE74LWfR5cHjWej8dtOofwRf5b0=
 
-semver@^7.8.5:
+semver@^7.7.2, semver@^7.7.3, semver@^7.8.5:
   version "7.8.5"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/semver/-/semver-7.8.5.tgz#39b646037dd50c14fb451e7e4cac58ed8b863f69"
   integrity sha1-ObZGA33VDBT7RR5+TKxY7YuGP2k=
+
+sharp@0.34.4:
+  version "0.34.4"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/sharp/-/sharp-0.34.4.tgz#73c2c5a425e98250b8b927e5537f711da8966e38"
+  integrity sha1-c8LFpCXpglC4uSflU39xHaiWbjg=
+  dependencies:
+    "@img/colour" "^1.0.0"
+    detect-libc "^2.1.0"
+    semver "^7.7.2"
+  optionalDependencies:
+    "@img/sharp-darwin-arm64" "0.34.4"
+    "@img/sharp-darwin-x64" "0.34.4"
+    "@img/sharp-libvips-darwin-arm64" "1.2.3"
+    "@img/sharp-libvips-darwin-x64" "1.2.3"
+    "@img/sharp-libvips-linux-arm" "1.2.3"
+    "@img/sharp-libvips-linux-arm64" "1.2.3"
+    "@img/sharp-libvips-linux-ppc64" "1.2.3"
+    "@img/sharp-libvips-linux-s390x" "1.2.3"
+    "@img/sharp-libvips-linux-x64" "1.2.3"
+    "@img/sharp-libvips-linuxmusl-arm64" "1.2.3"
+    "@img/sharp-libvips-linuxmusl-x64" "1.2.3"
+    "@img/sharp-linux-arm" "0.34.4"
+    "@img/sharp-linux-arm64" "0.34.4"
+    "@img/sharp-linux-ppc64" "0.34.4"
+    "@img/sharp-linux-s390x" "0.34.4"
+    "@img/sharp-linux-x64" "0.34.4"
+    "@img/sharp-linuxmusl-arm64" "0.34.4"
+    "@img/sharp-linuxmusl-x64" "0.34.4"
+    "@img/sharp-wasm32" "0.34.4"
+    "@img/sharp-win32-arm64" "0.34.4"
+    "@img/sharp-win32-ia32" "0.34.4"
+    "@img/sharp-win32-x64" "0.34.4"
 
 sharp@^0.35.3:
   version "0.35.3"
@@ -779,6 +1629,18 @@ sharp@^0.35.3:
     "@img/sharp-win32-arm64" "0.35.3"
     "@img/sharp-win32-ia32" "0.35.3"
     "@img/sharp-win32-x64" "0.35.3"
+
+shebang-command@^2.0.0:
+  version "2.0.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/shebang-command/-/shebang-command-2.0.0.tgz#ccd0af4f8835fbdc265b82461aaf0c36663f34ea"
+  integrity sha1-zNCvT4g1+9wmW4JGGq8MNmY/NOo=
+  dependencies:
+    shebang-regex "^3.0.0"
+
+shebang-regex@^3.0.0:
+  version "3.0.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/shebang-regex/-/shebang-regex-3.0.0.tgz#ae16f1644d873ecad843b0307b143362d4c42172"
+  integrity sha1-rhbxZE2HPsrYQ7AwexQzYtTEIXI=
 
 siginfo@^2.0.0:
   version "2.0.0"
@@ -835,10 +1697,42 @@ tinyrainbow@^3.1.0:
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/tinyrainbow/-/tinyrainbow-3.1.1.tgz#c0168387d3d8d70b6b3c2c0936de5fee738cea20"
   integrity sha1-wBaDh9PY1wtrPCwJNt5f7nOM6iA=
 
+ts-api-utils@^2.5.0:
+  version "2.5.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/ts-api-utils/-/ts-api-utils-2.5.0.tgz#4acd4a155e22734990a5ed1fe9e97f113bcb37c1"
+  integrity sha1-Ss1KFV4ic0mQpe0f6el/ETvLN8E=
+
 tslib@^2.4.0, tslib@^2.8.0:
   version "2.8.1"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/tslib/-/tslib-2.8.1.tgz#612efe4ed235d567e8aba5f2a5fab70280ade83f"
   integrity sha1-YS7+TtI11Wfoq6Xypfq3AoCt6D8=
+
+tsx@4.20.6:
+  version "4.20.6"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/tsx/-/tsx-4.20.6.tgz#8fb803fd9c1f70e8ccc93b5d7c5e03c3979ccb2e"
+  integrity sha1-j7gD/ZwfcOjMyTtdfF4Dw5ecyy4=
+  dependencies:
+    esbuild "~0.25.0"
+    get-tsconfig "^4.7.5"
+  optionalDependencies:
+    fsevents "~2.3.3"
+
+type-check@^0.4.0, type-check@~0.4.0:
+  version "0.4.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/type-check/-/type-check-0.4.0.tgz#07b8203bfa7056c0657050e3ccd2c37730bab8f1"
+  integrity sha1-B7ggO/pwVsBlcFDjzNLDdzC6uPE=
+  dependencies:
+    prelude-ls "^1.2.1"
+
+typescript-eslint@^8.67.0:
+  version "8.67.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/typescript-eslint/-/typescript-eslint-8.67.0.tgz#1e92de09ee0ff2d96cc0848f5e9f345ea930d963"
+  integrity sha1-HpLeCe4P8tlswISPXp80Xqkw2WM=
+  dependencies:
+    "@typescript-eslint/eslint-plugin" "8.67.0"
+    "@typescript-eslint/parser" "8.67.0"
+    "@typescript-eslint/typescript-estree" "8.67.0"
+    "@typescript-eslint/utils" "8.67.0"
 
 typescript@6.0.3:
   version "6.0.3"
@@ -849,6 +1743,13 @@ undici-types@~7.10.0:
   version "7.10.0"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/undici-types/-/undici-types-7.10.0.tgz#4ac2e058ce56b462b056e629cc6a02393d3ff350"
   integrity sha1-SsLgWM5WtGKwVuYpzGoCOT0/81A=
+
+uri-js@^4.2.2:
+  version "4.4.1"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/uri-js/-/uri-js-4.4.1.tgz#9b1a52595225859e55f669d928f88c6c57f2a77e"
+  integrity sha1-mxpSWVIlhZ5V9mnZKPiMbFfyp34=
+  dependencies:
+    punycode "^2.1.0"
 
 "vite@^6.0.0 || ^7.0.0 || ^8.0.0", vite@^8.2.1:
   version "8.2.1"
@@ -889,6 +1790,13 @@ vitest@4.1.10:
     vite "^6.0.0 || ^7.0.0 || ^8.0.0"
     why-is-node-running "^2.3.0"
 
+which@^2.0.1:
+  version "2.0.2"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/which/-/which-2.0.2.tgz#7c6a8dd0a636a0327e10b59c9286eee93f3f51b1"
+  integrity sha1-fGqN0KY2oDJ+ELWckobu6T8/UbE=
+  dependencies:
+    isexe "^2.0.0"
+
 why-is-node-running@^2.3.0:
   version "2.3.0"
   resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/why-is-node-running/-/why-is-node-running-2.3.0.tgz#a3f69a97107f494b3cdc3bdddd883a7d65cebf04"
@@ -896,3 +1804,13 @@ why-is-node-running@^2.3.0:
   dependencies:
     siginfo "^2.0.0"
     stackback "0.0.2"
+
+word-wrap@^1.2.5:
+  version "1.2.5"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/word-wrap/-/word-wrap-1.2.5.tgz#d2c45c6dd4fbce621a66f136cbe328afd0410b34"
+  integrity sha1-0sRcbdT7zmIaZvE2y+Mor9BBCzQ=
+
+yocto-queue@^0.1.0:
+  version "0.1.0"
+  resolved "https://pkgs.dev.azure.com/cadstrom/Cadstrom/_packaging/cadstrom/npm/registry/yocto-queue/-/yocto-queue-0.1.0.tgz#0294eb3dee05028d31ee1a5fa2c556a6aaf10a1b"
+  integrity sha1-ApTrPe4FAo0x7hpfosVWpqrxChs=
