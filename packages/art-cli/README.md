@@ -66,7 +66,7 @@ answer, and repeating one just buys the same 500 twice. Failures are collected p
 rather than aborting the run, and a failure that reached the provider is reported as
 probably-billed, separately from one that never left the machine.
 
-## Five things the live API taught us that no document had right
+## Seven things the live API taught us that no document had right
 
 **1. Retro Diffusion has a generation floor of 64px, and `check_cost` does not enforce it.**
 
@@ -118,6 +118,41 @@ generating the whole progression in one call was meant to prevent.
 integer multiple ≥64px and decimated, and fine detail does not survive 4×. Four sprinkler
 takes all read beautifully at 64px; only the one prompted for "large solid areas of flat
 colour, no thin lines, no small details" still read at 16px.
+
+**6. RD draws chunky _objects_ well and 16px _technical geometry_ badly. Author the geometry.**
+
+Measured across the factory art round (2026-08-12): the five 32px machines, every 16px item and
+the crop strips all landed from the model. The belt tile, the belt corner and the grabber arm
+each took two paid takes and came back as, respectively, a featureless dark rectangle with the
+run pointing the wrong way, a brown scribble on a background that quantised to violet, and an
+inkblot with no claw. All three are now authored by `art/tools/make-factory-parts.mjs`.
+
+The quality gap is the visible half of the argument; the load-bearing half is that those three
+carry **guarantees a diffusion model cannot make**. A belt tile must repeat along its run with
+no seam, and a mismatched edge repeats every 16px down a straight line where the eye is certain
+to find it — `tile_x: true` is a best effort, a modulus is exact, and the script asserts left
+edge equals right edge on every build. A grabber arm is rotated 90° per direction, so it has to
+be centred and symmetric about its own axis. Reach for `provider: "local"` whenever the sprite's
+correctness is arithmetic rather than aesthetic; that is the same reasoning
+`make-status-lamp.mjs` applied to a 4×4 dot, one order of magnitude larger.
+
+**7. `rd_fast__item_sheet` is _worse_ than `rd_fast__default` for growth strips, and
+regeneration did not reproduce a previous take.** Two corrections to PRICING.md, both measured
+while generating the crop strips.
+
+`item_sheet` is recommended there for crop growth strips on the reasoning that it is built for
+evenly-spaced cells. Tried on both new strips: it drew **literal cream frame borders** around
+each cell — the one thing "no frame borders, no grid lines" exists to prevent — and on the other
+strip it ignored the frame count entirely, fitting six plants across four cells. Growth strips
+stay on `rd_fast__default`, which is what the potato strip already used.
+
+More surprising: re-requesting an earlier take with **the same prompt, style, size and recorded
+seed returned a visibly different image**. The spike's byte-identical result (PRICING.md §4) was
+measured across calls made minutes apart in one session, and it does not appear to survive across
+hours. Treat determinism as a same-session property. The operational consequence is the useful
+part: **a take you like is only safe once its PNG is on disk**, so `--reroll` overwrites the
+original and a take worth keeping should be copied aside before the next roll. The recorded seed
+is provenance, not a restore point.
 
 ## How the seam works
 

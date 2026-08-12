@@ -1,0 +1,24 @@
+{
+  "id": "item_washed_potato",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 669910903,
+  "prompt": "a single washed clean potato, smooth pale tan oval tuber with no dirt on it, one big fat pale blue highlight patch across the top left showing it is wet, clearly a clean pale potato and not a brown dirty one, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, no thin lines, no small details, no droplets, no speckles, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T21:29:31.561Z"
+}

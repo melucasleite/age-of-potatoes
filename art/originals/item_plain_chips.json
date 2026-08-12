@@ -1,0 +1,24 @@
+{
+  "id": "item_plain_chips",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 879966250,
+  "prompt": "a pile of plain fried potato chips, three big fat curved crisps stacked in a pile filling most of the frame, pale golden yellow colour all over, plain and unseasoned, no red and no orange anywhere, game inventory item icon, large and filling the frame, chunky readable silhouette, very large solid areas of flat pale gold colour, thick heavy chunky shapes, no thin lines, no small details, no crumbs, no speckles, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T21:45:25.708Z"
+}

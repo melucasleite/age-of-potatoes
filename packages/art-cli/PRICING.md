@@ -168,7 +168,14 @@ pipeline then has to throw away.
 Note also that the 256px Pro render **baked the word "FRYER" into the sprite**, which the house
 rule "no text in sprites, ever" forbids outright.
 
-### Bonus finding: generation is deterministic on seed
+### Bonus finding: generation is deterministic on seed — within a session
+
+> **Amended 2026-08-12 (factory art round).** The byte-identity below is real and was measured
+> across calls made minutes apart. It did **not** survive across hours: re-requesting an earlier
+> take with the same prompt, style, size and recorded seed came back visibly different. Treat
+> determinism as a same-session property. Everything below about `--force` still holds — an
+> unchanged re-run is still a full-price coin flip you did not want — but the recorded seed is
+> **provenance, not a restore point**. A take you like is only safe once its PNG is copied aside.
 
 The byte-identical results above prove something useful beyond the reference-image question:
 **same prompt + style + seed + size returns the same image, byte for byte.** Regeneration is
@@ -193,6 +200,16 @@ response is money gone permanently.
 run is already within 10% of the limit**, so this is a live hazard today, not a Pro-only one.
 Filed as work item 049.
 
+**Fixed 2026-08-12 (work item 049).** Node does not expose undici's `Agent`, so there is no
+supported way to raise that headers timeout on the global `fetch`; the adapter now posts
+through `providers/http.ts`, a `node:https` client with an explicit **15-minute** timeout —
+about 3× the worst latency ever measured. The only thing a tight timeout can buy here is a
+bill with no asset, so the bias is deliberately to wait far too long. Transport failures
+retry **with the same seed** (determinism makes the retry re-request the exact image the
+lost attempt was charged for), HTTP errors are never retried, and a failure that reached the
+provider is reported as probably-billed distinctly from one that never left the machine. Per
+the 403 note above, that client sets its own `User-Agent`.
+
 Related gotcha found while working around it: a hand-rolled `node:https` client gets **403
 Forbidden** from RD's edge unless it sets a `User-Agent` header. undici sets one automatically.
 (Those 403s were rejected before billing and cost nothing.)
@@ -204,13 +221,20 @@ Forbidden** from RD's edge unless it sets a `User-Agent` header. undici sets one
 **Stay on `rd_fast` for everything. Buy consistency with seeds, prompt vocabulary and rerolls —
 not with a higher tier, which cannot deliver it at our sizes anyway.**
 
-| Asset class                         | Model                  | Why                                                                 |
-| ----------------------------------- | ---------------------- | ------------------------------------------------------------------- |
-| Terrain, items, icons, status lamps | `rd_fast__default`     | Grade A per plan §15; Pro cannot compose a sprite at these sizes    |
-| Crop growth strips                  | `rd_fast__item_sheet`  | Wide strips carry no aspect penalty; one call keeps frames coherent |
-| Machines (the hard ones)            | `rd_fast` + more takes | The problem is distinguishability — solved by rerolling, not tier   |
-| UI ornament                         | `rd_fast__ui`          | Cut the 9-slice by hand anyway                                      |
-| Anything tempted toward Pro         | `rd_plus__default`     | $0.027 is a rounding error and it still composes a real sprite      |
+| Asset class                         | Model                                        | Why                                                                                                                      |
+| ----------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Terrain, items, icons, status lamps | `rd_fast__default`                           | Grade A per plan §15; Pro cannot compose a sprite at these sizes                                                         |
+| Crop growth strips                  | ~~`rd_fast__item_sheet`~~ `rd_fast__default` | Wide strips carry no aspect penalty; one call keeps frames coherent. **`item_sheet` was tried and is worse** — see below |
+| Machines (the hard ones)            | `rd_fast` + more takes                       | The problem is distinguishability — solved by rerolling, not tier                                                        |
+| UI ornament                         | `rd_fast__ui`                                | Cut the 9-slice by hand anyway                                                                                           |
+| Anything tempted toward Pro         | `rd_plus__default`                           | $0.027 is a rounding error and it still composes a real sprite                                                           |
+
+**`item_sheet` was a reasonable guess and it is wrong.** Tried on both new crop strips
+(2026-08-12): it drew **literal cream frame borders** around each cell — precisely what the
+strip prompts say "no frame borders, no grid lines" to prevent — and on the other strip it
+ignored the frame count and fitted six plants across four cells. `rd_fast__default` is what the
+potato strip already used and what all four strips now use. The style name describing your
+intent is not evidence it serves it.
 
 **Spend the budget on rerolls, not on tier.** Ten `rd_fast` takes cost $0.17 — still less than a
 single Pro image at $0.18, and rerolling buys variety where Pro buys detail that decimation

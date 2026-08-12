@@ -32,6 +32,7 @@ export async function gen(args: Args): Promise<number> {
   const confirmed = args.flags.has('confirm');
   const maxSpend = numberOption(args, 'max-spend', DEFAULT_MAX_SPEND);
   const attempts = Math.max(1, numberOption(args, 'retries', DEFAULT_ATTEMPTS - 1) + 1);
+  const concurrency = Math.max(1, Math.floor(numberOption(args, 'concurrency', 1)));
   const only = args.options.get('only');
 
   const manifest = loadManifest();
@@ -39,13 +40,36 @@ export async function gen(args: Args): Promise<number> {
   mkdirSync(ORIGINALS_DIR, { recursive: true });
 
   let pending: AssetEntry[] = manifest.assets;
-  if (only) pending = pending.filter((entry) => entry.id === only);
+  if (only) {
+    // A comma-separated list, because rerolling is never a one-asset activity: a review pass
+    // rejects a handful at once, and eight sequential `--only` runs is eight times 2-5
+    // minutes of waiting for no reason. Unknown ids are named rather than silently dropped.
+    const wanted = new Set(
+      only
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0),
+    );
+    const known = new Set(pending.map((entry) => entry.id));
+    const missing = [...wanted].filter((id) => !known.has(id));
+    if (missing.length > 0) {
+      console.error(`\nNo such asset in art/manifest.json: ${missing.join(', ')}`);
+      return 1;
+    }
+    pending = pending.filter((entry) => wanted.has(entry.id));
+  }
   const skipped = pending.filter((entry) => !force && existsSync(originalPath(entry.id)));
   pending = pending.filter((entry) => force || !existsSync(originalPath(entry.id)));
 
   // Rerolled seeds are chosen here, once, and used for BOTH the free quote and the paid
-  // call. Generation is byte-deterministic on seed (work item 048), so `--force` alone
-  // buys the identical PNG at full price — a reroll is only a reroll if the seed moves.
+  // call. Generation is deterministic on seed within a session (work item 048), so
+  // `--force` alone is liable to buy the identical PNG at full price — a reroll is only a
+  // reroll if the seed moves.
+  //
+  // That determinism does NOT hold across hours: re-requesting a take from earlier the same
+  // day, with the same prompt, style, size and recorded seed, came back visibly different
+  // (factory art round). The seed is provenance, not a restore point, so a take worth
+  // keeping must be copied off disk before the next roll overwrites it.
   const seeds = new Map<string, number>();
   if (reroll) {
     for (const entry of pending) seeds.set(entry.id, Math.floor(Math.random() * 2 ** 31));
@@ -109,11 +133,29 @@ export async function gen(args: Args): Promise<number> {
   }
 
   // Phase 2 — spend.
-  console.log(`\nGenerating ${pending.length} asset(s)...\n`);
+  console.log(
+    `\nGenerating ${pending.length} asset(s)` +
+      `${concurrency > 1 ? `, ${concurrency} at a time` : ''}...\n`,
+  );
   let spent = 0;
   const failures: { id: string; message: string; billed: boolean }[] = [];
 
-  for (const entry of pending) {
+  // A worker pool over a shared cursor. Pricing stays sequential above — it is free and
+  // fast — but generation is 134-309 SECONDS per image (measured, work item 048), so a
+  // fifteen-asset run is an hour of a machine waiting on a socket. Nothing here is ordered
+  // or shared except the cursor and the tallies, and Node is single-threaded, so the
+  // accumulations below cannot interleave mid-statement.
+  let cursor = 0;
+
+  async function worker(): Promise<void> {
+    for (;;) {
+      const entry = pending[cursor++];
+      if (entry === undefined) return;
+      await generateOne(entry);
+    }
+  }
+
+  async function generateOne(entry: AssetEntry): Promise<void> {
     const adapter = getAdapter(entry.provider);
     let result;
     try {
@@ -133,7 +175,7 @@ export async function gen(args: Args): Promise<number> {
       const message = error instanceof Error ? error.message : String(error);
       failures.push({ id: entry.id, message, billed });
       console.error(`  FAIL  ${entry.id.padEnd(24)} ${message.split('\n')[0]}`);
-      continue;
+      return;
     }
     const image = result.images[0];
     if (!image) throw new Error(`Provider returned no image for "${entry.id}".`);
@@ -172,6 +214,8 @@ export async function gen(args: Args): Promise<number> {
         `seed ${String(result.seed ?? '-').padEnd(12)} ${usd(result.cost)}`,
     );
   }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, () => worker()));
 
   console.log(`\n  spent this run: ${usd(spent)}`);
   if (balance !== null) console.log(`  remaining balance: ${usd(balance)}`);

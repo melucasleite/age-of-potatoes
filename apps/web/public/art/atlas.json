@@ -1,9 +1,53 @@
 {
   "frames": {
-    "crop_potato_strip": {
+    "belt_corner": {
       "frame": {
         "x": 0,
         "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "belts"
+    },
+    "belt_straight": {
+      "frame": {
+        "x": 17,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "belts"
+    },
+    "crop_cane_strip": {
+      "frame": {
+        "x": 0,
+        "y": 17,
         "w": 64,
         "h": 16
       },
@@ -22,10 +66,120 @@
       "anchorMode": "top-left",
       "group": "crops"
     },
+    "crop_chili_strip": {
+      "frame": {
+        "x": 65,
+        "y": 17,
+        "w": 64,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "crops"
+    },
+    "crop_corn_strip": {
+      "frame": {
+        "x": 130,
+        "y": 17,
+        "w": 64,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "crops"
+    },
+    "crop_potato_strip": {
+      "frame": {
+        "x": 195,
+        "y": 17,
+        "w": 64,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "crops"
+    },
+    "grabber_arm": {
+      "frame": {
+        "x": 34,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "belts"
+    },
     "item_chip_bag": {
       "frame": {
         "x": 0,
-        "y": 17,
+        "y": 34,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_plain_chips": {
+      "frame": {
+        "x": 17,
+        "y": 34,
         "w": 16,
         "h": 16
       },
@@ -46,8 +200,8 @@
     },
     "item_potato": {
       "frame": {
-        "x": 17,
-        "y": 17,
+        "x": 34,
+        "y": 34,
         "w": 16,
         "h": 16
       },
@@ -66,10 +220,164 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "machine_chip_kitchen": {
+    "item_potato_slices": {
+      "frame": {
+        "x": 51,
+        "y": 34,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_seasoned_chips": {
+      "frame": {
+        "x": 68,
+        "y": 34,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_washed_potato": {
+      "frame": {
+        "x": 85,
+        "y": 34,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "machine_bagger": {
       "frame": {
         "x": 0,
-        "y": 34,
+        "y": 51,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_chip_kitchen": {
+      "frame": {
+        "x": 33,
+        "y": 51,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_fryer": {
+      "frame": {
+        "x": 66,
+        "y": 51,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_seasoner": {
+      "frame": {
+        "x": 99,
+        "y": 51,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_slicer": {
+      "frame": {
+        "x": 132,
+        "y": 51,
         "w": 32,
         "h": 32
       },
@@ -90,8 +398,8 @@
     },
     "machine_sprinkler": {
       "frame": {
-        "x": 33,
-        "y": 34,
+        "x": 198,
+        "y": 51,
         "w": 16,
         "h": 16
       },
@@ -110,10 +418,32 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
+    "machine_washer": {
+      "frame": {
+        "x": 165,
+        "y": 51,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
     "player_walk_down": {
       "frame": {
         "x": 0,
-        "y": 67,
+        "y": 101,
         "w": 32,
         "h": 16
       },
@@ -135,7 +465,7 @@
     "player_walk_side": {
       "frame": {
         "x": 33,
-        "y": 67,
+        "y": 101,
         "w": 32,
         "h": 16
       },
@@ -157,7 +487,7 @@
     "status_lamp": {
       "frame": {
         "x": 0,
-        "y": 84,
+        "y": 118,
         "w": 4,
         "h": 4
       },
@@ -179,7 +509,7 @@
     "terrain_grass": {
       "frame": {
         "x": 0,
-        "y": 89,
+        "y": 123,
         "w": 16,
         "h": 16
       },
@@ -201,7 +531,7 @@
     "terrain_soil": {
       "frame": {
         "x": 17,
-        "y": 89,
+        "y": 123,
         "w": 16,
         "h": 16
       },
@@ -223,7 +553,7 @@
     "terrain_soil_tilled": {
       "frame": {
         "x": 34,
-        "y": 89,
+        "y": 123,
         "w": 16,
         "h": 16
       },
@@ -241,6 +571,28 @@
       },
       "anchorMode": "top-left",
       "group": "terrain"
+    },
+    "zone_overlay": {
+      "frame": {
+        "x": 0,
+        "y": 84,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "overlay"
     }
   },
   "meta": {
@@ -248,39 +600,55 @@
     "image": "atlas.png",
     "format": "RGBA8888",
     "size": {
-      "w": 128,
-      "h": 128
+      "w": 512,
+      "h": 256
     },
     "scale": "1",
     "groups": [
       {
-        "group": "crops",
+        "group": "belts",
         "x": 0,
         "y": 0,
-        "width": 64,
+        "width": 50,
         "height": 16,
-        "count": 1
+        "count": 3
+      },
+      {
+        "group": "crops",
+        "x": 0,
+        "y": 17,
+        "width": 259,
+        "height": 16,
+        "count": 4
       },
       {
         "group": "items",
         "x": 0,
-        "y": 17,
-        "width": 33,
+        "y": 34,
+        "width": 101,
         "height": 16,
-        "count": 2
+        "count": 6
       },
       {
         "group": "machines",
         "x": 0,
-        "y": 34,
-        "width": 49,
+        "y": 51,
+        "width": 214,
         "height": 32,
-        "count": 2
+        "count": 7
+      },
+      {
+        "group": "overlay",
+        "x": 0,
+        "y": 84,
+        "width": 16,
+        "height": 16,
+        "count": 1
       },
       {
         "group": "player",
         "x": 0,
-        "y": 67,
+        "y": 101,
         "width": 65,
         "height": 16,
         "count": 2
@@ -288,7 +656,7 @@
       {
         "group": "status",
         "x": 0,
-        "y": 84,
+        "y": 118,
         "width": 4,
         "height": 4,
         "count": 1
@@ -296,7 +664,7 @@
       {
         "group": "terrain",
         "x": 0,
-        "y": 89,
+        "y": 123,
         "width": 50,
         "height": 16,
         "count": 3

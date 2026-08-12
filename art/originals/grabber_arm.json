@@ -1,0 +1,24 @@
+{
+  "id": "grabber_arm",
+  "provider": "local",
+  "model": "local:local/grabber_arm.png",
+  "seed": null,
+  "prompt": "One 16x16 grabber arm, drawn pointing EAST and centred, authored from the master palette by art/tools/make-factory-parts.mjs. Hand-authored after two paid takes returned an inkblot with no claw. The structural reason it stays hand-authored: the renderer gets the other three directions by rotating this 90 degrees about the sprite centre, so it has to be centred and symmetric about its own axis or it wobbles as it turns — a guarantee arithmetic can make and a diffusion model cannot.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "belts",
+  "costUsd": 0,
+  "generatedAt": "2026-08-12T21:53:33.730Z"
+}

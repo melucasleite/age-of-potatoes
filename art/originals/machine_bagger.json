@@ -1,0 +1,24 @@
+{
+  "id": "machine_bagger",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 731571208,
+  "prompt": "a bold simple pixel art machine, a chip bagging machine, one low wide pale cream and light tan box across the bottom of the frame, and three fat puffy cream coloured chip bags sitting on top of it in a row, each bag a chunky rounded pillow shape, warm pale cream and light tan colours throughout, low three-quarter view, very large solid areas of flat pale colour, thick heavy chunky shapes, a low wide base topped by three rounded bumps, no thin lines, no small details, no wires, no bolts, no signs, no blank flat panels, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T21:40:26.011Z"
+}

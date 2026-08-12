@@ -1,0 +1,24 @@
+{
+  "id": "machine_slicer",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 250775735,
+  "prompt": "a bold simple pixel art machine, a potato slicer, one huge bright silver metal blade shaped like a big solid triangle wedge tilted on a steep diagonal, the blade is one single flat shape filling the whole upper half of the frame, below it one short squat dark grey box base, only two shapes in total, low three-quarter view, very large solid areas of flat bright silver and dark grey colour, thick heavy chunky shapes, bold diagonal wedge silhouette, no thin lines, no small details, no teeth, no serrations, no wires, no bolts, no clutter, no scribbles, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T21:40:40.829Z"
+}
