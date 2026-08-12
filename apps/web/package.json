@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@snack/sim": "0.1.0",
+    "@supabase/supabase-js": "2.112.3",
     "idb": "8.0.3",
     "next": "16.3.0",
     "pixi.js": "8.19.0",

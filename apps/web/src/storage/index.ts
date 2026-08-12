@@ -23,11 +23,20 @@ export {
 export type { TraceBatch } from './db';
 export { requestPersistentStorage } from './persist';
 export type { PersistenceResult } from './persist';
+export { CONFLICT_KEY, adoptCloudEnvelope, readConflictEnvelope } from './cloudHandoff';
+export type { AdoptOutcome } from './cloudHandoff';
 export { clearSavedWorld, loadWorld, readRawSaves, saveWorld } from './saves';
 export type { LoadOutcome, LoadedWorld, NoSavedWorld, RefusedWorld, SaveResult } from './saves';
 export { clearTrace, drainTrace, exportTrace, readTrace, tracePersistedCount } from './trace';
 
 import { type WorldState, createWorld } from '@snack/sim';
+
+// The one place cloud sync is switched on. It is `void`ed at both call sites below and is
+// never awaited: work item 016's hard constraint is that no boot path may block on, await,
+// or fail because of a Supabase call. `startCloudSyncIfConfigured` does not even import the
+// Supabase SDK unless the env vars are set, so with no backend provisioned this costs one
+// synchronous check of `process.env` and nothing else.
+import { startCloudSyncIfConfigured } from '@/supabase/bootstrap';
 
 import { type PersistenceResult, requestPersistentStorage } from './persist';
 import { type LoadOutcome, loadWorld } from './saves';
@@ -70,6 +79,7 @@ export async function bootWorld(options: BootOptions = {}): Promise<BootResult> 
   const outcome = await loadWorld();
 
   if (outcome.status === 'loaded') {
+    void startCloudSyncIfConfigured({ localTickAtBoot: outcome.state.tick });
     return { state: outcome.state, fresh: false, outcome, persistence };
   }
 
@@ -90,6 +100,11 @@ export async function bootWorld(options: BootOptions = {}): Promise<BootResult> 
       logWarn('Could not clear the old input trace.', error);
     }
   }
+
+  // Null rather than 0: there is no envelope on disk to compare against, so a cloud save
+  // has nothing to be "ahead of" and adoption is unambiguously safe. This is the new-device
+  // case, and it is the one that makes sync feel like sync rather than like backup.
+  void startCloudSyncIfConfigured({ localTickAtBoot: null });
 
   return { state, fresh: true, outcome, persistence };
 }
