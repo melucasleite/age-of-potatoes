@@ -36,8 +36,14 @@ const MAX_CATCHUP = 5;
 const MAX_FRAME_DELTA_MS = 250;
 
 export interface GameHostOptions {
-  /** Same seed in, same world out, forever. */
+  /** Same seed in, same world out, forever. Ignored when `initialState` is given. */
   seed?: number;
+  /**
+   * A world restored from disk. When present the host adopts it as-is rather than
+   * generating one — its `worldSeed` and `tick` come with it, so a reload resumes
+   * mid-session instead of starting over.
+   */
+  initialState?: WorldState;
 }
 
 const DEFAULT_SEED = 20260812;
@@ -102,10 +108,21 @@ export class GameHost implements InputHost {
 
   constructor(container: HTMLElement, options: GameHostOptions = {}) {
     this.container = container;
-    this.seed = options.seed ?? DEFAULT_SEED;
-    this.state = createWorld(this.seed);
+    this.state = options.initialState ?? createWorld(options.seed ?? DEFAULT_SEED);
+    this.seed = this.state.worldSeed;
     this.keyboard = new KeyboardInput(this);
     this.pointer = new PointerInput(this);
+  }
+
+  /**
+   * The live world, for autosave to read on its own schedule.
+   *
+   * Handing out the mutable state is deliberate: the alternative is copying a world
+   * every poll, and the only caller serialises it. Nothing may mutate it — the sole
+   * door into the sim is `queue.push`.
+   */
+  getState(): WorldState {
+    return this.state;
   }
 
   // --- InputHost ---------------------------------------------------------------------

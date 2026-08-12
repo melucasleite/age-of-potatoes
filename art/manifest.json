@@ -32,7 +32,7 @@
       "provider": "retro-diffusion",
       "width": 16,
       "height": 16,
-      "prompt": "seamless top-down ground tile of freshly tilled farm soil, dark damp earth raked into straight parallel plough furrows, flat even lighting, no plants, no shadows, no text",
+      "prompt": "seamless top-down ground tile of dark brown crumbly farm soil, mottled irregular clods and small stones scattered at random, soft uneven speckled texture, flat even lighting, no rows, no lines, no furrows, no stripes, no planks, no wood, no plants, no shadows, no text",
       "promptStyle": "rd_fast__default",
       "anchor": "top-left",
       "atlasGroup": "terrain",

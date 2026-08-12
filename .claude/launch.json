@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "snack-mogul-preview",
+      "runtimeExecutable": "yarn",
+      "runtimeArgs": ["workspace", "@snack/web", "next", "start", "--port", "3210"],
+      "port": 3210
+    }
+  ]
+}
