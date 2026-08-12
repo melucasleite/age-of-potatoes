@@ -1,0 +1,30 @@
+{
+  "name": "snack-mogul",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A browser factory/farming/tycoon game — build a chips-and-soda empire from a weedy roadside lot.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "yarn workspace @snack/web dev",
+    "build": "yarn workspace @snack/web build",
+    "typecheck": "tsc --build --verbose",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css}\"",
+    "art": "yarn workspace @snack/art-cli art"
+  },
+  "devDependencies": {
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "vite": "^8.2.1",
+    "vitest": "4.1.10"
+  },
+  "packageManager": "yarn@1.22.22",
+  "engines": {
+    "node": ">=22"
+  }
+}

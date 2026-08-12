@@ -1,0 +1,40 @@
+# Secrets — MUST stay out of history. Contains live API tokens.
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/versions
+.pnp.*
+
+# Build output
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Asset pipeline — generated, rebuildable from committed originals
+art/build/
+art/review/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test / coverage
+coverage/

@@ -1,0 +1,24 @@
+{
+  "name": "@snack/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@snack/sim": "0.1.0",
+    "idb": "8.0.3",
+    "next": "16.3.0",
+    "pixi.js": "8.19.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.1"
+  }
+}
