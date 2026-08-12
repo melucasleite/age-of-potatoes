@@ -14,6 +14,7 @@ import {
   type SaveEnvelope,
   type WorldState,
   CURRENT_FORMAT_VERSION,
+  CeremonyId,
   CropId,
   Direction,
   ItemId,
@@ -33,9 +34,11 @@ import {
   serialize,
   step,
   stepMany,
+  worldTileIndex,
 } from '../src/index';
 import fixture from './fixtures/saves/format-1.json';
 import fixture2 from './fixtures/saves/format-2.json';
+import fixture3 from './fixtures/saves/format-3.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -216,12 +219,13 @@ describe('the permanent fixture set', () => {
   // real build and it must stay byte-identical forever; it is the only thing that will catch
   // a migration bug in 2029.
   //
-  // The expected DIGEST below is a different matter, and it moved once, on purpose. Format 2
-  // added belts, grabbers, zones, tech unlocks, upgrade dials, and the per-tile withering
-  // clock — all of them hashed — so the world this file restores to now legitimately hashes
-  // differently from the one it restored to under format 1. That is the migration working,
-  // not the save breaking: the tick, the seed, the money, and every machine came back
-  // unchanged, which is what the assertions around it check.
+  // The expected DIGEST below is a different matter, and it has moved twice, both times on
+  // purpose. Format 2 added belts, grabbers, zones, tech unlocks, upgrade dials, and the
+  // per-tile withering clock; format 3 added reservoirs, pipes, one-ledger networks, and the
+  // per-machine plumbing fields — all of them hashed — so the world this file restores to
+  // legitimately hashes differently each time. That is the migration working, not the save
+  // breaking: the tick, the seed, the money, and every machine came back unchanged, which is
+  // what the assertions around it check.
   //
   // The rule this preserves: a red line here means "either a migration is missing, or the
   // format changed without one". If you are updating this hash, the commit had better also
@@ -230,11 +234,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture);
 
     expect(restored.migration.fromVersion).toBe(1);
-    expect(restored.migration.steps).toEqual([1]);
+    expect(restored.migration.steps).toEqual([1, 2]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('cb2dcba0');
+    expect(hashState(restored.state)).toBe('f7667e6b');
   });
 
   it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
@@ -251,6 +255,17 @@ describe('the permanent fixture set', () => {
     expect(kitchen?.speedLevel).toBe(0);
     // Nothing aged while the world was in a file: the withering clock restarts at zero.
     expect(state.field.every((tile) => tile.readyAge === 0 && tile.compost === 0)).toBe(true);
+
+    // And the liquid layer's empty defaults, plus the one thing format 3 does NOT default:
+    // the pond arrives FULL. The water was always notionally there — v0.1 drew from an
+    // infinite supply — so a returning player must not find it drained by an update.
+    expect(state.pipes).toEqual([]);
+    expect(state.networks).toEqual([]);
+    expect(state.ceremonies).toEqual([]);
+    expect(state.reservoirs).toHaveLength(1);
+    expect(state.reservoirs[0]!.levelMl).toBe(state.reservoirs[0]!.capacityMl);
+    expect(state.machines.every((machine) => machine.network === 0)).toBe(true);
+    expect(state.machines.every((machine) => machine.scanCursor === 0)).toBe(true);
   });
 
   it('still contains the world it was recorded with', () => {
@@ -284,13 +299,14 @@ describe('the permanent fixture set', () => {
   // format-2 is the first save with a factory in it, caught deliberately mid-flight: items on
   // both belt segments, three grabber arms holding something, machines part-way through an
   // operation. A save taken at a tidy moment tests nothing.
-  it('loads format-2.json at the current version with no migration', () => {
+  it('migrates format-2.json up to the current version', () => {
     const restored = restoreWorld(fixture2);
 
     expect(restored.migration.fromVersion).toBe(2);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([2]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('0ecdf534');
+    expect(hashState(restored.state)).toBe('c6a41333');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -317,6 +333,59 @@ describe('the permanent fixture set', () => {
   it('keeps a restored factory simulating identically', () => {
     const a = restoreWorld(fixture2).state;
     const b = restoreWorld(fixture2).state;
+    stepMany(a, 500);
+    stepMany(b, 500);
+    expect(hashState(a)).toBe(hashState(b));
+  });
+
+  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
+  // format-3 is the first save with plumbing in it, caught deliberately mid-throttle: the
+  // network is over-demanded, every consumer is amber, the tank is empty, the pond is drawn
+  // down, and the Hub is part-way through a scan. A pipe network at rest would round-trip
+  // perfectly while proving almost nothing.
+  it('loads format-3.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture3);
+
+    expect(restored.migration.fromVersion).toBe(3);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.state.tick).toBe(21_306);
+    expect(hashState(restored.state)).toBe('a51acfaf');
+  });
+
+  it('brings the plumbing back exactly as it was left', () => {
+    const state = restoreWorld(fixture3).state;
+
+    expect(state.reservoirs).toHaveLength(1);
+    // Drawn down and still recharging. A pond that came back full would mean the level was
+    // recomputed rather than restored, which is the one thing a save must never do.
+    expect(state.reservoirs[0]!.levelMl).toBeLessThan(state.reservoirs[0]!.capacityMl);
+    expect(state.pipes).toHaveLength(17);
+    expect(state.networks).toHaveLength(1);
+
+    // Every pipe on the one network, and the network's id is its lowest world tile index.
+    const network = state.networks[0]!;
+    let lowest = Number.MAX_SAFE_INTEGER;
+    for (const pipe of state.pipes) {
+      expect(pipe.network).toBe(network.id);
+      const index = worldTileIndex(pipe.tileX, pipe.tileY);
+      if (index < lowest) lowest = index;
+    }
+    expect(network.id).toBe(lowest);
+
+    // The bookkeeping that only exists mid-flight, which is the whole reason for this fixture.
+    expect(network.rrOffset).toBeGreaterThan(0);
+    expect(network.demandMl).toBeGreaterThan(network.deliveredMl);
+    expect(state.machines.some((machine) => machine.throttled)).toBe(true);
+    expect(state.machines.some((machine) => machine.scanCursor > 0)).toBe(true);
+
+    // A first activation that already happened must not happen again after a reload.
+    expect(state.ceremonies).toContain(CeremonyId.IrrigationHub);
+    expect(state.ceremonies).toContain(CeremonyId.PipedSprinkler);
+  });
+
+  it('keeps a restored network flowing identically', () => {
+    const a = restoreWorld(fixture3).state;
+    const b = restoreWorld(fixture3).state;
     stepMany(a, 500);
     stepMany(b, 500);
     expect(hashState(a)).toBe(hashState(b));

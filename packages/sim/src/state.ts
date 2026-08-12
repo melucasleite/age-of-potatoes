@@ -28,7 +28,14 @@ import {
   FIELD_TILE_COUNT,
   type GrabberTier,
   ItemId,
+  type LiquidId,
   MachineKind,
+  POND_ORIGIN_X,
+  POND_ORIGIN_Y,
+  PIPE_PRICE_CENTS_PER_TILE,
+  POND_TILES_HIGH,
+  POND_TILES_WIDE,
+  RESERVOIR_CAPACITY_ML,
   STARTING_MONEY_CENTS,
   STARTING_SEEDS,
   WORLD_TILES_HIGH,
@@ -57,8 +64,10 @@ import { SUBTILE, divFloor, tileCentreSubtiles } from './units';
  * 1 — v0.1: field, machines, inventory, stats.
  * 2 — the factory: belts, grabbers, zones, tech unlocks, machine upgrade dials, and the
  *     per-tile withering clock. Migrations are a chain of pure functions, never edits.
+ * 3 — the liquid layer: reservoirs with a finite level, pipes, one-ledger networks, and the
+ *     per-machine plumbing fields (network, flow, throttle, the Hub's scan cursor).
  */
-export const WORLD_STATE_VERSION = 2;
+export const WORLD_STATE_VERSION = 3;
 
 /**
  * A held direction, not a delta. Input tells the sim *which way the player is holding*,
@@ -177,6 +186,106 @@ export interface Machine {
   speedLevel: number;
   efficiencyLevel: number;
   capacityLevel: number;
+
+  // --- the liquid layer (plan §5) ---
+  //
+  // Every field below is written by `pipes.ts` and read by `view.ts`. They are stored rather
+  // than derived because the renderer must not compute network state of its own (plan §12),
+  // and because a tank's net rate is a fact about the tick that just happened — there is
+  // nowhere else for it to live.
+
+  /**
+   * The pipe network this machine is attached to, or 0. Recomputed on EDIT ONLY, by
+   * `rebuildNetworks()`, never per tick.
+   */
+  network: number;
+  /**
+   * Signed net flow over the last tick, in millilitres per minute. Positive is in. This is
+   * what a tank's **net rate and time-to-empty** are read off — plan §5's one label that
+   * turns fluid management into arithmetic.
+   */
+  flowMlPerMinute: number;
+  /**
+   * Asked its network for water and got less than it asked for. Plan §5's AMBER DROPLET: the
+   * network is over-demanded and every consumer on it is running slow, which is a readable
+   * failure with a fixable cause rather than one machine mysteriously stopping.
+   */
+  throttled: boolean;
+  /**
+   * Where the Irrigation Hub's rotating scan is up to, as an offset into its coverage patch.
+   *
+   * IT LIVES HERE AND NOT IN A MODULE VARIABLE. Module state is invisible to the hash and to
+   * saves, so a cursor kept there would make two identically-saved worlds water different
+   * tiles after a reload — the exact class of bug the golden fixtures exist to catch.
+   */
+  scanCursor: number;
+  /** Tiles this machine has actually watered, lifetime. A Hub's saving is the gap between… */
+  wateredCount: number;
+  /** …this and that: tiles it looked at, found already wet, and deliberately skipped. */
+  skippedCount: number;
+}
+
+/**
+ * A body of water with a countable amount in it.
+ *
+ * Plan §4: "~10,000 units recharging ~20 u/min ... pumps halve below 25% and sip at recharge
+ * rate when empty — **reservoirs always recover**." The level is the whole point: it falls
+ * when drawn from, rises when left alone, and the shoreline moves with it, so overdraw is
+ * telegraphed in the world rather than in a panel.
+ */
+export interface Reservoir {
+  id: number;
+  /** Top-left tile of the footprint. */
+  tileX: number;
+  tileY: number;
+  tilesWide: number;
+  tilesHigh: number;
+  /** Millilitres in it now. Floors at zero; `water.ts` is the only thing that moves it. */
+  levelMl: number;
+  capacityMl: number;
+  /**
+   * Recharge remainder, in millilitre-ticks. 40,000 ml a minute is 33⅓ ml a tick, so this
+   * accrues and spends whole millilitres — the same integer accumulator the player's movement
+   * uses, and for the same reason: rounding a rate is a float wearing a disguise.
+   */
+  rechargeAccum: number;
+}
+
+/**
+ * One tile of pipe.
+ *
+ * A PIPE HAS NO CONTENTS. There is no fill level here and there must never be one — plan §5's
+ * model is flow, not pressure, and a per-segment volume is the first step down the road to a
+ * solver. A pipe knows what liquid its network carries and which network it belongs to. That
+ * is all a pipe is.
+ */
+export interface Pipe {
+  id: number;
+  tileX: number;
+  tileY: number;
+  liquid: LiquidId;
+  /** Its network's id, or 0. Recomputed on edit by `rebuildNetworks()`. */
+  network: number;
+}
+
+/**
+ * One connected run of pipe, and its ledger.
+ *
+ * The id is GEOMETRIC — the lowest row-major world tile index among its pipes — so two worlds
+ * that built the same plumbing in a different order agree, and laying a pipe across the map
+ * cannot renumber a network somewhere else.
+ */
+export interface PipeNetwork {
+  id: number;
+  liquid: LiquidId;
+  /** The pump-rate remainder, in millilitre-ticks. See `Reservoir.rechargeAccum`. */
+  supplyAccum: number;
+  /** The round-robin rotation. Advances one step every tick the network is over-demanded. */
+  rrOffset: number;
+  /** Last tick's numbers, for the hover readout. Supply is a capacity, not a forced flow. */
+  supplyMl: number;
+  demandMl: number;
+  deliveredMl: number;
 }
 
 /**
@@ -287,6 +396,32 @@ export interface WorldState {
   zones: Zone[];
   nextZoneId: number;
 
+  /** Sorted ascending by id. Finite, recharging, and never permanently dry (plan §4). */
+  reservoirs: Reservoir[];
+  nextReservoirId: number;
+
+  /** Sorted ascending by id. One tile each; a run is many. */
+  pipes: Pipe[];
+  nextPipeId: number;
+
+  /**
+   * Sorted ascending by id, and the id is the network's lowest world tile index rather than a
+   * counter — so there is deliberately no `nextNetworkId`. Rebuilt from the pipe list on
+   * every edit by `rebuildNetworks()`, never per tick.
+   */
+  networks: PipeNetwork[];
+
+  /**
+   * One-shot celebrations this world has already played, sorted.
+   *
+   * Plan §3's Hall of Hands: "First activations get ~10 seconds of in-world theater
+   * (sprinklers pop on down the rows)." The flag lives here rather than in the renderer so the
+   * ceremony fires exactly once per WORLD and never replays after a reload — a first time that
+   * happens twice is not a first time. The theatre itself is renderer-only and non-blocking;
+   * the sim only records that it is owed.
+   */
+  ceremonies: string[];
+
   /**
    * Researched tech node ids, sorted ascending. Sorted rather than insertion-ordered so
    * two worlds that bought the same nodes in a different order hash identically — they are
@@ -348,6 +483,12 @@ export function createWorld(seed: number): WorldState {
     nextGrabberId: 1,
     zones: [],
     nextZoneId: 1,
+    reservoirs: [],
+    nextReservoirId: 1,
+    pipes: [],
+    nextPipeId: 1,
+    networks: [],
+    ceremonies: [],
     unlocked: [],
     streams: {},
     stats,
@@ -371,6 +512,11 @@ export function createWorld(seed: number): WorldState {
   // The roadside stand is a gift, not a purchase — selling by hand is the manual tier of
   // plan §3's ladder and must work from the first second.
   spawnMachine(state, MachineKind.SellBin, FIELD_ORIGIN_X - 2, FIELD_ORIGIN_Y + FIELD_TILES_HIGH);
+
+  // And so is the pond. Plan §3's Liquids ladder starts at "bucket/can at the shore", so the
+  // shore has to exist on the first second too — the can is free, indestructible, and works
+  // from a full pond and an empty one alike.
+  spawnReservoir(state, POND_ORIGIN_X, POND_ORIGIN_Y, POND_TILES_WIDE, POND_TILES_HIGH);
 
   addItem(state, ItemId.PotatoSeed, STARTING_SEEDS);
   state.stats.netWorthCents = computeNetWorthCents(state);
@@ -406,12 +552,78 @@ export function spawnMachine(
     speedLevel: 0,
     efficiencyLevel: 0,
     capacityLevel: 0,
+    network: 0,
+    flowMlPerMinute: 0,
+    throttled: false,
+    scanCursor: 0,
+    wateredCount: 0,
+    skippedCount: 0,
   };
   state.nextMachineId += 1;
   // Ids only increase, so appending keeps the array sorted by id.
   state.machines.push(machine);
   return machine;
 }
+
+/** Put a body of water on the map. Full to start; the level is a fact from here on. */
+export function spawnReservoir(
+  state: WorldState,
+  tileX: number,
+  tileY: number,
+  tilesWide: number,
+  tilesHigh: number,
+): Reservoir {
+  const reservoir: Reservoir = {
+    id: state.nextReservoirId,
+    tileX,
+    tileY,
+    tilesWide,
+    tilesHigh,
+    levelMl: RESERVOIR_CAPACITY_ML,
+    capacityMl: RESERVOIR_CAPACITY_ML,
+    rechargeAccum: 0,
+  };
+  state.nextReservoirId += 1;
+  state.reservoirs.push(reservoir);
+  return reservoir;
+}
+
+/** Lay one tile of pipe. Network membership is assigned by `rebuildNetworks()`, not here. */
+export function spawnPipe(state: WorldState, tileX: number, tileY: number, liquid: LiquidId): Pipe {
+  const pipe: Pipe = { id: state.nextPipeId, tileX, tileY, liquid, network: 0 };
+  state.nextPipeId += 1;
+  state.pipes.push(pipe);
+  return pipe;
+}
+
+/**
+ * Record that a one-shot celebration is owed, exactly once per world.
+ *
+ * Returns true the first time and false forever after, which is what makes the Hub's
+ * pop-on-down-the-rows theatre a first time rather than a recurring animation.
+ */
+export function markCeremony(state: WorldState, id: string): boolean {
+  for (let i = 0; i < state.ceremonies.length; i++) {
+    const current = state.ceremonies[i]!;
+    if (current === id) return false;
+    if (current > id) {
+      state.ceremonies.splice(i, 0, id);
+      return true;
+    }
+  }
+  state.ceremonies.push(id);
+  return true;
+}
+
+/** The ids `markCeremony` uses. Strings, and they are save surface, so they are permanent. */
+export const CeremonyId = {
+  /** Plan §3's named example: the first time an Irrigation Hub waters a row. */
+  IrrigationHub: 'irrigation-hub-first-run',
+  /** The first piped head that pours without anyone having filled it. */
+  PipedSprinkler: 'piped-sprinkler-first-run',
+} as const;
+
+export type CeremonyId = (typeof CeremonyId)[keyof typeof CeremonyId];
 
 /** Place a belt without charging for it. */
 export function spawnBelt(
@@ -695,13 +907,48 @@ export function grabberAt(state: WorldState, tileX: number, tileY: number): Grab
   return null;
 }
 
-/** True when anything at all already occupies a tile. */
+/**
+ * True when anything at all already occupies a tile — including a pipe, and including open
+ * water. A pond is scenery you cannot build on; a Pump stands on the bank next to it.
+ */
 export function tileOccupied(state: WorldState, tileX: number, tileY: number): boolean {
   return (
     machineAt(state, tileX, tileY) !== null ||
     beltAt(state, tileX, tileY) !== null ||
-    grabberAt(state, tileX, tileY) !== null
+    grabberAt(state, tileX, tileY) !== null ||
+    pipeAtTile(state, tileX, tileY) !== null ||
+    reservoirAtTile(state, tileX, tileY) !== null
   );
+}
+
+/**
+ * Pipe and reservoir lookups, duplicated here rather than imported.
+ *
+ * `pipes.ts` and `water.ts` both import from this module, so reaching back into them for a
+ * two-line scan would be a cycle. These are the same rule written once more, and the tests
+ * hold them together.
+ */
+function pipeAtTile(state: WorldState, tileX: number, tileY: number): Pipe | null {
+  for (let i = 0; i < state.pipes.length; i++) {
+    const pipe = state.pipes[i]!;
+    if (pipe.tileX === tileX && pipe.tileY === tileY) return pipe;
+  }
+  return null;
+}
+
+function reservoirAtTile(state: WorldState, tileX: number, tileY: number): Reservoir | null {
+  for (let i = 0; i < state.reservoirs.length; i++) {
+    const reservoir = state.reservoirs[i]!;
+    if (
+      tileX >= reservoir.tileX &&
+      tileY >= reservoir.tileY &&
+      tileX < reservoir.tileX + reservoir.tilesWide &&
+      tileY < reservoir.tileY + reservoir.tilesHigh
+    ) {
+      return reservoir;
+    }
+  }
+  return null;
 }
 
 // --- zones ------------------------------------------------------------------------
@@ -827,6 +1074,11 @@ export function computeNetWorthCents(state: WorldState): number {
     if (spec !== null) total += spec.priceCents;
     if (grabber.held !== 0) total += listPriceCents(grabber.held as ItemId);
   }
+
+  // Pipe is an asset like belt is. WATER IS NOT: a pond is terrain rather than stock, and a
+  // tank full of it is a machine doing its job, not inventory. Counting water would make
+  // filling a tank read as profit and draining it as a loss, which is precisely backwards.
+  total += PIPE_PRICE_CENTS_PER_TILE * state.pipes.length;
 
   return total;
 }

@@ -79,9 +79,56 @@ export const MachineKind = {
   Fryer: 6,
   Seasoner: 7,
   Bagger: 8,
+
+  // The liquid layer. Plan §5's grammar is `RESERVOIR → (Pump) → pipes → [Tank] → machines`,
+  // and every piece of it is an ordinary machine on purpose: placement, pick-up-and-move,
+  // the reach checks, and the three upgrade dials all already work, so a pump inherits them
+  // rather than growing a parallel set of rules that drift.
+  Pump: 9,
+  Tank: 10,
+  PipedSprinkler: 11,
+  IrrigationHub: 12,
+  Recirculator: 13,
 } as const;
 
 export type MachineKind = (typeof MachineKind)[keyof typeof MachineKind];
+
+/**
+ * What a pipe carries. Plan §5: **one liquid per network, enforced**.
+ *
+ * Water is the only one the plumbing item needs. Syrup, juice, and carbonated water arrive
+ * with the soda line and are deliberately not invented here — a liquid whose machines do not
+ * exist is a liquid that lies. The ids are save surface and permanent.
+ */
+export const LiquidId = {
+  None: 0,
+  Water: 1,
+} as const;
+
+export type LiquidId = (typeof LiquidId)[keyof typeof LiquidId];
+
+export interface LiquidSpec {
+  readonly id: LiquidId;
+  readonly slug: string;
+  /**
+   * The colour a full pipe tints to, as 0xRRGGBB. An EMPTY pipe is not tinted with this — it
+   * renders grey, which is plan §5's diagnostic instrument and the pipe equivalent of a gap
+   * in a belt. The renderer owns the grey; the sim only says which liquid and how full.
+   */
+  readonly tintRgb: number;
+}
+
+export const LIQUID_SPECS: readonly LiquidSpec[] = [
+  { id: LiquidId.Water, slug: 'water', tintRgb: 0x4f9ed8 },
+];
+
+export function liquidSpec(id: LiquidId): LiquidSpec | null {
+  for (let i = 0; i < LIQUID_SPECS.length; i++) {
+    const spec = LIQUID_SPECS[i]!;
+    if (spec.id === id) return spec;
+  }
+  return null;
+}
 
 // --- items ------------------------------------------------------------------------
 
@@ -307,6 +354,101 @@ export const HAND_POUR_ML = 2000;
 /** One sprinkler head servicing one tile. Wetting an already-wet tile still costs water. */
 export const SPRINKLER_POUR_ML = 1500;
 
+// --- reservoirs -------------------------------------------------------------------
+//
+// Plan §4: "Reservoirs ~10,000 units recharging ~20 u/min; overdraw is telegraphed
+// (shoreline recedes, mud ring), pumps halve below 25% and sip at recharge rate when empty —
+// reservoirs always recover. ... The watering can always fills at any shore at any level."
+//
+// THE DERIVATION, WRITTEN DOWN BECAUSE EVERY LATER WATER NUMBER COMES OUT OF IT.
+// §4's "unit" is a design-scale quantity, not a millilitre. The two drain rates that already
+// exist decide what one is worth: `HAND_POUR_ML` is 2,000 and `SPRINKLER_POUR_ML` is 1,500,
+// so a "unit" is one pour — call it the can's, the larger of the two. Then:
+//
+//   capacity  10,000 units × 2,000 ml = 20,000,000 ml = 20,000 L   — a pond, not a bucket
+//   recharge      20 units/min × 2,000 ml =  40,000 ml/min = 40 L/min
+//
+// Sanity, which is the point of doing it out loud: one dumb sprinkler head wets 25 tiles per
+// 100 ticks at 1,500 ml a tile, which is 450 L/min — eleven times the recharge, and it drains
+// a full pond in about 45 active minutes. That is a budget the player can feel inside one
+// session without ever being stopped, which is exactly the pressure §4 asks for.
+
+/** One §4 "unit" of water, in millilitres: one pour from the can. */
+export const RESERVOIR_UNIT_ML = HAND_POUR_ML;
+/** §4's "~10,000 units". */
+export const RESERVOIR_CAPACITY_UNITS = 10_000;
+export const RESERVOIR_CAPACITY_ML = RESERVOIR_CAPACITY_UNITS * RESERVOIR_UNIT_ML;
+/** §4's "~20 u/min". Per minute, because it is not a whole number of ml per tick. */
+export const RESERVOIR_RECHARGE_UNITS_PER_MINUTE = 20;
+export const RESERVOIR_RECHARGE_ML_PER_MINUTE =
+  RESERVOIR_RECHARGE_UNITS_PER_MINUTE * RESERVOIR_UNIT_ML;
+
+/**
+ * "Pumps halve below 25%" — 250 permille of capacity, and the one place that threshold is
+ * written. Below it a pump runs at half rate; at a level of exactly zero it sips at the
+ * recharge rate instead, which is the clause that guarantees a pond always recovers.
+ */
+export const RESERVOIR_LOW_PERMILLE = 250;
+
+/**
+ * The starting pond, in world tiles: the lot's south-east corner, clear of the field.
+ *
+ * THE CORNER IS CHOSEN, NOT DEFAULTED. The player spawns just south of the field, so the
+ * shore is a short walk from the first second — which matters, because "bucket/can at the
+ * shore" is the bottom rung of plan §3's Liquids ladder and the rung everything above it is
+ * measured against. The north-west corner would have been the obvious pick and is the wrong
+ * one: it is where every test and every scratch build drops a machine when it just needs
+ * empty ground, and permanent scenery there would break that convention for everything
+ * written afterwards. The north strip is likewise where existing saves put their factories.
+ */
+export const POND_ORIGIN_X = 12;
+export const POND_ORIGIN_Y = 13;
+export const POND_TILES_WIDE = 3;
+export const POND_TILES_HIGH = 3;
+
+// --- pipes, pumps, and tanks --------------------------------------------------------
+//
+// FLOW, NOT PRESSURE (plan §5). There is no pressure field, no per-segment fill level, and
+// no flow solver anywhere in this package. A network is a set of pipe tiles; its supply is
+// one number; its demands are a list; the tick divides one by the other. If a future change
+// starts wanting a solver, the model has been misread.
+
+/** Cents per tile of pipe. Cheap: routing should be a puzzle, not a purchase decision. */
+export const PIPE_PRICE_CENTS_PER_TILE = 200;
+/** Longest run one drag may lay. A drag is one command, so this bounds its cost. */
+export const PIPE_MAX_PATH_TILES = 64;
+
+/**
+ * A pump's throughput at full pond, in millilitres per minute. 600 L/min — comfortably one
+ * dumb sprinkler head (450 L/min), and nowhere near two, which is the whole tension: the
+ * answer to "my second head is amber" is a second pump on its own network, or the Irrigation
+ * Hub, which needs a twentieth of the water.
+ */
+export const PUMP_RATE_ML_PER_MINUTE = 600_000;
+
+/**
+ * The round-robin rotation's modulus.
+ *
+ * 720,720 is divisible by every integer from 1 to 16, so `rrOffset % consumerCount` cycles
+ * evenly no matter how many consumers a network has and the rotation never quietly favours
+ * whoever sits at index 0. A power of two would bias every odd-sized network forever.
+ */
+export const PIPE_RR_MODULUS = 720_720;
+
+/** How much the Recirculator reclaims while an adjacent Washer is actually washing. */
+export const RECIRCULATOR_ML_PER_MINUTE = 90_000;
+
+/** Chebyshev radius of the Irrigation Hub's coverage, in tiles. A 9×9 patch. */
+export const IRRIGATION_HUB_RADIUS_TILES = 4;
+/**
+ * Coverage tiles the Hub examines per tick, from a cursor stored on the machine.
+ *
+ * BOUNDED ON PURPOSE (plan §13): the Hub's per-tick cost must not scale with the field. Eight
+ * tiles a tick sweeps a 9×9 patch in eleven ticks, which is half a second — far finer than
+ * the ~30 active minutes a tile takes to dry out, so the Hub never misses a tile going dry.
+ */
+export const IRRIGATION_HUB_SCAN_PER_TICK = 8;
+
 // --- zones ------------------------------------------------------------------------
 //
 // A zone is a PLAN, NOT A MACHINE (plan §5). It plants nothing on its own; the seed hopper
@@ -338,11 +480,30 @@ export const MachineRole = {
   Inert: 0,
   /** Consumes one input item, produces one output item. The whole chip line. */
   Converter: 1,
-  /** Pours from its own barrel on a period. */
+  /** Pours from its own barrel on a period. The v0.1 head and the Barrel Sprinkler. */
   Sprinkler: 2,
+
+  // The liquid layer's four roles. `advanceMachines` dispatches on these exactly as it does
+  // on Converter, so the pipe ledger never has to know what kind of thing it is feeding.
+  /** Draws from an adjacent reservoir into its network. One per network, enforced. */
+  Pump: 3,
+  /** Buffers a network: takes the surplus, covers the shortfall, shows time-to-empty. */
+  Tank: 4,
+  /**
+   * A head on a network. Same pour, same period, same radius as the v0.1 sprinkler — it
+   * simply never needs filling. The Hub is the same role with a dry-tile predicate.
+   */
+  PipedSprinkler: 5,
+  /** Reclaims Washer graywater into a TANK, never into a network (plan §5, and see below). */
+  Recirculator: 6,
 } as const;
 
 export type MachineRole = (typeof MachineRole)[keyof typeof MachineRole];
+
+/** True for the roles that register as consumers on a pipe network and draw a ledger share. */
+export function isNetworkConsumer(role: MachineRole): boolean {
+  return role === MachineRole.PipedSprinkler || role === MachineRole.Tank;
+}
 
 export interface MachineSpec {
   readonly kind: MachineKind;
@@ -368,6 +529,36 @@ export interface MachineSpec {
   readonly outputItem: ItemId | null;
   /** The node that makes this machine buildable, or null for the v0.1 three. */
   readonly requiresTech: string | null;
+
+  // --- the liquid layer's typed ports (plan §5) ---
+  //
+  // "Solids ride belts, liquids ride pipes, and they meet only inside machines with typed
+  // ports." These four fields ARE the typed port: a machine with `liquid === LiquidId.None`
+  // has no pipe connection at all and the ledger skips it, so a belt machine can never be
+  // accidentally plumbed and a pipe can never carry a potato.
+
+  /** The liquid this machine's pipe port accepts, or `LiquidId.None` for no port. */
+  readonly liquid: LiquidId;
+  /** A pump's throughput at a full source, in ml per minute. Zero for everything else. */
+  readonly pumpRateMlPerMinute: number;
+  /**
+   * The most this machine will pull off its network in one tick, in millilitres. Its actual
+   * demand is this capped by the room left in its own tank, so a full head asks for nothing
+   * and a network with one thirsty consumer and three full ones is not throttled at all.
+   */
+  readonly intakeMlPerTick: number;
+  /** Chebyshev radius a watering machine covers, in tiles. Zero for everything else. */
+  readonly coverageRadiusTiles: number;
+  /**
+   * §4's "moisture-sensing heads water only dry tiles". True for the Irrigation Hub alone.
+   *
+   * It is a spec flag rather than a check on kind so the dry-tile predicate stays one line in
+   * one place, and so a second sensing machine is a data change rather than a tick edit. The
+   * predicate itself is `MOISTURE_DRY_THRESHOLD` — THE SAME ONE the renderer draws cracked
+   * earth with. There is exactly one definition of dry in this game, and a machine that
+   * disagreed with the ground about it would be unexplainable.
+   */
+  readonly moistureSensing: boolean;
 }
 
 /** Condition runs 0..1000 so a "percent" readout has a decimal without needing a float. */
@@ -419,6 +610,11 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputItem: null,
     outputItem: null,
     requiresTech: null,
+    liquid: LiquidId.None,
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
   },
   {
     // The v0.1 monolith, kept buildable forever. It is strictly worse than the line — one
@@ -440,6 +636,11 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputItem: ItemId.RussetPotato,
     outputItem: ItemId.BaggedChips,
     requiresTech: null,
+    liquid: LiquidId.None,
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
   },
   {
     // The $150 sprinkler of plan §7 — the whole v0.1 design gate. You fill its barrel by
@@ -459,6 +660,11 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputItem: null,
     outputItem: null,
     requiresTech: null,
+    liquid: LiquidId.None,
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: SPRINKLER_RADIUS_TILES,
+    moistureSensing: false,
   },
   {
     kind: MachineKind.Washer,
@@ -476,6 +682,11 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputItem: ItemId.RussetPotato,
     outputItem: ItemId.WashedPotato,
     requiresTech: TechId.WashAndSlice,
+    liquid: LiquidId.None,
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
   },
   {
     kind: MachineKind.Slicer,
@@ -493,6 +704,11 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputItem: ItemId.WashedPotato,
     outputItem: ItemId.PotatoSlices,
     requiresTech: TechId.WashAndSlice,
+    liquid: LiquidId.None,
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
   },
   {
     // Half the throughput of everything around it. On purpose. Do not "fix" this.
@@ -511,6 +727,11 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputItem: ItemId.PotatoSlices,
     outputItem: ItemId.PlainChips,
     requiresTech: TechId.Fryer,
+    liquid: LiquidId.None,
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
   },
   {
     kind: MachineKind.Seasoner,
@@ -528,6 +749,11 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputItem: ItemId.PlainChips,
     outputItem: ItemId.SeasonedChips,
     requiresTech: TechId.Finishing,
+    liquid: LiquidId.None,
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
   },
   {
     kind: MachineKind.Bagger,
@@ -545,6 +771,143 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputItem: ItemId.SeasonedChips,
     outputItem: ItemId.BaggedChips,
     requiresTech: TechId.Finishing,
+    liquid: LiquidId.None,
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // The one thing on a network that MAKES water. Plan §5 allows exactly one per network,
+    // and that single rule is what keeps the ledger a division instead of a solver.
+    kind: MachineKind.Pump,
+    slug: 'pump',
+    role: MachineRole.Pump,
+    tilesWide: 1,
+    tilesHigh: 1,
+    priceCents: 20_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    inputCapacity: 0,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputItem: null,
+    outputItem: null,
+    requiresTech: TechId.Pumps,
+    liquid: LiquidId.Water,
+    pumpRateMlPerMinute: PUMP_RATE_ML_PER_MINUTE,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // A buffer, and the only object in the game that shows a NET RATE and a TIME-TO-EMPTY
+    // (plan §5). That label is the whole reason tanks exist: it turns "am I short of water"
+    // from a feeling into arithmetic the player can do at a glance.
+    kind: MachineKind.Tank,
+    slug: 'tank',
+    role: MachineRole.Tank,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 25_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    inputCapacity: 0,
+    outputCapacity: 0,
+    /** 1,000 L — about a hundred seconds of a pump at full tilt. */
+    tankCapacityMl: 1_000_000,
+    wearPerOperation: 0,
+    inputItem: null,
+    outputItem: null,
+    requiresTech: TechId.Pumps,
+    liquid: LiquidId.Water,
+    pumpRateMlPerMinute: 0,
+    /** A tank fills fast enough to soak up a whole pump's surplus and no faster. */
+    intakeMlPerTick: 600,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // THE TOP RUNG OF PLAN §3'S WATERING LADDER, and deliberately no better at watering than
+    // the barrel it replaces: same pour, same period, same radius. The only thing it buys is
+    // that you never fill it again. An automated tier that also waters *better* would make
+    // the lower rungs rot, and plan §1 says manual never rots.
+    kind: MachineKind.PipedSprinkler,
+    slug: 'piped-sprinkler',
+    role: MachineRole.PipedSprinkler,
+    tilesWide: 1,
+    tilesHigh: 1,
+    priceCents: 25_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    inputCapacity: 0,
+    outputCapacity: 0,
+    /** Ten pours of head-room, so a brief throttle does not stop the cycle dead. */
+    tankCapacityMl: 15_000,
+    wearPerOperation: 0,
+    inputItem: null,
+    outputItem: null,
+    requiresTech: TechId.PipedSprinklers,
+    liquid: LiquidId.Water,
+    pumpRateMlPerMinute: 0,
+    /** 400 ml/tick — a touch over the 375 it averages, so it stays topped up when it can. */
+    intakeMlPerTick: 400,
+    coverageRadiusTiles: SPRINKLER_RADIUS_TILES,
+    moistureSensing: false,
+  },
+  {
+    // "Moisture-sensing heads water only dry tiles" (plan §4). It covers nine times the area
+    // of a head and, on a field that is mostly wet, draws a small fraction of the water —
+    // which is the entire promotion, and it shows up on the Dry County board rather than in
+    // a tooltip.
+    kind: MachineKind.IrrigationHub,
+    slug: 'irrigation-hub',
+    role: MachineRole.PipedSprinkler,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 90_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    inputCapacity: 0,
+    outputCapacity: 0,
+    tankCapacityMl: 60_000,
+    wearPerOperation: 0,
+    inputItem: null,
+    outputItem: null,
+    requiresTech: TechId.IrrigationHub,
+    liquid: LiquidId.Water,
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 800,
+    coverageRadiusTiles: IRRIGATION_HUB_RADIUS_TILES,
+    moistureSensing: true,
+  },
+  {
+    // Reclaims Washer graywater — plan §4. IT FEEDS A TANK, NOT A NETWORK, and that is not a
+    // bug: plan §5 allows exactly ONE PUMP PER NETWORK, so a second source injecting straight
+    // into the pipes would break the rule that makes the ledger comprehensible. Pouring into
+    // a tank is the sanctioned way to add a source, and it is the cleanest possible teaching
+    // example of why the rule exists. Put a Recirculator beside a Washer and a Tank.
+    kind: MachineKind.Recirculator,
+    slug: 'recirculator',
+    role: MachineRole.Recirculator,
+    tilesWide: 1,
+    tilesHigh: 1,
+    priceCents: 30_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    inputCapacity: 0,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputItem: null,
+    outputItem: null,
+    requiresTech: TechId.Recirculator,
+    liquid: LiquidId.Water,
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
   },
 ];
 
@@ -764,8 +1127,12 @@ function balanceDigest(): string {
     const spec = MACHINE_SPECS[i]!;
     h = fnv1aString(
       h,
-      `${spec.kind}:${spec.slug}:${spec.role}:${spec.tilesWide}x${spec.tilesHigh}:${spec.priceCents}:${spec.workPerOperation}:${spec.workRatePerTick}:${spec.inputCapacity}:${spec.outputCapacity}:${spec.tankCapacityMl}:${spec.wearPerOperation}:${spec.inputItem}:${spec.outputItem}:${spec.requiresTech}`,
+      `${spec.kind}:${spec.slug}:${spec.role}:${spec.tilesWide}x${spec.tilesHigh}:${spec.priceCents}:${spec.workPerOperation}:${spec.workRatePerTick}:${spec.inputCapacity}:${spec.outputCapacity}:${spec.tankCapacityMl}:${spec.wearPerOperation}:${spec.inputItem}:${spec.outputItem}:${spec.requiresTech}:${spec.liquid}:${spec.pumpRateMlPerMinute}:${spec.intakeMlPerTick}:${spec.coverageRadiusTiles}:${spec.moistureSensing}`,
     );
+  }
+  for (let i = 0; i < LIQUID_SPECS.length; i++) {
+    const spec = LIQUID_SPECS[i]!;
+    h = fnv1aString(h, `${spec.id}:${spec.slug}:${spec.tintRgb}`);
   }
   for (let i = 0; i < BELT_SPECS.length; i++) {
     const spec = BELT_SPECS[i]!;

@@ -51,6 +51,7 @@ export const FIXTURE_NAMES = [
   'all-verbs',
   'factory-line',
   'withering',
+  'water-works',
 ] as const;
 
 export type FixtureName = (typeof FIXTURE_NAMES)[number];
@@ -90,6 +91,8 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   SetZonePriority: true,
   RenameZone: true,
   SetZoneAutoReplant: true,
+  PlacePipe: true,
+  RemovePipe: true,
 };
 
 /**

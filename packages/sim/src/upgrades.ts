@@ -68,9 +68,32 @@ export function upgradeCostCents(spec: MachineSpec, currentLevel: number): numbe
   return divFloor(spec.priceCents * percent, 100);
 }
 
-/** Whether a machine is the sort of thing a dial does anything to at all. */
+/**
+ * Whether a machine is the sort of thing a dial does anything to at all.
+ *
+ * DELIBERATELY UNCHANGED BY THE LIQUID LAYER. A pump has no work cycle, no wear, and no tank,
+ * so two of the three dials would visibly do nothing on it — and a bench that happily sells a
+ * dial which changes no number is worse than one that does not offer it. Pumps get their
+ * dials when Entropy gives irrigation something to wear out; `effectivePumpRateMlPerMinute`
+ * below already honours Speed for the day that happens.
+ */
 export function acceptsUpgrades(spec: MachineSpec): boolean {
   return spec.workPerOperation > 0;
+}
+
+/**
+ * A pump's rated throughput after the Speed dial, in millilitres per minute.
+ *
+ * The same +30%-per-level curve every other Speed dial uses, and deliberately NOT scaled by
+ * condition: irrigation carries no wear in this release (Entropy is its own), so a pump has
+ * no worn state to punish. The pond's own throttle is the only thing that reduces this.
+ */
+export function effectivePumpRateMlPerMinute(spec: MachineSpec, machine: Machine): number {
+  if (spec.pumpRateMlPerMinute <= 0) return 0;
+  return divFloor(
+    spec.pumpRateMlPerMinute * (100 + SPEED_RATE_BONUS_PERCENT_PER_LEVEL * machine.speedLevel),
+    100,
+  );
 }
 
 /**

@@ -27,15 +27,19 @@ import {
   MOISTURE_DRY_THRESHOLD,
   MOISTURE_MAX,
   MachineRole,
+  SPRINKLER_POUR_ML,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
   WiltStage,
   cropSpec,
   grabberSpec,
+  isNetworkConsumer,
   machineSpec,
   wiltStageForAge,
 } from './data';
-import type { CropTile, WorldState } from './state';
+import { networkFlowPermille, tankTicksToEmpty } from './pipes';
+import { reservoirLevelPermille, reservoirThrottle } from './water';
+import { type CropTile, type WorldState, tileAt } from './state';
 import {
   bestTrailingGainCents,
   centiActiveHoursElapsed,
@@ -126,6 +130,83 @@ export interface MachineView {
   speedLevel: number;
   efficiencyLevel: number;
   capacityLevel: number;
+
+  // --- the liquid layer ---
+
+  /** The pipe network this machine is on, or 0. Matches a `NetworkView.id`. */
+  network: number;
+  /** Signed net flow last tick, in ml per minute. Positive is in. A TANK'S NET RATE. */
+  flowMlPerMinute: number;
+  /**
+   * Ticks until a tank runs dry at its current net rate, or **-1 when it is not emptying**.
+   *
+   * The sentinel is the point: a tank at break-even has no time-to-empty, which is a different
+   * fact from "zero seconds", and it is why nothing here divides by zero.
+   */
+  ticksToEmpty: number;
+  /** 1 when this machine asked its network for water and got less. THE AMBER DROPLET. */
+  throttled: number;
+  /** Chebyshev radius this machine waters, for the placement coverage overlay. */
+  coverageRadius: number;
+  /** 1 when this machine waters only tiles that are actually dry. */
+  moistureSensing: number;
+  /** Tiles actually watered, lifetime. */
+  wateredCount: number;
+  /** Tiles looked at, found wet, and skipped — lifetime. The Hub's saving is the gap. */
+  skippedCount: number;
+}
+
+/**
+ * A reservoir, and enough for the renderer to draw a receding shoreline and a mud ring.
+ *
+ * `levelPermille` is the only number the shoreline needs: the water sits at that fraction of
+ * the footprint and the mud ring is the band between it and the bank. The sim does not decide
+ * how many rings there are or what they look like — that is the renderer's business, and it
+ * is the one number that keeps the two in agreement.
+ */
+export interface ReservoirView {
+  id: number;
+  tileX: number;
+  tileY: number;
+  tilesWide: number;
+  tilesHigh: number;
+  levelMl: number;
+  capacityMl: number;
+  /** 0..1000. Falls when drawn from, rises when left alone. Overdraw is telegraphed here. */
+  levelPermille: number;
+  /** `ReservoirThrottle`: 0 full, 1 halved below 25%, 2 sipping at the recharge rate. */
+  throttle: number;
+}
+
+/**
+ * One tile of pipe.
+ *
+ * `liquid` is what it carries and `flowPermille` is how much of its network's demand is
+ * actually being met — which is what the renderer tints with, and what makes an unfed pipe
+ * render GREY. There is deliberately no fill level: plan §5's model is flow, not pressure.
+ */
+export interface PipeView {
+  tileX: number;
+  tileY: number;
+  liquid: number;
+  network: number;
+  flowPermille: number;
+}
+
+/** One network's ledger, already reduced. Every number is millilitres for the last tick. */
+export interface NetworkView {
+  id: number;
+  liquid: number;
+  /** What the pump could have delivered. A capacity, never a forced flow. */
+  supplyMl: number;
+  /** What its consumers asked for. */
+  demandMl: number;
+  /** What actually landed. Never more than supply, over any interval. */
+  deliveredMl: number;
+  /** 0..1000 — deliveredMl over demandMl. Below 1000 means somebody is amber. */
+  flowPermille: number;
+  /** How many consumers are on it, so "3 heads sharing one pump" is one glance. */
+  consumerCount: number;
 }
 
 /**
@@ -223,9 +304,21 @@ export interface WorldView {
   belts: BeltView[];
   grabbers: GrabberView[];
   zones: ZoneView[];
+  reservoirs: ReservoirView[];
+  pipes: PipeView[];
+  networks: NetworkView[];
   inventory: InventoryView[];
   /** Researched tech node ids, sorted. Copied, so the HUD cannot mutate the world's list. */
   unlocked: string[];
+  /**
+   * One-shot celebrations this world has already played, sorted. Plan §3's Hall of Hands.
+   *
+   * A ceremony id appearing here for the first time is the renderer's cue to play ~10 seconds
+   * of in-world theatre — non-blocking, renderer-only, with `Math.random` jitter that never
+   * touches a sim stream. It never appears twice, and it survives a reload, because a first
+   * time that happens again is not a first time.
+   */
+  ceremonies: string[];
   stats: StatsView;
 }
 
@@ -260,8 +353,12 @@ export function createWorldView(): WorldView {
     belts: [],
     grabbers: [],
     zones: [],
+    reservoirs: [],
+    pipes: [],
+    networks: [],
     inventory: [],
     unlocked: [],
+    ceremonies: [],
     stats: {
       centiActiveHours: 0,
       lifetimeNetEarningsCents: 0,
@@ -301,6 +398,9 @@ export function view(state: WorldState, out: WorldView = createWorldView()): Wor
   projectBelts(state, out);
   projectGrabbers(state, out);
   projectZones(state, out);
+  projectReservoirs(state, out);
+  projectNetworks(state, out);
+  projectPipes(state, out);
   projectInventory(state, out);
   projectUnlocked(state, out);
   projectStats(state, out);
@@ -386,6 +486,14 @@ function projectMachines(state: WorldState, out: WorldView): void {
         speedLevel: 0,
         efficiencyLevel: 0,
         capacityLevel: 0,
+        network: 0,
+        flowMlPerMinute: 0,
+        ticksToEmpty: -1,
+        throttled: 0,
+        coverageRadius: 0,
+        moistureSensing: 0,
+        wateredCount: 0,
+        skippedCount: 0,
       };
       out.machines.push(mv);
     }
@@ -414,9 +522,142 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.speedLevel = machine.speedLevel;
     mv.efficiencyLevel = machine.efficiencyLevel;
     mv.capacityLevel = machine.capacityLevel;
+    mv.network = machine.network;
+    mv.flowMlPerMinute = machine.flowMlPerMinute;
+    // Computed in the sim, not the renderer: plan §12 says the renderer computes no network
+    // state of its own, and a time-to-empty is exactly the sort of arithmetic that would
+    // otherwise be reinvented twice and disagree.
+    mv.ticksToEmpty =
+      spec !== null && spec.role === MachineRole.Tank ? tankTicksToEmpty(machine) : -1;
+    mv.throttled = machine.throttled ? 1 : 0;
+    mv.coverageRadius = spec === null ? 0 : spec.coverageRadiusTiles;
+    mv.moistureSensing = spec !== null && spec.moistureSensing ? 1 : 0;
+    mv.wateredCount = machine.wateredCount;
+    mv.skippedCount = machine.skippedCount;
   }
 
   out.machines.length = count;
+}
+
+function projectReservoirs(state: WorldState, out: WorldView): void {
+  const count = state.reservoirs.length;
+
+  for (let i = 0; i < count; i++) {
+    const reservoir = state.reservoirs[i]!;
+
+    let rv = out.reservoirs[i];
+    if (rv === undefined) {
+      rv = {
+        id: 0,
+        tileX: 0,
+        tileY: 0,
+        tilesWide: 1,
+        tilesHigh: 1,
+        levelMl: 0,
+        capacityMl: 0,
+        levelPermille: 0,
+        throttle: 0,
+      };
+      out.reservoirs.push(rv);
+    }
+
+    rv.id = reservoir.id;
+    rv.tileX = reservoir.tileX;
+    rv.tileY = reservoir.tileY;
+    rv.tilesWide = reservoir.tilesWide;
+    rv.tilesHigh = reservoir.tilesHigh;
+    rv.levelMl = reservoir.levelMl;
+    rv.capacityMl = reservoir.capacityMl;
+    rv.levelPermille = reservoirLevelPermille(reservoir);
+    rv.throttle = reservoirThrottle(reservoir);
+  }
+
+  out.reservoirs.length = count;
+}
+
+function projectNetworks(state: WorldState, out: WorldView): void {
+  const count = state.networks.length;
+
+  for (let i = 0; i < count; i++) {
+    const network = state.networks[i]!;
+
+    let nv = out.networks[i];
+    if (nv === undefined) {
+      nv = {
+        id: 0,
+        liquid: 0,
+        supplyMl: 0,
+        demandMl: 0,
+        deliveredMl: 0,
+        flowPermille: 0,
+        consumerCount: 0,
+      };
+      out.networks.push(nv);
+    }
+
+    nv.id = network.id;
+    nv.liquid = network.liquid;
+    nv.supplyMl = network.supplyMl;
+    nv.demandMl = network.demandMl;
+    nv.deliveredMl = network.deliveredMl;
+    nv.flowPermille = networkFlowPermille(network);
+    nv.consumerCount = 0;
+  }
+
+  out.networks.length = count;
+  if (count === 0) return;
+
+  for (let i = 0; i < state.machines.length; i++) {
+    const machine = state.machines[i]!;
+    if (machine.network === 0) continue;
+    const spec = machineSpec(machine.kind);
+    if (spec === null || !isNetworkConsumer(spec.role)) continue;
+    for (let j = 0; j < count; j++) {
+      const nv = out.networks[j]!;
+      if (nv.id === machine.network) {
+        nv.consumerCount += 1;
+        break;
+      }
+    }
+  }
+}
+
+/**
+ * Pipes as flat tiles, each already carrying its network's flow.
+ *
+ * Carrying the flow per tile rather than making the renderer join pipes to networks is what
+ * lets the pipe layer be a straight tile-by-tile tint pass with no lookups — and GREY WHEN
+ * EMPTY, which is the diagnostic instrument that finds a dead line without opening anything.
+ */
+function projectPipes(state: WorldState, out: WorldView): void {
+  const count = state.pipes.length;
+
+  for (let i = 0; i < count; i++) {
+    const pipe = state.pipes[i]!;
+
+    let pv = out.pipes[i];
+    if (pv === undefined) {
+      pv = { tileX: 0, tileY: 0, liquid: 0, network: 0, flowPermille: 0 };
+      out.pipes.push(pv);
+    }
+
+    pv.tileX = pipe.tileX;
+    pv.tileY = pipe.tileY;
+    pv.liquid = pipe.liquid;
+    pv.network = pipe.network;
+
+    let flow = 0;
+    for (let j = 0; j < out.networks.length; j++) {
+      const nv = out.networks[j]!;
+      if (nv.id === pipe.network) {
+        flow = nv.flowPermille;
+        break;
+      }
+    }
+    pv.flowPermille = flow;
+  }
+
+  out.pipes.length = count;
 }
 
 /**
@@ -592,6 +833,11 @@ function projectUnlocked(state: WorldState, out: WorldView): void {
     out.unlocked[i] = state.unlocked[i]!;
   }
   out.unlocked.length = state.unlocked.length;
+
+  for (let i = 0; i < state.ceremonies.length; i++) {
+    out.ceremonies[i] = state.ceremonies[i]!;
+  }
+  out.ceremonies.length = state.ceremonies.length;
 }
 
 function lampFor(state: WorldState, index: number): LampState {
@@ -604,6 +850,30 @@ function lampFor(state: WorldState, index: number): LampState {
 
   if (spec.role === MachineRole.Sprinkler) {
     return machine.tankMl <= 0 ? LampState.UtilityMissing : LampState.Running;
+  }
+
+  // ONE LAMP GRAMMAR, EVERYWHERE (plan §5). A head with a dry buffer shows the BLUE utility
+  // lamp, the same as a sprinkler with an empty barrel, because it means the same thing: the
+  // thing that feeds me is not feeding me. A head that is getting water but less than it
+  // asked for shows AMBER, the "look upstream" lamp — and upstream of a head is the pump,
+  // which is exactly where the player should go.
+  if (spec.role === MachineRole.PipedSprinkler) {
+    if (machine.tankMl < SPRINKLER_POUR_ML) return LampState.UtilityMissing;
+    return machine.throttled ? LampState.Starved : LampState.Running;
+  }
+
+  if (spec.role === MachineRole.Pump) {
+    // A pump whose source has run out is not broken, it is thirsty. Blue says "the utility
+    // behind me is missing", which is precisely true of a dry pond.
+    return machine.flowMlPerMinute <= 0 ? LampState.UtilityMissing : LampState.Running;
+  }
+
+  if (spec.role === MachineRole.Tank) {
+    return machine.tankMl <= 0 ? LampState.UtilityMissing : LampState.Running;
+  }
+
+  if (spec.role === MachineRole.Recirculator) {
+    return machine.flowMlPerMinute <= 0 ? LampState.Starved : LampState.Running;
   }
 
   if (spec.workPerOperation <= 0) return LampState.Off;
@@ -627,6 +897,93 @@ function projectInventory(state: WorldState, out: WorldView): void {
     iv.count = slot.count;
   }
   out.inventory.length = count;
+}
+
+/**
+ * One tile's full state, for the can-as-inspector readout.
+ *
+ * PLAN §2'S MOGUL-ERA CEREMONY: "stroll a row with the old watering can, which now doubles as
+ * an inspector tool (watering a tile pops its full readout)." This is what makes the can
+ * retire with dignity instead of being deleted — it is the tool the Mogul carries out of
+ * affection, and it now tells you things.
+ *
+ * INFORMATION, NEVER A MECHANICAL BONUS. Plan §1 says hand tools are free, indestructible, and
+ * always work; §7 ruling 8 bans "trusty tool" bonuses in the other direction. The can waters
+ * exactly as it always did. It simply also answers a question.
+ *
+ * Allocates a small object rather than writing into the reused buffer, because it is called
+ * on a click rather than twenty times a second.
+ */
+export interface TileInspection {
+  /** 0 when the tile is not part of the field at all. */
+  exists: number;
+  tileX: number;
+  tileY: number;
+  crop: number;
+  stage: number;
+  moisture: number;
+  moistureMax: number;
+  moisturePermille: number;
+  /** 1 when the tile reads as dry — the same threshold the Irrigation Hub uses. */
+  dry: number;
+  growth: number;
+  growthTarget: number;
+  growthPermille: number;
+  ready: number;
+  /** `WiltStage`: 0 fresh, 1 drooping, 2 turned. */
+  wilt: number;
+  readyAge: number;
+  fertility: number;
+  compost: number;
+  zone: number;
+}
+
+export function inspectTile(state: WorldState, tileX: number, tileY: number): TileInspection {
+  const tile = tileAt(state, tileX, tileY);
+  if (tile === null) {
+    return {
+      exists: 0,
+      tileX,
+      tileY,
+      crop: 0,
+      stage: 0,
+      moisture: 0,
+      moistureMax: MOISTURE_MAX,
+      moisturePermille: 0,
+      dry: 1,
+      growth: 0,
+      growthTarget: 0,
+      growthPermille: 0,
+      ready: 0,
+      wilt: WiltStage.Fresh,
+      readyAge: 0,
+      fertility: 0,
+      compost: 0,
+      zone: 0,
+    };
+  }
+
+  const ready = tile.crop !== CropId.None && tile.growth >= tile.growthTarget;
+  return {
+    exists: 1,
+    tileX,
+    tileY,
+    crop: tile.crop,
+    stage: growthStage(tile),
+    moisture: tile.moisture,
+    moistureMax: MOISTURE_MAX,
+    moisturePermille: permille(tile.moisture, MOISTURE_MAX),
+    dry: tile.moisture < MOISTURE_DRY_THRESHOLD ? 1 : 0,
+    growth: tile.growth,
+    growthTarget: tile.growthTarget,
+    growthPermille: permille(tile.growth, tile.growthTarget > 0 ? tile.growthTarget : 1),
+    ready: ready ? 1 : 0,
+    wilt: ready ? wiltStageForAge(tile.readyAge) : WiltStage.Fresh,
+    readyAge: tile.readyAge,
+    fertility: tile.fertility,
+    compost: tile.compost,
+    zone: tile.zone,
+  };
 }
 
 function projectStats(state: WorldState, out: WorldView): void {

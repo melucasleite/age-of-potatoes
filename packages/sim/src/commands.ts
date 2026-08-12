@@ -18,7 +18,15 @@
 // Every variant is a plain serializable object with integer payloads. No floats, no
 // objects with behaviour, nothing that needs a constructor to come back from JSON.
 
-import type { BeltTier, CropId, GrabberTier, ItemId, MachineKind, UpgradeDial } from './data';
+import type {
+  BeltTier,
+  CropId,
+  GrabberTier,
+  ItemId,
+  LiquidId,
+  MachineKind,
+  UpgradeDial,
+} from './data';
 import type { Direction, TraceEntry, WorldState } from './state';
 import type { PaintMode, TileRect } from './zones';
 
@@ -221,6 +229,42 @@ export interface SetZoneAutoReplantCommand {
   on: boolean;
 }
 
+// --- pipes ----------------------------------------------------------------------------
+//
+// ONE DRAG IS ONE COMMAND, exactly as it is for zone painting and for belts. A thirty-tile
+// pipe run appends ONE entry to the trace carrying its whole path, so replays stay small, bug
+// reports stay readable, and an eventual undo has one exact inverse to apply rather than
+// thirty. The in-progress ghost is renderer-only and emits nothing; a cancelled drag emits
+// nothing at all.
+
+/** One tile of a routed run. Integers, like everything else in a command payload. */
+export interface PipePathNode {
+  x: number;
+  y: number;
+}
+
+/**
+ * Lay a run of pipe along a contiguous, non-repeating path of tiles.
+ *
+ * Refused outright — not resolved afterwards — if the run would join two liquids or put two
+ * pumps on one network. `pipePathRefusal()` in `pipes.ts` is the single rule, shared with the
+ * renderer's placement preview so the reason appears on the object before the click lands.
+ */
+export interface PlacePipeCommand {
+  type: 'PlacePipe';
+  liquid: LiquidId;
+  path: PipePathNode[];
+}
+
+/**
+ * Take a run of pipe back up. Refunds in full — misplacement is never a fine (plan §4) — and
+ * the path is the exact inverse of the `PlacePipe` that laid it.
+ */
+export interface RemovePipeCommand {
+  type: 'RemovePipe';
+  path: PipePathNode[];
+}
+
 export type Command =
   | SetMoveDirectionCommand
   | WaterTileCommand
@@ -247,7 +291,9 @@ export type Command =
   | SetZoneCropCommand
   | SetZonePriorityCommand
   | RenameZoneCommand
-  | SetZoneAutoReplantCommand;
+  | SetZoneAutoReplantCommand
+  | PlacePipeCommand
+  | RemovePipeCommand;
 
 export type CommandType = Command['type'];
 

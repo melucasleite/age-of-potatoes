@@ -144,6 +144,64 @@ export function hashStateUint32(state: WorldState): number {
     d.num(machine.speedLevel);
     d.num(machine.efficiencyLevel);
     d.num(machine.capacityLevel);
+    d.num(machine.network);
+    d.num(machine.flowMlPerMinute);
+    d.bool(machine.throttled);
+    d.num(machine.scanCursor);
+    d.num(machine.wateredCount);
+    d.num(machine.skippedCount);
+  }
+
+  // Reservoirs, pipes, and networks. All three are already sorted — reservoirs and pipes by
+  // id, networks by their geometric id — so the digest reads them as they stand. A network's
+  // id being its lowest world tile index is what makes two worlds that built the same
+  // plumbing in a different order hash the same.
+  d.text('reservoirs');
+  d.num(state.reservoirs.length);
+  d.num(state.nextReservoirId);
+  for (let i = 0; i < state.reservoirs.length; i++) {
+    const reservoir = state.reservoirs[i]!;
+    d.num(reservoir.id);
+    d.num(reservoir.tileX);
+    d.num(reservoir.tileY);
+    d.num(reservoir.tilesWide);
+    d.num(reservoir.tilesHigh);
+    d.num(reservoir.levelMl);
+    d.num(reservoir.capacityMl);
+    d.num(reservoir.rechargeAccum);
+  }
+
+  d.text('pipes');
+  d.num(state.pipes.length);
+  d.num(state.nextPipeId);
+  for (let i = 0; i < state.pipes.length; i++) {
+    const pipe = state.pipes[i]!;
+    d.num(pipe.id);
+    d.num(pipe.tileX);
+    d.num(pipe.tileY);
+    d.num(pipe.liquid);
+    d.num(pipe.network);
+  }
+
+  d.text('networks');
+  d.num(state.networks.length);
+  for (let i = 0; i < state.networks.length; i++) {
+    const network = state.networks[i]!;
+    d.num(network.id);
+    d.num(network.liquid);
+    d.num(network.supplyAccum);
+    d.num(network.rrOffset);
+    d.num(network.supplyMl);
+    d.num(network.demandMl);
+    d.num(network.deliveredMl);
+  }
+
+  // Already sorted in `WorldState`. A ceremony that has played is a fact about the world, and
+  // a world restored from a file must not replay a first time.
+  d.text('ceremonies');
+  d.num(state.ceremonies.length);
+  for (let i = 0; i < state.ceremonies.length; i++) {
+    d.text(state.ceremonies[i]!);
   }
 
   // Belts carry their items inline. The list is already sorted by distance and that order
@@ -298,6 +356,24 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].opCount`, machine.opCount);
     check(`machines[${i}].cooldown`, machine.cooldown);
     check(`machines[${i}].investedCents`, machine.investedCents);
+    check(`machines[${i}].flowMlPerMinute`, machine.flowMlPerMinute);
+    check(`machines[${i}].scanCursor`, machine.scanCursor);
+  }
+
+  // Millilitres are integers. If one of these ever goes fractional, the bug is a rate that
+  // was divided instead of accumulated — see `TICKS_PER_MINUTE` in units.ts.
+  for (let i = 0; i < state.reservoirs.length; i++) {
+    const reservoir = state.reservoirs[i]!;
+    check(`reservoirs[${i}].levelMl`, reservoir.levelMl);
+    check(`reservoirs[${i}].capacityMl`, reservoir.capacityMl);
+    check(`reservoirs[${i}].rechargeAccum`, reservoir.rechargeAccum);
+  }
+
+  for (let i = 0; i < state.networks.length; i++) {
+    const network = state.networks[i]!;
+    check(`networks[${i}].supplyAccum`, network.supplyAccum);
+    check(`networks[${i}].rrOffset`, network.rrOffset);
+    check(`networks[${i}].deliveredMl`, network.deliveredMl);
   }
 
   for (let i = 0; i < state.field.length; i++) {

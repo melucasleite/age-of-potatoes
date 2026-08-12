@@ -14,9 +14,10 @@
 // 2029. See `test/fixtures/saves/`.
 // ────────────────────────────────────────────────────────────────────────────────────────
 //
-// The chain is one step long: format 1 (v0.1 — field, machines, inventory, stats) up to
+// The chain is two steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
 // format 2 (the factory — belts, grabbers, zones, tech unlocks, upgrade dials, and the
-// per-tile withering clock).
+// per-tile withering clock) up to format 3 (the liquid layer — reservoirs, pipes, one-ledger
+// networks, and the per-machine plumbing fields).
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -27,7 +28,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 2;
+export const CURRENT_FORMAT_VERSION = 3;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -115,11 +116,88 @@ const migrateFormat1To2: SaveMigration = (payload) => {
 };
 
 /**
+ * The pond AS IT WAS WHEN FORMAT 3 ARRIVED, frozen here as literals for the same reason the
+ * format-1 prices above are frozen: a migration that looked up today's `data.ts` would give
+ * the same file a different pond every time the balance table moved. These numbers are the
+ * record of what a reservoir was on the day format 3 shipped, and they are never updated.
+ */
+const FORMAT_3_POND = {
+  tileX: 12,
+  tileY: 13,
+  tilesWide: 3,
+  tilesHigh: 3,
+  capacityMl: 20_000_000,
+} as const;
+
+/**
+ * Format 2 → 3.
+ *
+ * EVERY EXISTING WORLD GAINS A FULL POND. Not an empty one: the water was always notionally
+ * there — v0.1's `takeWater` seam drew from an infinite supply — so a returning player must
+ * not find their pond mysteriously drained by an update they did not ask for. Full is the
+ * value that makes the loaded world behave like the one that was saved.
+ *
+ * Everything else takes its empty default: no pipes, no networks, no ceremonies played, every
+ * machine unattached with a still flow and an idle scan cursor. `wateredCount` starts at zero
+ * even for a v0.1 sprinkler that has watered a thousand tiles — the counter did not exist, so
+ * inventing a number for it would be fiction, and it is a trophy stat rather than a gate.
+ *
+ * The pond's corner was picked to be clear of where existing worlds actually built — but if a
+ * player happens to have put something on those nine tiles, the machine keeps working and the
+ * water is simply drawn under it. Pick-up-and-move is free forever (plan §4), so an overlap is
+ * a cosmetic annoyance the player can fix in one drag, never a fine and never a broken world.
+ */
+const migrateFormat2To3: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-2 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    machines.push({
+      ...oldMachines[i]!,
+      network: 0,
+      flowMlPerMinute: 0,
+      throttled: false,
+      scanCursor: 0,
+      wateredCount: 0,
+      skippedCount: 0,
+    });
+  }
+
+  return {
+    ...p,
+    ceremonies: [],
+    machines,
+    networks: [],
+    nextPipeId: 1,
+    nextReservoirId: 2,
+    pipes: [],
+    reservoirs: [
+      {
+        capacityMl: FORMAT_3_POND.capacityMl,
+        id: 1,
+        levelMl: FORMAT_3_POND.capacityMl,
+        rechargeAccum: 0,
+        tileX: FORMAT_3_POND.tileX,
+        tileY: FORMAT_3_POND.tileY,
+        tilesHigh: FORMAT_3_POND.tilesHigh,
+        tilesWide: FORMAT_3_POND.tilesWide,
+      },
+    ],
+    version: 3,
+  };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
- * a format-2 payload.
+ * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one.
  */
 export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   1: migrateFormat1To2,
+  2: migrateFormat2To3,
 };
 
 export interface MigrationOutcome {

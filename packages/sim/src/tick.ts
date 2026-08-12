@@ -10,17 +10,23 @@
 //
 //   1. Commands, in arrival order.
 //   2. Player movement from the held direction.
-//   3. Machines, in ascending id order.
-//   4. Belts, in ascending id order — items move, then heads hand off.
-//   5. Grabbers, in ascending id order.
-//   6. Zones (the seed hopper), in descending priority then ascending id.
-//   7. Crops, in field index order — growth, withering, moisture.
-//   8. Stats and the clock.
+//   3. Water: reservoir recharge, then each pipe network's ledger, in ascending id order.
+//   4. Machines, in ascending id order.
+//   5. Belts, in ascending id order — items move, then heads hand off.
+//   6. Grabbers, in ascending id order.
+//   7. Zones (the seed hopper), in descending priority then ascending id.
+//   8. Crops, in field index order — growth, withering, moisture.
+//   9. Stats and the clock.
 //
 // Machines run before belts so a finished item is available to the grabber that empties it
 // on the same tick it appeared, and belts run before grabbers so an arm sees where the
 // goods actually are. None of that is load-bearing for correctness — only for latency —
 // but the ORDER ITSELF is load-bearing for determinism, so it is written down.
+//
+// Water runs before machines for the same latency reason and one more: RECHARGE COMES FIRST,
+// so a pump standing at an empty pond is served the millilitres the pond just made. That is
+// plan §4's "sip at recharge rate when empty" falling straight out of the running order
+// rather than needing a special case — and it is why a reservoir always recovers.
 //
 // Commands are applied in the order they arrive in `input.commands` — an array index,
 // which cannot tie. Nothing sorts them by tile, id, player, or type; any of those would
@@ -38,10 +44,12 @@ import {
   type PlaceBeltCommand,
   type PlaceGrabberCommand,
   type PlaceMachineCommand,
+  type PlacePipeCommand,
   type PlantTileCommand,
   type RefillHopperCommand,
   type RemoveBeltCommand,
   type RemoveGrabberCommand,
+  type RemovePipeCommand,
   type RenameZoneCommand,
   type RepairMachineCommand,
   type ResearchTechCommand,
@@ -67,19 +75,24 @@ import {
   GROWTH_PER_WATERED_TICK,
   HAND_POUR_ML,
   HAND_REACH_SUBTILES_SQUARED,
+  IRRIGATION_HUB_SCAN_PER_TICK,
   ItemId,
   JAM_EVERY_N_OPERATIONS_WHEN_WORN,
   MACHINE_SPECS,
   MOISTURE_DRAIN_PER_TICK,
+  MOISTURE_DRY_THRESHOLD,
   MOISTURE_MAX,
   MachineKind,
   MachineRole,
+  type MachineSpec,
   NET_WORTH_SAMPLE_PERIOD_TICKS,
+  PIPE_MAX_PATH_TILES,
+  PIPE_PRICE_CENTS_PER_TILE,
   PLAYER_SPEED_SUBTILES_PER_100_TICKS,
+  RECIRCULATOR_ML_PER_MINUTE,
   REPAIR_PER_TOUCH,
   SPRINKLER_POUR_ML,
   SPRINKLER_PERIOD_TICKS,
-  SPRINKLER_RADIUS_TILES,
   UPGRADE_MAX_LEVEL,
   WILT_GRACE_TICKS,
   WILT_WINDOW_TICKS,
@@ -97,9 +110,18 @@ import {
   wiltStageForAge,
 } from './data';
 import { advanceBelts, advanceGrabbers } from './belts';
+import {
+  BuildRefusal,
+  advancePipes,
+  liquidPlacementRefusal,
+  pipeAt,
+  pipePathRefusal,
+  rebuildNetworks,
+} from './pipes';
 import { SystemId, nextBelow } from './rng';
 import {
   type Machine,
+  CeremonyId,
   Direction,
   type WorldState,
   addItem,
@@ -117,17 +139,21 @@ import {
   machineAt,
   machineById,
   machineCentreSubtiles,
+  machineCoversTile,
+  markCeremony,
   plantCrop,
   removeItem,
   spawnBelt,
   spawnGrabber,
   spawnMachine,
+  spawnPipe,
   spawnZone,
   streamFor,
   tileAt,
   tileOccupied,
   zoneById,
 } from './state';
+import { WaterDraw, nearestReservoir, rechargeReservoir, takeWater } from './water';
 import {
   type ManualTouchKind,
   pushNetWorthSample,
@@ -135,7 +161,6 @@ import {
   recordManualTouch,
   recordRefund,
   recordSpend,
-  recordWaterDrawn,
 } from './stats';
 import { TechId, hasTech, milestoneMet, insertUnlocked, prerequisitesMet, techNode } from './tech';
 import {
@@ -149,7 +174,14 @@ import {
   upgradeCostCents,
   upgradeLevel,
 } from './upgrades';
-import { SUBTILE, clampInt, distanceSquaredSubtiles, divFloor, tileCentreSubtiles } from './units';
+import {
+  SUBTILE,
+  TICKS_PER_MINUTE,
+  clampInt,
+  distanceSquaredSubtiles,
+  divFloor,
+  tileCentreSubtiles,
+} from './units';
 import { PaintMode, advanceZones, clipRectToField, paintZoneRect } from './zones';
 
 /** What the host hands `step()` for one tick. */
@@ -174,6 +206,7 @@ export function step(state: WorldState, input: TickInput): void {
 
   applyCommands(state, input);
   advancePlayer(state);
+  advanceWater(state);
   advanceMachines(state);
   advanceBelts(state);
   advanceGrabbers(state);
@@ -260,6 +293,10 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applyRenameZone(state, command);
     case 'SetZoneAutoReplant':
       return applySetZoneAutoReplant(state, command);
+    case 'PlacePipe':
+      return applyPlacePipe(state, command);
+    case 'RemovePipe':
+      return applyRemovePipe(state, command);
     default:
       return false;
   }
@@ -303,13 +340,35 @@ function applySetMoveDirection(state: WorldState, command: SetMoveDirectionComma
   return true;
 }
 
+/**
+ * Pour the can on one tile.
+ *
+ * THE CAN IS SPECIAL AND THIS IS WHERE IT SAYS SO. Plan §4: "**The watering can always fills
+ * at any shore at any level** — hand-scale farming can never be water-starved." So this draw
+ * uses `WaterDraw.Shore`, which never fails and never returns short, even at a bone-dry pond
+ * or in a world with no pond at all. It is an anti-softlock guarantee in plan §1's tradition,
+ * not a balance number, and it must not be tuned away for tension.
+ *
+ * The draw is still COUNTED, in full, through the one accounting path — plan §6's Dry County
+ * board measures the water the player used, and hand-watering is water the player used.
+ *
+ * Nothing else about the can changed: still free, still indestructible, still no cooldown and
+ * no bonus (plan §1, and §7 ruling 8 bans "trusty tool" bonuses in the other direction). The
+ * inspector readout the Mogul-era can gets is `inspectTile()` in `view.ts` — information,
+ * never a mechanical advantage.
+ */
 function applyWaterTile(state: WorldState, command: WaterTileCommand): boolean {
   const tile = tileAt(state, command.tileX, command.tileY);
   if (tile === null) return false;
   if (!withinReachOfTile(state, command.tileX, command.tileY)) return false;
 
   tile.moisture = MOISTURE_MAX;
-  recordWaterDrawn(state.stats, HAND_POUR_ML);
+  takeWater(
+    state,
+    nearestReservoir(state, command.tileX, command.tileY),
+    HAND_POUR_ML,
+    WaterDraw.Shore,
+  );
   touch(state, 'handWater');
   return true;
 }
@@ -414,12 +473,22 @@ function applyPlaceMachine(state: WorldState, command: PlaceMachineCommand): boo
   if (!footprintFree(state, command.tileX, command.tileY, spec.tilesWide, spec.tilesHigh, 0)) {
     return false;
   }
+  // A pump must stand on a bank, and it may not join a network that already has one. The same
+  // function powers the renderer's placement ghost, so the refusal is on the object before the
+  // click lands rather than a click that silently does nothing (plan §5).
+  if (
+    liquidPlacementRefusal(state, command.kind, command.tileX, command.tileY) !== BuildRefusal.None
+  ) {
+    return false;
+  }
 
   const machine = spawnMachine(state, command.kind, command.tileX, command.tileY);
   if (machine === null) return false;
 
   state.moneyCents -= spec.priceCents;
   recordSpend(state.stats, spec.priceCents);
+  // On edit only, never per tick. A machine that landed beside a pipe run is now on it.
+  if (spec.liquid !== 0) rebuildNetworks(state);
   return true;
 }
 
@@ -436,9 +505,17 @@ function applyMoveMachine(state: WorldState, command: MoveMachineCommand): boole
   ) {
     return false;
   }
+  if (
+    liquidPlacementRefusal(state, machine.kind, command.tileX, command.tileY) !== BuildRefusal.None
+  ) {
+    return false;
+  }
 
   machine.tileX = command.tileX;
   machine.tileY = command.tileY;
+  // Moving is free and always will be (plan §4), but a moved pump has left its network and a
+  // moved head may have joined one. Recompute rather than guess.
+  if (spec.liquid !== 0) rebuildNetworks(state);
   touch(state, 'handCarry');
   return true;
 }
@@ -479,6 +556,17 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
   return true;
 }
 
+/**
+ * Top up a barrel by hand — the Assisted rung of plan §3's watering ladder.
+ *
+ * METERED, unlike the can. Hauling barrel-loads is a pump you operate with your legs, so it
+ * takes what the pond actually has and stops when the pond is empty. That is the first place
+ * a player meets the finite reservoir, and it is a partial fill rather than a refusal: you get
+ * what is there.
+ *
+ * Water is counted where it leaves the SOURCE, which is here. What the sprinkler later pours
+ * out of its own barrel is not a second draw.
+ */
 function applyRefillHopper(state: WorldState, command: RefillHopperCommand): boolean {
   const machine = machineById(state, command.machineId);
   if (machine === null || !withinReachOfMachine(state, machine)) return false;
@@ -487,13 +575,18 @@ function applyRefillHopper(state: WorldState, command: RefillHopperCommand): boo
   if (spec === null || spec.tankCapacityMl <= 0) return false;
 
   const capacity = effectiveTankCapacityMl(spec, machine);
-  const poured = capacity - machine.tankMl;
+  const room = capacity - machine.tankMl;
+  if (room <= 0) return false;
+
+  const poured = takeWater(
+    state,
+    nearestReservoir(state, machine.tileX, machine.tileY),
+    room,
+    WaterDraw.Metered,
+  );
   if (poured <= 0) return false;
 
-  machine.tankMl = capacity;
-  // Water is counted where it leaves the source, which is here. What the sprinkler later
-  // pours out of its own barrel is not a second draw.
-  recordWaterDrawn(state.stats, poured);
+  machine.tankMl += poured;
   touch(state, 'hopperRefill');
   return true;
 }
@@ -748,6 +841,72 @@ function applyRemoveGrabber(state: WorldState, command: RemoveGrabberCommand): b
   return true;
 }
 
+// --- pipes ------------------------------------------------------------------------
+
+/**
+ * Lay a run of pipe. ONE DRAG, ONE COMMAND, ONE TRACE ENTRY — a thirty-tile run appends one
+ * entry carrying its path, exactly as a zone paint carries a rect.
+ *
+ * The whole run is accepted or the whole run is refused; there is no partial lay. A drag that
+ * clips a machine half way along should not leave the player with a stub they now have to
+ * find and remove.
+ */
+function applyPlacePipe(state: WorldState, command: PlacePipeCommand): boolean {
+  if (!hasTech(state.unlocked, TechId.Pumps)) return false;
+  if (
+    pipePathRefusal(state, command.path, command.liquid, PIPE_MAX_PATH_TILES) !== BuildRefusal.None
+  ) {
+    return false;
+  }
+
+  const cost = PIPE_PRICE_CENTS_PER_TILE * command.path.length;
+  if (state.moneyCents < cost) return false;
+
+  for (let i = 0; i < command.path.length; i++) {
+    const node = command.path[i]!;
+    spawnPipe(state, node.x, node.y, command.liquid);
+  }
+
+  state.moneyCents -= cost;
+  recordSpend(state.stats, cost);
+  rebuildNetworks(state);
+  return true;
+}
+
+/**
+ * Take a run of pipe back up — the exact inverse of the `PlacePipe` that laid it.
+ *
+ * Full refund. Misplacement is never a fine (plan §4), and a pipe holds nothing, so unlike a
+ * belt there is nothing riding it to hand back.
+ */
+function applyRemovePipe(state: WorldState, command: RemovePipeCommand): boolean {
+  if (command.path.length < 1 || command.path.length > PIPE_MAX_PATH_TILES) return false;
+
+  let removed = 0;
+  for (let i = 0; i < command.path.length; i++) {
+    const node = command.path[i]!;
+    const pipe = pipeAt(state, node.x, node.y);
+    if (pipe === null) continue;
+    for (let j = 0; j < state.pipes.length; j++) {
+      if (state.pipes[j]!.id === pipe.id) {
+        state.pipes.splice(j, 1);
+        break;
+      }
+    }
+    removed += 1;
+  }
+  if (removed === 0) return false;
+
+  const refund = PIPE_PRICE_CENTS_PER_TILE * removed;
+  state.moneyCents += refund;
+  // A refund reverses a spend rather than earning income — the same rule belts follow, and the
+  // reason buying and re-selling the same pipe a thousand times lands exactly where it started.
+  recordRefund(state.stats, refund);
+  rebuildNetworks(state);
+  touch(state, 'handCarry');
+  return true;
+}
+
 // --- zones ------------------------------------------------------------------------
 
 function cropAssignable(state: WorldState, crop: CropId): boolean {
@@ -835,7 +994,24 @@ function advancePlayer(state: WorldState): void {
   player.ySub = clampInt(player.ySub, 0, WORLD_TILES_HIGH * SUBTILE - 1);
 }
 
-// --- 3. machines ------------------------------------------------------------------
+// --- 3. water ---------------------------------------------------------------------
+
+/**
+ * Reservoir recharge, then every network's ledger.
+ *
+ * RECHARGE FIRST, and the order is the mechanism: a pump at an empty pond is served the
+ * millilitres the pond made this tick and no more, which is exactly plan §4's "sip at
+ * recharge rate when empty". No special case, no floor, no clamp — the guarantee that a
+ * reservoir always recovers is a consequence of two lines being in this order.
+ */
+function advanceWater(state: WorldState): void {
+  for (let i = 0; i < state.reservoirs.length; i++) {
+    rechargeReservoir(state.reservoirs[i]!);
+  }
+  advancePipes(state);
+}
+
+// --- 4. machines ------------------------------------------------------------------
 
 function advanceMachines(state: WorldState): void {
   // `state.machines` is kept sorted by id, so this is id order by construction.
@@ -845,16 +1021,36 @@ function advanceMachines(state: WorldState): void {
     if (spec === null) continue;
 
     // Dispatch on role, not on kind: adding the Bagger should not have meant editing the
-    // tick, and adding the Carbonator should not either.
+    // tick, and adding the Carbonator should not either. The Pump and the Tank have no case
+    // here at all — the pipe ledger already moved their water, and a machine whose whole job
+    // is a number in `advancePipes` has nothing left to do on its own.
     if (spec.role === MachineRole.Sprinkler) {
-      advanceSprinkler(state, machine);
+      advanceSprinkler(state, machine, spec, effectiveWear(spec, machine));
+    } else if (spec.role === MachineRole.PipedSprinkler) {
+      advancePipedSprinkler(state, machine, spec);
+    } else if (spec.role === MachineRole.Recirculator) {
+      advanceRecirculator(state, machine);
     } else if (spec.role === MachineRole.Converter) {
       advanceConverter(state, machine);
     }
   }
 }
 
-function advanceSprinkler(state: WorldState, machine: Machine): void {
+/**
+ * One cycle of a head that wets everything in range, wet or dry.
+ *
+ * Shared by the v0.1 barrel sprinkler and the piped head, because they ARE the same machine
+ * with different plumbing — plan §1's "manual never rots" cuts both ways, and an automated
+ * rung that also watered *better* would make the rung below it a mistake to have bought.
+ * Wasting water on a soaked tile is the sloppiness tax showing up on the Dry County board;
+ * moisture sensing is the Hub's job and the Hub's alone.
+ */
+function advanceSprinkler(
+  state: WorldState,
+  machine: Machine,
+  spec: MachineSpec,
+  wearPerCycle: number,
+): void {
   if (machine.jammed || machine.condition <= 0) return;
   if (machine.cooldown > 0) {
     machine.cooldown -= 1;
@@ -862,15 +1058,13 @@ function advanceSprinkler(state: WorldState, machine: Machine): void {
   }
   if (machine.tankMl < SPRINKLER_POUR_ML) return;
 
+  const radius = spec.coverageRadiusTiles;
   let watered = 0;
-  for (let dy = -SPRINKLER_RADIUS_TILES; dy <= SPRINKLER_RADIUS_TILES; dy++) {
-    for (let dx = -SPRINKLER_RADIUS_TILES; dx <= SPRINKLER_RADIUS_TILES; dx++) {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
       if (machine.tankMl < SPRINKLER_POUR_ML) break;
       const tile = tileAt(state, machine.tileX + dx, machine.tileY + dy);
       if (tile === null) continue;
-      // A plain head wets everything in range, wet or dry. Wasting water on a soaked tile
-      // is the sloppiness tax showing up on the Dry County board; moisture-sensing heads
-      // are the automated tier (plan §3), not the first one.
       tile.moisture = MOISTURE_MAX;
       machine.tankMl -= SPRINKLER_POUR_ML;
       watered += 1;
@@ -880,8 +1074,173 @@ function advanceSprinkler(state: WorldState, machine: Machine): void {
   machine.cooldown = SPRINKLER_PERIOD_TICKS;
   if (watered > 0) {
     machine.opCount += 1;
-    wear(machine, 1);
+    machine.wateredCount += watered;
+    if (wearPerCycle > 0) wear(machine, wearPerCycle);
   }
+}
+
+/**
+ * A head on a pipe network: the automated rung of plan §3's watering ladder.
+ *
+ * No wear (Entropy is its own release), no jamming, no flooding, no way to damage a crop. It
+ * pours from the small buffer the ledger keeps topped up, and when the network cannot fill
+ * that buffer it simply stops — showing `LampState.UtilityMissing`, the blue "a utility is
+ * missing" lamp §5's grammar already defines, which means the same thing here as it does on a
+ * sprinkler with an empty barrel.
+ */
+function advancePipedSprinkler(state: WorldState, machine: Machine, spec: MachineSpec): void {
+  if (spec.moistureSensing) {
+    advanceIrrigationHub(state, machine, spec);
+    return;
+  }
+  advanceSprinkler(state, machine, spec, 0);
+  if (machine.wateredCount > 0) markCeremony(state, CeremonyId.PipedSprinkler);
+}
+
+/**
+ * The Irrigation Hub: §4's "moisture-sensing heads water only dry tiles".
+ *
+ * THE SCAN IS BOUNDED AND ITS CURSOR IS IN `WorldState`. A fixed slice of the coverage patch
+ * is examined per tick from `machine.scanCursor`, so the Hub's cost does not scale with the
+ * field and never will — and the cursor is world state rather than a module variable, because
+ * module state is invisible to the hash and to saves, which would make two identically-saved
+ * worlds water different tiles after a reload.
+ *
+ * The saving IS the promotion. A dumb head at this coverage would re-wet every soaked tile on
+ * every cycle; this skips them, and the difference lands where the player can already see it —
+ * plan §6's Dry County board and the Shift Report's water line — rather than in a tooltip.
+ * `skippedCount` is what a skip is worth, counted so the readout can show it.
+ *
+ * Coverage is anchored on the machine's top-left tile, the same as every other head, so what
+ * the placement overlay draws is exactly what gets watered.
+ */
+function advanceIrrigationHub(state: WorldState, machine: Machine, spec: MachineSpec): void {
+  if (machine.jammed || machine.condition <= 0) return;
+
+  const radius = spec.coverageRadiusTiles;
+  const span = radius * 2 + 1;
+  const patch = span * span;
+  if (patch <= 0) return;
+
+  for (let scanned = 0; scanned < IRRIGATION_HUB_SCAN_PER_TICK; scanned++) {
+    // `% patch` rather than a bare index, so a save whose coverage changed under it lands
+    // somewhere legal instead of scanning off the end of the patch.
+    const offset = machine.scanCursor % patch;
+    const dx = (offset % span) - radius;
+    const dy = divFloor(offset, span) - radius;
+    const tile = tileAt(state, machine.tileX + dx, machine.tileY + dy);
+
+    if (tile !== null) {
+      // ONE DEFINITION OF DRY, and it is the one the ground is drawn with.
+      if (tile.moisture >= MOISTURE_DRY_THRESHOLD) {
+        machine.skippedCount += 1;
+      } else {
+        // Out of water: hold the cursor here rather than skating past a dry tile. The Hub
+        // resumes exactly where it stopped when its buffer refills.
+        if (machine.tankMl < SPRINKLER_POUR_ML) return;
+        machine.tankMl -= SPRINKLER_POUR_ML;
+        // Clamps, always. No overwatering is possible on any rung (plan §2, hard rule).
+        tile.moisture = MOISTURE_MAX;
+        machine.wateredCount += 1;
+        machine.opCount += 1;
+        // Plan §3's Hall of Hands: the first activation is owed ~10 seconds of theatre, once
+        // per world, ever. The renderer plays it; the sim only remembers that it happened.
+        markCeremony(state, CeremonyId.IrrigationHub);
+      }
+    }
+
+    machine.scanCursor = (offset + 1) % patch;
+  }
+}
+
+/**
+ * The Recirculator: §4's "Recirculators reclaim washer graywater".
+ *
+ * IT FILLS A TANK, NOT A NETWORK, AND THAT IS NOT A BUG. Plan §5 allows exactly ONE PUMP PER
+ * NETWORK, and a second source injecting straight into the pipes would break the single rule
+ * that keeps the ledger a division instead of a solver. Pouring into an adjacent tank is the
+ * sanctioned way to add supply — the tank is already the thing that covers a shortfall — and
+ * it is the cleanest teaching example of why the one-pump rule exists. Anyone who reads this
+ * and thinks "surely it should just feed the pipe" is exactly who this comment is for.
+ *
+ * It reclaims while the Washer is actually washing: has an input, is not blocked, is not
+ * broken. An idle Washer produces no graywater, because there is no wash.
+ */
+function advanceRecirculator(state: WorldState, machine: Machine): void {
+  if (!washerRunningBeside(state, machine)) {
+    machine.flowMlPerMinute = 0;
+    return;
+  }
+
+  const tank = tankBeside(state, machine);
+  if (tank === null) {
+    machine.flowMlPerMinute = 0;
+    return;
+  }
+
+  const tankSpec = machineSpec(tank.kind);
+  if (tankSpec === null) return;
+
+  // Per-minute rate through the same integer accumulator everything else uses — the machine's
+  // own `progress` field, which a Recirculator has no other use for.
+  machine.progress += RECIRCULATOR_ML_PER_MINUTE;
+  const whole = divFloor(machine.progress, TICKS_PER_MINUTE);
+  if (whole <= 0) return;
+  machine.progress -= whole * TICKS_PER_MINUTE;
+
+  const room = effectiveTankCapacityMl(tankSpec, tank) - tank.tankMl;
+  const put = room < whole ? room : whole;
+  if (put <= 0) {
+    machine.flowMlPerMinute = 0;
+    return;
+  }
+
+  tank.tankMl += put;
+  tank.flowMlPerMinute += put * TICKS_PER_MINUTE;
+  machine.flowMlPerMinute = put * TICKS_PER_MINUTE;
+  machine.opCount += 1;
+}
+
+/** Orthogonal neighbours of a machine's footprint, scanned in a fixed order. */
+function neighbourMachine(
+  state: WorldState,
+  machine: Machine,
+  match: (candidate: Machine, spec: MachineSpec) => boolean,
+): Machine | null {
+  const spec = machineSpec(machine.kind);
+  if (spec === null) return null;
+
+  let best: Machine | null = null;
+  for (let dy = -1; dy <= spec.tilesHigh; dy++) {
+    for (let dx = -1; dx <= spec.tilesWide; dx++) {
+      const x = machine.tileX + dx;
+      const y = machine.tileY + dy;
+      if (machineCoversTile(machine, x, y)) continue;
+      const candidate = machineAt(state, x, y);
+      if (candidate === null || candidate.id === machine.id) continue;
+      const candidateSpec = machineSpec(candidate.kind);
+      if (candidateSpec === null || !match(candidate, candidateSpec)) continue;
+      // Lowest id wins, so two eligible neighbours resolve by a total order rather than by
+      // which direction the scan happened to reach first.
+      if (best === null || candidate.id < best.id) best = candidate;
+    }
+  }
+  return best;
+}
+
+function washerRunningBeside(state: WorldState, machine: Machine): boolean {
+  return (
+    neighbourMachine(state, machine, (candidate, spec) => {
+      if (spec.kind !== MachineKind.Washer) return false;
+      if (candidate.jammed || candidate.condition <= 0) return false;
+      if (candidate.inputCount <= 0) return false;
+      return candidate.outputCount < effectiveOutputCapacity(spec, candidate);
+    }) !== null
+  );
+}
+
+function tankBeside(state: WorldState, machine: Machine): Machine | null {
+  return neighbourMachine(state, machine, (_candidate, spec) => spec.role === MachineRole.Tank);
 }
 
 /**
@@ -921,7 +1280,7 @@ function wear(machine: Machine, amount: number): void {
   machine.condition = clampInt(machine.condition - amount, 0, CONDITION_MAX);
 }
 
-// --- 7. crops ---------------------------------------------------------------------
+// --- 8. crops ---------------------------------------------------------------------
 
 /** A crop is gone from the tile this long after it turns. */
 const COMPOST_AT_AGE = WILT_GRACE_TICKS + WILT_WINDOW_TICKS + COMPOST_AFTER_TICKS;
@@ -966,7 +1325,7 @@ function advanceCrops(state: WorldState): void {
   }
 }
 
-// --- 8. stats and the clock -------------------------------------------------------
+// --- 9. stats and the clock -------------------------------------------------------
 
 function advanceStats(state: WorldState): void {
   const stats = state.stats;

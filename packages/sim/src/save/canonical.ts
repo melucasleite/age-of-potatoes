@@ -27,14 +27,17 @@
 // `WorldState` and inside the hash; recomputing them on load would produce a world that
 // hashes differently from the one that was saved, which is the definition of a broken save.
 
-import { BeltTier, CropId, GrabberTier, ItemId, MachineKind } from '../data';
+import { BeltTier, CropId, GrabberTier, ItemId, LiquidId, MachineKind } from '../data';
 import type { RngState } from '../rng';
 import {
   type Belt,
   type CropTile,
   type Grabber,
   type Machine,
+  type Pipe,
+  type PipeNetwork,
   type PlayerState,
+  type Reservoir,
   type TraceEntry,
   type WorldState,
   type Zone,
@@ -74,18 +77,63 @@ export interface SaveMachine {
   condition: number;
   cooldown: number;
   efficiencyLevel: number;
+  flowMlPerMinute: number;
   id: number;
   inputCount: number;
   investedCents: number;
   jammed: boolean;
   kind: number;
+  network: number;
   opCount: number;
   outputCount: number;
   progress: number;
+  scanCursor: number;
+  skippedCount: number;
   speedLevel: number;
   tankMl: number;
+  throttled: boolean;
   tileX: number;
   tileY: number;
+  wateredCount: number;
+}
+
+/** A body of water, and how much is actually left in it. */
+export interface SaveReservoir {
+  capacityMl: number;
+  id: number;
+  levelMl: number;
+  rechargeAccum: number;
+  tileX: number;
+  tileY: number;
+  tilesHigh: number;
+  tilesWide: number;
+}
+
+/** One tile of pipe. It has no contents — see `Pipe` in state.ts. */
+export interface SavePipe {
+  id: number;
+  liquid: number;
+  network: number;
+  tileX: number;
+  tileY: number;
+}
+
+/**
+ * One network's ledger bookkeeping.
+ *
+ * Membership is NOT stored: it is recomputed from the pipe list on load exactly as it is on
+ * every edit, so a save cannot contain a network whose shape disagrees with its pipes. What
+ * is stored is the part that cannot be recomputed — the supply accumulator and the round-robin
+ * rotation, which are history rather than geometry.
+ */
+export interface SavePipeNetwork {
+  deliveredMl: number;
+  demandMl: number;
+  id: number;
+  liquid: number;
+  rrOffset: number;
+  supplyAccum: number;
+  supplyMl: number;
 }
 
 /** One item on a belt: how far along it is, and what it is. Nothing else exists. */
@@ -166,15 +214,22 @@ export interface SaveStats {
 /** `WorldState` minus the trace, in canonical form. Keys are alphabetical, always. */
 export interface SavePayload {
   belts: SaveBelt[];
+  /** One-shot celebrations already played, sorted. A first time must not happen twice. */
+  ceremonies: string[];
   field: SaveCropTile[];
   grabbers: SaveGrabber[];
   inventory: SaveInventorySlot[];
   machines: SaveMachine[];
   moneyCents: number;
+  networks: SavePipeNetwork[];
   nextBeltId: number;
   nextGrabberId: number;
   nextMachineId: number;
+  nextPipeId: number;
+  nextReservoirId: number;
   nextZoneId: number;
+  pipes: SavePipe[];
+  reservoirs: SaveReservoir[];
   player: SavePlayer;
   stats: SaveStats;
   streams: SaveStream[];
@@ -223,18 +278,24 @@ export function toPayload(state: WorldState): SavePayload {
       condition: machine.condition,
       cooldown: machine.cooldown,
       efficiencyLevel: machine.efficiencyLevel,
+      flowMlPerMinute: machine.flowMlPerMinute,
       id: machine.id,
       inputCount: machine.inputCount,
       investedCents: machine.investedCents,
       jammed: machine.jammed,
       kind: machine.kind,
+      network: machine.network,
       opCount: machine.opCount,
       outputCount: machine.outputCount,
       progress: machine.progress,
+      scanCursor: machine.scanCursor,
+      skippedCount: machine.skippedCount,
       speedLevel: machine.speedLevel,
       tankMl: machine.tankMl,
+      throttled: machine.throttled,
       tileX: machine.tileX,
       tileY: machine.tileY,
+      wateredCount: machine.wateredCount,
     });
   }
 
@@ -287,6 +348,50 @@ export function toPayload(state: WorldState): SavePayload {
     });
   }
 
+  const reservoirs: SaveReservoir[] = [];
+  for (let i = 0; i < state.reservoirs.length; i++) {
+    const reservoir = state.reservoirs[i]!;
+    reservoirs.push({
+      capacityMl: reservoir.capacityMl,
+      id: reservoir.id,
+      levelMl: reservoir.levelMl,
+      rechargeAccum: reservoir.rechargeAccum,
+      tileX: reservoir.tileX,
+      tileY: reservoir.tileY,
+      tilesHigh: reservoir.tilesHigh,
+      tilesWide: reservoir.tilesWide,
+    });
+  }
+
+  const pipes: SavePipe[] = [];
+  for (let i = 0; i < state.pipes.length; i++) {
+    const pipe = state.pipes[i]!;
+    pipes.push({
+      id: pipe.id,
+      liquid: pipe.liquid,
+      network: pipe.network,
+      tileX: pipe.tileX,
+      tileY: pipe.tileY,
+    });
+  }
+
+  const networks: SavePipeNetwork[] = [];
+  for (let i = 0; i < state.networks.length; i++) {
+    const network = state.networks[i]!;
+    networks.push({
+      deliveredMl: network.deliveredMl,
+      demandMl: network.demandMl,
+      id: network.id,
+      liquid: network.liquid,
+      rrOffset: network.rrOffset,
+      supplyAccum: network.supplyAccum,
+      supplyMl: network.supplyMl,
+    });
+  }
+
+  const ceremonies: string[] = [];
+  for (let i = 0; i < state.ceremonies.length; i++) ceremonies.push(state.ceremonies[i]!);
+
   const unlocked: string[] = [];
   for (let i = 0; i < state.unlocked.length; i++) unlocked.push(state.unlocked[i]!);
 
@@ -306,15 +411,21 @@ export function toPayload(state: WorldState): SavePayload {
 
   return {
     belts,
+    ceremonies,
     field,
     grabbers,
     inventory,
     machines,
     moneyCents: state.moneyCents,
+    networks,
     nextBeltId: state.nextBeltId,
     nextGrabberId: state.nextGrabberId,
     nextMachineId: state.nextMachineId,
+    nextPipeId: state.nextPipeId,
+    nextReservoirId: state.nextReservoirId,
     nextZoneId: state.nextZoneId,
+    pipes,
+    reservoirs,
     player: {
       facing: state.player.facing,
       moveAccum: state.player.moveAccum,
@@ -464,7 +575,14 @@ const MACHINE_KINDS: readonly number[] = [
   MachineKind.Fryer,
   MachineKind.Seasoner,
   MachineKind.Bagger,
+  MachineKind.Pump,
+  MachineKind.Tank,
+  MachineKind.PipedSprinkler,
+  MachineKind.IrrigationHub,
+  MachineKind.Recirculator,
 ];
+/** `None` is not a legal liquid for a pipe: a pipe that carries nothing is not a pipe. */
+const LIQUIDS: readonly number[] = [LiquidId.Water];
 const BELT_TIERS: readonly number[] = [BeltTier.Basic, BeltTier.Fast, BeltTier.Express];
 const GRABBER_TIERS: readonly number[] = [GrabberTier.Mk1, GrabberTier.Mk2, GrabberTier.Long];
 /** Belts and grabbers face a compass direction. `None` is not a legal facing for either. */
@@ -553,8 +671,72 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       speedLevel: int(machine, 'speedLevel', path),
       efficiencyLevel: int(machine, 'efficiencyLevel', path),
       capacityLevel: int(machine, 'capacityLevel', path),
+      network: int(machine, 'network', path),
+      flowMlPerMinute: int(machine, 'flowMlPerMinute', path),
+      throttled: bool(machine, 'throttled', path),
+      scanCursor: int(machine, 'scanCursor', path),
+      wateredCount: int(machine, 'wateredCount', path),
+      skippedCount: int(machine, 'skippedCount', path),
     });
   }
+
+  const reservoirsRaw = list(p, 'reservoirs', 'payload');
+  const reservoirs: Reservoir[] = [];
+  for (let i = 0; i < reservoirsRaw.length; i++) {
+    const path = `payload.reservoirs[${String(i)}]`;
+    const reservoir = record(reservoirsRaw[i], path);
+    reservoirs.push({
+      id: int(reservoir, 'id', path),
+      tileX: int(reservoir, 'tileX', path),
+      tileY: int(reservoir, 'tileY', path),
+      tilesWide: int(reservoir, 'tilesWide', path),
+      tilesHigh: int(reservoir, 'tilesHigh', path),
+      levelMl: int(reservoir, 'levelMl', path),
+      capacityMl: int(reservoir, 'capacityMl', path),
+      rechargeAccum: int(reservoir, 'rechargeAccum', path),
+    });
+  }
+
+  const pipesRaw = list(p, 'pipes', 'payload');
+  const pipes: Pipe[] = [];
+  for (let i = 0; i < pipesRaw.length; i++) {
+    const path = `payload.pipes[${String(i)}]`;
+    const pipe = record(pipesRaw[i], path);
+    pipes.push({
+      id: int(pipe, 'id', path),
+      tileX: int(pipe, 'tileX', path),
+      tileY: int(pipe, 'tileY', path),
+      liquid: idInt(pipe, 'liquid', path, LIQUIDS) as LiquidId,
+      network: int(pipe, 'network', path),
+    });
+  }
+
+  const networksRaw = list(p, 'networks', 'payload');
+  const networks: PipeNetwork[] = [];
+  for (let i = 0; i < networksRaw.length; i++) {
+    const path = `payload.networks[${String(i)}]`;
+    const network = record(networksRaw[i], path);
+    networks.push({
+      id: int(network, 'id', path),
+      liquid: idInt(network, 'liquid', path, LIQUIDS) as LiquidId,
+      supplyAccum: int(network, 'supplyAccum', path),
+      rrOffset: int(network, 'rrOffset', path),
+      supplyMl: int(network, 'supplyMl', path),
+      demandMl: int(network, 'demandMl', path),
+      deliveredMl: int(network, 'deliveredMl', path),
+    });
+  }
+
+  const ceremoniesRaw = list(p, 'ceremonies', 'payload');
+  const ceremonies: string[] = [];
+  for (let i = 0; i < ceremoniesRaw.length; i++) {
+    const value = ceremoniesRaw[i];
+    if (typeof value !== 'string') {
+      fail(`payload.ceremonies[${String(i)}]`, 'expected a string ceremony id');
+    }
+    ceremonies.push(value);
+  }
+  ceremonies.sort();
 
   const beltsRaw = list(p, 'belts', 'payload');
   const belts: Belt[] = [];
@@ -701,6 +883,12 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     nextGrabberId: int(p, 'nextGrabberId', 'payload'),
     zones,
     nextZoneId: int(p, 'nextZoneId', 'payload'),
+    reservoirs,
+    nextReservoirId: int(p, 'nextReservoirId', 'payload'),
+    pipes,
+    nextPipeId: int(p, 'nextPipeId', 'payload'),
+    networks,
+    ceremonies,
     unlocked,
     streams,
     stats,

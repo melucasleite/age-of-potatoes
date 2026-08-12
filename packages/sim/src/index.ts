@@ -21,6 +21,7 @@ export {
   SUBTILE,
   TICKS_PER_ACTIVE_HOUR,
   TICKS_PER_BEAT,
+  TICKS_PER_MINUTE,
   TICKS_PER_SECOND,
   TICK_MS,
   beatIndex,
@@ -88,8 +89,12 @@ export {
   GrabberTier,
   HAND_POUR_ML,
   HAND_REACH_SUBTILES,
+  IRRIGATION_HUB_RADIUS_TILES,
+  IRRIGATION_HUB_SCAN_PER_TICK,
   ITEM_SPECS,
   ItemId,
+  LIQUID_SPECS,
+  LiquidId,
   MACHINE_SPECS,
   MOISTURE_DRY_THRESHOLD,
   MOISTURE_MAX,
@@ -97,7 +102,21 @@ export {
   MachineRole,
   NET_WORTH_SAMPLE_LIMIT,
   NET_WORTH_SAMPLE_PERIOD_TICKS,
+  PIPE_MAX_PATH_TILES,
+  PIPE_PRICE_CENTS_PER_TILE,
+  PIPE_RR_MODULUS,
+  POND_ORIGIN_X,
+  POND_ORIGIN_Y,
+  POND_TILES_HIGH,
+  POND_TILES_WIDE,
+  PUMP_RATE_ML_PER_MINUTE,
+  RECIRCULATOR_ML_PER_MINUTE,
   REPAIR_PER_TOUCH,
+  RESERVOIR_CAPACITY_ML,
+  RESERVOIR_CAPACITY_UNITS,
+  RESERVOIR_LOW_PERMILLE,
+  RESERVOIR_RECHARGE_ML_PER_MINUTE,
+  RESERVOIR_UNIT_ML,
   SPEED_RATE_BONUS_PERCENT_PER_LEVEL,
   SPEED_WEAR_PENALTY_PERCENT_PER_LEVEL,
   SPRINKLER_POUR_ML,
@@ -123,13 +142,47 @@ export {
   cropSpec,
   dayOldPriceCents,
   grabberSpec,
+  isNetworkConsumer,
   isPurchasable,
   itemSpec,
+  liquidSpec,
   listPriceCents,
   machineSpec,
   wiltStageForAge,
 } from './data';
-export type { BeltSpec, CropSpec, GrabberSpec, ItemSpec, MachineSpec } from './data';
+export type { BeltSpec, CropSpec, GrabberSpec, ItemSpec, LiquidSpec, MachineSpec } from './data';
+
+// --- the liquid layer -------------------------------------------------------------
+// Plan §5's grammar is `RESERVOIR → (Pump) → pipes → [Tank] → machines`, and the model is
+// FLOW, NOT PRESSURE: one ledger per network, one pump and one liquid per network enforced at
+// placement, tanks buffering the difference and showing a net rate and a time-to-empty.
+export {
+  ReservoirThrottle,
+  WaterDraw,
+  nearestReservoir,
+  pumpSupplyMlPerMinute,
+  rechargeReservoir,
+  reservoirAdjacentToTile,
+  reservoirAt,
+  reservoirById,
+  reservoirCoversTile,
+  reservoirLevelPermille,
+  reservoirThrottle,
+  takeWater,
+} from './water';
+export {
+  BuildRefusal,
+  advancePipes,
+  liquidPlacementRefusal,
+  networkById,
+  networkFlowPermille,
+  pipeAt,
+  pipePathRefusal,
+  rebuildNetworks,
+  tankTicksToEmpty,
+  worldTileIndex,
+} from './pipes';
+export type { TilePoint } from './pipes';
 
 // --- the tech tree ----------------------------------------------------------------
 // Nodes unlock VERBS and carry no numbers; upgrade dials scale NUMBERS and unlock nothing.
@@ -153,6 +206,7 @@ export {
   acceptsUpgrades,
   effectiveInputCapacity,
   effectiveOutputCapacity,
+  effectivePumpRateMlPerMinute,
   effectiveTankCapacityMl,
   effectiveWear,
   effectiveWorkRate,
@@ -181,6 +235,7 @@ export type { TileRect, ZoneCounts } from './zones';
 
 // --- world state ------------------------------------------------------------------
 export {
+  CeremonyId,
   Direction,
   WORLD_STATE_VERSION,
   addItem,
@@ -211,6 +266,7 @@ export {
   machineById,
   machineCentreSubtiles,
   machineCoversTile,
+  markCeremony,
   oppositeDirection,
   plantCrop,
   removeItem,
@@ -218,6 +274,8 @@ export {
   spawnBelt,
   spawnGrabber,
   spawnMachine,
+  spawnPipe,
+  spawnReservoir,
   spawnZone,
   streamFor,
   tileAt,
@@ -232,7 +290,10 @@ export type {
   Grabber,
   InventorySlot,
   Machine,
+  Pipe,
+  PipeNetwork,
   PlayerState,
+  Reservoir,
   TraceEntry,
   WorldState,
   Zone,
@@ -250,12 +311,15 @@ export type {
   MoveMachineCommand,
   PaintZoneCommand,
   PlaceBeltCommand,
+  PipePathNode,
   PlaceGrabberCommand,
   PlaceMachineCommand,
+  PlacePipeCommand,
   PlantTileCommand,
   RefillHopperCommand,
   RemoveBeltCommand,
   RemoveGrabberCommand,
+  RemovePipeCommand,
   RenameZoneCommand,
   RepairMachineCommand,
   ResearchTechCommand,
@@ -339,6 +403,9 @@ export type {
   SaveMachine,
   SaveMigration,
   SavePayload,
+  SavePipe,
+  SavePipeNetwork,
+  SaveReservoir,
   SaveStats,
   SaveStream,
   SaveZone,
@@ -346,15 +413,19 @@ export type {
 } from './save/index';
 
 // --- the render projection --------------------------------------------------------
-export { LampState, createWorldView, growthStage, view } from './view';
+export { LampState, createWorldView, growthStage, inspectTile, view } from './view';
 export type {
   BeltView,
   FieldView,
   GrabberView,
   InventoryView,
   MachineView,
+  NetworkView,
+  PipeView,
   PlayerView,
+  ReservoirView,
   StatsView,
+  TileInspection,
   WorldView,
   ZoneView,
 } from './view';

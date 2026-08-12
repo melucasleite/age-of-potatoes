@@ -48,6 +48,22 @@ export const TechId = {
   /** The upgrade bench: what makes `UpgradeMachine` legal at all. */
   UpgradeBench: 'commerce-upgrade-bench',
 
+  // Hydraulics. Plan §3 names the branch and plan §5 names its grammar:
+  // `RESERVOIR → (Pump) → pipes → [Tank] → machines`. The nodes follow that sentence.
+
+  /** Pipes, the Pump, and the Tank — the plumbing itself, with nothing on the end of it. */
+  Pumps: 'hydraulics-pumps',
+  /** Piped sprinkler heads: the automated rung of plan §3's watering ladder. */
+  PipedSprinklers: 'hydraulics-piped-sprinklers',
+  /**
+   * The Recirculator. Requires the Washer as well as the pumps — plan §3: "branches
+   * interlock at fantasy-correct joints". You cannot reclaim graywater with no wash to
+   * reclaim it from.
+   */
+  Recirculator: 'hydraulics-recirculator',
+  /** The Irrigation Hub — moisture-sensing heads that water only dry tiles (plan §4). */
+  IrrigationHub: 'hydraulics-irrigation-hub',
+
   /** Era gate 1 → 2 (plan §3). Money plus a visible milestone. */
   WorkshopCharter: 'charter-workshop',
   /** Era gate 2 → 3. */
@@ -180,6 +196,41 @@ export const TECH_NODES: readonly TechNode[] = [
     branch: TechBranch.Agronomy,
     priceCents: 120_000,
     requires: [TechId.WorkshopCharter],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    // The liquid layer opens after the Workshop Charter, at roughly the same rung as belts:
+    // plan §8 puts fluids at v0.4, after the belt factory and before soda, and the whole soda
+    // line will stand on this plumbing.
+    id: TechId.Pumps,
+    branch: TechBranch.Hydraulics,
+    priceCents: 40_000,
+    requires: [TechId.WorkshopCharter],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    id: TechId.PipedSprinklers,
+    branch: TechBranch.Hydraulics,
+    priceCents: 70_000,
+    requires: [TechId.Pumps],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    id: TechId.Recirculator,
+    branch: TechBranch.Hydraulics,
+    priceCents: 90_000,
+    requires: [TechId.Pumps, TechId.WashAndSlice],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    id: TechId.IrrigationHub,
+    branch: TechBranch.Hydraulics,
+    priceCents: 180_000,
+    requires: [TechId.PipedSprinklers],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },

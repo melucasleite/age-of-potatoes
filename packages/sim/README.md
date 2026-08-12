@@ -135,6 +135,55 @@ into **Compost** on the tile, which the player can still pick up. There is no pa
 crop tile that pays zero, and there is no roll anywhere in it — a crop that wilted on a die
 roll would teach nothing.
 
+## The liquid layer
+
+The physical grammar is exactly `RESERVOIR → (Pump) → pipes → [Tank] → machines`, and the
+rules that keep it comprehensible matter as much as the feature does.
+
+**Flow, not pressure** (plan §5). No pressure field, no per-segment fill level, no flow
+solver anywhere. Each connected pipe network is **one ledger**: supply is the pump's rate
+capped by what the source holds, demand is the sum of its consumers' draws, and the tick
+divides one by the other. Demand ≤ supply and everyone runs; demand > supply and every
+consumer is throttled **round-robin** and flagged amber. That is why routing a pipe is a
+_puzzle_ — where does the pump go, how do I split the supply — rather than a _chore_ — why
+is segment 41 empty. **If a change here starts wanting a solver, the model has been misread.**
+
+**One pump and one liquid per network, enforced at placement.** Not warned about, not
+resolved afterwards: `pipePathRefusal()` refuses the run that would create the situation and
+returns a `BuildRefusal` code the renderer prints on the object. That single rule kills most
+fluid-sim confusion. It is also why the **Recirculator feeds a Tank rather than the pipes** —
+a second source injecting into a network would break the rule, and a tank is the sanctioned
+way to add supply.
+
+**Network ids are geometric, not sequential.** A network's id is the lowest row-major world
+tile index among its pipes, so two worlds that built the same plumbing in a different order
+hash identically and a pipe laid across the map cannot renumber anything. Membership is
+recomputed **on edit only** by `rebuildNetworks()` — a full recompute, because a wrong
+incremental update is a determinism bug that hides for weeks.
+
+**Reservoirs are finite but never permanently dry.** ~20,000 L recharging 40 L/min, both
+derived from `HAND_POUR_ML` in `data.ts` with the arithmetic written out. Draw it down and
+the level falls and the shoreline recedes; leave it and it recovers. Pumps run at full rate
+above 25%, **half below 25%**, and at empty they **sip at the recharge rate** — which falls
+out of the tick order (recharge runs before the ledger) rather than needing a special case.
+
+**`takeWater()` in `water.ts` is the one place water leaves a source and the one place
+`stats.waterDrawnMl` moves.** Every draw goes through it: the can, a hand refill, a pump, and
+anything added later. If two code paths could take water, plan §6's Dry County board would
+already be wrong and nobody would notice for months. Its `WaterDraw.Shore` mode exists for
+exactly one caller — **the watering can always fills at any shore at any level** (plan §4),
+including an empty pond and a world with no pond at all. That and "reservoirs always recover"
+are anti-softlock guarantees in plan §1's tradition, not balance numbers; `test/water.test.ts`
+pins both and they must not be tuned away for tension.
+
+**The watering ladder's top rung.** A piped sprinkler head is the barrel sprinkler with
+plumbing — same pour, same period, same radius, it simply never needs filling. The
+**Irrigation Hub** waters only tiles below `MOISTURE_DRY_THRESHOLD`, **the same threshold the
+renderer draws cracked earth with**; there is exactly one definition of dry. Its scan is a
+fixed slice of its coverage per tick from a cursor stored on the machine, so its cost never
+scales with the field — and the cursor is world state rather than a module variable, because
+module state is invisible to the hash and to saves.
+
 **The tree and the dials.** `tech.ts` unlocks **verbs** (crops, machines, belt tiers, the
 auto-replant toggle) and carries no numeric field anywhere in `TechNode`. `upgrades.ts` scales
 **numbers** (Speed, Efficiency, Capacity) and unlocks nothing. That split is plan §3's
@@ -154,6 +203,9 @@ Per plan §12, these were settled in v0.1 and cannot be revisited once worlds ex
   consumer never perturbs an existing stream.
 - Leaderboard stat accumulators living **inside** `WorldState` and **inside** the hash.
 - The first save format a real world uses.
+- Fluids as **flow, not pressure**: one ledger per network, one pump and one liquid per
+  network. A pressure model could not be retrofitted without invalidating every stored world,
+  and it is the decision the entire soda line will stand on.
 
 Everything else is a two-way door.
 
@@ -192,6 +244,8 @@ are in [`src/save/README.md`](src/save/README.md). The IndexedDB driver lives in
 | `state.ts`    | `WorldState`, `createWorld`, and the accessors over it                     |
 | `belts.ts`    | Belt movement, hand-off, and grabber arms                                  |
 | `zones.ts`    | Zone painting, readouts, and the seed hopper                               |
+| `water.ts`    | Reservoirs, the throttle curve, and `takeWater()` — the one draw path      |
+| `pipes.ts`    | Pipe networks, placement refusals, and the one-ledger flow tick            |
 | `commands.ts` | The `Command` union and the append-only trace                              |
 | `tick.ts`     | `step()` and the fixed system order                                        |
 | `stats.ts`    | Leaderboard accumulators                                                   |

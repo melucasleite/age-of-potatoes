@@ -8,10 +8,11 @@ shipped. These files are small, they never change, and they are the only thing t
 catch a migration bug in 2029 — by which point nobody will remember what a format-1 payload
 looked like, and the code that wrote it will be long gone.
 
-| File            | Format | Recorded             | World                                                                                                                                                                                                                                                                 |
-| --------------- | ------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `format-1.json` | 1      | 2026-08-12, `v0.1.0` | Seed 20260812, tick 32096. A sell bin, a sprinkler mid-cooldown with 12 L in the barrel, and a Chip Kitchen caught part-way through a bag.                                                                                                                            |
-| `format-2.json` | 2      | 2026-08-12, `v0.2.0` | Seed 70707, tick 29100. The first save with a factory in it: seven machines, two belt segments with six items riding them, five grabber arms — three of them mid-swing holding a washed potato or a plain chip — a painted Grow Zone, and nine researched tech nodes. |
+| File            | Format | Recorded             | World                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------- | ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `format-1.json` | 1      | 2026-08-12, `v0.1.0` | Seed 20260812, tick 32096. A sell bin, a sprinkler mid-cooldown with 12 L in the barrel, and a Chip Kitchen caught part-way through a bag.                                                                                                                                                                                                                                                 |
+| `format-2.json` | 2      | 2026-08-12, `v0.2.0` | Seed 70707, tick 29100. The first save with a factory in it: seven machines, two belt segments with six items riding them, five grabber arms — three of them mid-swing holding a washed potato or a plain chip — a painted Grow Zone, and nine researched tech nodes.                                                                                                                      |
+| `format-3.json` | 3      | 2026-08-12, `v0.4.0` | Seed 51015, tick 21306. The first save with plumbing in it: a drawn-down pond, a Pump on its bank, a seventeen-tile pipe run, and a Tank, two piped heads and an Irrigation Hub caught **mid-throttle** — demand 1,600 ml against a supply of 500, every consumer amber, the round-robin offset at 40, the Hub's scan cursor at 62, and both first-activation ceremonies already recorded. |
 
 `format-1.json` was produced by driving `step()` through a scripted play session — plant,
 water, harvest, walk, sell, buy the sprinkler, feed the kitchen — and calling `serialize()`
@@ -24,6 +25,14 @@ part-way through the run that feeds twenty potatoes through the line — and cal
 `serialize()`. It stops mid-everything for the same reason format-1 does: goods in transit on
 a belt and in an arm's hand are part of the world, and a save taken when the line is empty
 would not prove they come back.
+
+`format-3.json` was recorded by replaying the `water-works` golden fixture to forty ticks
+after its last command and calling `serialize()`. That moment was chosen deliberately: every
+buffer is still filling, so the ledger is genuinely over-demanded and all three consumers are
+flagged amber. A pipe network at rest has a supply accumulator of zero, an idle rotation, and
+full tanks — it would round-trip perfectly while proving almost nothing. The interesting
+fields are the ones that only exist mid-flight: `supplyAccum`, `rrOffset`, `throttled`, and
+the Hub's `scanCursor`.
 
 ## When the test fails
 

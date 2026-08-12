@@ -50,6 +50,19 @@ export const TICK_MS = 50;
 export const TICKS_PER_ACTIVE_HOUR = 72_000;
 
 /**
+ * An active minute, in ticks.
+ *
+ * THE DENOMINATOR OF EVERY FLUID RATE. Water rates are quoted per minute rather than per
+ * tick because the honest numbers are not whole millilitres per tick — a reservoir
+ * recharging 40,000 ml a minute owes 33⅓ ml per tick, and rounding that to 33 would make
+ * the pond quietly 1% slower to recover forever. Every consumer of these rates accrues
+ * `rate` per tick into an accumulator and spends `divFloor(accum, TICKS_PER_MINUTE)` whole
+ * millilitres, exactly as `PlayerState.moveAccum` spends subtiles. Over any 1,200 ticks the
+ * total is exact.
+ */
+export const TICKS_PER_MINUTE = 1_200;
+
+/**
  * The Music Box grid (plan §14). 100 BPM at 20 Hz is exactly 12 ticks per beat. The beat
  * is derived from the tick counter and is therefore part of the deterministic world;
  * `AudioContext.currentTime` must never flow the other way.
