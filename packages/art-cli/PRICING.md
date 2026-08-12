@@ -1,6 +1,6 @@
 # Retro Diffusion pricing — measured, not remembered
 
-A spike (work item 023, 2026-08-12) run against the live API to settle one question. The
+A spike (work item 048, 2026-08-12) run against the live API to settle one question. The
 project had been operating on an **inferred** conclusion: that consistent house-style art
 requires RD Pro at a flat $0.18/image — roughly 10× the `rd_fast` floor — and that a full
 v1.0 catalogue therefore costs **$150–400**.
@@ -191,7 +191,7 @@ response is money gone permanently.
 
 `providers/retro-diffusion.ts` uses bare `fetch` with no timeout configuration. **A `rd_fast`
 run is already within 10% of the limit**, so this is a live hazard today, not a Pro-only one.
-Filed as work item 024.
+Filed as work item 049.
 
 Related gotcha found while working around it: a hand-rolled `node:https` client gets **403
 Forbidden** from RD's edge unless it sets a `User-Agent` header. undici sets one automatically.
