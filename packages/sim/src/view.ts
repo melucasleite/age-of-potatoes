@@ -16,6 +16,7 @@
 // the host passes to its draw call is the renderer's business alone.
 
 import {
+  ARMFUL_CAP_ITEMS,
   CART_CAPACITY,
   CONDITION_EFFECT_THRESHOLD,
   CONDITION_MAX,
@@ -64,6 +65,7 @@ import {
   type Machine,
   type WorldState,
   CeremonyId,
+  carriedCount,
   isParcelBuyable,
   nextDeedPriceCents,
   tileAt,
@@ -127,6 +129,8 @@ export interface FieldView {
   /** 1 when the tile reads as dry to the player. */
   dry: number[];
   fertility: number[];
+  /** `SoilType` per tile: 1 loam, 2 sand, 3 clay. Rolled once, never changed. */
+  soil: number[];
   /** `WiltStage` per tile: 0 fresh, 1 drooping, 2 turned. */
   wilt: number[];
   /** Ticks the tile has stood mature, for the "going Day-Old" countdown in the HUD. */
@@ -390,6 +394,23 @@ export interface InventoryView {
   boxedMachineKind: number;
   /** One entry per boxed machine. Empty on every ordinary row. Reused between frames. */
   boxes: BoxedMachineView[];
+  /**
+   * Ticks until the soonest-expiring part of this stack turns to Compost, or **-1 when nothing
+   * in it ever will**.
+   *
+   * **A COUNTDOWN RATHER THAN THE DEADLINE, AND THAT IS THE ONE INTERESTING CHOICE HERE.** The
+   * world stores an absolute `spoilAtTick` because an absolute tick needs nobody to decrement it
+   * (see `FreshStack`); the HUD wants the opposite, because "4:12 left" is a sentence and "spoils
+   * at tick 918,400" is not. Subtracting once, here, in the projection, is the seam doing its job
+   * — the renderer never has to know what tick it is, which is the same reason it is handed
+   * `stage` rather than `growth`.
+   *
+   * -1 for shelf-stable goods rather than a very large number, so "never" and "a long time" can
+   * never be confused by a progress bar dividing by a maximum.
+   */
+  ticksToSpoil: number;
+  /** How many units of this row are in that soonest-expiring heap. 0 when nothing perishes. */
+  spoilingCount: number;
 }
 
 /** The numbers the HUD panel reads, already reduced. All integers, all cents or counts. */
@@ -455,6 +476,44 @@ export interface PlayerView {
    * Compare against `view.tick`; the sim owns the deadline and the renderer only draws it.
    */
   intentIssuedTick: number;
+  /** The `Machine.id` of the hand cart in tow, or 0. Non-zero is "draw the handles". */
+  towedCartId: number;
+  /**
+   * Ordinary goods in the player's arms, and the cap it is measured against.
+   *
+   * **BOTH NUMBERS, RATHER THAN A FRACTION OR A "FULL" FLAG**, because the HUD has to be able to
+   * say *12 / 12* — item 023's criterion is that the cap is visible, and a player who cannot
+   * harvest needs to see the reason rather than a refusal. Boxed machines are excluded from the
+   * count for the reason `ARMFUL_CAP_ITEMS` gives: a box is not a good.
+   */
+  carriedCount: number;
+  armfulCap: number;
+}
+
+/**
+ * One Agri-Bot, in subtiles. Plan §3's "Spudnik".
+ *
+ * The renderer interpolates between frames from these and **never writes back** (§12): an
+ * interpolated position exists on screen, is never persisted, never hashed, and never read into
+ * the sim. `phase` is what a 2-frame walk cycle is driven off — walking, working, or standing —
+ * and locked decision 10 designs that character down to fit generation rather than up.
+ */
+export interface BotView {
+  id: number;
+  kind: number;
+  dockId: number;
+  xSub: number;
+  ySub: number;
+  facing: number;
+  /** `BotPhase`: 0 idle, 1 walking out, 2 working, 3 walking home. */
+  phase: number;
+  /** What it is carrying and how much, or 0. */
+  carryItem: number;
+  carryCount: number;
+  /** 0..CONDITION_MAX, and the permille of it the HUD draws a bar from. */
+  condition: number;
+  conditionPermille: number;
+  opCount: number;
 }
 
 /**
@@ -586,6 +645,8 @@ export interface WorldView {
   machines: MachineView[];
   belts: BeltView[];
   grabbers: GrabberView[];
+  /** Agri-Bots, in id order. Empty on a lot that has never bought a dock. */
+  bots: BotView[];
   zones: ZoneView[];
   reservoirs: ReservoirView[];
   pipes: PipeView[];
@@ -634,6 +695,9 @@ export function createWorldView(): WorldView {
       intentTileX: 0,
       intentTileY: 0,
       intentIssuedTick: 0,
+      towedCartId: 0,
+      carriedCount: 0,
+      armfulCap: ARMFUL_CAP_ITEMS,
     },
     field: {
       originX: FIELD_ORIGIN_X,
@@ -646,6 +710,7 @@ export function createWorldView(): WorldView {
       ready: new Array<number>(FIELD_TILE_COUNT).fill(0),
       dry: new Array<number>(FIELD_TILE_COUNT).fill(0),
       fertility: new Array<number>(FIELD_TILE_COUNT).fill(0),
+      soil: new Array<number>(FIELD_TILE_COUNT).fill(0),
       wilt: new Array<number>(FIELD_TILE_COUNT).fill(0),
       readyAge: new Array<number>(FIELD_TILE_COUNT).fill(0),
       compost: new Array<number>(FIELD_TILE_COUNT).fill(0),
@@ -654,6 +719,7 @@ export function createWorldView(): WorldView {
     machines: [],
     belts: [],
     grabbers: [],
+    bots: [],
     zones: [],
     reservoirs: [],
     pipes: [],
@@ -713,12 +779,16 @@ export function view(state: WorldState, out: WorldView = createWorldView()): Wor
   out.player.intentTileX = intent === null ? 0 : intent.tileX;
   out.player.intentTileY = intent === null ? 0 : intent.tileY;
   out.player.intentIssuedTick = intent === null ? 0 : intent.issuedTick;
+  out.player.towedCartId = state.player.towedCartId;
+  out.player.carriedCount = carriedCount(state);
+  out.player.armfulCap = ARMFUL_CAP_ITEMS;
 
   projectLand(state, out);
   projectField(state, out);
   projectMachines(state, out);
   projectBelts(state, out);
   projectGrabbers(state, out);
+  projectBots(state, out);
   projectZones(state, out);
   projectReservoirs(state, out);
   projectNetworks(state, out);
@@ -747,6 +817,7 @@ function projectField(state: WorldState, out: WorldView): void {
     field.ready[i] = ready ? 1 : 0;
     field.dry[i] = tile.moisture < MOISTURE_DRY_THRESHOLD ? 1 : 0;
     field.fertility[i] = tile.fertility;
+    field.soil[i] = tile.soil;
     field.wilt[i] = ready ? wiltStageForAge(tile.readyAge) : WiltStage.Fresh;
     field.readyAge[i] = tile.readyAge;
     field.compost[i] = tile.compost;
@@ -1348,19 +1419,76 @@ function lampFor(state: WorldState, index: number): LampState {
   return LampState.Running;
 }
 
+/** Bots, pooled into the reused buffer exactly as machines and grabbers are. */
+function projectBots(state: WorldState, out: WorldView): void {
+  const count = state.bots.length;
+  for (let i = 0; i < count; i++) {
+    const bot = state.bots[i]!;
+    let bv = out.bots[i];
+    if (bv === undefined) {
+      bv = {
+        id: 0,
+        kind: 0,
+        dockId: 0,
+        xSub: 0,
+        ySub: 0,
+        facing: 0,
+        phase: 0,
+        carryItem: 0,
+        carryCount: 0,
+        condition: 0,
+        conditionPermille: 0,
+        opCount: 0,
+      };
+      out.bots.push(bv);
+    }
+    bv.id = bot.id;
+    bv.kind = bot.kind;
+    bv.dockId = bot.dockId;
+    bv.xSub = bot.xSub;
+    bv.ySub = bot.ySub;
+    bv.facing = bot.facing;
+    bv.phase = bot.phase;
+    bv.carryItem = bot.carryItem;
+    bv.carryCount = bot.carryCount;
+    bv.condition = bot.condition;
+    bv.conditionPermille = permille(bot.condition, CONDITION_MAX);
+    bv.opCount = bot.opCount;
+  }
+  out.bots.length = count;
+}
+
 function projectInventory(state: WorldState, out: WorldView): void {
   const count = state.inventory.length;
   for (let i = 0; i < count; i++) {
     const slot = state.inventory[i]!;
     let iv = out.inventory[i];
     if (iv === undefined) {
-      iv = { item: 0, count: 0, sellable: 0, boxedMachineKind: 0, boxes: [] };
+      iv = {
+        item: 0,
+        count: 0,
+        sellable: 0,
+        boxedMachineKind: 0,
+        boxes: [],
+        ticksToSpoil: -1,
+        spoilingCount: 0,
+      };
       out.inventory.push(iv);
     }
     iv.item = slot.item;
     iv.count = slot.count;
     iv.sellable = isSellable(slot.item) ? 1 : 0;
     iv.boxedMachineKind = machineKindForBoxedItem(slot.item) ?? 0;
+
+    const head = slot.stacks[0];
+    if (head === undefined) {
+      iv.ticksToSpoil = -1;
+      iv.spoilingCount = 0;
+    } else {
+      const left = head.spoilAtTick - state.tick;
+      iv.ticksToSpoil = left < 0 ? 0 : left;
+      iv.spoilingCount = head.count;
+    }
 
     // The nested list is pooled exactly as the row list above it is: grow into it, overwrite in
     // place, then truncate. `view()` buffers are reused forever, and a box left over from last

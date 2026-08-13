@@ -19,15 +19,102 @@ import { TICKS_PER_SECOND, divFloor } from './units';
 // `as const` objects, never `enum`: Node's native type stripping cannot execute enums,
 // and these ids are written into saves, so their numeric values are permanent.
 
+/**
+ * The tilled-ground crops. **THE ROSTER IS EIGHT AND FIVE OF THEM ARE HERE.**
+ *
+ * Plan §5 caps the roster at eight and names them: Russet Potato, Gold Potato, Chili Pepper,
+ * Corn, Sugar Cane, and the three 2×2 trees — Orange, Lemon, Kola Nut. §7 ruling 8 restates the
+ * cap as a decision that survived the critique. Five of the eight are `CropId`s; **the three
+ * trees are `MachineKind`s**, and that split is a ruling rather than an implementation detail.
+ *
+ * **WHY A TREE IS NOT A `CropId`.** A `CropTile` is one tile with one crop on it, and the field
+ * is a flat row-major array — so a 2×2 tree expressed as a crop would be four tiles each
+ * claiming to hold a quarter of a plant, with nothing in the shape to say they are the same
+ * plant. Every question the feature asks is then a new one: which quarter do you harvest, what
+ * happens when you plant over one corner, where does the fruiting cooldown live. A `Machine`
+ * already answers all of them — it has `tileX/tileY`, a `MachineSpec.tilesWide/tilesHigh`
+ * footprint, `machineCoversTile()`, a cooldown, an output buffer a belt can drain, ownership
+ * gating, an invoice on the net-worth books, and boxing — so a permanent multi-tile plant that
+ * survives harvest and fruits on a cycle is *already* a machine in everything but name. Item 030
+ * recommends exactly this and it is worth more than taxonomic purity.
+ *
+ * The count still comes to eight, and it is the eight §5 lists: five sown, three planted.
+ *
+ * Numeric values are written into saves and permanent. Never renumber 0 or 1.
+ */
 export const CropId = {
   None: 0,
   RussetPotato: 1,
   SugarCane: 2,
   Corn: 3,
   ChiliPepper: 4,
+  /** §5: "Gold Potato (premium, thirsty)". Drinks three times what a Russet does. */
+  GoldPotato: 5,
 } as const;
 
 export type CropId = (typeof CropId)[keyof typeof CropId];
+
+/**
+ * What a field tile is made of. §5: *"Soil types (loam/sand/clay) and 1–3★ fertility make
+ * placement a decision."*
+ *
+ * Rolled once per tile at world creation from `SystemId.SoilInit` — a **new** stream, so every
+ * world that already exists keeps the fertility it rolled (see `rng.ts`). Permanent save surface,
+ * like every other id in this file.
+ */
+export const SoilType = {
+  /** The middle of every axis, and the value a migrated tile gets: nothing changes. */
+  Loam: 1,
+  /** Grows fast and dries fast. A sprinkler's favourite ground and the can's worst. */
+  Sand: 2,
+  /** Slow and thirsty-proof. Holds water through a dry spell and takes its time. */
+  Clay: 3,
+} as const;
+
+export type SoilType = (typeof SoilType)[keyof typeof SoilType];
+
+export interface SoilSpec {
+  readonly id: SoilType;
+  readonly slug: string;
+  /**
+   * Growth rate as permille of loam. Applied to the tile's `growthTarget` when the crop is
+   * SOWN, never to the per-tick increment — `GROWTH_PER_WATERED_TICK` is 1, and there is no
+   * integer between 0 and 1 for a modifier to land on. A target divided once at planting is
+   * exact, is visible in the save, and cannot drift.
+   */
+  readonly growthPermille: number;
+  /** Moisture drain as permille of the crop's own rate, spent through `CropTile.moistureAccum`. */
+  readonly moistureDrainPermille: number;
+}
+
+export const SOIL_SPECS: readonly SoilSpec[] = [
+  { id: SoilType.Loam, slug: 'loam', growthPermille: 1000, moistureDrainPermille: 1000 },
+  { id: SoilType.Sand, slug: 'sand', growthPermille: 1150, moistureDrainPermille: 1500 },
+  { id: SoilType.Clay, slug: 'clay', growthPermille: 850, moistureDrainPermille: 700 },
+];
+
+export function soilSpec(id: SoilType): SoilSpec | null {
+  for (let i = 0; i < SOIL_SPECS.length; i++) {
+    const spec = SOIL_SPECS[i]!;
+    if (spec.id === id) return spec;
+  }
+  return null;
+}
+
+/** Every soil a roll may produce, in a fixed order. The roll is an index into this. */
+export const SOIL_ROLL_TABLE: readonly SoilType[] = [SoilType.Loam, SoilType.Sand, SoilType.Clay];
+
+/**
+ * How many harvests one tile gives up before it loses a star, and the floor it stops at.
+ *
+ * **A FIXED COUNT, NEVER A ROLL** (item 030's constraint, and plan §7 ruling 5's house style).
+ * Five is chosen against the anti-softlock floor rather than against a feel: a tile bottoms out
+ * at `FERTILITY_MIN` after ten harvests at best, and `FERTILITY_MIN` is 1, so exhausted ground
+ * still yields — there is no path to a tile that pays zero. Compost-fed recovery is the other
+ * half and it is real: `ApplyFertilizer` puts a star back and resets the counter.
+ */
+export const HARVESTS_PER_FERTILITY_STEP = 5;
+export const FERTILITY_PER_FERTILIZER = 1;
 
 /**
  * Plan §5 caps the recipe graph at ~50 items. We are at **26 items plus 5 liquids = 31 nodes**
@@ -130,6 +217,65 @@ export const ItemId = {
   BoxedDeliveryCart: 47,
   BoxedTruckDepot: 48,
   BoxedBeltJunction: 49,
+
+  // --- the roster's last crop, and the orchard ----------------------------------------
+  //
+  // §5's "Gold Potato (premium, thirsty)" and the fruit the three 2×2 trees drop. The trees
+  // themselves are machines (see `CropId`); these are what comes out of them.
+  GoldPotatoSeed: 50,
+  GoldPotato: 51,
+  DayOldGoldPotato: 52,
+  /** Orange Tree fruit. Sellable produce, and nothing eats it — §8 defers fruit sodas past 1.0. */
+  Orange: 53,
+  Lemon: 54,
+
+  /**
+   * Compost, composted. Plan §4: *"spoiled goods → Compost → Fertilizer (+yield or +grace)"*.
+   *
+   * **THE "+YIELD" HALF, AND ONLY THAT HALF.** §4 offers a choice of two effects and item 035
+   * says pick one; `CropTile.fertility` already exists, already decides yield, and — as of the
+   * crop roster — already decays with harvests, so restoring it needs no new tile field and
+   * lands exactly where the decay took something away. "+grace" would have meant a second clock
+   * per tile competing with `readyAge` for the same sentence.
+   */
+  Fertilizer: 55,
+
+  /**
+   * The push-scythe: plan §3's assisted rung of the harvesting ladder, three tiles a swing.
+   *
+   * **AN ITEM RATHER THAN A MACHINE, BECAUSE IT IS A TOOL YOU HOLD.** It is never placed, never
+   * consumed, never wears (§8 forbids two risky systems in one release, and hand tools never rot
+   * — §1), and it does nothing whatsoever while it sits in the bag. Owning one is what makes
+   * `SwingScythe` legal, exactly as owning a repair kit is what makes `UseRepairKit` legal.
+   */
+  PushScythe: 56,
+
+  /**
+   * A packing crate. §4's *"45 crated"*, and **AN ITEM RATHER THAN A MACHINE FOR A REASON THAT
+   * ONLY SHOWS UP WHEN YOU TRY IT THE OTHER WAY.**
+   *
+   * Goods age in the player's hands and nowhere else — nothing inside any machine has a clock,
+   * which is how §4's hopper freeze is implemented (see `InventorySlot.stacks`). So a Crate built
+   * as a placeable container would freeze its contents exactly as a Root Cellar does, and the two
+   * would be one object with two prices: the same "two names for one rule" the belt junction
+   * ruling refuses. The distinction §4 actually draws is between goods **loose** and goods
+   * **crated** — and both of those are in your arms.
+   *
+   * So it is a consumable you pack a stack into, and what it buys is thirty more minutes of
+   * carrying. `PackCrate` is refused rather than consumed when it would not help, the same rule
+   * `UseRepairKit` follows: misplacement is never a fine (§4).
+   */
+  Crate: 57,
+
+  // --- boxes for everything above ------------------------------------------------------
+  BoxedRootCellar: 58,
+  BoxedComposter: 59,
+  BoxedHandCart: 60,
+  BoxedOrangeTree: 61,
+  BoxedLemonTree: 62,
+  BoxedKolaTree: 63,
+  BoxedHarvesterDock: 64,
+  BoxedPlanterDock: 65,
 } as const;
 
 export type ItemId = (typeof ItemId)[keyof typeof ItemId];
@@ -198,6 +344,60 @@ export const MachineKind = {
    * already see.
    */
   BeltJunction: 24,
+
+  // --- keeping things (plan §4's spoilage softeners) ------------------------------------
+  //
+  // `MachineRole.Storage`: placed, moved, boxed, invoiced, ownership-gated and reach-checked by
+  // exactly the code that does all of that for a Fryer, and loaded and emptied by
+  // `LoadMachine`/`UnloadMachine`, which already exist, already count a `handCarry` touch, and
+  // already have a walk-to errand wired. Not one line of any of that was written for these.
+  /**
+   * §4: *"frozen in a Root Cellar"*. The clock stops, and it stops for the ordinary reason every
+   * clock in a machine stops — nothing inside any machine ages, because a buffer holds counts and
+   * counts have no timer. What the Cellar buys on top of that is **a hundred slots**: it is the
+   * one place in the game to put a harvest you cannot process yet, and the crate in your arms
+   * holds twenty for thirty minutes.
+   */
+  RootCellar: 25,
+  /** Compost → Fertilizer. An ordinary converter; it is here for the recipe, not the role. */
+  Composter: 26,
+  /**
+   * Plan §3's assisted rung of the TRANSPORT ladder: "Wheelbarrow/hand cart".
+   *
+   * Storage on wheels. Hitch it and it follows you at a cost in speed; park it and it is a box.
+   * It is deliberately NOT `MachineKind.DeliveryCart`, which is the assisted rung of *selling* —
+   * that one you load and send away, this one you load and drag. Same ladder rung, different
+   * ladder, and they are not the same object: the delivery cart goes somewhere you do not.
+   */
+  HandCart: 27,
+
+  // --- the orchard (plan §5's three 2×2 trees) -------------------------------------------
+  //
+  // See `CropId` for why a permanent multi-tile plant is a machine rather than a crop. Each one
+  // is `MachineRole.Orchard`: no inputs, no plumbing, a footprint, and an output buffer that
+  // fills on a cycle and that a belt or a grabber can drain.
+  OrangeTree: 28,
+  LemonTree: 29,
+  /**
+   * **PLANTING THE FIRST ONE IS AN EVENT** (§5, by name), because it is the gate on the cola
+   * line: the Grinder eats kola nuts, and until now the only kola in the world was bought at the
+   * stand. This is the crafted rung of §4's consumable ladder finally arriving under the bought
+   * one — and it is why the README's Vertical Integration note no longer lists "kola as a crop"
+   * as a thing that will never exist. §5 always listed the kola tree; what it ruled out was a
+   * ninth *sown* crop, which this is not.
+   */
+  KolaTree: 30,
+
+  // --- Agri-Bots (plan §3's automated rung of harvesting) ---------------------------------
+  //
+  // A dock is a machine; the bot that lives in it is an entity in `WorldState.bots`. One dock,
+  // one bot, one zone — the zone is the instruction set (`Machine.boundZone`), because item 018
+  // already built a surface that says what should be growing where and a second one would be a
+  // second answer to the same question.
+  /** "Spudnik" patrols the zone and pulls ripe crops into this shed's output buffer. */
+  HarvesterDock: 31,
+  /** And this one puts them back, from a seed hopper you keep filled — by hand, or by belt. */
+  PlanterDock: 32,
 } as const;
 
 export type MachineKind = (typeof MachineKind)[keyof typeof MachineKind];
@@ -603,6 +803,80 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.BoxedDeliveryCart, slug: 'boxed-delivery-cart', ...BOXED },
   { id: ItemId.BoxedTruckDepot, slug: 'boxed-truck-depot', ...BOXED },
   { id: ItemId.BoxedBeltJunction, slug: 'boxed-belt-junction', ...BOXED },
+
+  // --- the roster's last crop and the orchard's fruit ---------------------------------
+  //
+  // ART MANIFEST, DECLARED HERE AND NOWHERE ELSE. The slugs below are the ids the art pipeline
+  // reads: `gold-potato-seed`, `gold-potato`, `day-old-gold-potato`, `orange`, `lemon`,
+  // `fertilizer`, `push-scythe` as item sprites, plus the growth strip `crop_gold_potato_strip`
+  // (one horizontal strip per crop, one generation call — §15, and never four separate calls)
+  // and three tree sprites for `orange-tree`, `lemon-tree`, `kola-tree` in `MACHINE_SPECS`.
+  // Nothing here generates art; this table is the declaration the art pass reads off.
+  {
+    id: ItemId.GoldPotatoSeed,
+    slug: 'gold-potato-seed',
+    listPriceCents: 200,
+    purchasable: true,
+    sellable: false,
+  },
+  {
+    // §5's "premium". Three times a Russet at the till, and three times the water in the ground.
+    id: ItemId.GoldPotato,
+    slug: 'gold-potato',
+    listPriceCents: 600,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.DayOldGoldPotato,
+    slug: 'day-old-gold-potato',
+    listPriceCents: 300,
+    purchasable: false,
+    sellable: true,
+  },
+  { id: ItemId.Orange, slug: 'orange', listPriceCents: 260, purchasable: false, sellable: true },
+  { id: ItemId.Lemon, slug: 'lemon', listPriceCents: 240, purchasable: false, sellable: true },
+  {
+    // Crafted from compost and never bought: a Composter is the only source, which is the entire
+    // reason to build one. Sellable at a token price so that a player who over-composts is not
+    // holding a good with no exit — §4's floor again.
+    id: ItemId.Fertilizer,
+    slug: 'fertilizer',
+    listPriceCents: 120,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    // §3's 15-Minute Rule against the $150 barrel sprinkler's anchor: era-1 income is about $10 a
+    // minute, so an assisted tool wants to sit near $60–$100. The scythe is the cheapest of the
+    // three because it is the one that removes the least — you still walk the row and swing.
+    id: ItemId.PushScythe,
+    slug: 'push-scythe',
+    listPriceCents: 6_000,
+    purchasable: true,
+    sellable: true,
+  },
+  {
+    // $8 — the same money a repair kit costs, and the parallel is deliberate: both are a
+    // consumable you buy at the stand to spend on one spot of trouble, and both are refused
+    // rather than eaten when they would not help. One crate keeps twenty potatoes ($40 of
+    // produce) alive for another half hour, so it pays for itself five times over the first time
+    // it saves a stack — cheap relative to the loss it prevents, which is item 035's instruction.
+    id: ItemId.Crate,
+    slug: 'crate',
+    listPriceCents: 800,
+    purchasable: true,
+    sellable: true,
+  },
+
+  { id: ItemId.BoxedRootCellar, slug: 'boxed-root-cellar', ...BOXED },
+  { id: ItemId.BoxedComposter, slug: 'boxed-composter', ...BOXED },
+  { id: ItemId.BoxedHandCart, slug: 'boxed-hand-cart', ...BOXED },
+  { id: ItemId.BoxedOrangeTree, slug: 'boxed-orange-tree', ...BOXED },
+  { id: ItemId.BoxedLemonTree, slug: 'boxed-lemon-tree', ...BOXED },
+  { id: ItemId.BoxedKolaTree, slug: 'boxed-kola-tree', ...BOXED },
+  { id: ItemId.BoxedHarvesterDock, slug: 'boxed-harvester-dock', ...BOXED },
+  { id: ItemId.BoxedPlanterDock, slug: 'boxed-planter-dock', ...BOXED },
 ];
 
 /**
@@ -639,6 +913,17 @@ export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly
     { kind: MachineKind.DeliveryCart, item: ItemId.BoxedDeliveryCart },
     { kind: MachineKind.TruckDepot, item: ItemId.BoxedTruckDepot },
     { kind: MachineKind.BeltJunction, item: ItemId.BoxedBeltJunction },
+    { kind: MachineKind.RootCellar, item: ItemId.BoxedRootCellar },
+    { kind: MachineKind.Composter, item: ItemId.BoxedComposter },
+    { kind: MachineKind.HandCart, item: ItemId.BoxedHandCart },
+    // A boxed tree. It is a sapling in a sack, and it keeps nothing but its invoice — the fruit
+    // in its buffer comes back to the player's hands with everything else `DeconstructMachine`
+    // empties, exactly as a Fryer's basket does.
+    { kind: MachineKind.OrangeTree, item: ItemId.BoxedOrangeTree },
+    { kind: MachineKind.LemonTree, item: ItemId.BoxedLemonTree },
+    { kind: MachineKind.KolaTree, item: ItemId.BoxedKolaTree },
+    { kind: MachineKind.HarvesterDock, item: ItemId.BoxedHarvesterDock },
+    { kind: MachineKind.PlanterDock, item: ItemId.BoxedPlanterDock },
   ];
 
 /** The boxed item a machine kind goes into, or `null` for a kind that has no box. */
@@ -765,6 +1050,157 @@ export function wiltStageForAge(readyAge: number): WiltStage {
   return WiltStage.Wilted;
 }
 
+// --- harvested-inventory spoilage --------------------------------------------------
+//
+// Everything above this line is the IN-GROUND half (item 021): a crop that matures and is left
+// there. Everything below is the HARVESTED half (item 035): a good in the player's hands, in a
+// crate, or in a cellar, with a clock on it.
+//
+// §4's thesis is the title of its own section — **"processing IS preservation"** — and §7 ruling
+// 6 is the sticky note: **"spoilage teaches layout, not panic."** Every number here was chosen
+// soft and none of them should be tightened to make it feel like a game.
+//
+// THE CLOCK IS TICKS AND ONLY TICKS. `TICKS_PER_ACTIVE_HOUR` is 72,000, so an active minute is
+// 1,200: fifteen minutes is 18,000, forty-five is 54,000, and §4's six-minute slice window is
+// 7,200. Nothing here reads `Date`; the package would not type-check if it tried. Close the tab
+// for a week and not one potato ages, because time does not pass.
+
+/**
+ * How long each perishable good keeps in the player's hands, in ticks. **ONE TABLE** (item 035's
+ * instruction 3), and an item that is not in it is shelf-stable forever.
+ *
+ * The absence of a row is the interesting half. §4: *"Raw is perishable, intermediates are
+ * urgent, **processed is shelf-stable forever**"* — so the chip line's ladder crosses a line at
+ * the Fryer, and it is not an arbitrary one: everything before the oil is a wet vegetable and
+ * everything after it is a fried snack. That makes the Fryer the preservation step, and it makes
+ * the lesson *get the slices to the Fryer inside six minutes* rather than *do not leave things
+ * lying about*, which is the difference between teaching layout and teaching panic.
+ *
+ * Day-Old goods keep half as long as fresh ones. They are the same produce, already turned once;
+ * a Day-Old potato that outlasted a fresh one would be the table arguing with itself.
+ *
+ * Bought consumables — bottles, kola nuts, repair kits — do not spoil. Their prices are stable
+ * and posted (locked decision 3) and a consumable that rotted would make stocking up a trap.
+ */
+export const FRESHNESS_TICKS_BY_ITEM: readonly { readonly item: ItemId; readonly ticks: number }[] =
+  [
+    // Raw produce: ~15 active minutes loose (§4).
+    { item: ItemId.RussetPotato, ticks: 18_000 },
+    { item: ItemId.GoldPotato, ticks: 18_000 },
+    { item: ItemId.SugarCane, ticks: 18_000 },
+    { item: ItemId.Corn, ticks: 18_000 },
+    { item: ItemId.ChiliPepper, ticks: 18_000 },
+    { item: ItemId.Orange, ticks: 18_000 },
+    { item: ItemId.Lemon, ticks: 18_000 },
+    // Already turned once. Half of fresh.
+    { item: ItemId.DayOldPotato, ticks: 9_000 },
+    { item: ItemId.DayOldGoldPotato, ticks: 9_000 },
+    { item: ItemId.DayOldCane, ticks: 9_000 },
+    { item: ItemId.DayOldCorn, ticks: 9_000 },
+    { item: ItemId.DayOldChili, ticks: 9_000 },
+    // §4's "intermediates are urgent — fresh slices ~6 min, the first real layout puzzle".
+    // A washed potato is a wet potato, so it keeps the same six minutes a slice does.
+    { item: ItemId.WashedPotato, ticks: 7_200 },
+    { item: ItemId.PotatoSlices, ticks: 7_200 },
+  ];
+
+/** How long this good keeps loose, or 0 for the shelf-stable majority. */
+export function freshnessTicks(item: ItemId): number {
+  for (let i = 0; i < FRESHNESS_TICKS_BY_ITEM.length; i++) {
+    const row = FRESHNESS_TICKS_BY_ITEM[i]!;
+    if (row.item === item) return row.ticks;
+  }
+  return 0;
+}
+
+export function isPerishable(item: ItemId): boolean {
+  return freshnessTicks(item) > 0;
+}
+
+/**
+ * Spoil ticks are rounded DOWN to a multiple of this, and stacks merge when they land on the
+ * same one. One active minute.
+ *
+ * **THIS IS WHAT KEEPS THE SAVE SMALL, AND THE SAVE SIZE IS THE STATED RISK OF THIS FEATURE.**
+ * Freshness breaks the merge rule the inventory has always had — two potatoes picked ten minutes
+ * apart are not interchangeable — so a slot becomes a list of stacks, and a player who harvests
+ * one tile at a time would otherwise write one stack per harvest, forever. Quantising to a minute
+ * means everything picked inside the same minute is one stack, which is exactly the resolution a
+ * player can perceive (§12's rule: do not spend the JSON budget until saves exceed ~5 MB).
+ *
+ * DOWN rather than to-nearest, so the rounding is never in the player's favour by accident and
+ * two builds cannot disagree about a half.
+ */
+export const FRESHNESS_BUCKET_TICKS = 15 * TICKS_PER_SECOND;
+
+/**
+ * What one packing crate buys, in ticks: **§4's "45 crated"**, and how many goods it covers.
+ *
+ * Forty-five active minutes, replacing whatever window the stack had — so a potato with two
+ * minutes left and a potato just pulled both come out of the crate with forty-five. That is
+ * generous on purpose and it is the softener doing its job: §7 ruling 6 wants spoilage to teach
+ * layout, and a player who has just watched a stack start to turn should be able to *fix it* with
+ * eight dollars rather than watch it go.
+ *
+ * Twenty units per crate, which is one Fryer's buffer and one cart's load — the sizes the rest of
+ * the game already counts in.
+ */
+export const CRATE_FRESHNESS_TICKS = 54_000;
+export const CRATE_PACK_CAPACITY = 20;
+
+/**
+ * The most distinct stacks one inventory slot will hold. **A HARD CAP, AND THE REASON IS THE
+ * SAVE FILE** (item 035, and §12's JSON-for-debuggability budget).
+ *
+ * Eight is derived rather than picked: the longest window in the game is a crated stack at 45
+ * active minutes, and the coarsest a player would notice is the difference between "spoils in the
+ * next minute" and "spoils in five" — so eight buckets across any window is fine-grained enough
+ * to sort a bag by, and it bounds one slot at eight pairs of integers no matter how pathological
+ * the play is. Sixty-five item ids × eight stacks × two numbers is a few kilobytes at the
+ * absolute worst, against a 5 MB budget.
+ *
+ * When a ninth would appear, the two SOONEST-EXPIRING stacks merge and keep the sooner tick. That
+ * direction is the pessimistic one on purpose: merging fresh goods into an old stack can only
+ * ever cost the player freshness they were about to lose anyway, whereas merging old into fresh
+ * would let a player top a stack up forever and never spoil anything.
+ */
+export const FRESHNESS_MAX_STACKS = 8;
+
+/**
+ * A spoiled stack becomes this much Compost per unit. **NOTHING VANISHES** (§4, and item 021's
+ * standing constraint): there is no path in this game out of a good that pays zero.
+ *
+ * One for one rather than a fraction, because a fraction is a rounding rule nobody asked for and
+ * because Compost is worth 20¢ against a 200¢ potato — the loss is already ninety percent, and
+ * making it ninety-five would buy nothing but arithmetic.
+ */
+export const COMPOST_PER_SPOILED_ITEM = 1;
+
+/** Compost one Composter operation eats. Four spoiled potatoes make one bag of Fertilizer. */
+export const COMPOST_PER_FERTILIZER = 4;
+
+/**
+ * The armful. Plan §3's manual rung of the transport ladder: *"Armful (12 items, teeter + slow)"*.
+ *
+ * **IT GATES THE VERB, NOT THE CONTAINER, AND THAT DISTINCTION IS THE WHOLE DESIGN.** `addItem`
+ * is deliberately still unbounded, because §4's floor is that nothing vanishes and half the
+ * things that put goods in the bag are *involuntary* — taking up a belt with forty slices on it,
+ * boxing a machine with a full hopper, cancelling a contract with a truck on the road, a refund.
+ * A cap enforced inside `addItem` would have to either destroy those goods or refuse the verb
+ * that returns them, and both are fines for misplacement, which plan §4 rules out flat.
+ *
+ * So the cap is asked at the voluntary door instead: harvest, buy, unload, take-from-storage,
+ * pick up compost. A full player cannot harvest — **the crop stays in the ground**, which is item
+ * 023's acceptance criterion stated exactly, and it is also the anti-softlock answer, because a
+ * tile you could not pick is a tile that is still there when you come back with room.
+ *
+ * Boxed machines are exempt and counted apart. A box is not a good — the sell bin refuses one,
+ * `ItemSpec.sellable` is false on every boxed row, and it is scrapped from a panel rather than
+ * carried anywhere — so an armful of potatoes and a Fryer under one arm are different questions,
+ * and folding them together would mean demolishing a factory filled your hands with turnips.
+ */
+export const ARMFUL_CAP_ITEMS = 12;
+
 // --- crops ------------------------------------------------------------------------
 
 export interface CropSpec {
@@ -847,6 +1283,32 @@ export const CROP_SPECS: readonly CropSpec[] = [
     regrowTicks: 45 * TICKS_PER_SECOND,
     moistureDrainPerTick: 1,
     requiresTech: TechId.Chili,
+  },
+  {
+    // §5: "Gold Potato (premium, thirsty)". The roster's fifth sown crop and its last.
+    //
+    // **THIRST IS A DRAIN RATE, NOT A SPRINKLER SPECIAL CASE** (item 030's constraint). Three
+    // moisture a tick against a Russet's one, so on the same watering schedule a gold row runs
+    // dry three times as fast and stops growing while it waits — visible in the ground as cracked
+    // earth at `MOISTURE_DRY_THRESHOLD`, which is the same threshold the renderer already draws
+    // and the Irrigation Hub already senses. Nothing anywhere knows this crop is special; it just
+    // drinks, and the sprinkler you already own is suddenly not enough, which is the decision §5
+    // wants placement to be.
+    //
+    // A one-shot, like the Russet: §5 gives regrowth to cane and chili only, and the crop list is
+    // the pacing mechanism for the Agri-Bots — a premium one-shot is precisely the crop that
+    // waits for the planter bot.
+    id: CropId.GoldPotato,
+    slug: 'gold-potato',
+    growthTicks: 180 * TICKS_PER_SECOND,
+    growthVariancePermille: 150,
+    seedItem: ItemId.GoldPotatoSeed,
+    yieldItem: ItemId.GoldPotato,
+    dayOldItem: ItemId.DayOldGoldPotato,
+    stageCount: 5,
+    regrowTicks: 0,
+    moistureDrainPerTick: 3,
+    requiresTech: TechId.GoldPotato,
   },
 ];
 
@@ -1036,9 +1498,42 @@ export const MachineRole = {
    * placement, ownership, invoicing and boxing, and a belt fitting for everything else.
    */
   Junction: 9,
+
+  /**
+   * A box with a lid: holds one product, and stamps a freshness window on what goes in.
+   *
+   * NO WORK CYCLE — it never wears, never jams, never takes a dial, exactly like the two
+   * vehicles and the junction. What it does have is `MachineSpec.preserveTicks`, which is the
+   * only mechanical difference between a Crate, a Root Cellar and a hand cart.
+   */
+  Storage: 10,
+  /**
+   * A tree. Fills its own output buffer on a cycle and eats nothing at all.
+   *
+   * **NOT `Converter` WITH AN EMPTY RECIPE, THOUGH THAT WOULD HAVE COMPILED AND RUN.**
+   * `recipeSatisfied` is vacuously true on an empty input list, so a tree dropped into the
+   * converter path would fruit correctly — and it would also advance `untouchedTicks` every tick
+   * it fruited, which would hand the Corporate Charter to a player who planted a tree and ran one
+   * belt off it. That milestone's entire claim is *"a machine cannot advance work for 96,000
+   * straight ticks unless something is feeding it and something is emptying it, so what the
+   * counter certifies **is** a line"* — and a tree needs nothing feeding it. One extra role is
+   * cheaper than a Charter that means something different than it says.
+   */
+  Orchard: 11,
+  /**
+   * An Agri-Bot dock. Holds a bot's harvest for a belt to take away, and — on the planter — the
+   * seed hopper the bot replants from. Runs no work cycle of its own: the bot does the work, and
+   * the bot is an entity rather than a number on this machine.
+   */
+  BotDock: 12,
 } as const;
 
 export type MachineRole = (typeof MachineRole)[keyof typeof MachineRole];
+
+/** True for the two docks. A dock is bound to a zone and spawns exactly one bot. */
+export function isBotDockKind(kind: MachineKind): boolean {
+  return kind === MachineKind.HarvesterDock || kind === MachineKind.PlanterDock;
+}
 
 /** True for the roles that register as consumers on a pipe network and draw a ledger share. */
 export function isNetworkConsumer(role: MachineRole): boolean {
@@ -2045,6 +2540,254 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     coverageRadiusTiles: 0,
     moistureSensing: false,
   },
+
+  // --- keeping things -------------------------------------------------------------------
+  //
+  // Two boxes with lids, and the only difference between them is whether it is a shed or a
+  // barrow. Everything else — placed, moved, boxed, invoiced, ownership-gated, reach-checked,
+  // loaded with `LoadMachine`, emptied with `UnloadMachine` — is code that already existed and
+  // that neither of these needed a line of.
+  //
+  // They hold ONE PRODUCT AT A TIME, in `cargoItem`/`cargoCount`, which is the delivery cart's
+  // pair doing a second job. That is a container, not a warehouse: "what is in this" stays one
+  // word and one number, and a player who wants two products puts down a second box.
+  {
+    // THE CLOCK STOPS. §4 names it — "frozen in a Root Cellar" — and it is the top rung of the
+    // storage ladder, so it is dear, big, and needs the Agronomy node under it. Nothing in it ever
+    // turns, forever, which is why it holds five times a crate and costs thirty times as much.
+    kind: MachineKind.RootCellar,
+    slug: 'root-cellar',
+    role: MachineRole.Storage,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 25_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    inputCapacity: 100,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.RootCellar,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // Plan §3's assisted rung of the TRANSPORT ladder. Storage that follows you.
+    //
+    // It preserves as well as a crate does not — 15 minutes, exactly what the goods had loose —
+    // because a cart is a barrow with a tarp over it, and a hand cart that also refrigerated
+    // would make the $250 Root Cellar the second-best fridge in the game. What it buys is the
+    // TRIP: twenty-four goods at the cost of walking slower, which is precisely §1's rule that an
+    // assisted tool compresses trips and never replaces the verb.
+    kind: MachineKind.HandCart,
+    slug: 'hand-cart',
+    role: MachineRole.Storage,
+    tilesWide: 1,
+    tilesHigh: 1,
+    priceCents: 8_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    inputCapacity: 24,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: null,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // Compost → Fertilizer, and an ordinary `Converter` with nothing special about it at all.
+    // That is the point: §4's loop closes with a recipe, so it closes in the recipe executor.
+    kind: MachineKind.Composter,
+    slug: 'composter',
+    role: MachineRole.Converter,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 12_000,
+    workPerOperation: 60 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 20,
+    outputCapacity: 20,
+    tankCapacityMl: 0,
+    wearPerOperation: 1,
+    inputs: [{ item: ItemId.Compost, count: COMPOST_PER_FERTILIZER }],
+    outputItem: ItemId.Fertilizer,
+    overcookOutputItem: null,
+    requiresTech: TechId.Composting,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+
+  // --- the orchard ----------------------------------------------------------------------
+  //
+  // Three 2×2 permanent plants that survive harvest and fruit on a cycle (§5). The cycle is
+  // `workPerOperation ÷ workRatePerTick`, exactly as a Fryer's is — a tree is a machine that
+  // takes four active minutes to make one fruit out of nothing — so the Speed dial works on it,
+  // the progress bar means what it means everywhere else, and `MachineSpec` needed no new field.
+  //
+  // NO WEAR AND NO JAM: `wearPerOperation` is 0, because a tree is not machinery and §8 forbids
+  // hanging a maintenance chore off a feature in the release that is not about maintenance. They
+  // are dear to plant and free to keep, which is what makes planting one a decision.
+  {
+    kind: MachineKind.OrangeTree,
+    slug: 'orange-tree',
+    role: MachineRole.Orchard,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 20_000,
+    workPerOperation: 240 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 0,
+    outputCapacity: 12,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: ItemId.Orange,
+    overcookOutputItem: null,
+    requiresTech: TechId.Orchard,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    kind: MachineKind.LemonTree,
+    slug: 'lemon-tree',
+    role: MachineRole.Orchard,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 20_000,
+    workPerOperation: 240 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 0,
+    outputCapacity: 12,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: ItemId.Lemon,
+    overcookOutputItem: null,
+    requiresTech: TechId.Orchard,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // **THE GATE ON THE COLA LINE, AND THE ONLY TREE WHOSE FRUIT ANYTHING EATS.** A kola nut off
+    // this tree and a kola nut off the roadside stand are the same `ItemId`, deliberately: the
+    // Grinder does not care where its nut came from, and §4's consumable ladder is exactly a
+    // bought rung with a crafted rung under it. What the tree buys is that the nut stops costing
+    // 150¢ — which is a third of a bottle of soda's ingredients — so a soda line that plants an
+    // orchard is a soda line with a margin.
+    //
+    // Slower and dearer than the other two, because it is the one worth waiting for.
+    kind: MachineKind.KolaTree,
+    slug: 'kola-tree',
+    role: MachineRole.Orchard,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 45_000,
+    workPerOperation: 360 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 0,
+    outputCapacity: 12,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: ItemId.KolaNut,
+    overcookOutputItem: null,
+    requiresTech: TechId.KolaTree,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+
+  // --- the Agri-Bot docks ------------------------------------------------------------------
+  //
+  // A dock is a shed with a zone written on it. The bot is an entity in `WorldState.bots`; this
+  // machine is where it sleeps, what it fills, and — on the planter — where its seeds come from.
+  // `outputCapacity` is the floor a belt or a grabber drains; `inputCapacity` is the seed hopper.
+  {
+    kind: MachineKind.HarvesterDock,
+    slug: 'harvester-dock',
+    role: MachineRole.BotDock,
+    tilesWide: 2,
+    tilesHigh: 2,
+    // The automated rung, priced above every assisted tool on the same ladder and above the
+    // Truck Depot beside it: what it buys is the one chore nothing in this game has ever done for
+    // the player. Plan §3 prices the automated rung above the assisted one it replaces, and the
+    // assisted one here is a $60 scythe you still have to swing.
+    priceCents: 60_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    inputCapacity: 0,
+    outputCapacity: 40,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.AgriBots,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // The seed hopper on legs. §5: "regrowing crops automate first; one-shots wait for the
+    // seed-hopper bot — the crop list itself paces the arc", so this is the machine that makes
+    // potatoes, corn and gold potatoes automatable, and chili and cane never needed it.
+    kind: MachineKind.PlanterDock,
+    slug: 'planter-dock',
+    role: MachineRole.BotDock,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 50_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    /** Seeds the hopper holds. Hand-filled counts a touch; belt-filled does not. */
+    inputCapacity: 60,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.PlanterBot,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
 ];
 
 export function machineSpec(kind: MachineKind): MachineSpec | null {
@@ -2525,6 +3268,91 @@ export const HAND_REACH_SUBTILES_SQUARED = HAND_REACH_SUBTILES * HAND_REACH_SUBT
 /** 4 tiles/second, expressed per 100 ticks so the arithmetic stays exact (see tick.ts). */
 export const PLAYER_SPEED_SUBTILES_PER_100_TICKS = 5_120;
 
+// --- the assisted tier (plan §3's middle rung, on three ladders at once) ---------------
+//
+// §1 states what "assisted" MEANS mechanically and it is a design rule rather than flavour:
+// *"Tedium may live only in walking and waiting — the two things automation removes. The hand
+// actions themselves stay delightful forever."* An assisted tool COMPRESSES TRIPS and never
+// REPLACES THE VERB. The scythe still wants you to walk the row and swing; it just pays three
+// tiles for the swing. The cart still wants you to walk; it just carries more while you do.
+//
+// **THE BARREL SPRINKLER IS `MachineKind.Sprinkler`, AND IT HAS BEEN SINCE v0.1.** Item 023 asks
+// for a distinct, cheaper Barrel on the grounds that item 011 disclaimed the $150 sprinkler as
+// "the automated feel" — and re-reading the machine that actually shipped, that disclaimer is
+// what is wrong, not the machine. It has a real `tankCapacityMl`, it is filled BY CAN through
+// `RefillHopper`, it counts a `hopperRefill` touch, it shows `LampState.UtilityMissing` when it
+// runs dry, and it stops when the barrel is empty. That is the assisted rung, in full, down to
+// the lamp. The automated rung is the piped head at $250 and the Hub at $900, which need no
+// filling at all — so the ladder is 0 → $150 → $250 → $900 and no rung is missing.
+//
+// Shipping a second machine with identical behaviour and a lower price would be two names for one
+// rule, two prices for one object, and a build menu asking the player to decide something the
+// design already decided — the exact argument `MachineKind.BeltJunction` makes about splitters and
+// mergers. The debt item 023 was filed to pay was a LABEL, and this paragraph pays it.
+
+/**
+ * Subtiles per 100 ticks a hitched hand cart costs the player.
+ *
+ * **A DEDUCTION IN THE SAME UNITS AS THE SPEED, NEVER A FLOAT MULTIPLIER** (item 023's criterion,
+ * stated exactly that way). `PlayerState.moveAccum` already carries movement in hundredths of a
+ * subtile precisely so a rate that does not divide evenly stays exact, so a tow is one subtraction
+ * inside that accumulator and nothing anywhere becomes fractional.
+ *
+ * 1,280 of 5,120 is a quarter: four tiles a second becomes three. Slow enough to feel in the legs
+ * on a 64-tile lot, nowhere near slow enough to make the cart a mistake to own.
+ */
+export const TOW_SPEED_PENALTY_SUBTILES_PER_100_TICKS = 1_280;
+
+/**
+ * How many tiles one scythe swing cuts, and it is three because §3's table says
+ * *"Push-scythe, 3-wide"*.
+ *
+ * The three are PERPENDICULAR TO THE PLAYER'S FACING and centred on the tile swung at, so walking
+ * a row and swinging cuts a swathe the width of the row — which is the gesture the name describes.
+ * Unready tiles cost nothing and are left exactly as they were; a swing that finds one ripe tile
+ * and two bare ones harvests the one.
+ */
+export const SCYTHE_SWATHE_TILES = 3;
+
+// --- Agri-Bots (plan §3's automated rung of harvesting) --------------------------------
+
+/**
+ * Subtiles per 100 ticks a bot walks. **Deliberately slower than the farmer.**
+ *
+ * 3,072 is 2.4 tiles a second against the player's 4. A bot that outran you would make the
+ * automated rung feel like a cheat rather than a delegation, and §8's release gate for this
+ * feature is whether the player *watches with pride or alt-tabs* — something visibly plodding
+ * about its business is more watchable than something that blinks between tiles.
+ *
+ * It rides the same accumulator the player does, through the same function: see `movement.ts`.
+ */
+export const BOT_SPEED_SUBTILES_PER_100_TICKS = 3_072;
+
+/** How many goods a harvester carries before it must walk back to the dock. */
+export const BOT_CARRY_CAPACITY = 8;
+
+/**
+ * Condition one completed operation costs a bot. **PER OPERATION, NEVER PER TICK OR PER MINUTE**
+ * — §4 names this case explicitly: *"Agri-Bot upkeep is per-harvest-op, not weekly."*
+ *
+ * That is a direct instruction against the obvious design. Time-based upkeep would charge a player
+ * for leaving the tab open, which contradicts §6's clock outright, and a docked idle bot would
+ * rust while nothing happened. Here a bot that never harvests never wears, forever, and
+ * `test/bots.test.ts` pins exactly that over 10,000 ticks.
+ *
+ * Two per op against `CONDITION_MAX` of 1,000 is 500 harvests to the floor — a long afternoon,
+ * and repaired for free by hand at the dock like everything else.
+ */
+export const BOT_WEAR_PER_OPERATION = 2;
+
+/**
+ * Ticks a bot pauses at a tile to do the work, and at the dock to unload.
+ *
+ * It exists for the same reason `DEPOT_LOAD_TICKS` does: an action that happened between two
+ * ticks is an action the renderer has nothing to draw. Half an active second is a bend-down.
+ */
+export const BOT_WORK_TICKS = 10;
+
 /**
  * How long a walk-to errand may live before the sim gives up on it, in ticks.
  *
@@ -2667,6 +3495,34 @@ function balanceDigest(): string {
   h = fnv1aString(
     h,
     `${ROAD_EDGE_TILE_X}:${RUN_TICKS_PER_TILE_FROM_ROAD}:${CART_RUN_BASE_TICKS}:${CART_CAPACITY}:${DEPOT_RUN_BASE_TICKS}:${DEPOT_LOAD_TICKS}:${DEPOT_STOCK_CAPACITY}:${DEPOT_MAX_CONTRACTS}:${CONTRACT_MAX_QUANTITY}:${DESTINATION_MAX_LENGTH}`,
+  );
+  // Soil. A tile's soil is rolled once and saved, and the modifiers are read every time a crop is
+  // sown on it — so a build that retuned sand would grow a different crop on the same saved tile.
+  for (let i = 0; i < SOIL_SPECS.length; i++) {
+    const spec = SOIL_SPECS[i]!;
+    h = fnv1aString(
+      h,
+      `${spec.id}:${spec.slug}:${spec.growthPermille}:${spec.moistureDrainPermille}`,
+    );
+  }
+  // Harvested-inventory spoilage. THE FRESHNESS TABLE IS THE LOAD-BEARING HALF: a saved world
+  // holds stacks whose spoil ticks were computed from these windows, so a build that shortened a
+  // potato's fifteen minutes would describe a stack it did not write as further from turning than
+  // it is. The bucket and the stack cap ride along because they decide which stacks a save has at
+  // all, and the armful because it decides which verbs a world can still perform.
+  for (let i = 0; i < FRESHNESS_TICKS_BY_ITEM.length; i++) {
+    const row = FRESHNESS_TICKS_BY_ITEM[i]!;
+    h = fnv1aString(h, `${row.item}>${row.ticks}`);
+  }
+  h = fnv1aString(
+    h,
+    `${FRESHNESS_BUCKET_TICKS}:${FRESHNESS_MAX_STACKS}:${CRATE_FRESHNESS_TICKS}:${CRATE_PACK_CAPACITY}:${COMPOST_PER_SPOILED_ITEM}:${COMPOST_PER_FERTILIZER}:${ARMFUL_CAP_ITEMS}:${HARVESTS_PER_FERTILITY_STEP}:${FERTILITY_PER_FERTILIZER}:${FERTILITY_MIN}/${FERTILITY_MAX}`,
+  );
+  // The assisted tier and the bots. Every one of these is a rate or a capacity a saved world is
+  // mid-way through spending: a hitched cart's next step, a bot's next harvest, a swing's width.
+  h = fnv1aString(
+    h,
+    `${TOW_SPEED_PENALTY_SUBTILES_PER_100_TICKS}:${SCYTHE_SWATHE_TILES}:${BOT_SPEED_SUBTILES_PER_100_TICKS}:${BOT_CARRY_CAPACITY}:${BOT_WEAR_PER_OPERATION}:${BOT_WORK_TICKS}`,
   );
   return fnv1aToHex(h);
 }

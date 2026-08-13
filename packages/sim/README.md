@@ -306,6 +306,120 @@ into **Compost** on the tile, which the player can still pick up. There is no pa
 crop tile that pays zero, and there is no roll anywhere in it — a crop that wilted on a die
 roll would teach nothing.
 
+## The farm
+
+Plan §3's ladder runs manual → assisted → automated for every system in the game, and the farm was
+the column where only the bottom rung existed. What arrives here is the rest of it, plus the clock
+that makes any of it matter.
+
+**The roster is eight and five of them are `CropId`s.** §5 names Russet Potato, Gold Potato, Chili
+Pepper, Corn, Sugar Cane, and the three 2×2 trees — and **the trees are `MachineKind`s**. A
+`CropTile` is one tile with one crop on it, so a 2×2 tree expressed as a crop is four tiles each
+claiming a quarter of a plant, with nothing in the shape to say they are the same plant; every
+question the feature asks (which quarter do you harvest, what happens when you plant over a corner,
+where does the cooldown live) is then new. A `Machine` already answers all of them. The count still
+comes to eight: five sown, three planted. **`MachineRole.Orchard` is not `Converter` with an empty
+recipe**, though that would have compiled and run — a converter advancing work ticks
+`untouchedTicks`, and the Corporate Charter's whole claim is that a machine cannot advance work for
+96,000 ticks unless something is _feeding_ it. A tree needs nothing feeding it.
+
+**Soil scales the target once, at sowing.** `GROWTH_PER_WATERED_TICK` is 1 and there is no integer
+between 0 and 1, so sand's 1150‰ is a target 13% lower rather than growth 15% faster — divided once
+at planting it is exact, visible in the save, and cannot drift, and loam divides to exactly what the
+line computed before soil existed. Moisture goes the other way, through `CropTile.moistureAccum`:
+clay at 700‰ under a Russet's drain of 1 floors to **zero**, so a clay tile would never dry out at
+all without the accumulator. Fertility decay is **a counter, never a roll** — five harvests a star,
+floored at 1, so exhausted ground still feeds you while you go and fetch fertilizer.
+
+**Goods age in the player's hands and nowhere else.** That one sentence is how §4's _"timers freeze
+inside machine hoppers"_ is implemented: a machine buffer is `inputCounts: number[]`, a bare count
+per recipe line, and counts have no timer — so freeze is **structural** rather than a rule somebody
+could forget. The alternative was giving every buffer in the game per-stack spoil ticks and then
+advancing them with the world while held, which turns one integer into a list of pairs on every
+machine, in the hash, in the save, in the migration, in the loader, in `advanceConverter`, in
+`consumeRecipe` and in every grabber hand-off — to model a clock whose only legal value is
+_stopped_. Goods handed back OUT of a machine are stamped fresh from that tick, and that is not a
+laundering exploit worth closing: it costs two hand-verbs and a walk to gain what running the
+machine for one operation would have gained anyway, and §4's thesis for the whole section is that
+**processing is preservation**.
+
+**A crate is an item, not a building, and that only becomes obvious when you try it the other way.**
+Since nothing inside any machine has a clock, a placeable Crate would freeze its contents exactly as
+a Root Cellar does and the two would be one object with two prices — the same "two names for one
+rule" the belt junction ruling refuses. The distinction §4 actually draws is between goods **loose**
+and goods **crated**, and both of those are in your arms. So the Crate is a consumable you pack a
+stack into, refused rather than eaten when it would not help, and the Root Cellar is a hundred slots
+where the clock stops.
+
+**The armful gates the verb, not the container.** `addItem` is deliberately still unbounded, because
+half the things that put goods in the bag are involuntary — a belt taken up with forty slices on it,
+a machine boxed with a full hopper, a cancelled contract, a refund — and a cap enforced inside
+`addItem` would have to either destroy those goods or refuse the verb that returns them. Both are
+fines for misplacement, which §4 rules out flat. So the cap is asked at the voluntary door instead:
+harvest, buy, unload, take-from-storage, pick up compost. **A full player cannot harvest and the
+crop stays in the ground**, which is the anti-softlock answer as well as the criterion — a tile you
+could not pick is a tile that is still there when you come back with room. Boxed machines are
+exempt: a box is not a good, the bin refuses one, and demolishing a factory must not fill your hands
+with turnips.
+
+**The Barrel Sprinkler is `MachineKind.Sprinkler` and has been since v0.1.** Item 023 asks for a
+distinct, cheaper Barrel on the grounds that item 011 disclaimed the $150 sprinkler as "the
+automated feel" — and re-reading the machine that actually shipped, the disclaimer is what is wrong.
+It has a real tank, it is filled by can through `RefillHopper`, it counts a `hopperRefill` touch, it
+shows the blue utility lamp when dry, and it stops when the barrel is empty. That is the assisted
+rung in full, down to the lamp; the automated rung is the piped head at $250 and the Hub at $900,
+which need no filling at all. The debt was a **label**, and shipping a second machine with identical
+behaviour would have been a build menu asking the player to decide something already decided.
+
+**One swing is one touch.** Plan §6's taxonomy counts _hands on the world_, and a scythe swing is
+one motion of one pair of arms. Counting three would make the assisted rung score **worse** on
+Hands-Free than doing the same work by hand, which inverts the whole ladder — the way to win a board
+about not touching things would be to refuse the tool that touches them less.
+
+## The Agri-Bots, and the one mover
+
+**There is exactly one mover in this simulation and that is the point of `movement.ts`.** Item 039
+requires its repair drones to reuse the Agri-Bot movement code _verbatim_, which is a promise you
+can only keep about code that lives in one place — so rather than writing a bot mover beside the
+player's errand walk and keeping them in step by remembering to, the walk that already existed was
+**generalised**. `advanceErrand` had carried the whole thing since v0.1: accrue speed into a
+hundredths accumulator, spend whole subtiles, aim straight, clamp to the world, face the dominant
+axis. None of that was ever about the player. It moved to `stepToward`, the errand calls it, the
+bots call it, and the arithmetic did not change in the move — a replay of a pre-bot world walks the
+farmer over exactly the same subtiles.
+
+**The route is dumb on purpose.** A bot scans its zone's tiles in field-index order from a cursor
+stored in `WorldState`, takes the first that wants work, and walks at it in a straight line: no A\*,
+no float distances, no `Math.sqrt` heuristics, no dynamic avoidance, and a tile it cannot service is
+skipped rather than queued. Nothing in this world is solid enough to walk into, so a path around an
+obstacle would be a path around nothing — and pathing is where determinism usually dies. The cursor
+is world state rather than a module variable for the reason the Irrigation Hub's is.
+
+**The zone is the bot's only instruction set.** Item 018 already built a surface that says what
+should be growing where; a dock carrying its own crop and its own tile list would be a second answer
+to the same question, and the two would disagree the first time somebody repainted a rectangle.
+`Machine.boundZone` is an id rather than a copy of the tiles, so repainting re-aims the bot with no
+command at all.
+
+**Upkeep is per completed operation and never per tick** — §4 names this case by name. A docked idle
+bot wears exactly nothing, forever, because time-based upkeep would charge a player for leaving the
+tab open, which contradicts §6's clock outright.
+
+**Hand-fed costs a touch and belt-fed costs nothing, and the Hands-Free board rests on it.** §6's
+taxonomy makes _"hand-refilling any hopper (seeds, kits, consumables)"_ a disqualifier, so the two
+paths are different functions rather than one function with a flag: `RefillHopper` in `tick.ts` is
+the hand's and counts, `dockAcceptSeed` in `bots.ts` is the belt's and does not. A genuinely
+hands-free farm therefore has to feed its planter by belt, which is the design turning that board
+into a logistics problem rather than a purchase.
+
+**What the golden set cannot reach, said plainly.** The dock is gated on the Corporate Charter,
+whose milestone is 96,000 consecutive ticks of untouched work, so a fixture that reached
+`SetDockZone` honestly would be a six-figure-tick recording of a belt loop built to satisfy a
+checklist. `SetDockZone` is therefore the one entry in `GOLDEN_COVERAGE_EXEMPT`, and `test/bots.test.ts`
+pins what a fixture would have: two worlds built the same way and stepped the same way hash
+identically, a bot clears its zone with no player input, and an idle bot wears nothing over ten
+thousand ticks.
+
 ## Selling above the roadside stand
 
 Plan §3's ladder runs manual → assisted → automated for every system in the game, and selling
@@ -527,8 +641,11 @@ explicitly"):
 - **The Evaporator** — water → salt, for seasoning.
 - **The chili grinder** — chili → chili powder. The Grinder that ships takes kola nuts only.
 - **Corn syrup** — a second sweetener route into the Syrup Mixer's syrup inlet.
-- **Kola as a crop.** There is none and there will not be one: §5 caps the roster at eight and
-  §7 ruling 8 closes it, which is exactly why kola arrives as a bought nut.
+- ~~**Kola as a crop.**~~ **Built** — as a 2×2 tree, which is what §5 listed all along. The cap of
+  eight was never in danger: §5's roster is five sown crops and three trees, and the ninth _sown_
+  crop is the thing §7 ruling 8 closes the door on. A kola nut off your own tree and one off the
+  roadside stand are the same `ItemId`, deliberately: the Grinder does not care where its nut came
+  from, and §4's consumable ladder is exactly a bought rung with a crafted rung under it.
 
 `LiquidId` reserves **5 for kola syrup**, which the renderer already has a colour for. Skipping a
 number now is cheaper than renumbering a shipped save later.
@@ -565,7 +682,17 @@ non-empty result is a bug in units, not in the hash.
 ## Saves
 
 `serialize(state)` produces a plain-JSON `SaveEnvelope`; `restoreWorld(value)` parses,
-migrates, and deserializes one. The chain is at **format 10** — the third Charter and the belt
+migrates, and deserializes one. The chain is at **format 11** — the farm: every perishable stack in
+the bag carries the tick it turns, every field tile carries its soil, its moisture remainder and its
+fertility counter, every machine carries the zone a dock is bound to, the player carries the cart
+they are towing, and the world carries a sorted list of Agri-Bots. Four items landed in one release
+and therefore in one migration step; the chain's rule is one migration per _released_ version, and
+11 is not released until this ships. Almost all of 10 → 11 is empty and zero because no format-10
+save can name a bot, a cart or a dock — the two exceptions are soil, which becomes **loam** rather
+than being rolled (a half-grown crop's `growthTarget` was computed at loam rates, so calling its
+tile clay afterwards would leave a crop whose target agrees with no soil at all), and freshness,
+which is computed **generously** so a returning player opens their bag to fresh potatoes rather
+than to a compost heap. Format 10 was the third Charter and the belt
 junction, so every machine carries the untouched-work clock the Corporate Charter's milestone is
 read off and the two round-robin cursors a junction alternates on, and the stats block carries the
 lot's high-water mark. A format-9 world had no junctions and had never been asked how long a line
@@ -594,6 +721,8 @@ are in [`src/save/README.md`](src/save/README.md). The IndexedDB driver lives in
 | `upgrades.ts` | The three per-machine dials. Scales numbers; unlocks nothing               |
 | `state.ts`    | `WorldState`, `createWorld`, and the accessors over it                     |
 | `belts.ts`    | Belt movement, hand-off, and grabber arms                                  |
+| `movement.ts` | **The one mover.** Straight-line travel in integer subtiles                |
+| `bots.ts`     | Agri-Bots: the dock, the route, and what a bot does when it arrives        |
 | `zones.ts`    | Zone painting, readouts, and the seed hopper                               |
 | `water.ts`    | Reservoirs, the throttle curve, and `takeWater()` — the one draw path      |
 | `pipes.ts`    | Pipe networks, placement refusals, and the one-ledger flow tick            |

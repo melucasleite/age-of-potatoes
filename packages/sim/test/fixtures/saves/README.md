@@ -21,6 +21,8 @@ looked like, and the code that wrote it will be long gone.
 
 | `format-9.json` | 9 | 2026-08-13, `v0.4.0` | Seed 320480, tick 17,949. The first save with **vehicles** in it, caught at a moment that exists for about two hundred ticks in the world's whole history: a delivery cart 212 ticks from home with eight bags aboard, a truck that left the depot moments ago with five more, one bag already on the depot floor for the next run — and **not a penny of it paid yet**. |
 
+| `format-11.json` | 11 | 2026-08-13, `v0.4.0` | Seed 90210, tick 66,516. The first save with a **clock on the goods** and a **robot on the lot**: an Agri-Bot between the row and its dock with eight potatoes in its arms and 32 hundredths of a subtile banked in its walk, two heaps of potatoes on two different deadlines beside a heap of slices on a third, a hand cart in tow, and three soils under the field. |
+
 | `format-10.json` | 10 | 2026-08-13, `v0.4.0` | Seed 320320, tick 22,929. The first save with a **belt junction** in it, caught mid-rotation: one bag already sent north and one sent east, four more riding the feed belt, and a Chip Kitchen 381 ticks into a run nobody has touched. |
 
 `format-10.json` was recorded by replaying the `depot-run` golden fixture, then driving `step()`
@@ -136,3 +138,29 @@ assertion in `save.test.ts` would still pass. The format 7 → 8 migration does 
 file at all — it was born on the 64-wide map — which is exactly why `format-3.json` is the one
 that proves the network-id widening: it has seventeen pipes on it, laid when a row was sixteen
 tiles long.
+
+`format-11.json` was recorded by replaying the `the-farm` golden fixture — a genuinely played
+world, with soil under its crops, freshness stacks in the bag, a hand cart in the yard and a
+Composter that has run — and then putting on the lot the one thing no fixture can reach by
+command: an **Agri-Bot**. The dock is gated on the Corporate Charter, whose milestone is 96,000
+consecutive ticks of untouched work, so the dock, its zone and its bot were spawned directly and
+the world stepped until the robot was genuinely between two places. That mixture is deliberate and
+it is stated here rather than hidden: the played half is what makes the soil, the stacks and the
+cart real, and the spawned half is the only way this format's newest entity gets into a permanent
+file at all.
+
+The moment is the point, as always. **A bot's position, its walk accumulator and a stack's
+deadline are all mid-flight quantities.** A parked bot has a zero accumulator, a freshly filled bag
+has exactly one stack, and a farm at rest would round-trip perfectly while proving nothing about
+the format it was written for. This one is caught mid-stride with eight potatoes in its arms, two
+potato heaps on two deadlines, and the player towing a cart while it happens.
+
+The 10 → 11 migration is the widest in the chain — four items landed in one release — and almost
+all of it is empty and zero for the usual reason: no format-10 save can name a bot, a hand cart or
+a dock, because none of those existed. The two that are NOT defaults are worth knowing. Soil
+becomes **loam** on every migrated tile rather than being rolled, because `growthTarget` is
+computed from the soil at sowing and a half-grown crop's target was calculated at loam rates —
+calling that tile clay afterwards would leave a crop whose target agrees with no soil at all. And
+freshness is **computed to be generous**: every perishable stack comes back with its full window
+ahead of it, measured from the tick the save was written, because the world that was saved had no
+clock at all and time does not pass when nobody is playing.

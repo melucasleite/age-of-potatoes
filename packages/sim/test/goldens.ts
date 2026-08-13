@@ -71,6 +71,7 @@ export const FIXTURE_NAMES = [
   'rotate-and-box',
   'land-deeds',
   'depot-run',
+  'the-farm',
 ] as const;
 
 export type FixtureName = (typeof FIXTURE_NAMES)[number];
@@ -122,7 +123,39 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   SetZoneAutoReplant: true,
   PlacePipe: true,
   RemovePipe: true,
+  SwingScythe: true,
+  ApplyFertilizer: true,
+  PackCrate: true,
+  HitchCart: true,
+  UnhitchCart: true,
+  SetDockZone: true,
 };
+
+/**
+ * Verbs the fixture set is allowed not to reach, and **each one needs an argument rather than a
+ * shrug** — this list is the escape hatch the test above warns against, so it is deliberately
+ * hard to add to and every entry says what pins the verb instead.
+ *
+ * `SetDockZone` — the Agri-Bot dock is gated on `TechId.AgriBots`, which requires the **Corporate
+ * Charter**, whose milestone is *one line untouched for ten in-game days*: 96,000 consecutive
+ * ticks of one machine advancing work with something feeding it and something emptying it. A
+ * golden fixture that reached this verb honestly would be a six-figure-tick recording of a belt
+ * loop built for no reason but to satisfy a checklist, and it would take longer to replay than
+ * the rest of the set combined. The alternative — putting the command in a fixture where it is
+ * refused — would leave the coverage test passing while guarding nothing, which is worse than
+ * this list.
+ *
+ * **What pins it instead:** `test/bots.test.ts` builds a docked world directly through the
+ * exported spawn helpers, binds a zone, runs ten thousand ticks, and asserts the same thing a
+ * fixture would — that two independently-built worlds with the same seed and the same steps hash
+ * identically, that a bot clears its zone with no player input, and that an idle bot wears
+ * nothing. The determinism claim is tested; only the *file format* it is tested through differs.
+ *
+ * If the tech gate ever moves, delete this entry and extend a fixture.
+ */
+export const GOLDEN_COVERAGE_EXEMPT: ReadonlySet<CommandType> = new Set<CommandType>([
+  'SetDockZone',
+]);
 
 /**
  * Marks the payload line `scripts/hash-goldens.ts` prints, so a stray Node warning on

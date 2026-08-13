@@ -63,8 +63,30 @@ export type { RngState } from './rng';
 
 // --- balance data -----------------------------------------------------------------
 export {
+  ARMFUL_CAP_ITEMS,
   AUTO_REPLANT_PERIOD_TICKS,
   BALANCE_HASH,
+  BOT_CARRY_CAPACITY,
+  BOT_SPEED_SUBTILES_PER_100_TICKS,
+  BOT_WEAR_PER_OPERATION,
+  BOT_WORK_TICKS,
+  COMPOST_PER_FERTILIZER,
+  COMPOST_PER_SPOILED_ITEM,
+  CRATE_FRESHNESS_TICKS,
+  CRATE_PACK_CAPACITY,
+  FERTILITY_PER_FERTILIZER,
+  FRESHNESS_BUCKET_TICKS,
+  FRESHNESS_MAX_STACKS,
+  FRESHNESS_TICKS_BY_ITEM,
+  HARVESTS_PER_FERTILITY_STEP,
+  SCYTHE_SWATHE_TILES,
+  SOIL_SPECS,
+  SoilType,
+  TOW_SPEED_PENALTY_SUBTILES_PER_100_TICKS,
+  freshnessTicks,
+  isBotDockKind,
+  isPerishable,
+  soilSpec,
   BELT_ITEM_SPACING_SUBTILES,
   BOXED_MACHINE_ROWS,
   BELT_MAX_LENGTH_TILES,
@@ -332,6 +354,8 @@ export {
   WORLD_STATE_VERSION,
   addBoxedMachine,
   addItem,
+  addItemFresh,
+  armfulRoom,
   beltAt,
   beltById,
   beltCoversTile,
@@ -340,6 +364,8 @@ export {
   beltInsert,
   beltTileAtIndex,
   beltTileIndexForDist,
+  botById,
+  carriedCount,
   clipZoneName,
   computeNetWorthCents,
   createWorld,
@@ -348,8 +374,11 @@ export {
   fieldIndex,
   fieldTileX,
   fieldTileY,
+  fertilizeTile,
   grabberAt,
   grabberById,
+  hasArmfulRoom,
+  inventorySlot,
   isCompassDirection,
   isFieldTile,
   isInsideWorld,
@@ -371,16 +400,21 @@ export {
   oppositeDirection,
   peekBoxedMachine,
   plantCrop,
+  removeBotsForDock,
   removeItem,
   removeZone,
   rotateDirectionClockwise,
   clipDestination,
   contractById,
+  soonestSpoilTick,
   spawnBelt,
+  spawnBot,
   spawnGrabber,
   spawnMachine,
   spawnPipe,
+  spoilTickFor,
   takeBoxedMachine,
+  takeHarvest,
   takeOneOutput,
   spawnReservoir,
   spawnZone,
@@ -393,10 +427,13 @@ export {
 export type {
   Belt,
   BeltItem,
+  Bot,
   BoxedMachine,
   Contract,
   CropTile,
+  FreshStack,
   Grabber,
+  HarvestResult,
   InventorySlot,
   Machine,
   MachinePort,
@@ -409,6 +446,16 @@ export type {
   WorldState,
   Zone,
 } from './state';
+export { BotKind, BotPhase } from './state';
+
+// --- movement ---------------------------------------------------------------------
+//
+// ONE MOVER, and item 039's drones are required to reuse it verbatim. See `movement.ts`.
+export { resetMomentum, stepToward } from './movement';
+export type { Mover } from './movement';
+
+// --- Agri-Bots --------------------------------------------------------------------
+export { advanceBots, dockAcceptSeed, dockSeedCount, dockWantedSeed, isBotDock } from './bots';
 
 // --- commands ---------------------------------------------------------------------
 export { appendTrace } from './commands';

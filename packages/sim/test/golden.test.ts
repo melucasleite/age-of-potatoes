@@ -21,6 +21,7 @@ import { findNonIntegerFields, hashState } from '../src/index';
 import {
   type GoldenFixture,
   FIXTURE_NAMES,
+  GOLDEN_COVERAGE_EXEMPT,
   HASH_LINE_PREFIX,
   REQUIRED_COMMAND_COVERAGE,
   loadAllFixtures,
@@ -109,7 +110,9 @@ describe('fixture set health', () => {
       for (const entry of fixture.commands) seen.add(entry.command.type);
     }
 
-    const required = Object.keys(REQUIRED_COMMAND_COVERAGE).sort();
+    const required = Object.keys(REQUIRED_COMMAND_COVERAGE)
+      .sort()
+      .filter((type) => !GOLDEN_COVERAGE_EXEMPT.has(type as never));
     const missing = required.filter((type) => !seen.has(type));
 
     expect(

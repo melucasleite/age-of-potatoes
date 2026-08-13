@@ -3,7 +3,7 @@
   "description": "Six potatoes planted, watered once, and then left. Ticks past maturity, past the 30-active-minute in-ground grace, and past the wilting window so the crop turns; one tile is harvested as Day-Old and sold at half list, and the rest are left long enough to collapse into Compost, which is then swept up off the bare tiles. Pins the whole withering timeline, including the rule that nothing is ever worth zero.",
   "seed": 31337,
   "ticks": 60212,
-  "expectedHash": "fc31233f",
+  "expectedHash": "93a5f205",
   "commands": [
     {
       "tick": 0,

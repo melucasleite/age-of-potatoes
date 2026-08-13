@@ -37,6 +37,17 @@ export const SystemId = {
   Harvest: 'harvest',
   /** Reserved for demand saturation (plan §4). Unused in v0.1. */
   Economy: 'economy',
+  /**
+   * One-time field generation: which soil each tile is made of.
+   *
+   * **A NEW STREAM RATHER THAN A SECOND DRAW FROM `FieldInit`, AND PLAN §12 REQUIRES IT.**
+   * Fertility is rolled from `FieldInit` in `createWorld`, tile by tile; taking soil from the
+   * same generator would interleave a second draw between every existing one and give every
+   * world that has ever been seeded a different field. Derivation goes through the id's
+   * *string*, so adding this leaves `field-init` bit-identical — that is the whole reason the
+   * derivation was built that way, and this is the first system to spend it.
+   */
+  SoilInit: 'soil-init',
 } as const;
 
 export type SystemId = (typeof SystemId)[keyof typeof SystemId];
@@ -47,6 +58,7 @@ export const SYSTEM_IDS: readonly SystemId[] = [
   SystemId.Economy,
   SystemId.FieldInit,
   SystemId.Harvest,
+  SystemId.SoilInit,
 ];
 
 function rotl(x: number, k: number): number {

@@ -25,6 +25,7 @@ import {
   grabberSpec,
   machineSpec,
 } from './data';
+import { dockAcceptSeed } from './bots';
 import { depotAccept } from './commerce';
 import {
   type Belt,
@@ -379,6 +380,15 @@ function grabberPlace(state: WorldState, grabber: Grabber): boolean {
     // "look downstream" stall as a full hopper, saying the same thing about the same mistake.
     if (machineSpecFor.role === MachineRole.TruckDepot) {
       return depotAccept(state, machine, grabber.held as ItemId);
+    }
+    // AN AGRI-BOT DOCK HAS NO RECIPE EITHER, and its door is the one that makes the Hands-Free
+    // board adjudicable. A planter's seed hopper can be filled by hand or by belt; §6's taxonomy
+    // makes the hand path a `hopperRefill` touch and the belt path free, so the two are different
+    // functions rather than one function with a flag — and this is the free one. It refuses a seed
+    // the dock's zone did not ask for and a hopper that is full, and the arm then stands there
+    // holding it: the same "look downstream" stall a full Fryer hopper gives.
+    if (machineSpecFor.role === MachineRole.BotDock) {
+      return dockAcceptSeed(state, machine, grabber.held);
     }
     // An arm puts what it is holding into the line of the recipe that wants it, and stands there
     // holding it if no line does. That is the same "look downstream" stall a blocked arm has

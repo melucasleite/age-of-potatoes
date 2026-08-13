@@ -58,6 +58,52 @@ export interface HarvestTileCommand {
   tileY: number;
 }
 
+/**
+ * Swing the push-scythe: three tiles at once, across the player's path.
+ *
+ * **ONE SWING IS ONE COMMAND AND ONE TOUCH.** The three tiles are computed by the sim from the
+ * player's facing and the tile swung at — there is no tile list in the payload, for the same
+ * reason `RotateGrabber` carries no direction: which three tiles a swing cuts is the sim's rule,
+ * and a client that could send the list is a client that could send the wrong one.
+ *
+ * Unready tiles cost nothing and are left untouched, so a swing at the end of a row is a swing,
+ * not a mistake. Refused entirely unless the player owns a `PushScythe`, which is never consumed.
+ */
+export interface SwingScytheCommand {
+  type: 'SwingScythe';
+  tileX: number;
+  tileY: number;
+}
+
+/**
+ * Work a bag of Fertilizer into a tile, putting a fertility star back.
+ *
+ * The closing arrow of plan §4's loop — *"spoiled goods → Compost → Fertilizer"* — and the reason
+ * a player builds a Composter at all. Reach-gated like every verb you do with your hands, and
+ * **refused rather than consumed** on a tile already at full stars: misplacement is never a fine.
+ */
+export interface ApplyFertilizerCommand {
+  type: 'ApplyFertilizer';
+  tileX: number;
+  tileY: number;
+}
+
+/**
+ * Pack a perishable stack into a crate, buying it §4's *"45 crated"*.
+ *
+ * NOT REACH-GATED, and not a placement: a crate is a thing in your bag that you put other things
+ * in your bag into. There is nothing to stand next to. It is the same shape as
+ * `SellBoxedMachine`, which is also paperwork done from the inventory panel.
+ *
+ * Consumes one `ItemId.Crate` and is refused — never consumed — when it would not help: an
+ * unperishable item, an empty bag, or goods that are already crated and would gain nothing.
+ */
+export interface PackCrateCommand {
+  type: 'PackCrate';
+  item: ItemId;
+  count: number;
+}
+
 /** Buy and place a machine at its invoice price. */
 export interface PlaceMachineCommand {
   type: 'PlaceMachine';
@@ -293,6 +339,50 @@ export interface CancelContractCommand {
   contractId: number;
 }
 
+// --- the hand cart, and the Agri-Bot dock ---------------------------------------------
+
+/**
+ * Take hold of a hand cart's handles. Counts a `handCarry` touch.
+ *
+ * **THE TOW IS ONE COMMAND AND THEN IT IS WORLD STATE**, not a held key. `PlayerState.towedCartId`
+ * says which cart is in the player's hands, and from that tick the cart's tile follows the player
+ * and the player walks slower — so a save loaded mid-haul comes back with the cart still in tow,
+ * and a replay drags it over exactly the same subtiles. A key held down would put the tow in the
+ * input layer, which is the same mistake as sending movement deltas.
+ *
+ * Reach-gated, because you are picking up a handle. Hitching a second cart drops the first, which
+ * is the only sensible reading of a player with two hands and one back.
+ */
+export interface HitchCartCommand {
+  type: 'HitchCart';
+  cartId: number;
+}
+
+/** Let go. Free, always — the cart stands where the player was standing. */
+export interface UnhitchCartCommand {
+  type: 'UnhitchCart';
+}
+
+/**
+ * Point an Agri-Bot dock at a Grow Zone.
+ *
+ * **THE ZONE IS THE BOT'S ONLY INSTRUCTION SET** (item 038's constraint): item 018 already built
+ * a surface that says what should be growing where, and a dock with its own crop and its own tile
+ * list would be a second answer to the same question — one that disagrees the first time somebody
+ * repaints a rectangle. This command carries a zone id and nothing else, because there is nothing
+ * else about a dock to configure.
+ *
+ * NO TOUCH AND NO REACH CHECK, exactly like `SetGrabberFilter` beside it and `CreateContract`
+ * before it. Retuning a machine from a panel is paperwork; it is `RotateGrabber` — reaching out
+ * and shoving something — that is the physical verb.
+ */
+export interface SetDockZoneCommand {
+  type: 'SetDockZone';
+  machineId: number;
+  /** 0 to unbind. A dock with no zone has no orders and its bot parks. */
+  zoneId: number;
+}
+
 // --- belts and grabbers -------------------------------------------------------------
 
 /** Lay one straight belt segment. Corners are two segments meeting, not a curve. */
@@ -480,6 +570,12 @@ export type Command =
   | WaterTileCommand
   | PlantTileCommand
   | HarvestTileCommand
+  | SwingScytheCommand
+  | ApplyFertilizerCommand
+  | PackCrateCommand
+  | HitchCartCommand
+  | UnhitchCartCommand
+  | SetDockZoneCommand
   | PlaceMachineCommand
   | LoadMachineCommand
   | UnloadMachineCommand

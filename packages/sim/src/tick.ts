@@ -44,10 +44,13 @@ import {
   type CreateZoneCommand,
   type DeconstructMachineCommand,
   type DispatchCartCommand,
+  type ApplyFertilizerCommand,
   type HarvestTileCommand,
+  type HitchCartCommand,
   type LoadCartCommand,
   type LoadMachineCommand,
   type MoveMachineCommand,
+  type PackCrateCommand,
   type PaintZoneCommand,
   type PlaceBeltCommand,
   type PlaceGrabberCommand,
@@ -64,11 +67,13 @@ import {
   type RotateGrabberCommand,
   type SellBoxedMachineCommand,
   type SellItemCommand,
+  type SetDockZoneCommand,
   type SetGrabberFilterCommand,
   type SetMoveDirectionCommand,
   type SetZoneAutoReplantCommand,
   type SetZoneCropCommand,
   type SetZonePriorityCommand,
+  type SwingScytheCommand,
   type UnloadMachineCommand,
   type UpgradeMachineCommand,
   type UseRepairKitCommand,
@@ -80,6 +85,12 @@ import {
 import {
   BELT_MAX_LENGTH_TILES,
   COMPOST_AFTER_TICKS,
+  COMPOST_PER_SPOILED_ITEM,
+  CRATE_FRESHNESS_TICKS,
+  CRATE_PACK_CAPACITY,
+  FRESHNESS_BUCKET_TICKS,
+  SCYTHE_SWATHE_TILES,
+  TOW_SPEED_PENALTY_SUBTILES_PER_100_TICKS,
   COMPOST_PER_CROP,
   CONDITION_EFFECT_THRESHOLD,
   CONDITION_MAX,
@@ -122,14 +133,18 @@ import {
   boxedMachineScrapCents,
   cropSpec,
   grabberSpec,
+  isBotDockKind,
+  isPerishable,
   isPurchasable,
   isSellable,
   listPriceCents,
   machineKindForBoxedItem,
   machineSpec,
-  wiltStageForAge,
+  soilSpec,
 } from './data';
 import { advanceBelts, advanceGrabbers, advanceJunctions } from './belts';
+import { advanceBots, dockWantedSeed } from './bots';
+import { stepToward } from './movement';
 import {
   advanceCommerce,
   cartRoomFor,
@@ -156,6 +171,7 @@ import {
 import { SystemId, nextBelow } from './rng';
 import {
   type Machine,
+  BotKind,
   CeremonyId,
   ContractPhase,
   Direction,
@@ -164,6 +180,8 @@ import {
   type WorldState,
   addBoxedMachine,
   addItem,
+  addItemFresh,
+  armfulRoom,
   beltById,
   clipDestination,
   clipZoneName,
@@ -171,7 +189,10 @@ import {
   contractById,
   directionStepX,
   directionStepY,
+  fertilizeTile,
   grabberById,
+  hasArmfulRoom,
+  inventorySlot,
   isCompassDirection,
   isFieldTile,
   isInsideWorld,
@@ -188,8 +209,11 @@ import {
   ownParcel,
   peekBoxedMachine,
   plantCrop,
+  removeBotsForDock,
   removeItem,
   rotateDirectionClockwise,
+  soonestSpoilTick,
+  spawnBot,
   spawnBelt,
   spawnGrabber,
   spawnMachine,
@@ -197,6 +221,7 @@ import {
   spawnZone,
   streamFor,
   takeBoxedMachine,
+  takeHarvest,
   takeOneOutput,
   tileAt,
   tileOccupied,
@@ -260,6 +285,11 @@ export function step(state: WorldState, input: TickInput): void {
   advancePlayer(state);
   advanceWater(state);
   advanceMachines(state);
+  // Bots run with the machines rather than with the crops, and just after them: a bot is
+  // machinery, its dock is a machine, and the goods it drops on that dock's floor should be
+  // available to the belt that empties it on the same tick they land. The same latency argument
+  // that puts `advanceMachines` before `advanceBelts`.
+  advanceBots(state);
   advanceBelts(state);
   // Between the belts and the arms, and that is the only place it can go: a junction hands off
   // from one belt to another, so the belts must already have moved this tick and the grabbers
@@ -270,6 +300,12 @@ export function step(state: WorldState, input: TickInput): void {
   advanceCommerce(state);
   advanceZones(state);
   advanceCrops(state);
+  // LAST BEFORE THE CLOCK, AND THAT PLACEMENT IS THE ONE THING TO GET RIGHT ABOUT IT. A stack
+  // spoils when `state.tick` reaches its deadline, and `state.tick` is incremented on the line
+  // below — so running the sweep here means a stack stamped for tick N is swept on tick N, once,
+  // by the tick that owns it. Running it before the commands would let a good the player picked
+  // up this tick be judged against last tick's clock.
+  advanceSpoilage(state);
   advanceStats(state);
 
   state.tick += 1;
@@ -309,6 +345,18 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applyPlantTile(state, command);
     case 'HarvestTile':
       return applyHarvestTile(state, command);
+    case 'SwingScythe':
+      return applySwingScythe(state, command);
+    case 'ApplyFertilizer':
+      return applyApplyFertilizer(state, command);
+    case 'PackCrate':
+      return applyPackCrate(state, command);
+    case 'HitchCart':
+      return applyHitchCart(state, command);
+    case 'UnhitchCart':
+      return applyUnhitchCart(state);
+    case 'SetDockZone':
+      return applySetDockZone(state, command);
     case 'PlaceMachine':
       return applyPlaceMachine(state, command);
     case 'LoadMachine':
@@ -558,10 +606,25 @@ function applyHarvestTile(state: WorldState, command: HarvestTileCommand): boole
   const tile = tileAt(state, command.tileX, command.tileY);
   if (tile === null) return false;
   if (!withinReachOfTile(state, command.tileX, command.tileY)) return false;
+  return harvestOneTile(state, tile);
+}
 
+/**
+ * The hand-harvest of one tile, shared by the click and by each of the scythe's three.
+ *
+ * **A FULL PLAYER CANNOT HARVEST, AND THE CROP STAYS IN THE GROUND.** That is item 023's
+ * criterion word for word and it is also the anti-softlock answer: refusing costs nothing,
+ * because a tile you could not pick is a tile that is still there when you come back with room.
+ * The alternative — harvest anyway and drop the overflow — is a fine for misplacement, which
+ * plan §4 rules out. The check is deliberately pessimistic about the yield (it asks for room for
+ * the whole armful the tile might give, plus the seed it hands back) rather than harvesting and
+ * discovering.
+ */
+function harvestOneTile(state: WorldState, tile: WorldState['field'][number]): boolean {
   if (!isTileReady(tile)) {
     // Sweeping up after a crop you never got to. Still worth bending down for.
     if (tile.compost <= 0) return false;
+    if (!hasArmfulRoom(state, tile.compost)) return false;
     addItem(state, ItemId.Compost, tile.compost);
     tile.compost = 0;
     touch(state, 'handCarry');
@@ -571,32 +634,139 @@ function applyHarvestTile(state: WorldState, command: HarvestTileCommand): boole
   const spec = cropSpec(tile.crop);
   if (spec === null) return false;
 
-  const bonus = nextBelow(streamFor(state, SystemId.Harvest), 2);
-  const yieldCount = tile.fertility + bonus;
-  const wilted = wiltStageForAge(tile.readyAge) === WiltStage.Wilted;
+  // The most this pull could possibly hand over: the yield at its luckiest, the compost on the
+  // tile, and the seed a one-shot returns. Asked BEFORE anything is mutated, because `takeHarvest`
+  // clears the tile and there would be nothing to put back.
+  const worstCase = tile.fertility + 1 + tile.compost + (spec.regrowTicks > 0 ? 0 : 1);
+  if (!hasArmfulRoom(state, worstCase)) return false;
 
-  addItem(state, wilted ? spec.dayOldItem : spec.yieldItem, yieldCount);
+  const result = takeHarvest(state, tile, spec);
+  if (result === null) return false;
+
+  addItem(state, result.item, result.count);
   if (tile.compost > 0) {
     addItem(state, ItemId.Compost, tile.compost);
     tile.compost = 0;
   }
+  // Any potato replants as a seed — the anti-softlock floor of plan §4. Regrowing crops keep the
+  // plant instead and return nothing, which `takeHarvest` has already decided.
+  if (spec.regrowTicks <= 0) addItem(state, spec.seedItem, 1);
 
-  if (spec.regrowTicks > 0) {
-    // A regrowing crop keeps its plant and returns no seed — you already own the plant.
-    const regrown = tile.growthTarget - spec.regrowTicks;
-    tile.growth = regrown < 0 ? 0 : regrown;
-    tile.readyAge = 0;
-  } else {
-    // Any potato replants as a seed — the anti-softlock floor of plan §4.
-    addItem(state, spec.seedItem, 1);
-    tile.crop = CropId.None;
-    tile.growth = 0;
-    tile.growthTarget = 0;
-    tile.readyAge = 0;
+  state.stats.itemsHarvestedByHand += result.count;
+  touch(state, 'handHarvest');
+  return true;
+}
+
+/**
+ * Swing the push-scythe: `SCYTHE_SWATHE_TILES` across the player's path, centred on the tile aimed
+ * at. Plan §3's assisted rung of the harvesting ladder.
+ *
+ * **ACROSS THE FACING, NOT ALONG IT**, which is what makes it a scythe rather than a longer reach:
+ * you walk the row and cut sideways. Facing north or south cuts an east–west line; facing east or
+ * west cuts a north–south one.
+ *
+ * **ONE SWING IS ONE `handHarvest` TOUCH, NOT THREE, AND THE HANDS-FREE BOARD READS THIS NUMBER
+ * FOREVER** — item 023 asks for the decision and the reasoning in writing, so here it is. Plan
+ * §6's taxonomy counts *hands on the world*: the unit it is measuring is the player reaching out
+ * and doing something, and a scythe swing is one motion of one pair of arms. Counting three would
+ * make the assisted rung score **worse** on Hands-Free than doing the same work by hand — three
+ * touches for one gesture against three touches for three — which inverts the whole ladder plan
+ * §3 is built on, and would mean the way to win a board about not touching things was to refuse
+ * the tool that touches them less.
+ *
+ * Unready tiles cost nothing and are untouched. A swing that cuts nothing at all is refused, so it
+ * appends nothing to the trace and the "every applied command changed the world" contract holds.
+ */
+function applySwingScythe(state: WorldState, command: SwingScytheCommand): boolean {
+  if (itemCount(state, ItemId.PushScythe) <= 0) return false;
+  if (!withinReachOfTile(state, command.tileX, command.tileY)) return false;
+
+  // Perpendicular to the facing. `Direction.None` is not a facing the player can hold — `facing`
+  // keeps the last real direction — but a default of east keeps this total.
+  const alongX = state.player.facing === Direction.North || state.player.facing === Direction.South;
+  const half = divFloor(SCYTHE_SWATHE_TILES, 2);
+
+  let cut = 0;
+  for (let offset = -half; offset <= half; offset++) {
+    const x = command.tileX + (alongX ? offset : 0);
+    const y = command.tileY + (alongX ? 0 : offset);
+    const tile = tileAt(state, x, y);
+    if (tile === null || !isTileReady(tile)) continue;
+
+    const spec = cropSpec(tile.crop);
+    if (spec === null) continue;
+    const worstCase = tile.fertility + 1 + tile.compost + (spec.regrowTicks > 0 ? 0 : 1);
+    if (!hasArmfulRoom(state, worstCase)) continue;
+
+    const result = takeHarvest(state, tile, spec);
+    if (result === null) continue;
+    addItem(state, result.item, result.count);
+    if (tile.compost > 0) {
+      addItem(state, ItemId.Compost, tile.compost);
+      tile.compost = 0;
+    }
+    if (spec.regrowTicks <= 0) addItem(state, spec.seedItem, 1);
+    state.stats.itemsHarvestedByHand += result.count;
+    cut += 1;
   }
 
-  state.stats.itemsHarvestedByHand += yieldCount;
+  if (cut === 0) return false;
   touch(state, 'handHarvest');
+  return true;
+}
+
+/** Work a bag of Fertilizer into a tile. Refused, never consumed, on ground already at 3★. */
+function applyApplyFertilizer(state: WorldState, command: ApplyFertilizerCommand): boolean {
+  const tile = tileAt(state, command.tileX, command.tileY);
+  if (tile === null) return false;
+  if (!withinReachOfTile(state, command.tileX, command.tileY)) return false;
+  if (itemCount(state, ItemId.Fertilizer) <= 0) return false;
+  if (!fertilizeTile(tile)) return false;
+
+  removeItem(state, ItemId.Fertilizer, 1);
+  // `handCarry` rather than a category of its own. Plan §6's taxonomy is seven categories and it
+  // is inside the hash, so it is not a list to extend casually — and `handCarry` is already where
+  // this codebase files every hand verb that is not one of the six named ones (rotating an arm,
+  // selling at the bin, buying at the stand, moving a machine). Working a bag into the soil is
+  // carrying something and putting it somewhere.
+  touch(state, 'handCarry');
+  return true;
+}
+
+/**
+ * Pack a perishable stack into a crate: §4's *"45 crated"*.
+ *
+ * **REFUSED RATHER THAN CONSUMED WHEN IT WOULD NOT HELP**, which is `UseRepairKit`'s rule and for
+ * the same reason — a misclick that silently ate eight dollars teaches the player to distrust the
+ * tool. "Would not help" is precise: the item must perish at all, the player must have some, and
+ * the new deadline must actually be later than what those units already carry, so crating a stack
+ * you crated a minute ago is refused instead of resetting the clock for free.
+ */
+function applyPackCrate(state: WorldState, command: PackCrateCommand): boolean {
+  if (command.count <= 0 || !Number.isInteger(command.count)) return false;
+  if (!isPerishable(command.item)) return false;
+  if (itemCount(state, ItemId.Crate) <= 0) return false;
+
+  const held = itemCount(state, command.item);
+  if (held <= 0) return false;
+
+  const wanted = command.count < CRATE_PACK_CAPACITY ? command.count : CRATE_PACK_CAPACITY;
+  const packed = wanted < held ? wanted : held;
+  if (packed <= 0) return false;
+
+  const deadline =
+    divFloor(state.tick + CRATE_FRESHNESS_TICKS, FRESHNESS_BUCKET_TICKS) * FRESHNESS_BUCKET_TICKS;
+  // Nothing to gain: the soonest-expiring stack already keeps longer than a crate would give it.
+  const slot = inventorySlot(state, command.item);
+  if (slot === null || soonestSpoilTick(slot) >= deadline) return false;
+
+  // Out of the soonest-expiring stacks and back in at the crate's deadline — which is exactly
+  // what packing is. `removeItem` already eats soonest-first, so the goods that were about to
+  // turn are the goods that get saved.
+  if (!removeItem(state, command.item, packed)) return false;
+  addItemFresh(state, command.item, packed, deadline);
+  removeItem(state, ItemId.Crate, 1);
+  touch(state, 'handCarry');
   return true;
 }
 
@@ -684,6 +854,17 @@ function applyPlaceMachine(state: WorldState, command: PlaceMachineCommand): boo
     machine.investedCents = box.investedCents;
     touch(state, 'handCarry');
   }
+  // A DOCK ARRIVES WITH ITS BOT. There is no `BuyBot` command and there should not be one: one
+  // dock, one bot (item 038's instruction 1), so which bot you have is never a question separate
+  // from which docks you built. It comes out of the shed at full condition and stands there until
+  // the player points the dock at a zone, which is the one thing about it that IS a decision.
+  if (isBotDockKind(command.kind)) {
+    spawnBot(
+      state,
+      command.kind === MachineKind.PlanterDock ? BotKind.Planter : BotKind.Harvester,
+      machine,
+    );
+  }
   // On edit only, never per tick. A machine that landed beside a pipe run is now on it.
   if (spec.liquid !== 0) rebuildNetworks(state);
   return true;
@@ -743,13 +924,24 @@ function applyDeconstructMachine(state: WorldState, command: DeconstructMachineC
     if (held > 0) addItem(state, spec.inputs[i]!.item, held);
     machine.inputCounts[i] = 0;
   }
-  // Cargo in a parked cart comes back to the player's hands, exactly as the hoppers do. The box
+  // Cargo in a parked cart, a crate's contents, or a planter's seed hopper — all the same field,
+  // and all of it comes back to the player's hands exactly as the recipe buffers do. The box
   // records the dials, the condition and the invoice — never the load.
   if (machine.cargoItem !== 0 && machine.cargoCount > 0) {
     addItem(state, machine.cargoItem, machine.cargoCount);
   }
   machine.cargoItem = 0;
   machine.cargoCount = 0;
+  // A boxed dock takes its bot with it, and whatever the bot was carrying comes back too. Nothing
+  // vanishes (plan §4), and a bot whose shed is in the player's bag has nowhere to walk to.
+  const orphans = removeBotsForDock(state, machine.id);
+  for (let i = 0; i < orphans.length; i++) {
+    const bot = orphans[i]!;
+    if (bot.carryItem !== 0 && bot.carryCount > 0) addItem(state, bot.carryItem, bot.carryCount);
+  }
+  // And a boxed hand cart cannot still be in tow. Cleared here rather than left for the mover to
+  // notice, so `towedCartId` never names a machine that is not on the lot.
+  if (state.player.towedCartId === machine.id) state.player.towedCartId = 0;
   // A depot's routes go with the depot, handing back the floor and anything already rolling. A
   // contract whose depot is in somebody's bag has nothing to load it — see `releaseDepotContracts`.
   if (spec.role === MachineRole.TruckDepot) releaseDepotContracts(state, machine.id);
@@ -783,6 +975,14 @@ function applyDeconstructMachine(state: WorldState, command: DeconstructMachineC
 function isMachineWorking(spec: MachineSpec, machine: Machine): boolean {
   if (spec.workPerOperation <= 0) return false;
   if (machine.condition <= 0) return false;
+  // **A TREE IS NEVER MID-BATCH, AND WITHOUT THIS LINE A TREE COULD NEVER BE DUG UP AT ALL.**
+  // The mid-batch refusal means "it has the ingredients and it has the room, so stop it first" —
+  // and an orchard has no ingredients, so `recipeSatisfied` is vacuously true and any tree with
+  // one space left in its basket reads as running, forever. The player would be able to move a
+  // tree only in the ten seconds after its buffer filled, which is not a rule anybody could
+  // guess. What is lost by digging one up mid-fruit is banked progress, which is what every
+  // other machine loses too: work-points are not an item and cannot be spilled.
+  if (spec.role === MachineRole.Orchard) return false;
   return recipeSatisfied(spec, machine) && outputHasRoom(spec, machine);
 }
 
@@ -872,7 +1072,29 @@ function applyLoadMachine(state: WorldState, command: LoadMachineCommand): boole
   if (machine === null || !withinReachOfMachine(state, machine)) return false;
 
   const spec = machineSpec(machine.kind);
-  if (spec === null || spec.inputs.length === 0) return false;
+  if (spec === null) return false;
+
+  // Storage takes one product and as much of it as fits — see `applyUnloadMachine` for why the
+  // pair of verbs is shared rather than duplicated. Which product is whichever the command names,
+  // or whatever the box already holds; a box holding potatoes refuses corn rather than mixing,
+  // because "what is in this" has to stay one word.
+  if (spec.role === MachineRole.Storage) {
+    if (command.item === undefined) return false;
+    if (machine.cargoItem !== 0 && machine.cargoItem !== command.item) return false;
+    const room = spec.inputCapacity - machine.cargoCount;
+    const have = itemCount(state, command.item);
+    const moved = Math.min(command.count, Math.min(room, have));
+    if (moved <= 0) return false;
+
+    removeItem(state, command.item, moved);
+    machine.cargoItem = command.item;
+    machine.cargoCount += moved;
+    handsOn(machine);
+    touch(state, 'handCarry');
+    return true;
+  }
+
+  if (spec.inputs.length === 0) return false;
 
   const capacity = effectiveInputCapacity(spec, machine);
   for (let i = 0; i < spec.inputs.length; i++) {
@@ -893,15 +1115,82 @@ function applyLoadMachine(state: WorldState, command: LoadMachineCommand): boole
   return false;
 }
 
+/**
+ * Take hold of a hand cart. Reach-gated, and it drops whatever was already in tow.
+ *
+ * A player has one back, so hitching a second cart lets the first one go where the player is
+ * standing — which is the only reading that does not require a second `towedCartId`.
+ */
+function applyHitchCart(state: WorldState, command: HitchCartCommand): boolean {
+  const cart = machineById(state, command.cartId);
+  if (cart === null || cart.kind !== MachineKind.HandCart) return false;
+  if (!withinReachOfMachine(state, cart)) return false;
+  if (state.player.towedCartId === cart.id) return false;
+
+  state.player.towedCartId = cart.id;
+  handsOn(cart);
+  touch(state, 'handCarry');
+  return true;
+}
+
+/** Let go. The cart stands where the player is standing; free, always. */
+function applyUnhitchCart(state: WorldState): boolean {
+  if (state.player.towedCartId === 0) return false;
+  state.player.towedCartId = 0;
+  touch(state, 'handCarry');
+  return true;
+}
+
+/**
+ * Point a dock at a zone. Paperwork: no reach check, no touch — see `SetDockZoneCommand`.
+ *
+ * A zone id of 0 unbinds, which is a legal thing to want and is how a player retires a dock
+ * without boxing it. An id that names no zone is refused rather than stored, because a dock
+ * pointed at a zone that does not exist is a machine with instructions nothing can read.
+ */
+function applySetDockZone(state: WorldState, command: SetDockZoneCommand): boolean {
+  const dock = machineById(state, command.machineId);
+  if (dock === null || !isBotDockKind(dock.kind)) return false;
+  if (dock.boundZone === command.zoneId) return false;
+  if (command.zoneId !== 0 && zoneById(state, command.zoneId) === null) return false;
+
+  dock.boundZone = command.zoneId;
+  return true;
+}
+
 function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): boolean {
   if (command.count <= 0) return false;
   const machine = machineById(state, command.machineId);
   if (machine === null || !withinReachOfMachine(state, machine)) return false;
 
   const spec = machineSpec(machine.kind);
-  if (spec === null || spec.outputItem === null) return false;
+  if (spec === null) return false;
 
-  const moved = Math.min(command.count, machine.outputCount);
+  // A STORAGE MACHINE HAS NO OUTPUT BUFFER; IT HAS CONTENTS. Emptying a Root Cellar or a hand
+  // cart is the same verb the player already knows, aimed at the same key, counted the same way —
+  // which is the whole reason storage is a machine role rather than a new entity with its own
+  // pair of commands. Freshness is stamped on the way OUT, from this tick, because nothing inside
+  // any machine ages (see `InventorySlot.stacks`) and goods that have just come back into the
+  // player's arms are loose again.
+  if (spec.role === MachineRole.Storage) {
+    if (machine.cargoItem === 0 || machine.cargoCount <= 0) return false;
+    const wanted = Math.min(command.count, machine.cargoCount);
+    const taken = Math.min(wanted, armfulRoom(state));
+    if (taken <= 0) return false;
+
+    const item = machine.cargoItem;
+    machine.cargoCount -= taken;
+    if (machine.cargoCount === 0) machine.cargoItem = 0;
+    addItem(state, item, taken);
+    handsOn(machine);
+    touch(state, 'handCarry');
+    return true;
+  }
+
+  if (spec.outputItem === null) return false;
+
+  const wanted = Math.min(command.count, machine.outputCount);
+  const moved = Math.min(wanted, armfulRoom(state));
   if (moved <= 0) return false;
 
   // One unit at a time through the one take path, rather than a single subtraction, because
@@ -935,7 +1224,39 @@ function applyRefillHopper(state: WorldState, command: RefillHopperCommand): boo
   if (machine === null || !withinReachOfMachine(state, machine)) return false;
 
   const spec = machineSpec(machine.kind);
-  if (spec === null || spec.tankCapacityMl <= 0) return false;
+  if (spec === null) return false;
+
+  // **A SEED HOPPER FILLED BY HAND, AND THIS IS THE LINE THE HANDS-FREE BOARD RESTS ON.** §6's
+  // taxonomy names *"hand-refilling any hopper (seeds, kits, consumables)"* as a disqualifier, so
+  // the hand path has to cost a touch and the belt path has to cost nothing — which means they
+  // cannot be one function with a flag. This is the hand path; `dockAcceptSeed` in `bots.ts` is
+  // the belt's, and it counts nothing. A genuinely hands-free farm therefore has to feed its
+  // planter by belt, which is the design turning the board into a logistics problem rather than a
+  // purchase.
+  //
+  // It routes through `RefillHopper` rather than a new command because that command already
+  // exists, already counts `hopperRefill`, and already has a walk-to errand wired — item 023 says
+  // in as many words: do not invent a second refill path.
+  if (spec.role === MachineRole.BotDock) {
+    if (machine.kind !== MachineKind.PlanterDock) return false;
+    const seed = dockWantedSeed(state, machine);
+    if (seed === 0) return false;
+    if (machine.cargoItem !== 0 && machine.cargoItem !== seed) return false;
+
+    const room = spec.inputCapacity - machine.cargoCount;
+    const have = itemCount(state, seed);
+    const moved = Math.min(room, have);
+    if (moved <= 0) return false;
+
+    removeItem(state, seed, moved);
+    machine.cargoItem = seed;
+    machine.cargoCount += moved;
+    handsOn(machine);
+    touch(state, 'hopperRefill');
+    return true;
+  }
+
+  if (spec.tankCapacityMl <= 0) return false;
 
   const capacity = effectiveTankCapacityMl(spec, machine);
   const room = capacity - machine.tankMl;
@@ -958,13 +1279,38 @@ function applyRefillHopper(state: WorldState, command: RefillHopperCommand): boo
 function applyRepairMachine(state: WorldState, command: RepairMachineCommand): boolean {
   const machine = machineById(state, command.machineId);
   if (machine === null || !withinReachOfMachine(state, machine)) return false;
-  if (machine.condition >= CONDITION_MAX) return false;
+
+  // **A DOCK'S BOTS ARE REPAIRED BY REPAIRING THE DOCK**, and that is a deliberate choice about
+  // where the player stands rather than a shortcut. A bot is somewhere in a field on most ticks,
+  // so a repair aimed at the bot itself would mean chasing a robot around a zone with the repair
+  // key held — which is the opposite of what the automated rung was bought for. You service it in
+  // its shed, like anything else with wheels.
+  const serviced = repairBotsAtDock(state, machine);
+  if (machine.condition >= CONDITION_MAX) {
+    if (!serviced) return false;
+    handsOn(machine);
+    touch(state, 'handRepair');
+    return true;
+  }
 
   // Hold-to-repair is free and always available. Hand tools never rot (plan §1).
   machine.condition = Math.min(CONDITION_MAX, machine.condition + REPAIR_PER_TOUCH);
   handsOn(machine);
   touch(state, 'handRepair');
   return true;
+}
+
+/** One repair pulse into every bot living in this machine. Returns true if any of them wanted it. */
+function repairBotsAtDock(state: WorldState, dock: Machine): boolean {
+  let serviced = false;
+  for (let i = 0; i < state.bots.length; i++) {
+    const bot = state.bots[i]!;
+    if (bot.dockId !== dock.id) continue;
+    if (bot.condition >= CONDITION_MAX) continue;
+    bot.condition = Math.min(CONDITION_MAX, bot.condition + REPAIR_PER_TOUCH);
+    serviced = true;
+  }
+  return serviced;
 }
 
 /**
@@ -989,10 +1335,22 @@ function applyUseRepairKit(state: WorldState, command: UseRepairKitCommand): boo
   for (let i = 0; i < state.machines.length; i++) {
     const machine = state.machines[i]!;
     if (!machineWithinKitRadius(machine, command.tileX, command.tileY)) continue;
-    if (machine.condition >= CONDITION_MAX && !machine.jammed) continue;
+    // A kit tops a dock's bots up with everything else in the cell. "One trip services a cell"
+    // (plan §4) would be a strange promise if the one thing in the cell that actually moves had
+    // to be serviced separately.
+    let wantsBots = false;
+    for (let j = 0; j < state.bots.length; j++) {
+      const bot = state.bots[j]!;
+      if (bot.dockId === machine.id && bot.condition < CONDITION_MAX) wantsBots = true;
+    }
+    if (machine.condition >= CONDITION_MAX && !machine.jammed && !wantsBots) continue;
 
     machine.condition = CONDITION_MAX;
     machine.jammed = false;
+    for (let j = 0; j < state.bots.length; j++) {
+      const bot = state.bots[j]!;
+      if (bot.dockId === machine.id) bot.condition = CONDITION_MAX;
+    }
     handsOn(machine);
     serviced += 1;
   }
@@ -1050,6 +1408,11 @@ function applyBuyItem(state: WorldState, command: BuyItemCommand): boolean {
   if (command.count <= 0) return false;
   if (!isPurchasable(command.item)) return false;
   if (!nearSellBin(state)) return false;
+
+  // The armful again: you can only buy what you can carry home. Refused rather than clamped,
+  // because the count is the player's own number off a panel and quietly buying four of twenty
+  // would be the shop deciding for them — and unlike a harvest there is nothing to leave behind.
+  if (!hasArmfulRoom(state, command.count)) return false;
 
   const cost = listPriceCents(command.item) * command.count;
   if (cost <= 0 || state.moneyCents < cost) return false;
@@ -1590,20 +1953,25 @@ function advancePlayer(state: WorldState): void {
   const player = state.player;
   if (player.intent !== null) {
     advanceErrand(state, player.intent);
+    dragTowedCart(state);
     return;
   }
 
   if (player.moveDir === Direction.None) {
     player.moveAccum = 0;
+    dragTowedCart(state);
     return;
   }
 
   // 4 tiles/s at 20 Hz is 51.2 subtiles per tick. Accruing hundredths and spending whole
   // subtiles keeps that exact; rounding to 51 would quietly make the character slow.
-  player.moveAccum += PLAYER_SPEED_SUBTILES_PER_100_TICKS;
+  player.moveAccum += playerSpeed(state);
   const stepSub = divFloor(player.moveAccum, 100);
   player.moveAccum -= stepSub * 100;
-  if (stepSub === 0) return;
+  if (stepSub === 0) {
+    dragTowedCart(state);
+    return;
+  }
 
   if (player.moveDir === Direction.North) player.ySub -= stepSub;
   else if (player.moveDir === Direction.South) player.ySub += stepSub;
@@ -1612,6 +1980,50 @@ function advancePlayer(state: WorldState): void {
 
   player.xSub = clampInt(player.xSub, 0, WORLD_TILES_WIDE * SUBTILE - 1);
   player.ySub = clampInt(player.ySub, 0, WORLD_TILES_HIGH * SUBTILE - 1);
+  dragTowedCart(state);
+}
+
+/**
+ * How fast the player walks this tick: four tiles a second, less a quarter while towing.
+ *
+ * **A DEDUCTION IN SUBTILES-PER-100-TICKS, NEVER A FLOAT MULTIPLIER** — item 023's criterion says
+ * so in those words, and `moveAccum` is why it costs nothing to obey: movement already accrues in
+ * hundredths of a subtile precisely so a rate that does not divide evenly stays exact, so a tow is
+ * one subtraction inside a number that was already integer.
+ */
+function playerSpeed(state: WorldState): number {
+  if (state.player.towedCartId === 0) return PLAYER_SPEED_SUBTILES_PER_100_TICKS;
+  const speed = PLAYER_SPEED_SUBTILES_PER_100_TICKS - TOW_SPEED_PENALTY_SUBTILES_PER_100_TICKS;
+  // Floored at one subtile per 100 ticks rather than at zero: a penalty that could stop the player
+  // dead would be a cart that softlocks the farmer in a field, and plan §4's anti-softlock posture
+  // does not have exceptions for balance numbers somebody might retune later.
+  return speed < 1 ? 1 : speed;
+}
+
+/**
+ * The towed cart follows the player's tile, every tick, with no collision check.
+ *
+ * **NO FOOTPRINT TEST, AND THAT IS DELIBERATE.** A cart in tow is in the player's hands rather
+ * than standing on the ground, and the farmer already walks over belts, pipes and machines alike
+ * — a cart that refused to cross a belt would be the first collision geometry in the game, added
+ * to stop a player dragging a barrow across their own yard. It lands for real on `UnhitchCart`,
+ * where it simply stands where the player was.
+ *
+ * Clamped to the world, because a cart is a machine and a machine off the map is a machine
+ * `machineAt` can never find again.
+ */
+function dragTowedCart(state: WorldState): void {
+  const id = state.player.towedCartId;
+  if (id === 0) return;
+  const cart = machineById(state, id);
+  if (cart === null) {
+    // The cart stopped existing — boxed, scrapped, or never there. Let go rather than carry a
+    // reference to nothing.
+    state.player.towedCartId = 0;
+    return;
+  }
+  cart.tileX = clampInt(divFloor(state.player.xSub, SUBTILE), 0, WORLD_TILES_WIDE - 1);
+  cart.tileY = clampInt(divFloor(state.player.ySub, SUBTILE), 0, WORLD_TILES_HIGH - 1);
 }
 
 /**
@@ -1657,46 +2069,18 @@ function advanceErrand(state: WorldState, intent: PlayerIntent): void {
 
   // 4. Still walking.
   //
-  // STRAIGHT AT IT, THROUGH ANYTHING IN THE WAY. Obstacle avoidance is deliberately deferred,
-  // not forgotten: there is nothing in this world solid enough to walk into — the player
-  // strolls over belts, pipes and machines alike — so A* would be pathing around obstacles
-  // that do not exist. When something finally blocks a footstep, this is the function that
-  // grows a path, and the errand's shape (a target and a verb) is already the right shape for
-  // one. Until then, a straight line is not a simplification; it is the correct answer.
-  player.moveAccum += PLAYER_SPEED_SUBTILES_PER_100_TICKS;
-  const budget = divFloor(player.moveAccum, 100);
-  player.moveAccum -= budget * 100;
-  if (budget === 0) return;
-
-  const dx = target.xSub - player.xSub;
-  const dy = target.ySub - player.ySub;
-
-  // `sqrt` is the one non-trivial float operation the determinism rules allow, because
-  // IEEE-754 requires it to be correctly rounded — every engine returns the same bits. The
-  // truncations either side keep it out of world state: what gets stored is always an integer
-  // number of subtiles, so the walk can be replayed a decade from now.
-  const distance = Math.trunc(Math.sqrt(dx * dx + dy * dy));
-  if (distance <= budget) {
-    // Unreachable while reach (384) exceeds a tick's budget (~52) — the check above would
-    // have fired first. Kept because it is the guard against dividing by a zero distance, and
-    // because the day someone tunes either number it stops being unreachable.
-    player.xSub = target.xSub;
-    player.ySub = target.ySub;
-  } else {
-    player.xSub += Math.trunc((dx * budget) / distance);
-    player.ySub += Math.trunc((dy * budget) / distance);
-  }
-
-  player.xSub = clampInt(player.xSub, 0, WORLD_TILES_WIDE * SUBTILE - 1);
-  player.ySub = clampInt(player.ySub, 0, WORLD_TILES_HIGH * SUBTILE - 1);
-
-  // Face the way you are going. The sprite has no idea an errand exists; it just wants a
-  // compass direction, and the dominant axis is the one a person would say they were walking.
-  if (dx * dx >= dy * dy) {
-    player.facing = dx >= 0 ? Direction.East : Direction.West;
-  } else {
-    player.facing = dy >= 0 ? Direction.South : Direction.North;
-  }
+  // STRAIGHT AT IT, THROUGH ANYTHING IN THE WAY, AND THROUGH THE ONE MOVER IN THE SIMULATION.
+  // This walk used to be written out here, and it was the only walk there was; item 038 needed
+  // bots to move and item 039 requires its drones to reuse the bots' movement code *verbatim*, so
+  // the arithmetic moved to `movement.ts` and this call is what is left. Nothing about it changed
+  // in the move — the same operations in the same order, so a replay of a pre-bot world walks the
+  // farmer over exactly the same subtiles — and there is now no second implementation to drift.
+  //
+  // Obstacle avoidance is still deliberately absent rather than forgotten: nothing in this world
+  // is solid enough to walk into, so A* would be pathing around obstacles that do not exist. When
+  // something finally blocks a footstep, `stepToward` is the one function that grows a path and
+  // every mover in the game gets it at once.
+  stepToward(player, target.xSub, target.ySub, playerSpeed(state));
 }
 
 /** Drop the errand and the momentum with it. The player stands where they stopped. */
@@ -1723,7 +2107,9 @@ function intentTargetSubtiles(
   switch (intent.action) {
     case IntentAction.Water:
     case IntentAction.Plant:
-    case IntentAction.Harvest: {
+    case IntentAction.Harvest:
+    case IntentAction.Fertilize:
+    case IntentAction.Scythe: {
       const tile = tileAt(state, intent.tileX, intent.tileY);
       if (tile === null) return null;
       // Planting a tile something else already planted, or harvesting one something else
@@ -1745,6 +2131,7 @@ function intentTargetSubtiles(
     case IntentAction.Repair:
     case IntentAction.WhackJam:
     case IntentAction.Deconstruct:
+    case IntentAction.HitchCart:
     case IntentAction.Sell:
     case IntentAction.Buy: {
       // Resolved from the tile every tick rather than pinned by id at issue time, and that is
@@ -1787,6 +2174,10 @@ function intentCommand(state: WorldState, intent: PlayerIntent): Command | null 
       };
     case IntentAction.Harvest:
       return { type: 'HarvestTile', tileX: intent.tileX, tileY: intent.tileY };
+    case IntentAction.Fertilize:
+      return { type: 'ApplyFertilizer', tileX: intent.tileX, tileY: intent.tileY };
+    case IntentAction.Scythe:
+      return { type: 'SwingScythe', tileX: intent.tileX, tileY: intent.tileY };
     case IntentAction.Sell:
       return { type: 'SellItem', item: intent.item as ItemId, count: intent.count };
     // Buy resolves without the machine for the same reason Sell does: `nearSellBin` inside the
@@ -1813,6 +2204,8 @@ function intentCommand(state: WorldState, intent: PlayerIntent): Command | null 
       return { type: 'WhackJam', machineId: machine.id };
     case IntentAction.Deconstruct:
       return { type: 'DeconstructMachine', machineId: machine.id };
+    case IntentAction.HitchCart:
+      return { type: 'HitchCart', cartId: machine.id };
     default:
       return null;
   }
@@ -1861,8 +2254,39 @@ function advanceMachines(state: WorldState): void {
       advanceRecirculator(state, machine);
     } else if (spec.role === MachineRole.Converter) {
       advanceConverter(state, machine);
+    } else if (spec.role === MachineRole.Orchard) {
+      advanceOrchard(machine, spec);
     }
   }
+}
+
+/**
+ * One tick of a fruit tree: §5's *"2×2 trees, permanent, fruit on a cycle"*.
+ *
+ * **DEMAND-PULL, LIKE EVERYTHING ELSE.** A tree whose buffer is full stops accruing and simply
+ * stands there with fruit on it — it does not drop anything on the ground and nothing rots. That
+ * is the same one stop rule the Fryer and the Juicer obey, and it means an unpicked orchard is a
+ * pause rather than a loss, which is what §7 ruling 6 asks of every clock in this game.
+ *
+ * **IT IS NOT `advanceConverter` WITH AN EMPTY RECIPE**, and `MachineRole.Orchard` carries the
+ * long version of why: a converter advancing work ticks `untouchedTicks`, and the Corporate
+ * Charter's entire claim is that a machine cannot advance work for 96,000 straight ticks unless
+ * something is *feeding* it. A tree needs nothing feeding it, so a tree on the converter path
+ * would hand out that Charter for planting a sapling and running one belt.
+ *
+ * No wear, no jam, no waste cadence. A tree is not machinery, and §8 forbids landing a
+ * maintenance system inside a release that is not about maintenance.
+ */
+function advanceOrchard(machine: Machine, spec: MachineSpec): void {
+  if (spec.outputItem === null || spec.workPerOperation <= 0) return;
+  if (machine.outputCount >= effectiveOutputCapacity(spec, machine)) return;
+
+  machine.progress += effectiveWorkRate(spec, machine);
+  if (machine.progress < spec.workPerOperation) return;
+
+  machine.progress -= spec.workPerOperation;
+  machine.outputCount += 1;
+  machine.opCount += 1;
 }
 
 /**
@@ -2276,10 +2700,77 @@ function advanceCrops(state: WorldState): void {
     }
 
     if (tile.moisture > 0) {
-      const drain = spec === null ? MOISTURE_DRAIN_PER_TICK : spec.moistureDrainPerTick;
-      tile.moisture = Math.max(0, tile.moisture - drain);
+      // THIRST × SOIL, THROUGH AN ACCUMULATOR. The crop says how much it drinks (a Gold Potato
+      // drinks three times a Russet) and the ground says how well it holds water (clay at 700‰,
+      // sand at 1500‰). Multiplied and floored directly, clay under a Russet would drain
+      // `divFloor(1 × 700, 1000)` = zero, forever — so the product accrues in thousandths and
+      // whole units are spent, the same integer accumulator the player's legs and the pond's
+      // recharge already use.
+      const base = spec === null ? MOISTURE_DRAIN_PER_TICK : spec.moistureDrainPerTick;
+      const soil = soilSpec(tile.soil);
+      tile.moistureAccum += base * (soil === null ? 1000 : soil.moistureDrainPermille);
+      const drain = divFloor(tile.moistureAccum, 1000);
+      if (drain > 0) {
+        tile.moistureAccum -= drain * 1000;
+        tile.moisture = Math.max(0, tile.moisture - drain);
+      }
+    } else {
+      // Dry ground banks nothing. Without this a tile that sat empty for an hour would drain its
+      // first whole unit the instant it was watered, which is a bucket of water evaporating on
+      // contact and a number the player cannot see the cause of.
+      tile.moistureAccum = 0;
     }
   }
+}
+
+// --- 10. spoilage -----------------------------------------------------------------
+
+/**
+ * Turn every stack whose deadline has come into Compost.
+ *
+ * **NOTHING VANISHES** (§4, and item 021's standing constraint): every spoilage path in this game
+ * ends in a good, so a turned stack is not deleted — it is `COMPOST_PER_SPOILED_ITEM` of Compost
+ * per unit, which the Composter turns into Fertilizer, which goes back in the ground. That is
+ * plan §4's loop closing, and it is the reason there is no zero-value outcome anywhere in this
+ * feature.
+ *
+ * **NO ROLL ANYWHERE IN IT.** A stack turns when `state.tick` reaches an integer that was written
+ * when the goods entered the bag. Same seed and same commands, same potatoes turn on the same
+ * ticks, forever (§7 ruling 5).
+ *
+ * The scan is cheap and bounded: the inventory is a few dozen slots and each holds at most
+ * `FRESHNESS_MAX_STACKS` stacks, sorted — so on almost every tick this reads one integer per
+ * perishable slot and stops.
+ *
+ * The compost is added AFTER the sweep rather than inside it, because `addItem` walks the same
+ * inventory this loop is iterating and inserting a slot mid-scan is how an off-by-one gets into a
+ * hashed collection. It also cannot cascade: Compost does not perish, so nothing added here can
+ * be swept by the same pass.
+ */
+function advanceSpoilage(state: WorldState): void {
+  let composted = 0;
+
+  for (let i = 0; i < state.inventory.length; i++) {
+    const slot = state.inventory[i]!;
+    if (slot.stacks.length === 0) continue;
+
+    let spoiled = 0;
+    while (slot.stacks.length > 0 && slot.stacks[0]!.spoilAtTick <= state.tick) {
+      spoiled += slot.stacks[0]!.count;
+      slot.stacks.shift();
+    }
+    if (spoiled <= 0) continue;
+
+    slot.count -= spoiled;
+    composted += spoiled * COMPOST_PER_SPOILED_ITEM;
+  }
+
+  // Drop any slot the sweep emptied. Backwards, so the splices cannot skip an entry.
+  for (let i = state.inventory.length - 1; i >= 0; i--) {
+    if (state.inventory[i]!.count <= 0) state.inventory.splice(i, 1);
+  }
+
+  if (composted > 0) addItem(state, ItemId.Compost, composted);
 }
 
 // --- 9. stats and the clock -------------------------------------------------------

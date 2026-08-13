@@ -100,6 +100,9 @@ export function hashStateUint32(state: WorldState): number {
   d.num(state.player.facing);
   d.num(state.player.moveDir);
   d.num(state.player.moveAccum);
+  // The cart in tow. A world where the farmer is dragging a barrow and one where they left it by
+  // the shed are different worlds, and the difference is visible in how fast the next step is.
+  d.num(state.player.towedCartId);
 
   // A pending errand is world state like any other: two players who have both clicked a far
   // tile but are half a field apart in the walk are in genuinely different worlds, and a
@@ -137,6 +140,16 @@ export function hashStateUint32(state: WorldState): number {
       d.num(box.condition);
       d.num(box.investedCents);
     }
+    // FRESHNESS, LENGTH FIRST, IN THE SLOT'S SORTED ORDER. Two bags holding twelve potatoes are
+    // not the same world if one of them is about to lose four of them, so the deadlines are in
+    // the digest — and the list is counted even when empty, because "no clock on this" is a fact
+    // about the world and skipping it would let a shelf-stable stack and a perishable one collide.
+    d.num(slot.stacks.length);
+    for (let j = 0; j < slot.stacks.length; j++) {
+      const stack = slot.stacks[j]!;
+      d.num(stack.spoilAtTick);
+      d.num(stack.count);
+    }
   }
 
   d.text('field');
@@ -147,7 +160,10 @@ export function hashStateUint32(state: WorldState): number {
     d.num(tile.growth);
     d.num(tile.growthTarget);
     d.num(tile.moisture);
+    d.num(tile.moistureAccum);
+    d.num(tile.soil);
     d.num(tile.fertility);
+    d.num(tile.fertilityWear);
     d.num(tile.readyAge);
     d.num(tile.compost);
     d.num(tile.zone);
@@ -198,6 +214,7 @@ export function hashStateUint32(state: WorldState): number {
     d.num(machine.untouchedTicks);
     d.num(machine.junctionInCursor);
     d.num(machine.junctionOutCursor);
+    d.num(machine.boundZone);
     d.num(machine.ports.length);
     for (let j = 0; j < machine.ports.length; j++) {
       const port = machine.ports[j]!;
@@ -282,6 +299,33 @@ export function hashStateUint32(state: WorldState): number {
     d.num(contract.ticksRemaining);
     d.num(contract.runsCompleted);
     d.num(contract.grossCents);
+  }
+
+  // Agri-Bots, already sorted ascending by id. **A BOT'S POSITION IS IN THE DIGEST**, which is
+  // item 038's criterion — "bot movement is identical across runs from the same seed and command
+  // list" — stated as bytes: two worlds whose robots are half a field apart are genuinely
+  // different worlds, and the only way a replay can prove it walked the same route is for the
+  // route to be hashed. The route cursor is in here for the reason a junction's cursors are.
+  d.text('bots');
+  d.num(state.bots.length);
+  d.num(state.nextBotId);
+  for (let i = 0; i < state.bots.length; i++) {
+    const bot = state.bots[i]!;
+    d.num(bot.id);
+    d.num(bot.kind);
+    d.num(bot.dockId);
+    d.num(bot.xSub);
+    d.num(bot.ySub);
+    d.num(bot.facing);
+    d.num(bot.moveAccum);
+    d.num(bot.phase);
+    d.num(bot.targetTile);
+    d.num(bot.routeCursor);
+    d.num(bot.workTicks);
+    d.num(bot.carryItem);
+    d.num(bot.carryCount);
+    d.num(bot.condition);
+    d.num(bot.opCount);
   }
 
   // Already sorted in `WorldState`. A ceremony that has played is a fact about the world, and
@@ -438,6 +482,7 @@ export function findNonIntegerFields(state: WorldState): string[] {
   check('player.xSub', state.player.xSub);
   check('player.ySub', state.player.ySub);
   check('player.moveAccum', state.player.moveAccum);
+  check('player.towedCartId', state.player.towedCartId);
 
   // Hashed, so checked. `action` is left out on purpose: it is an id rather than a quantity,
   // it is validated against `ERRAND_ACTIONS` on load, and a fractional one could only come
@@ -458,6 +503,12 @@ export function findNonIntegerFields(state: WorldState): string[] {
   for (let i = 0; i < state.inventory.length; i++) {
     const slot = state.inventory[i]!;
     check(`inventory[${i}].count`, slot.count);
+    for (let j = 0; j < slot.stacks.length; j++) {
+      // A spoil tick is arithmetic on the clock and a bucket size; a count is a count. Both are
+      // integers by construction and checked rather than reasoned about.
+      check(`inventory[${i}].stacks[${j}].spoilAtTick`, slot.stacks[j]!.spoilAtTick);
+      check(`inventory[${i}].stacks[${j}].count`, slot.stacks[j]!.count);
+    }
     for (let j = 0; j < slot.boxes.length; j++) {
       // A box carries cents and a condition, which are exactly the two kinds of number that go
       // fractional when somebody divides without flooring. The dials are small integers and
@@ -476,7 +527,9 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`field[${i}].growth`, tile.growth);
     check(`field[${i}].growthTarget`, tile.growthTarget);
     check(`field[${i}].moisture`, tile.moisture);
+    check(`field[${i}].moistureAccum`, tile.moistureAccum);
     check(`field[${i}].fertility`, tile.fertility);
+    check(`field[${i}].fertilityWear`, tile.fertilityWear);
   }
 
   for (let i = 0; i < state.machines.length; i++) {
@@ -502,6 +555,23 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].untouchedTicks`, machine.untouchedTicks);
     check(`machines[${i}].junctionInCursor`, machine.junctionInCursor);
     check(`machines[${i}].junctionOutCursor`, machine.junctionOutCursor);
+    check(`machines[${i}].boundZone`, machine.boundZone);
+  }
+
+  // A bot's position is the one place in this world where a float would be invisible until a
+  // replay diverged, so every number on it is checked. `moveAccum` especially: it is hundredths
+  // of a subtile and it is what a mis-typed speed constant would go fractional in.
+  for (let i = 0; i < state.bots.length; i++) {
+    const bot = state.bots[i]!;
+    check(`bots[${i}].xSub`, bot.xSub);
+    check(`bots[${i}].ySub`, bot.ySub);
+    check(`bots[${i}].moveAccum`, bot.moveAccum);
+    check(`bots[${i}].targetTile`, bot.targetTile);
+    check(`bots[${i}].routeCursor`, bot.routeCursor);
+    check(`bots[${i}].workTicks`, bot.workTicks);
+    check(`bots[${i}].carryCount`, bot.carryCount);
+    check(`bots[${i}].condition`, bot.condition);
+    check(`bots[${i}].opCount`, bot.opCount);
   }
 
   // Counts and a countdown, all of which are integers by construction — and cents, which are the

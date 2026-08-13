@@ -61,6 +61,48 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
     detail:
       'A Grow Zone with the hopper armed sows a tile the moment it is cleared. The field stops waiting for you to walk back.',
   },
+  [TechId.GoldPotato]: {
+    title: 'Gold Potato',
+    verb: 'Plant gold potatoes',
+    detail:
+      'Three times a Russet at the till and three times the water in the ground. The sprinkler you already own will not keep up with a whole row of them.',
+  },
+  [TechId.Composting]: {
+    title: 'Composting',
+    verb: 'Turn compost into fertilizer',
+    detail:
+      'The Composter takes what spoiled and hands back a bag you can work into the soil. Nothing you grow is ever wasted, only late.',
+  },
+  [TechId.RootCellar]: {
+    title: 'Root Cellar',
+    verb: 'Store a harvest that keeps',
+    detail:
+      'A hundred slots underground where nothing turns. It is the answer to a harvest bigger than the line can eat today.',
+  },
+  [TechId.Orchard]: {
+    title: 'Orchard',
+    verb: 'Plant orange and lemon trees',
+    detail:
+      'Trees take four tiles and stay forever, dropping fruit on their own cycle. You plant one once and pick it for the rest of the game.',
+  },
+  [TechId.KolaTree]: {
+    title: 'Kola Tree',
+    verb: 'Plant the kola tree',
+    detail:
+      'The nut the cola line runs on, growing on your own land instead of arriving on a delivery. Planting the first one is the day soda stops being someone else’s ingredient.',
+  },
+  [TechId.AgriBots]: {
+    title: 'Agri-Bots',
+    verb: 'Send a robot to pull the crop',
+    detail:
+      'A dock at the edge of a Grow Zone, and Spudnik patrolling it. Nothing in this game has ever harvested for you before.',
+  },
+  [TechId.PlanterBot]: {
+    title: 'Planter Bot',
+    verb: 'Send a robot to sow the row',
+    detail:
+      'The seed hopper on legs. Chili and cane never needed one — potatoes, corn and gold potatoes have been waiting for it.',
+  },
 
   [TechId.WashAndSlice]: {
     title: 'Wash & Slice',

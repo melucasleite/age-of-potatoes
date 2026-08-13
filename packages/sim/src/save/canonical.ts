@@ -37,14 +37,17 @@ import {
   MachineKind,
   PARCELS_HIGH,
   PARCELS_WIDE,
+  SoilType,
   isParcelIndex,
   machineSpec,
 } from '../data';
 import type { RngState } from '../rng';
 import {
   type Belt,
+  type Bot,
   type BoxedMachine,
   type Contract,
+  type FreshStack,
   type CropTile,
   type Grabber,
   type Machine,
@@ -57,6 +60,8 @@ import {
   type TraceEntry,
   type WorldState,
   type Zone,
+  BotKind,
+  BotPhase,
   ContractPhase,
   Direction,
   IntentAction,
@@ -90,6 +95,8 @@ export interface SavePlayer {
   intent: SavePlayerIntent | null;
   moveAccum: number;
   moveDir: number;
+  /** The `Machine.id` of the hand cart in tow, or 0. A haul survives a reload. */
+  towedCartId: number;
   xSub: number;
   ySub: number;
 }
@@ -103,21 +110,38 @@ export interface SaveBoxedMachine {
   speedLevel: number;
 }
 
+/** One heap of a perishable good and the tick it turns on. */
+export interface SaveFreshStack {
+  count: number;
+  spoilAtTick: number;
+}
+
 export interface SaveInventorySlot {
   /** Sorted least-invested-first, and always either empty or `count` long. */
   boxes: SaveBoxedMachine[];
   count: number;
   item: number;
+  /**
+   * Freshness, soonest-expiring first. Empty for every shelf-stable good, and summing to `count`
+   * for a perishable one — the same "either empty or exactly `count`" invariant `boxes` holds.
+   */
+  stacks: SaveFreshStack[];
 }
 
 export interface SaveCropTile {
   compost: number;
   crop: number;
   fertility: number;
+  /** Harvests since this tile last lost a star. Decay is a counter, never a roll. */
+  fertilityWear: number;
   growth: number;
   growthTarget: number;
   moisture: number;
+  /** Moisture-drain remainder in thousandths, so clay and sand stay exact. */
+  moistureAccum: number;
   readyAge: number;
+  /** `SoilType`. Rolled once at world creation and never changed. */
+  soil: number;
   zone: number;
 }
 
@@ -131,6 +155,8 @@ export interface SaveMachinePort {
 
 export interface SaveMachine {
   blockedTicks: number;
+  /** The `Zone.id` an Agri-Bot dock takes its orders from. 0 on every other machine. */
+  boundZone: number;
   capacityLevel: number;
   /** Goods on a delivery cart. 0 on every machine that is not one. */
   cargoCount: number;
@@ -269,6 +295,33 @@ export interface SaveContract {
   ticksRemaining: number;
 }
 
+/**
+ * One Agri-Bot.
+ *
+ * Its POSITION is stored, in subtiles, because a bot halfway across a field is a fact about the
+ * world rather than a thing that can be recomputed — and because item 038's criterion is that bot
+ * movement is identical across runs, which is a claim about a saved world as much as a fresh one.
+ * The route cursor rides along for the reason a junction's round-robin cursors do: it is history,
+ * not geometry, so nothing can derive it back.
+ */
+export interface SaveBot {
+  carryCount: number;
+  carryItem: number;
+  condition: number;
+  dockId: number;
+  facing: number;
+  id: number;
+  kind: number;
+  moveAccum: number;
+  opCount: number;
+  phase: number;
+  routeCursor: number;
+  targetTile: number;
+  workTicks: number;
+  xSub: number;
+  ySub: number;
+}
+
 /** One RNG stream, with its system id folded in — an array entry, not a map key. */
 export interface SaveStream {
   id: string;
@@ -314,6 +367,8 @@ export interface SaveStats {
 /** `WorldState` minus the trace, in canonical form. Keys are alphabetical, always. */
 export interface SavePayload {
   belts: SaveBelt[];
+  /** Agri-Bots, sorted ascending by id. */
+  bots: SaveBot[];
   /** One-shot celebrations already played, sorted. A first time must not happen twice. */
   ceremonies: string[];
   /** Standing contracts, sorted ascending by id. */
@@ -325,6 +380,7 @@ export interface SavePayload {
   moneyCents: number;
   networks: SavePipeNetwork[];
   nextBeltId: number;
+  nextBotId: number;
   nextContractId: number;
   nextGrabberId: number;
   nextMachineId: number;
@@ -367,10 +423,13 @@ export function toPayload(state: WorldState): SavePayload {
       compost: tile.compost,
       crop: tile.crop,
       fertility: tile.fertility,
+      fertilityWear: tile.fertilityWear,
       growth: tile.growth,
       growthTarget: tile.growthTarget,
       moisture: tile.moisture,
+      moistureAccum: tile.moistureAccum,
       readyAge: tile.readyAge,
+      soil: tile.soil,
       zone: tile.zone,
     });
   }
@@ -389,7 +448,12 @@ export function toPayload(state: WorldState): SavePayload {
         speedLevel: box.speedLevel,
       });
     }
-    inventory.push({ boxes, count: slot.count, item: slot.item });
+    const stacks: SaveFreshStack[] = [];
+    for (let j = 0; j < slot.stacks.length; j++) {
+      const stack = slot.stacks[j]!;
+      stacks.push({ count: stack.count, spoilAtTick: stack.spoilAtTick });
+    }
+    inventory.push({ boxes, count: slot.count, item: slot.item, stacks });
   }
 
   const machines: SaveMachine[] = [];
@@ -397,6 +461,7 @@ export function toPayload(state: WorldState): SavePayload {
     const machine = state.machines[i]!;
     machines.push({
       blockedTicks: machine.blockedTicks,
+      boundZone: machine.boundZone,
       capacityLevel: machine.capacityLevel,
       cargoCount: machine.cargoCount,
       cargoItem: machine.cargoItem,
@@ -543,6 +608,28 @@ export function toPayload(state: WorldState): SavePayload {
     });
   }
 
+  const bots: SaveBot[] = [];
+  for (let i = 0; i < state.bots.length; i++) {
+    const bot = state.bots[i]!;
+    bots.push({
+      carryCount: bot.carryCount,
+      carryItem: bot.carryItem,
+      condition: bot.condition,
+      dockId: bot.dockId,
+      facing: bot.facing,
+      id: bot.id,
+      kind: bot.kind,
+      moveAccum: bot.moveAccum,
+      opCount: bot.opCount,
+      phase: bot.phase,
+      routeCursor: bot.routeCursor,
+      targetTile: bot.targetTile,
+      workTicks: bot.workTicks,
+      xSub: bot.xSub,
+      ySub: bot.ySub,
+    });
+  }
+
   const ceremonies: string[] = [];
   for (let i = 0; i < state.ceremonies.length; i++) ceremonies.push(state.ceremonies[i]!);
 
@@ -568,6 +655,7 @@ export function toPayload(state: WorldState): SavePayload {
 
   return {
     belts,
+    bots,
     ceremonies,
     contracts,
     field,
@@ -577,6 +665,7 @@ export function toPayload(state: WorldState): SavePayload {
     moneyCents: state.moneyCents,
     networks,
     nextBeltId: state.nextBeltId,
+    nextBotId: state.nextBotId,
     nextContractId: state.nextContractId,
     nextGrabberId: state.nextGrabberId,
     nextMachineId: state.nextMachineId,
@@ -604,6 +693,7 @@ export function toPayload(state: WorldState): SavePayload {
             },
       moveAccum: state.player.moveAccum,
       moveDir: state.player.moveDir,
+      towedCartId: state.player.towedCartId,
       xSub: state.player.xSub,
       ySub: state.player.ySub,
     },
@@ -789,6 +879,16 @@ const CROP_IDS: readonly number[] = [
   CropId.SugarCane,
   CropId.Corn,
   CropId.ChiliPepper,
+  CropId.GoldPotato,
+];
+/** The roster's other three are machines, not crops — see `CropId`. */
+const SOIL_TYPES: readonly number[] = [SoilType.Loam, SoilType.Sand, SoilType.Clay];
+const BOT_KINDS: readonly number[] = [BotKind.Harvester, BotKind.Planter];
+const BOT_PHASES: readonly number[] = [
+  BotPhase.Idle,
+  BotPhase.Outbound,
+  BotPhase.Working,
+  BotPhase.Returning,
 ];
 /**
  * Every item id a save may legally hold — DERIVED FROM `ITEM_SPECS`, not typed out beside it.
@@ -831,6 +931,14 @@ const MACHINE_KINDS: readonly number[] = [
   MachineKind.DeliveryCart,
   MachineKind.TruckDepot,
   MachineKind.BeltJunction,
+  MachineKind.RootCellar,
+  MachineKind.Composter,
+  MachineKind.HandCart,
+  MachineKind.OrangeTree,
+  MachineKind.LemonTree,
+  MachineKind.KolaTree,
+  MachineKind.HarvesterDock,
+  MachineKind.PlanterDock,
 ];
 /** `None` is not a legal liquid for a pipe: a pipe that carries nothing is not a pipe. */
 const LIQUIDS: readonly number[] = [
@@ -875,6 +983,9 @@ const ERRAND_ACTIONS: readonly number[] = [
   IntentAction.Sell,
   IntentAction.Deconstruct,
   IntentAction.Buy,
+  IntentAction.Fertilize,
+  IntentAction.Scythe,
+  IntentAction.HitchCart,
 ];
 
 /**
@@ -913,6 +1024,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     facing: idInt(playerRaw, 'facing', 'payload.player', DIRECTIONS) as Direction,
     moveDir: idInt(playerRaw, 'moveDir', 'payload.player', DIRECTIONS) as Direction,
     moveAccum: int(playerRaw, 'moveAccum', 'payload.player'),
+    towedCartId: int(playerRaw, 'towedCartId', 'payload.player'),
     intent,
   };
 
@@ -934,10 +1046,26 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
         investedCents: int(box, 'investedCents', boxPath),
       });
     }
+    const stacksRaw = list(slot, 'stacks', path);
+    const stacks: FreshStack[] = [];
+    for (let j = 0; j < stacksRaw.length; j++) {
+      const stackPath = `${path}.stacks[${String(j)}]`;
+      const stack = record(stacksRaw[j], stackPath);
+      stacks.push({
+        spoilAtTick: int(stack, 'spoilAtTick', stackPath),
+        count: int(stack, 'count', stackPath),
+      });
+    }
+    // SORTED HERE RATHER THAN TRUSTED, exactly as `ownedParcels` and `ceremonies` are: the order
+    // is a hashed invariant and a file that lost it would restore a world that hashes differently
+    // from the one that was saved while holding the same potatoes. Ascending by deadline, which
+    // is also the order removals eat them in.
+    stacks.sort((a, b) => a.spoilAtTick - b.spoilAtTick);
     inventory.push({
       item: idInt(slot, 'item', path, ITEM_IDS) as ItemId,
       count: int(slot, 'count', path),
       boxes,
+      stacks,
     });
   }
 
@@ -951,7 +1079,10 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       growth: int(tile, 'growth', path),
       growthTarget: int(tile, 'growthTarget', path),
       moisture: int(tile, 'moisture', path),
+      moistureAccum: int(tile, 'moistureAccum', path),
+      soil: idInt(tile, 'soil', path, SOIL_TYPES) as SoilType,
       fertility: int(tile, 'fertility', path),
+      fertilityWear: int(tile, 'fertilityWear', path),
       readyAge: int(tile, 'readyAge', path),
       compost: int(tile, 'compost', path),
       zone: int(tile, 'zone', path),
@@ -996,8 +1127,37 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       untouchedTicks: int(machine, 'untouchedTicks', path),
       junctionInCursor: int(machine, 'junctionInCursor', path),
       junctionOutCursor: int(machine, 'junctionOutCursor', path),
+      boundZone: int(machine, 'boundZone', path),
     });
   }
+
+  // Bots. Validated against this build the way contracts are: a kind and a phase are ids this
+  // build has to be able to dispatch on, and a bot in phase 9 is not a thing that can be advanced,
+  // drawn, or repaired — so it stops here, loudly, rather than at the first tick that touches it.
+  const botsRaw = list(p, 'bots', 'payload');
+  const bots: Bot[] = [];
+  for (let i = 0; i < botsRaw.length; i++) {
+    const path = `payload.bots[${String(i)}]`;
+    const bot = record(botsRaw[i], path);
+    bots.push({
+      id: int(bot, 'id', path),
+      kind: idInt(bot, 'kind', path, BOT_KINDS) as BotKind,
+      dockId: int(bot, 'dockId', path),
+      xSub: int(bot, 'xSub', path),
+      ySub: int(bot, 'ySub', path),
+      facing: idInt(bot, 'facing', path, DIRECTIONS) as Direction,
+      moveAccum: int(bot, 'moveAccum', path),
+      phase: idInt(bot, 'phase', path, BOT_PHASES) as BotPhase,
+      targetTile: int(bot, 'targetTile', path),
+      routeCursor: int(bot, 'routeCursor', path),
+      workTicks: int(bot, 'workTicks', path),
+      carryItem: idInt(bot, 'carryItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
+      carryCount: int(bot, 'carryCount', path),
+      condition: int(bot, 'condition', path),
+      opCount: int(bot, 'opCount', path),
+    });
+  }
+  bots.sort((a, b) => a.id - b.id);
 
   const reservoirsRaw = list(p, 'reservoirs', 'payload');
   const reservoirs: Reservoir[] = [];
@@ -1282,6 +1442,8 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     networks,
     contracts,
     nextContractId: int(p, 'nextContractId', 'payload'),
+    bots,
+    nextBotId: int(p, 'nextBotId', 'payload'),
     ceremonies,
     unlocked,
     streams,

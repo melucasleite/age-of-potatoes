@@ -29,7 +29,10 @@
 // own, three delivery-cart fields on every machine, and one more lifetime accumulator) up to
 // format 10 (the third Charter and the belt junction — the untouched-work clock every machine
 // keeps, the two round-robin cursors a junction alternates on, and the high-water mark the
-// Corporate Charter's milestone is read off).
+// Corporate Charter's milestone is read off) up to format 11 (the farm — a spoil tick on every
+// perishable stack in the bag, soil and a moisture remainder and a fertility counter on every
+// tile, the zone a bot dock is bound to, the cart the player is towing, and a sorted list of
+// Agri-Bots).
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -40,7 +43,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 10;
+export const CURRENT_FORMAT_VERSION = 11;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -618,6 +621,142 @@ const migrateFormat9To10: SaveMigration = (payload) => {
 };
 
 /**
+ * The freshness windows AS THEY WERE WHEN FORMAT 11 ARRIVED, frozen here as literals.
+ *
+ * The same discipline as `FORMAT_1_MACHINE_PRICE_CENTS` and `FORMAT_5_MACHINE_INPUT_SLOTS`, and
+ * the same reason: a migration that called `freshnessTicks()` would stamp a different deadline on
+ * the same file every time the table moved, so one save read by two builds would become two
+ * different worlds — which is precisely what this directory exists to prevent. These numbers are
+ * the record of what a potato kept for on the day spoilage shipped, and they are never updated.
+ *
+ * An id that is not here did not perish in format 11 and gets no stack, which is also how a
+ * shelf-stable good is represented in a live world: an empty list rather than a long deadline.
+ */
+const FORMAT_11_FRESHNESS_TICKS: Readonly<Record<number, number>> = {
+  2: 18_000, // RussetPotato
+  51: 18_000, // GoldPotato
+  11: 18_000, // SugarCane
+  14: 18_000, // Corn
+  17: 18_000, // ChiliPepper
+  53: 18_000, // Orange
+  54: 18_000, // Lemon
+  8: 9_000, // DayOldPotato
+  52: 9_000, // DayOldGoldPotato
+  12: 9_000, // DayOldCane
+  15: 9_000, // DayOldCorn
+  18: 9_000, // DayOldChili
+  4: 7_200, // WashedPotato
+  5: 7_200, // PotatoSlices
+};
+
+/** The bucket spoil ticks were quantised to when format 11 shipped. Frozen for the same reason. */
+const FORMAT_11_FRESHNESS_BUCKET_TICKS = 300;
+
+/**
+ * Format 10 → 11.
+ *
+ * The farm release, and the widest step in the chain: harvested goods gained a clock, the crop
+ * roster reached eight, the assisted tier arrived, and so did the Agri-Bots. **Four items in one
+ * step because they land in one release** — the rule this file opens with is that a *released*
+ * migration is never edited, and 11 is not released until this ships, so one step is the whole
+ * change rather than four steps nobody could ever have run separately.
+ *
+ * Most of it is empty and zero, and each of those is a claim rather than a shrug:
+ *
+ * - **`bots: []` and `nextBotId: 1`.** `MachineKind.HarvesterDock` did not exist, so no format-10
+ *   save can name one, so no bot can exist to have been saved. Not a default — the only value.
+ * - **`player.towedCartId: 0`.** The hand cart did not exist either. Zero is "not towing", which
+ *   is what every format-10 player was doing.
+ * - **`machines[].boundZone: 0`.** A dock is the only machine that reads it and there were none.
+ * - **`field[].fertilityWear: 0` and `moistureAccum: 0`.** Both are remainders, and a returning
+ *   player starts each one at the beginning of its cycle. `fertilityWear` at zero is *generous* —
+ *   a tile harvested four times under format 10 comes back with a full five harvests before it
+ *   loses a star — and that is the right direction to be wrong in, because the alternative is
+ *   billing a player for harvests they took under rules that did not charge for them.
+ *
+ * **`field[].soil: Loam` IS THE ONE THAT IS NOT A DEFAULT, AND IT MATTERS.** The obvious move is
+ * to roll soil for a migrated world so old lots get the variety new ones have. That would be a
+ * migration that reaches into the RNG (which it must not) *and* a migration that changes the
+ * ground under crops already growing: `growthTarget` is computed from the soil AT SOWING, so a
+ * tile carrying a half-grown potato has a target that was calculated at loam rates, and calling
+ * that tile clay afterwards would leave a crop whose target agrees with no soil at all. Loam is
+ * 1000‰ on both axes — exactly the behaviour every format-10 tile actually had — so it is the
+ * value that makes the loaded world identical to the one that was saved. New worlds roll soil;
+ * old ones are loam, honestly, forever.
+ *
+ * **THE ONE THING THAT IS ACTUALLY COMPUTED IS FRESHNESS**, and it is computed to be generous on
+ * purpose. Item 035's instruction is that no existing world loses anything on load, and the
+ * world that was saved had no clock at all — so every perishable stack comes back with its FULL
+ * window ahead of it, measured from the tick the save was written. A returning player opens their
+ * bag to twelve fresh potatoes rather than to twelve that turned while the tab was shut, which is
+ * the same promise the format 1 → 2 step made about the withering clock and for the same reason:
+ * time does not pass when nobody is playing, and a migration must not be the one exception.
+ */
+const migrateFormat10To11: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-10 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const tickRaw = p['tick'];
+  const tick = typeof tickRaw === 'number' && Number.isInteger(tickRaw) ? tickRaw : 0;
+
+  const inventory: Record<string, unknown>[] = [];
+  const oldInventory = rows(p, 'inventory');
+  for (let i = 0; i < oldInventory.length; i++) {
+    const slot = oldInventory[i]!;
+    const item = slot['item'];
+    const countRaw = slot['count'];
+    const count = typeof countRaw === 'number' && Number.isInteger(countRaw) ? countRaw : 0;
+    const window = typeof item === 'number' ? FORMAT_11_FRESHNESS_TICKS[item] : undefined;
+
+    const stacks: Record<string, unknown>[] = [];
+    if (window !== undefined && count > 0) {
+      const deadline =
+        Math.floor((tick + window) / FORMAT_11_FRESHNESS_BUCKET_TICKS) *
+        FORMAT_11_FRESHNESS_BUCKET_TICKS;
+      stacks.push({ count, spoilAtTick: deadline });
+    }
+    inventory.push({ ...slot, stacks });
+  }
+
+  const field: Record<string, unknown>[] = [];
+  const oldField = rows(p, 'field');
+  for (let i = 0; i < oldField.length; i++) {
+    field.push({ ...oldField[i]!, moistureAccum: 0, soil: FORMAT_11_LOAM, fertilityWear: 0 });
+  }
+
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    machines.push({ ...oldMachines[i]!, boundZone: 0 });
+  }
+
+  const playerRaw = p['player'];
+  if (typeof playerRaw !== 'object' || playerRaw === null || Array.isArray(playerRaw)) {
+    throw new SaveCorruptError('Cannot migrate: `payload.player` is not an object.');
+  }
+
+  return {
+    ...p,
+    bots: [],
+    field,
+    inventory,
+    machines,
+    nextBotId: 1,
+    player: { ...(playerRaw as Record<string, unknown>), towedCartId: 0 },
+    version: 11,
+  };
+};
+
+/**
+ * `SoilType.Loam` AS IT WAS WHEN FORMAT 11 ARRIVED. One is one in every build this file will run
+ * in — but the id is save surface, and a migration that imported `SoilType` would start writing
+ * whatever a future table called loam. See the step above for why loam specifically.
+ */
+const FORMAT_11_LOAM = 1;
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -632,6 +771,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   7: migrateFormat7To8,
   8: migrateFormat8To9,
   9: migrateFormat9To10,
+  10: migrateFormat10To11,
 };
 
 export interface MigrationOutcome {

@@ -51,6 +51,7 @@ function field(overrides: Partial<FieldView> = {}): FieldView {
     ready: new Array<number>(COUNT).fill(0),
     dry: new Array<number>(COUNT).fill(0),
     fertility: new Array<number>(COUNT).fill(0),
+    soil: new Array<number>(COUNT).fill(1),
     wilt: new Array<number>(COUNT).fill(0),
     readyAge: new Array<number>(COUNT).fill(0),
     compost: new Array<number>(COUNT).fill(0),

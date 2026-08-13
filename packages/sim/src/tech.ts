@@ -40,6 +40,39 @@ export const TechId = {
   Chili: 'agronomy-chili',
   /** The seed hopper: what makes a Grow Zone's auto-replant toggle legal. */
   AutoReplant: 'agronomy-seed-hopper',
+  /** §5's "Gold Potato (premium, thirsty)" — the roster's fifth and last sown crop. */
+  GoldPotato: 'agronomy-gold-potato',
+  /** The Composter: spoiled goods become Fertilizer, and Fertilizer goes back in the ground. */
+  Composting: 'agronomy-composting',
+  /** The Root Cellar. The one place in the game where a clock stops (plan §4). */
+  RootCellar: 'agronomy-root-cellar',
+  /** The Orange and Lemon trees — 2×2, permanent, fruiting on a cycle (§5). */
+  Orchard: 'agronomy-orchard',
+  /**
+   * The Kola Tree, and **PLAN §3'S JOINT RULE POINTED AT THE COLA LINE**: it requires the orchard
+   * *and* the soda press. You cannot plant the nut that feeds a cola line before you have a cola
+   * line to feed — until then, kola is a thing you buy at the stand for 150¢, which is §4's
+   * consumable ladder working exactly as written.
+   */
+  KolaTree: 'agronomy-kola-tree',
+  /**
+   * Agri-Bots: the dock and the harvester that patrols a zone. **THE FIRST NODE EVER TO SIT
+   * BEHIND THE CORPORATE CHARTER**, which shipped with nothing on the far side of it and said so.
+   *
+   * The gate is fantasy-correct rather than administrative. The Charter's milestone is *one line
+   * untouched for ten in-game days* — a player who has demonstrated that a factory can run without
+   * them is exactly the player who is ready to be told the farm can too, and it is the one chore
+   * in this game that nothing has ever done for them.
+   */
+  AgriBots: 'agronomy-agri-bots',
+  /**
+   * The planter bot. Requires the harvester **and** the seed hopper, because it is the seed hopper
+   * with legs — §5: *"regrowing crops automate first; one-shots wait for the seed-hopper bot — the
+   * crop list itself paces the arc."* A player with only a harvester keeps chili and cane running
+   * forever and watches their potatoes run out, which is the roster doing the pacing it was
+   * designed to do.
+   */
+  PlanterBot: 'agronomy-planter-bot',
 
   /** Washer and Slicer — the front half of the chip line. */
   WashAndSlice: 'fabrication-wash-and-slice',
@@ -431,22 +464,95 @@ export const TECH_NODES: readonly TechNode[] = [
     // a minute a running belt factory makes, which is plan §3's charter rule stated in its own
     // units. Two-way door, like every price here.
     //
-    // **WHAT IS BEHIND IT TODAY: NOTHING, AND THAT IS THE HONEST OPTION RATHER THAN THE TIDY
-    // ONE.** Era 4 in plan §3 is "multi-product lines, repair drones, maintenance-as-logistics",
-    // and its machines — the Maintenance Station, the drones, the Agri-Bots — are items 039 and
-    // 038, neither of which is built. The tidy-looking alternative was to move an existing
-    // mid-game node (Bundles, say) behind this signature so the band would have something under
-    // it, and that would delay the one feature the design needs *early* — plan §8's "does one
-    // line dominate into decoration?" gate is answered by the Snack Combo — behind a fee twenty
-    // times its price. A Charter is an era gate, and an era gate with nothing on the far side of
-    // it yet is a promise; a mid-game node dragged behind a late-game fee is a broken curve.
-    // When 038 and 039 land they hang off this id, and nothing renumbers.
+    // **WHAT IS BEHIND IT: THE AGRI-BOTS.** This Charter shipped with an empty era behind it, on
+    // the stated grounds that an era gate with nothing on the far side is an honest promise while
+    // a mid-game node dragged behind a late-game fee is a broken curve — and the promise was
+    // "when 038 and 039 land they hang off this id, and nothing renumbers". Item 038 landed:
+    // `TechId.AgriBots` requires this node, `TechId.PlanterBot` requires that, and nothing
+    // renumbered. The Maintenance Station and the repair drones (item 039) are still to come and
+    // hang off it too.
+    //
+    // The gate reads correctly, which is worth checking rather than assuming: the milestone is
+    // *one line untouched for ten in-game days*, so the player who opens era 4 is exactly the
+    // player who has proved a factory can run without them — and what era 4 sells is the farm
+    // learning the same trick.
     id: TechId.CorporateCharter,
     branch: TechBranch.Charter,
     priceCents: 2_000_000,
     requires: [TechId.AssemblyCharter],
     milestone: MilestoneKind.UntouchedLine,
     milestoneAmount: 10,
+  },
+
+  // --- the rest of Agronomy ---------------------------------------------------------------
+  //
+  // The branch that shipped with three crops and a hopper now carries the roster's last crop, the
+  // spoilage loop's two answers, the orchard, and the bots. It is declared after the Charters
+  // because two of its nodes hang off them, and `TECH_NODES` is in panel order.
+  {
+    // $150 against a $250 gold potato: one harvest of one 3★ tile pays it back twice over, which
+    // is the 15-Minute Rule landing on a crop rather than on a machine.
+    id: TechId.GoldPotato,
+    branch: TechBranch.Agronomy,
+    priceCents: 15_000,
+    requires: [TechId.WorkshopCharter],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    // Cheap and early, because it is the node that makes spoilage a LOOP rather than a LEAK. Plan
+    // §4's whole spoilage argument ends "nothing vanishes: spoiled goods → Compost → Fertilizer",
+    // and until this exists the second arrow is missing and rot really is a hole.
+    id: TechId.Composting,
+    branch: TechBranch.Agronomy,
+    priceCents: 12_000,
+    requires: [],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    id: TechId.RootCellar,
+    branch: TechBranch.Agronomy,
+    priceCents: 55_000,
+    requires: [TechId.WorkshopCharter],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    id: TechId.Orchard,
+    branch: TechBranch.Agronomy,
+    priceCents: 80_000,
+    requires: [TechId.WorkshopCharter],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    // The joint: orchard AND soda press. See `TechId.KolaTree`.
+    id: TechId.KolaTree,
+    branch: TechBranch.Agronomy,
+    priceCents: 200_000,
+    requires: [TechId.Orchard, TechId.SodaPress],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    // **ERA 4 FINALLY HAS SOMETHING IN IT.** `TechId.CorporateCharter`'s comment promised that
+    // "when 038 and 039 land they hang off this id, and nothing renumbers" — this is 038 landing,
+    // and nothing renumbered.
+    id: TechId.AgriBots,
+    branch: TechBranch.Agronomy,
+    priceCents: 400_000,
+    requires: [TechId.CorporateCharter],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    id: TechId.PlanterBot,
+    branch: TechBranch.Agronomy,
+    priceCents: 300_000,
+    requires: [TechId.AgriBots, TechId.AutoReplant],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
   },
 ];
 
