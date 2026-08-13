@@ -40,12 +40,25 @@ export interface RectRun {
   h: number;
 }
 
+/**
+ * A belt run: one straight leg, or two meeting at a right angle.
+ *
+ * The second leg's ORIGIN is deliberately absent. It is always the first leg's exit tile —
+ * one step past its last — and the sim derives it the same way (`applyPlaceBelt`). A field
+ * for it here would be a second place the elbow could be decided, and the two could disagree
+ * about which segment owns the corner tile; that disagreement is invisible until an item
+ * reaches the bend and stops dead on ground with no belt on it.
+ */
 export interface LineRun {
   kind: 'line';
   tileX: number;
   tileY: number;
   dir: Direction;
   lengthTiles: number;
+  /** `Direction.None` when the run is straight. */
+  turnDir: Direction;
+  /** 0 when the run is straight. */
+  turnLengthTiles: number;
 }
 
 export type DragRun = RectRun | LineRun;
@@ -82,27 +95,149 @@ function clampSpan(delta: number): number {
 }
 
 /**
- * The straight run from anchor toward cursor, along whichever axis moved further.
+ * The L from anchor to cursor: along one axis, then the other.
  *
- * A belt segment is straight in the sim and a corner is two segments meeting — so the
- * gesture is straight too. Snapping to the dominant axis rather than routing an L keeps
- * one drag equal to one command, and keeps the thing you are dragging identical to the
- * thing that gets built. Ties go to the horizontal, arbitrarily but consistently: a
- * gesture that flickers between two readings at 45° is worse than one that picks a side.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  THIS USED TO THROW AN AXIS AWAY, AND THAT WAS THE BUG. `lineBetween` picked whichever
+ *  axis had moved further and discarded the other, so a diagonal drag silently became a
+ *  straight line and there was no gesture in the game that could express a bend — reported
+ *  as, in full, "the belts there is no way to make an angle".
+ *
+ *  THE SIM NEEDED NOTHING FOR THIS. `belts.ts` hands a head item onto whatever belt starts
+ *  where its own ends, so an east belt feeding a south belt has always carried goods round
+ *  the corner; `test/belt-run.test.ts` pins that as a fact about the shipped sim rather than
+ *  as a thing this change added.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * WHICH AXIS LEADS: the one the cursor moved further along, and **R flips it**. The
+ * alternative on the table was Factorio's — the bend follows the direction the cursor moved
+ * in last — and it was rejected for being stateful in a way this camera makes hostile: the
+ * camera is the player's body and rides along while he walks, so "the direction the cursor
+ * moved last" picks up motion the player did not make with his hand, and a one-pixel wobble
+ * at the end of a drag can flip the whole run at the moment of release. R is stable — the
+ * ghost shows one L until the player asks for the other one — it is already the rotate key
+ * in every placement context, and the band says so while the drag is in progress, which is
+ * the criterion that the rule be discoverable from the ghost rather than from this comment.
+ *
+ * TIES STILL GO TO THE HORIZONTAL, arbitrarily but consistently: a gesture that flickers
+ * between two readings at 45° is worse than one that picks a side.
+ *
+ * THE ELBOW TILE BELONGS TO THE SECOND LEG. The first leg stops one short of the corner so
+ * that its exit tile IS the second leg's first tile, which is the arrangement the hand-off
+ * looks for. Both legs are capped independently at `BELT_MAX_LENGTH_TILES`, because the cap
+ * is a property of one segment and a corner is two of them — and clamping the first leg
+ * moves the elbow, which is exactly why nothing downstream is told where the elbow is.
  */
-export function lineBetween(anchor: TilePoint, cursor: TilePoint): LineRun {
+export function elbowBetween(anchor: TilePoint, cursor: TilePoint, flipped: boolean): LineRun {
   const dx = cursor.tileX - anchor.tileX;
   const dy = cursor.tileY - anchor.tileY;
 
-  const horizontal = Math.abs(dx) >= Math.abs(dy);
-  const raw = horizontal ? dx : dy;
-  const length = Math.min(BELT_MAX_LENGTH_TILES, Math.abs(raw) + 1);
+  const dominantIsHorizontal = Math.abs(dx) >= Math.abs(dy);
+  const leadHorizontal = flipped ? !dominantIsHorizontal : dominantIsHorizontal;
 
-  let dir: Direction;
-  if (horizontal) dir = raw < 0 ? Direction.West : Direction.East;
-  else dir = raw < 0 ? Direction.North : Direction.South;
+  const lead = leadHorizontal ? dx : dy;
+  const cross = leadHorizontal ? dy : dx;
 
-  return { kind: 'line', tileX: anchor.tileX, tileY: anchor.tileY, dir, lengthTiles: length };
+  // Nothing moved along the leading axis, so there is no corner to turn — this is the
+  // straight run the player drew, along the other axis. Flipping the lead onto an axis with
+  // no travel on it must not invent a one-tile stub pointing the wrong way.
+  if (lead === 0) {
+    return straightRun(anchor, cross, !leadHorizontal);
+  }
+  // Nothing moved across, so the run is straight along the leading axis: the old behaviour,
+  // unchanged, for the drag that is still by far the most common one.
+  if (cross === 0) {
+    return straightRun(anchor, lead, leadHorizontal);
+  }
+
+  return {
+    kind: 'line',
+    tileX: anchor.tileX,
+    tileY: anchor.tileY,
+    dir: axisDirection(lead, leadHorizontal),
+    // One SHORT of the corner: the elbow is the second leg's, so this leg's exit tile is
+    // where the second leg begins.
+    lengthTiles: Math.min(BELT_MAX_LENGTH_TILES, Math.abs(lead)),
+    turnDir: axisDirection(cross, !leadHorizontal),
+    // …and one LONGER, because it owns the elbow as well as everything up to the cursor.
+    turnLengthTiles: Math.min(BELT_MAX_LENGTH_TILES, Math.abs(cross) + 1),
+  };
+}
+
+function straightRun(anchor: TilePoint, delta: number, horizontal: boolean): LineRun {
+  return {
+    kind: 'line',
+    tileX: anchor.tileX,
+    tileY: anchor.tileY,
+    dir: axisDirection(delta, horizontal),
+    lengthTiles: Math.min(BELT_MAX_LENGTH_TILES, Math.abs(delta) + 1),
+    turnDir: Direction.None,
+    turnLengthTiles: 0,
+  };
+}
+
+function axisDirection(delta: number, horizontal: boolean): Direction {
+  if (horizontal) return delta < 0 ? Direction.West : Direction.East;
+  return delta < 0 ? Direction.North : Direction.South;
+}
+
+/** Where the second leg starts: one step past the first leg's last tile. */
+export function elbowTile(run: LineRun): TilePoint | null {
+  if (run.turnDir === Direction.None || run.turnLengthTiles < 1) return null;
+  return {
+    tileX: run.tileX + stepX(run.dir) * run.lengthTiles,
+    tileY: run.tileY + stepY(run.dir) * run.lengthTiles,
+  };
+}
+
+function stepX(dir: Direction): number {
+  if (dir === Direction.East) return 1;
+  return dir === Direction.West ? -1 : 0;
+}
+
+function stepY(dir: Direction): number {
+  if (dir === Direction.South) return 1;
+  return dir === Direction.North ? -1 : 0;
+}
+
+/**
+ * Every tile a run covers, in the order goods travel over them.
+ *
+ * The ghost needs the SHAPE rather than a bounding box once a run can bend — an L's box is
+ * mostly tiles the belt does not touch, and painting those is a preview that lies about what
+ * the click will build.
+ */
+export function runTiles(run: DragRun): TilePoint[] {
+  const tiles: TilePoint[] = [];
+  if (run.kind === 'rect') {
+    for (let y = run.y; y < run.y + run.h; y++) {
+      for (let x = run.x; x < run.x + run.w; x++) tiles.push({ tileX: x, tileY: y });
+    }
+    return tiles;
+  }
+
+  for (let i = 0; i < run.lengthTiles; i++) {
+    tiles.push({
+      tileX: run.tileX + stepX(run.dir) * i,
+      tileY: run.tileY + stepY(run.dir) * i,
+    });
+  }
+
+  const elbow = elbowTile(run);
+  if (elbow === null) return tiles;
+
+  for (let i = 0; i < run.turnLengthTiles; i++) {
+    tiles.push({
+      tileX: elbow.tileX + stepX(run.turnDir) * i,
+      tileY: elbow.tileY + stepY(run.turnDir) * i,
+    });
+  }
+  return tiles;
+}
+
+/** Tiles in a run, both legs. What the run costs is this times the tier's per-tile price. */
+export function runLength(run: LineRun): number {
+  return run.lengthTiles + run.turnLengthTiles;
 }
 
 /** The zone that owns a tile, or 0 for none. Reads the projection's plain arrays only. */
@@ -161,8 +296,24 @@ export function eraseCommandFor(view: WorldView, anchor: TilePoint, rect: RectRu
   };
 }
 
-/** The one command a completed belt drag becomes. */
+/**
+ * The one command a completed belt drag becomes — ONE, whether or not it turns a corner.
+ *
+ * The bend rides on the same command rather than becoming a second `PlaceBelt`, because two
+ * commands cannot be refused together: a drag whose far leg crosses a machine would lay the
+ * near leg and leave a stub. See `PlaceBeltCommand` for the argument in full.
+ */
 export function beltCommandFor(tier: BeltTier, run: LineRun): Command {
+  if (run.turnDir === Direction.None || run.turnLengthTiles < 1) {
+    return {
+      type: 'PlaceBelt',
+      tier,
+      tileX: run.tileX,
+      tileY: run.tileY,
+      dir: run.dir,
+      lengthTiles: run.lengthTiles,
+    };
+  }
   return {
     type: 'PlaceBelt',
     tier,
@@ -170,22 +321,32 @@ export function beltCommandFor(tier: BeltTier, run: LineRun): Command {
     tileY: run.tileY,
     dir: run.dir,
     lengthTiles: run.lengthTiles,
+    turnDir: run.turnDir,
+    turnLengthTiles: run.turnLengthTiles,
   };
 }
 
-/** Every tile a run covers, for the ghost. Rect runs return their own corner and size. */
+/**
+ * The box a run sits inside, for anything that wants one number per edge.
+ *
+ * A BENT RUN'S BOX IS NOT ITS SHAPE — most of an L's bounding rectangle is ground the belt
+ * never touches. This is the tag's anchor and the cull, and nothing else: the ghost paints
+ * `runTiles()` instead, so the preview shows the L rather than the square around it.
+ */
 export function runBounds(run: DragRun): { x: number; y: number; w: number; h: number } {
   if (run.kind === 'rect') return { x: run.x, y: run.y, w: run.w, h: run.h };
 
-  const span = run.lengthTiles - 1;
-  switch (run.dir) {
-    case Direction.North:
-      return { x: run.tileX, y: run.tileY - span, w: 1, h: run.lengthTiles };
-    case Direction.South:
-      return { x: run.tileX, y: run.tileY, w: 1, h: run.lengthTiles };
-    case Direction.West:
-      return { x: run.tileX - span, y: run.tileY, w: run.lengthTiles, h: 1 };
-    default:
-      return { x: run.tileX, y: run.tileY, w: run.lengthTiles, h: 1 };
+  const tiles = runTiles(run);
+  let minX = run.tileX;
+  let minY = run.tileY;
+  let maxX = run.tileX;
+  let maxY = run.tileY;
+  for (let i = 0; i < tiles.length; i++) {
+    const tile = tiles[i]!;
+    if (tile.tileX < minX) minX = tile.tileX;
+    if (tile.tileY < minY) minY = tile.tileY;
+    if (tile.tileX > maxX) maxX = tile.tileX;
+    if (tile.tileY > maxY) maxY = tile.tileY;
   }
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }

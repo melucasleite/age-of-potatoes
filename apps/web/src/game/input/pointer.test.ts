@@ -27,7 +27,13 @@ import {
 } from '@snack/sim';
 import type { Command, WorldView } from '@snack/sim';
 
-import { bestSellable, counterPanelFor, primaryCommand, reachAdjusted } from './pointer';
+import {
+  bestSellable,
+  counterPanelFor,
+  dragCommands,
+  primaryCommand,
+  reachAdjusted,
+} from './pointer';
 import { ToolMode } from './tools';
 
 /** Stand the farmer on the centre of a tile. Reach is measured from tile centres. */
@@ -242,19 +248,65 @@ describe('the sell bin is a counter with two sides', () => {
   });
 });
 
-describe('the Box Up tool', () => {
-  it('names the machine under the cursor and lets the sim judge it', () => {
+// The teardown tool is a RECT gesture as of [[060]], so it no longer passes through
+// `primaryCommand` at all — a click reaches it as a one-tile drag. What is worth pinning here
+// is the seam that change could have broken silently: a click on a machine used to walk, and
+// a gesture change that quietly turned that into a refused command would read as a dead click
+// on the far side of the lot. `teardown.test.ts` covers what the tool finds; this covers what
+// a click DOES with it.
+describe('the teardown tool', () => {
+  function drag(view: WorldView, tileX: number, tileY: number) {
+    const at = { tileX, tileY };
+    return dragCommands(
+      view,
+      { pointerId: 1, anchor: at, cursor: at, tool: ToolMode.Deconstruct, flipped: false },
+      CropId.RussetPotato,
+    );
+  }
+
+  it('boxes a machine in reach where it stands', () => {
     const view = withMachine(standingOn(4, 4), 4, 4, MachineKind.Fryer, 7);
-    expect(
-      primaryCommand(view, { tileX: 4, tileY: 4 }, ToolMode.Deconstruct, Direction.East),
-    ).toEqual({ type: 'DeconstructMachine', machineId: 7 });
+    expect(drag(view, 4, 4)).toEqual([{ type: 'DeconstructMachine', machineId: 7 }]);
   });
 
-  it('does nothing on bare ground', () => {
-    const view = standingOn(4, 4);
-    expect(
-      primaryCommand(view, { tileX: 4, tileY: 4 }, ToolMode.Deconstruct, Direction.East),
-    ).toBeNull();
+  it('still walks to a machine across the lot, rather than sending a refused command', () => {
+    const view = withMachine(standingOn(1, 1), FAR.tileX, FAR.tileY, MachineKind.Fryer, 7);
+    expect(drag(view, FAR.tileX, FAR.tileY)).toEqual([
+      {
+        type: 'WalkAndAct',
+        action: IntentAction.Deconstruct,
+        tileX: 14,
+        tileY: 14,
+        item: 0,
+        count: 0,
+      },
+    ]);
+  });
+
+  it('emits nothing on bare ground', () => {
+    expect(drag(standingOn(4, 4), 4, 4)).toEqual([]);
+  });
+
+  // The one thing the walk must NOT do: a drag over several objects has no single errand to
+  // become, and the sim holds one errand at a time.
+  it('does not walk for a drag that holds more than one thing', () => {
+    const view = withMachine(standingOn(1, 1), 14, 14, MachineKind.Fryer, 7);
+    view.grabbers.push({ id: 5, tileX: 16, tileY: 14, dir: Direction.East, tier: 1 } as never);
+    const commands = dragCommands(
+      view,
+      {
+        pointerId: 1,
+        anchor: { tileX: 14, tileY: 14 },
+        cursor: { tileX: 16, tileY: 14 },
+        tool: ToolMode.Deconstruct,
+        flipped: false,
+      },
+      CropId.RussetPotato,
+    );
+    expect(commands).toEqual([
+      { type: 'DeconstructMachine', machineId: 7 },
+      { type: 'RemoveGrabber', grabberId: 5 },
+    ]);
   });
 });
 

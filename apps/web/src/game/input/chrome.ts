@@ -42,6 +42,18 @@ const CSS = `
 .sm-ix-band[data-tone="erase"] { border-color:rgba(233,124,110,0.95); background:rgba(233,124,110,0.18); }
 .sm-ix-band[data-tone="belt"] { border-color:rgba(226,190,101,0.95); background:rgba(226,190,101,0.16); }
 .sm-ix-band[data-tone="blocked"] { border-color:rgba(233,124,110,0.9); background:rgba(233,124,110,0.10); }
+/* Per-tile cells, for the two bands that are not rectangles: a belt run that bends, and a
+   teardown drag whose tiles disagree about what is going to happen to them. One div per
+   tile, pooled and reused — a drag is at most a few hundred of these and they are written
+   once a frame from the same loop the rect band is. */
+.sm-ix-cell { position:absolute; box-sizing:border-box; display:none;
+  border:1px solid rgba(126,214,142,0.85); background:rgba(126,214,142,0.20); }
+.sm-ix-cell[data-tone="erase"] { border-color:rgba(233,124,110,0.9); background:rgba(233,124,110,0.22); }
+.sm-ix-cell[data-tone="belt"] { border-color:rgba(226,190,101,0.95); background:rgba(226,190,101,0.22); }
+.sm-ix-cell[data-tone="box"] { border-color:rgba(122,200,240,0.95); background:rgba(122,200,240,0.22); }
+.sm-ix-cell[data-tone="blocked"] { border-color:rgba(233,124,110,0.9); background:rgba(233,124,110,0.12); }
+.sm-ix-band[data-tone="box"] { border-color:rgba(122,200,240,0.95); background:rgba(122,200,240,0.18); }
+.sm-ix-chev[data-tone="box"] { background:rgba(122,200,240,0.98); }
 /* The facing chevron. A ROTATED TRIANGLE RATHER THAN A GLYPH: work item 052's whole
    complaint is that "R rotate" was a text arrow nobody read as motion, and a shape that
    physically swings a quarter turn under the cursor is the one version of this that cannot
@@ -101,6 +113,33 @@ function ensureStyle(): void {
   document.head.appendChild(el);
 }
 
+/**
+ * `box` IS THE TEARDOWN TOOL'S SECOND COLOUR AND IT EARNS ITS PLACE ([[060]]).
+ *
+ * One drag can do two different things: belts, arms and pipes come up for cash, and machines
+ * go into the bag as boxes for nothing at all. That asymmetry is deliberate ([[054]]: boxing
+ * is not selling) but a player who cannot see it coming learns it by watching their money not
+ * move. `erase` red is "off the lot, money back" and this is "into your bag" — a cool blue,
+ * borrowed from the walk-destination marker rather than invented, because both mean "this is
+ * going to end up somewhere else" rather than "this is a problem".
+ */
+export type BandTone = 'zone' | 'erase' | 'belt' | 'box' | 'blocked';
+
+/**
+ * One tile of a band that is not a rectangle.
+ *
+ * TWO GESTURES OUTGREW THE RECTANGLE AT ONCE and for opposite reasons, which is why this is
+ * a list of tiles rather than a second rect. A belt run can now bend, so its shape is an L
+ * and its bounding box is mostly ground it never touches. A teardown drag IS a rectangle,
+ * but the things inside it are removed one by one — so the tiles do not agree about their
+ * tone, and a single fill would have to pick the majority opinion and hide the rest.
+ */
+export interface BandCell {
+  x: number;
+  y: number;
+  tone: BandTone;
+}
+
 /** A tile rectangle to outline, plus what to say about it. */
 export interface BandState {
   x: number;
@@ -108,7 +147,14 @@ export interface BandState {
   w: number;
   h: number;
   label: string;
-  tone: 'zone' | 'erase' | 'belt' | 'blocked';
+  tone: BandTone;
+  /**
+   * Per-tile fills, drawn INSTEAD of the outlined rectangle when present.
+   *
+   * The rect above is still carried and still means something when this is set: it is the
+   * bounding box, which is where the tag hangs. Nothing draws it.
+   */
+  cells?: readonly BandCell[];
   /**
    * The facing to draw a chevron for: a `Direction`, or `Direction.None` for no chevron.
    *
@@ -145,6 +191,8 @@ export class InputChrome {
   private open = false;
   private refreshCountdown = 0;
   private lastHintKey = '';
+  /** One div per tile of a non-rectangular band, grown on demand and reused. */
+  private readonly cells: HTMLElement[] = [];
   /** One sign per unowned parcel, grown on demand and reused. Fifteen at the very most. */
   private readonly deedSigns: HTMLElement[] = [];
   /** What each sign currently says, so a frame that changes nothing writes nothing. */
@@ -193,8 +241,9 @@ export class InputChrome {
     this.tag = null;
     this.hint = null;
     this.menu = null;
-    // The signs are children of `root` and go with it, but the arrays must not survive a
-    // StrictMode remount holding nodes that are no longer in the document.
+    // The signs and cells are children of `root` and go with it, but the arrays must not
+    // survive a StrictMode remount holding nodes that are no longer in the document.
+    this.cells.length = 0;
     this.deedSigns.length = 0;
     this.deedText.length = 0;
     this.open = false;
@@ -223,6 +272,7 @@ export class InputChrome {
     if (state === null) {
       band.style.display = 'none';
       tag.style.display = 'none';
+      this.setCells(null);
       this.setChevron(null, 0, 0, 0, 0);
       return;
     }
@@ -232,12 +282,19 @@ export class InputChrome {
     const width = state.w * TILE_PX * zoom;
     const height = state.h * TILE_PX * zoom;
 
-    band.style.display = 'block';
-    band.dataset.tone = state.tone;
-    band.style.left = `${origin.x}px`;
-    band.style.top = `${origin.y}px`;
-    band.style.width = `${width}px`;
-    band.style.height = `${height}px`;
+    const cells = state.cells;
+    if (cells !== undefined) {
+      band.style.display = 'none';
+      this.setCells(cells);
+    } else {
+      this.setCells(null);
+      band.style.display = 'block';
+      band.dataset.tone = state.tone;
+      band.style.left = `${origin.x}px`;
+      band.style.top = `${origin.y}px`;
+      band.style.width = `${width}px`;
+      band.style.height = `${height}px`;
+    }
 
     this.setChevron(state, origin.x, origin.y, width, height);
 
@@ -285,6 +342,45 @@ export class InputChrome {
     chev.style.left = `${left + width / 2}px`;
     chev.style.top = `${top + height / 2}px`;
     chev.style.transform = `translate(-50%,-50%) rotate(${degrees}deg)`;
+  }
+
+  /**
+   * The per-tile cells, positioned and toned, with the unused tail hidden.
+   *
+   * POOLED AND NEVER DESTROYED, exactly as the deed signs are: a drag redraws every frame
+   * while the camera rides along with the walking player, so creating and dropping a few
+   * hundred divs a frame would be the one part of this layer that could actually be felt.
+   * The pool grows to the largest band the session ever showed and then stops.
+   */
+  private setCells(cells: readonly BandCell[] | null): void {
+    const root = this.root;
+    if (root === null) return;
+
+    const count = cells === null ? 0 : cells.length;
+    while (this.cells.length < count) {
+      const cell = document.createElement('div');
+      cell.className = 'sm-ix-cell';
+      root.appendChild(cell);
+      this.cells.push(cell);
+    }
+
+    const zoom = this.camera.transform.zoom;
+    const size = TILE_PX * zoom;
+    for (let i = 0; i < count; i++) {
+      const spec = cells![i]!;
+      const el = this.cells[i]!;
+      const origin = this.camera.worldToScreen(spec.x * TILE_PX, spec.y * TILE_PX);
+      el.style.display = 'block';
+      el.dataset.tone = spec.tone;
+      el.style.left = `${origin.x}px`;
+      el.style.top = `${origin.y}px`;
+      el.style.width = `${size}px`;
+      el.style.height = `${size}px`;
+    }
+    for (let i = count; i < this.cells.length; i++) {
+      const el = this.cells[i]!;
+      if (el.style.display !== 'none') el.style.display = 'none';
+    }
   }
 
   // --- the deed signs --------------------------------------------------------------------

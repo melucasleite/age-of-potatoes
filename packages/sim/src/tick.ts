@@ -1641,6 +1641,21 @@ function applyCancelContract(state: WorldState, command: CancelContractCommand):
 
 // --- belts and grabbers -----------------------------------------------------------
 
+/**
+ * Lay a belt run: one segment, or two meeting at a right angle.
+ *
+ * BOTH LEGS ARE JUDGED BEFORE EITHER IS BUILT, which is the whole reason an L is one command
+ * (see `PlaceBeltCommand`). The tile loop below runs over the entire run and the money is
+ * checked against the entire run, so a bend whose far leg crosses a machine lays nothing at
+ * all rather than leaving half of itself on the lot.
+ *
+ * `BELT_MAX_LENGTH_TILES` IS PER LEG, NOT PER RUN, and that is the reading that was already
+ * true rather than a relaxation: the cap is a property of a `Belt`, which is one straight
+ * segment, and two segments meeting at a corner are two belts by every other rule in this
+ * file — separate ids, separate item lists, separate refunds when they come back up. A player
+ * who wants a longer run drags again from the end, exactly as before; what changes is that
+ * the corner between the two no longer costs a second gesture.
+ */
 function applyPlaceBelt(state: WorldState, command: PlaceBeltCommand): boolean {
   const spec = beltSpec(command.tier);
   if (spec === null) return false;
@@ -1650,19 +1665,49 @@ function applyPlaceBelt(state: WorldState, command: PlaceBeltCommand): boolean {
 
   const dx = directionStepX(command.dir);
   const dy = directionStepY(command.dir);
-  for (let i = 0; i < command.lengthTiles; i++) {
-    const x = command.tileX + dx * i;
-    const y = command.tileY + dy * i;
+
+  // The second leg, if there is one. It starts at the first leg's EXIT tile — one step past
+  // its last — so the elbow belongs to the second segment and the hand-off in `belts.ts`
+  // finds a belt starting exactly where the first one delivers.
+  const turnDir = command.turnDir ?? Direction.None;
+  const turnLength = command.turnLengthTiles ?? 0;
+  const turning = turnDir !== Direction.None || turnLength > 0;
+  let turnDx = 0;
+  let turnDy = 0;
+  let turnOriginX = 0;
+  let turnOriginY = 0;
+
+  if (turning) {
+    if (!isCompassDirection(turnDir)) return false;
+    if (turnLength < 1 || turnLength > BELT_MAX_LENGTH_TILES) return false;
+    turnDx = directionStepX(turnDir);
+    turnDy = directionStepY(turnDir);
+    // Perpendicular, or nothing. Parallel is a straight run written in two pieces and
+    // anti-parallel is a belt folded back over itself; both would also make the two legs
+    // fight over tiles, which the disjointness the loops below rely on assumes away.
+    if (turnDx * dx + turnDy * dy !== 0) return false;
+    turnOriginX = command.tileX + dx * command.lengthTiles;
+    turnOriginY = command.tileY + dy * command.lengthTiles;
+  }
+
+  const totalTiles = command.lengthTiles + (turning ? turnLength : 0);
+
+  for (let i = 0; i < totalTiles; i++) {
+    const onFirst = i < command.lengthTiles;
+    const step = onFirst ? i : i - command.lengthTiles;
+    const x = onFirst ? command.tileX + dx * step : turnOriginX + turnDx * step;
+    const y = onFirst ? command.tileY + dy * step : turnOriginY + turnDy * step;
     if (!isInsideWorld(x, y)) return false;
     // The whole run or none of it, the same rule a pipe path follows: a belt dragged across
     // the fence is refused rather than clipped at it, because a stub that stops where the
-    // player did not aim is a stub they now have to find and take up.
+    // player did not aim is a stub they now have to find and take up. With a bend that rule
+    // spans both legs, which is why this loop walks the run rather than one segment.
     if (!isOwnedTile(state, x, y)) return false;
     if (isFieldTile(x, y)) return false;
     if (tileOccupied(state, x, y)) return false;
   }
 
-  const cost = spec.priceCentsPerTile * command.lengthTiles;
+  const cost = spec.priceCentsPerTile * totalTiles;
   if (state.moneyCents < cost) return false;
 
   const belt = spawnBelt(
@@ -1674,6 +1719,17 @@ function applyPlaceBelt(state: WorldState, command: PlaceBeltCommand): boolean {
     command.lengthTiles,
   );
   if (belt === null) return false;
+
+  if (turning) {
+    const second = spawnBelt(state, command.tier, turnOriginX, turnOriginY, turnDir, turnLength);
+    // Nothing above can make this fail — the tiles were all checked and `spawnBelt` refuses
+    // only what those checks already cover — but a half-laid run is the one outcome this
+    // command exists to prevent, so the first leg goes back rather than being left standing.
+    if (second === null) {
+      removeBeltById(state, belt.id);
+      return false;
+    }
+  }
 
   state.moneyCents -= cost;
   recordSpend(state.stats, cost);

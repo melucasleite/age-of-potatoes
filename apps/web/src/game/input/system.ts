@@ -174,11 +174,20 @@ export class InputSystem {
    * press is one `RotateGrabber` in the trace, applied at a tick boundary and re-validated by
    * the sim; `placeDir` is cursor state that is never traced, never hashed and never saved.
    *
-   * MID-DRAG R KEEPS ITS OLD MEANING, per the item's constraints. Nothing draggable rotates,
-   * so this is a promise not to surprise a player halfway through a belt run rather than a
-   * behaviour anybody will notice.
+   * MID-DRAG, R NOW FLIPS A BELT RUN'S CORNER — and this is the one place item 052's
+   * "nothing draggable rotates" stopped being true. A belt drag can lay an L since [[059]],
+   * so there is now exactly one draggable thing with an orientation to change, and R is the
+   * key the player already reaches for to change an orientation. It is still not a command:
+   * the corner belongs to a gesture that has not been released, and an in-progress band emits
+   * nothing by the rule at the top of `gesture.ts`.
+   *
+   * THE ORDER IS STILL THE FEATURE. A drag in progress is the most specific statement of
+   * intent on screen, so it outranks the arm under the cursor exactly as the arm outranks
+   * the ghost — and turning a placed arm mid-drag was never reachable anyway, because the
+   * old code refused to look for one while dragging.
    */
   rotate(): void {
+    if (this.pointer.flipDragAxis()) return;
     if (!this.dragging) {
       const command = this.pointer.rotateCommand();
       if (command !== null) {

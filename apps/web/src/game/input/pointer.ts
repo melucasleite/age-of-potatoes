@@ -60,14 +60,16 @@ import type { BandState } from './chrome';
 import type { HoverTile, InputHost } from './context';
 import {
   beltCommandFor,
+  elbowBetween,
   eraseCommandFor,
-  lineBetween,
   paintCommandFor,
   rectBetween,
   runBounds,
+  runLength,
+  runTiles,
   zoneIdAt,
 } from './gesture';
-import type { DragRun, TilePoint } from './gesture';
+import type { DragRun, RectRun, TilePoint } from './gesture';
 import type { PanelRequest } from './panels';
 import { requestPanel } from './panels';
 import {
@@ -78,6 +80,7 @@ import {
   tileAtView,
   tileWithinReach,
 } from './picking';
+import { teardownPlan } from './teardown';
 import type { InputSystem } from './system';
 import {
   TOOL_INFO,
@@ -95,6 +98,15 @@ interface Drag {
   anchor: TilePoint;
   cursor: TilePoint;
   tool: ToolMode;
+  /**
+   * Which axis the belt run leads with: false for the one the cursor moved further along,
+   * true for the other. R toggles it mid-drag.
+   *
+   * DRAG STATE, NOT TOOL STATE, so it resets with every press. A player who flipped one
+   * corner is not asking for every corner after it to come out backwards — and the ghost
+   * shows the answer before the release either way, so there is nothing to remember.
+   */
+  flipped: boolean;
 }
 
 export class PointerInput {
@@ -147,6 +159,21 @@ export class PointerInput {
 
   get dragging(): boolean {
     return this.drag !== null;
+  }
+
+  /**
+   * R during a belt drag: swap which axis the run leads with.
+   *
+   * Returns false when there is nothing to flip — no drag, or a drag whose tool does not lay
+   * an L — so `InputSystem.rotate()` can fall through to R's other meanings without knowing
+   * what a belt run is. Emits NOTHING: the corner is part of a gesture that has not been
+   * released yet, and an in-progress band is renderer state that never enters the trace.
+   */
+  flipDragAxis(): boolean {
+    const drag = this.drag;
+    if (drag === null || toolBeltTier(drag.tool) === null) return false;
+    drag.flipped = !drag.flipped;
+    return true;
   }
 
   // --- listeners -----------------------------------------------------------------------
@@ -230,7 +257,7 @@ export class PointerInput {
       return;
     }
 
-    this.drag = { pointerId: event.pointerId, anchor: tile, cursor: tile, tool };
+    this.drag = { pointerId: event.pointerId, anchor: tile, cursor: tile, tool, flipped: false };
     // See the header: without capture the gesture dies at the canvas edge.
     try {
       this.host.canvas.setPointerCapture(event.pointerId);
@@ -259,13 +286,16 @@ export class PointerInput {
     if (view === null) return;
 
     drag.cursor = this.tileUnder(event);
-    const command = dragCommand(view, drag, this.system.zoneCrop);
 
-    // EXACTLY ONE COMMAND, OR NONE. A forty-tile paint appends one entry to the trace.
-    // A gesture that formed nothing meaningful — an erase started on bare soil — appends
-    // nothing, which is the same outcome as cancelling and is deliberately not a special
-    // case in the trace.
-    if (command !== null) this.host.queue.push(command);
+    // ONE COMMAND FOR EVERY BUILDING GESTURE, AND THAT IS STILL THE RULE. A forty-tile paint,
+    // a thirty-tile pipe run and a belt run that turns a corner are one entry each. A gesture
+    // that formed nothing meaningful — an erase started on bare soil — appends nothing, which
+    // is the same outcome as cancelling and is deliberately not a special case in the trace.
+    //
+    // TEARDOWN IS THE ONE THAT RETURNS SEVERAL, because it is several removals rather than one
+    // decision; the argument is written out in full at the top of `teardown.ts`.
+    const commands = dragCommands(view, drag, this.system.zoneCrop);
+    for (let i = 0; i < commands.length; i++) this.host.queue.push(commands[i]!);
   };
 
   private tileUnder(event: PointerEvent): HoverTile {
@@ -317,6 +347,10 @@ export class PointerInput {
   /** True when R would do something the player can see. Drives the hint strip, nothing else. */
   rotateAdvertised(tool: ToolMode): boolean {
     if (toolGrabberTier(tool) !== null) return true;
+    // A belt tool advertises R because a belt run can bend now and R chooses which way
+    // ([[059]]). Advertised on the ARMED TOOL rather than only mid-drag, so the player finds
+    // out before committing to a corner instead of during one.
+    if (toolBeltTier(tool) !== null) return true;
     return this.grabberUnderCursor() !== null;
   }
 
@@ -347,6 +381,15 @@ export class PointerInput {
     // the same reason a machine ghost does: the player is aiming at sixteen tiles a side, and
     // a one-tile chevron under that is answering a question nobody asked.
     if (tool === ToolMode.BuyDeed) return deedBand(view, hover);
+
+    // The teardown ghost outranks the arm-under-the-cursor band, and has to: an arm is one of
+    // the four things this tool takes, so "arm → · R turns it" under a cursor that is about to
+    // rip it out would be the wrong sentence about the right object. It outlines the WHOLE
+    // thing under the cursor — all four tiles of a Fryer, all sixteen of a belt — because that
+    // is what one click removes.
+    if (tool === ToolMode.Deconstruct) {
+      return teardownBand(view, { x: hover.tileX, y: hover.tileY, w: 1, h: 1 });
+    }
 
     const grabber = this.grabberUnderCursor();
     if (grabber !== null && toolMachineKind(tool) === null) return grabberBand(hover, grabber);
@@ -402,13 +445,10 @@ export function primaryCommand(
       return { type: 'HarvestTile', tileX: tile.tileX, tileY: tile.tileY };
     case ToolMode.Hand:
       return query.machine === null ? null : handCommand(view, query.machine);
-    // Boxing is a machine verb like repair, so it names the machine and lets the sim decide
-    // ([[054]]): jammed, mid-batch, or the sell bin are all refusals in `tick.ts`, and none of
-    // them are re-implemented here. Out of reach becomes an errand in `reachAdjusted`.
-    case ToolMode.Deconstruct:
-      return query.machine === null
-        ? null
-        : { type: 'DeconstructMachine', machineId: query.machine.id };
+    // No `Deconstruct` case any more, and its absence is the change [[060]] made: teardown is
+    // a rect gesture now, so it never reaches this function. Its verb lives in `teardown.ts`,
+    // which dispatches on all four things a tile can hold rather than on machines alone, and a
+    // plain click gets there as a one-tile drag.
     default:
       return null;
   }
@@ -589,23 +629,52 @@ function standErrand(view: WorldView, direct: Command, item: number, count: numb
   };
 }
 
-/** The single command a completed drag becomes, or `null` for "nothing to say". */
-function dragCommand(view: WorldView, drag: Drag, crop: CropId): Command | null {
+/**
+ * What a completed drag becomes. Empty for "nothing to say".
+ *
+ * Returns a LIST because one gesture in the game is genuinely many removals — see the header
+ * of `teardown.ts`. Every other branch here returns exactly one command or none, and the
+ * plural signature is what keeps that visible rather than hiding it behind a helper.
+ */
+export function dragCommands(view: WorldView, drag: Drag, crop: CropId): Command[] {
   const run = runFor(drag);
 
   if (run.kind === 'rect') {
-    if (drag.tool === ToolMode.EraseZone) return eraseCommandFor(view, drag.anchor, run);
-    return paintCommandFor(view, drag.anchor, run, crop);
+    if (drag.tool === ToolMode.Deconstruct) return teardownCommands(view, run);
+    const command =
+      drag.tool === ToolMode.EraseZone
+        ? eraseCommandFor(view, drag.anchor, run)
+        : paintCommandFor(view, drag.anchor, run, crop);
+    return command === null ? [] : [command];
   }
 
   const tier = toolBeltTier(drag.tool);
-  if (tier === null) return null;
-  return beltCommandFor(tier, run);
+  if (tier === null) return [];
+  return [beltCommandFor(tier, run)];
+}
+
+/**
+ * The teardown drag's commands, with the single-machine case still able to walk.
+ *
+ * A CLICK IS A 1×1 DRAG, so this is also the path a plain click on a Fryer takes — and a
+ * click on a machine across the lot has walked there since [[054]]. Losing that to a gesture
+ * change would be a silent regression: the command is not reach-gated in the input layer, so
+ * it would simply be built, sent, and refused. Anything larger than one machine does not
+ * walk, because the sim holds ONE errand at a time and there is no honest way to walk to six
+ * things — the ghost reddens what is out of reach instead, and the ribbon says so.
+ */
+function teardownCommands(view: WorldView, rect: RectRun): Command[] {
+  const plan = teardownPlan(view, rect);
+  const lone = plan.loneMachineTile;
+  if (lone !== null && plan.commands.length === 1) {
+    return [reachAdjusted(view, lone, plan.commands[0]!)];
+  }
+  return plan.commands;
 }
 
 function runFor(drag: Drag): DragRun {
   return gestureFor(drag.tool) === 'line'
-    ? lineBetween(drag.anchor, drag.cursor)
+    ? elbowBetween(drag.anchor, drag.cursor, drag.flipped)
     : rectBetween(drag.anchor, drag.cursor);
 }
 
@@ -720,23 +789,44 @@ function dragBand(view: WorldView, drag: Drag, crop: CropId): BandState {
   if (run.kind === 'line') {
     const tier = toolBeltTier(drag.tool);
     const perTile = tier === null ? 0 : (beltSpec(tier)?.priceCentsPerTile ?? 0);
-    const cost = perTile * run.lengthTiles;
-    const clear = runIsClearOfField(view, bounds);
+    const tiles = runTiles(run);
+    const length = runLength(run);
+    const cost = perTile * length;
+    // THE WHOLE RUN GOES RED TOGETHER, and with a bend that is no longer merely tidy — it is
+    // the truth. `applyPlaceBelt` judges both legs before laying either, so one tile crossing
+    // the fence at the far end of the second leg refuses the near leg too. Colouring per tile
+    // here would show a mostly-green L that builds nothing.
+    const clear = tilesAreClear(view, tiles);
+    const tone = clear && view.moneyCents >= cost ? 'belt' : 'blocked';
+    const bent = run.turnLengthTiles > 0;
     return {
       ...bounds,
-      tone: clear && view.moneyCents >= cost ? 'belt' : 'blocked',
+      tone,
+      // The L is painted tile by tile rather than as its bounding box: a bent run's box is
+      // mostly ground the belt never touches, and a preview that covers it is a preview that
+      // lies about where the belt is going.
+      cells: tiles.map((tile) => ({ x: tile.tileX, y: tile.tileY, tone })),
       // THE PENNIES ARE THE POINT ON A BELT RUN. Basic belt is 150 cents a tile, so an
       // odd-length run costs a round number of dollars and fifty cents, and this label used to
       // round it — a three-tile run cost $4.50 and advertised "$5", which is a quote the tone
       // beside it can contradict: `moneyCents >= cost` is exact, so $4.60 in the pouch drew a
       // green band under a label saying five dollars. It quotes the charge now.
-      label: `${run.lengthTiles} tile${run.lengthTiles === 1 ? '' : 's'} · ${formatCents(cost)} ${arrow(run.dir)}`,
+      //
+      // AND ON A BENT RUN THE LABEL CARRIES THE RULE. Which axis leads is a choice the player
+      // has to be able to find, and the only place it can be found while the button is still
+      // down is here — so the tag says both arrows in order and says what flips them.
+      label: bent
+        ? `${length} tiles · ${formatCents(cost)} ${arrow(run.dir)}${arrow(run.turnDir)} · R flips the corner`
+        : `${length} tile${length === 1 ? '' : 's'} · ${formatCents(cost)} ${arrow(run.dir)}`,
       // No chevron on a belt run, and that is the point of the chevron. A belt's direction is
-      // the direction it was dragged and R does not touch it (item 052's constraints say so
-      // outright), so the shape that means "R turns this" must never appear on one.
+      // the direction it was dragged and R does not turn a placed one (item 052's constraints
+      // say so outright), so the shape that means "R turns this" must never appear on one —
+      // including now that R does something else entirely while a belt drag is in progress.
       dir: Direction.None,
     };
   }
+
+  if (drag.tool === ToolMode.Deconstruct) return teardownBand(view, bounds);
 
   const inField = tilesInsideField(view, bounds);
   if (drag.tool === ToolMode.EraseZone) {
@@ -759,6 +849,35 @@ function dragBand(view: WorldView, drag: Drag, crop: CropId): BandState {
         : zoneId > 0
           ? `+ ${inField} tiles → zone ${zoneId}`
           : `new zone · ${inField} tiles · ${cropName(crop)}`,
+    dir: Direction.None,
+  };
+}
+
+/**
+ * The teardown band: every object the rectangle would take, toned by what happens to it.
+ *
+ * PER-TILE COLOURING IS RIGHT HERE AND WRONG ON A BELT RUN, and the difference is the whole
+ * reason both bands exist. A belt run is refused WHOLE, so one bad tile reddens all of them —
+ * colouring per tile there would advertise a mostly-green L that builds nothing. A teardown is
+ * N independent removals, so the tiles genuinely disagree: this belt is coming up for cash,
+ * that Fryer is going in the bag, and the jammed one over there is going nowhere.
+ *
+ * AN EMPTY RECTANGLE KEEPS THE PLAIN OUTLINE. With no cells the chrome would draw nothing at
+ * all, and a drag with no visible band is not a drag — so bare ground gets the rectangle, in
+ * the refusal tone, saying there is nothing in it.
+ */
+function teardownBand(view: WorldView, bounds: Bounds): BandState {
+  const plan = teardownPlan(view, bounds);
+  if (plan.cells.length === 0) {
+    return { ...bounds, tone: 'blocked', label: plan.label, dir: Direction.None };
+  }
+  return {
+    ...bounds,
+    // The summary tone is the majority outcome, and it only shows through where a cell does
+    // not: the tag reads it, the cells carry the real answer per object.
+    tone: plan.boxCount > 0 && plan.refundCents === 0 ? 'box' : 'erase',
+    cells: plan.cells,
+    label: plan.label,
     dir: Direction.None,
   };
 }
@@ -881,17 +1000,19 @@ function tilesInsideField(view: WorldView, bounds: Bounds): number {
  * sim; this mirrors the cheap half of that so the band turns red before the click rather
  * than after. Belts and arms already down are not in `TileQuery`, so a run laid across one
  * still shows green and is still correctly refused — the sim is the authority (§12).
+ *
+ * TAKES THE RUN'S TILES RATHER THAN ITS BOX, since a run can now bend: an L's bounding
+ * rectangle contains ground the belt never touches, and a machine standing in the empty
+ * quarter of it would have reddened a run that is in fact perfectly legal.
  */
-function runIsClearOfField(view: WorldView, bounds: Bounds): boolean {
-  for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
-    for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
-      const query = tileAtView(view, x, y);
-      // Ownership is checked here as well as in the sim, because a run dragged over the fence
-      // is refused WHOLE (`applyPlaceBelt`) — so the band has to go red for the whole run
-      // rather than for the two tiles that crossed it.
-      if (!query.insideWorld || !query.owned || query.isField || query.machine !== null) {
-        return false;
-      }
+function tilesAreClear(view: WorldView, tiles: readonly TilePoint[]): boolean {
+  for (let i = 0; i < tiles.length; i++) {
+    const query = tileAtView(view, tiles[i]!.tileX, tiles[i]!.tileY);
+    // Ownership is checked here as well as in the sim, because a run dragged over the fence
+    // is refused WHOLE (`applyPlaceBelt`) — so the band has to go red for the whole run
+    // rather than for the two tiles that crossed it.
+    if (!query.insideWorld || !query.owned || query.isField || query.machine !== null) {
+      return false;
     }
   }
   return true;

@@ -29,6 +29,7 @@ import { beltItemsVisibleAt } from '../input/lod';
 import type { HoverTile } from '../input/context';
 import { grabberAtView, tileAtView, tileWithinReach } from '../input/picking';
 import { bestSellable } from '../input/pointer';
+import { outcomePhrase, teardownTargetAt } from '../input/teardown';
 import { beltItemAtTile } from './belt-items';
 import { FarmFx } from './farm-fx';
 import { money } from './hud';
@@ -928,6 +929,26 @@ export function statusFor(view: WorldView, ui: RenderUiState): string {
 
   const query = tileAtView(view, ui.hover.tileX, ui.hover.tileY);
   if (!query.insideWorld) return 'outside the lot';
+
+  // THE TEARDOWN TOOL OUTRANKS EVERY OTHER READING OF A TILE, and it has to: the sentences
+  // below describe what a thing IS, and a player holding this cursor needs to know what is
+  // about to happen TO it. The two outcomes are deliberately different money — a machine goes
+  // in the bag with its dials and pays nothing, everything else refunds in full ([[054]],
+  // [[060]]) — and this line is where that stops being a thing you discover afterwards by
+  // watching the pouch fail to move.
+  if (ui.tool === ToolMode.Deconstruct) {
+    const target = teardownTargetAt(view, ui.hover.tileX, ui.hover.tileY);
+    if (target === null) return 'teardown — nothing here to take up';
+    if (target.refused) {
+      // Named rather than merely reddened. Both of these are refusals the sim will make and
+      // the projection can see coming; the third — a machine mid-batch — it cannot, so this
+      // line does not claim to cover it.
+      return query.machine !== null && query.machine.lamp === LampState.Jammed
+        ? `${target.name} is jammed — whack it first`
+        : `${target.name} — too far, click to walk over`;
+    }
+    return `${target.name} · ${outcomePhrase(target)}`;
+  }
 
   // UNOWNED LAND OUTRANKS EVERYTHING ELSE ON THE TILE, and that ordering is the readable
   // reason item 053 asks for: a player who drags a belt across the fence gets "you do not own

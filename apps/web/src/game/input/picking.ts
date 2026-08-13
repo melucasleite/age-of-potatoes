@@ -25,8 +25,8 @@
 // So picking asks the SIM what occupies a tile — `tileAtView()` below — and never asks
 // the display. When belts land they need no new mechanism.
 
-import type { GrabberView, MachineView, WorldView } from '@snack/sim';
-import { HAND_REACH_SUBTILES, SUBTILE } from '@snack/sim';
+import type { BeltView, GrabberView, MachineView, PipeView, WorldView } from '@snack/sim';
+import { Direction, HAND_REACH_SUBTILES, SUBTILE } from '@snack/sim';
 
 import type { Camera } from '../render/camera';
 import { TILE_PX } from '../render/pixel';
@@ -198,6 +198,64 @@ export function grabberAtView(v: WorldView, tileX: number, tileY: number): Grabb
   for (let i = 0; i < v.grabbers.length; i++) {
     const g = v.grabbers[i]!;
     if (g.tileX === tileX && g.tileY === tileY) return g;
+  }
+  return null;
+}
+
+/**
+ * The belt segment running over a tile, if there is one.
+ *
+ * BESIDE `tileAtView` RATHER THAN INSIDE IT, for the same reason `grabberAtView` is: the tile
+ * query runs for every tile of a drag's footprint and on every pointer move for the status
+ * ribbon, and only the teardown tool and the ribbon ever ask this. Analytic rather than a walk
+ * down the segment — a belt is a straight run from an origin, so membership is a multiply and
+ * two compares whatever its length.
+ *
+ * IT RETURNS THE WHOLE SEGMENT, and that is the fact the teardown ghost is built on:
+ * `RemoveBelt` names a belt by id and takes all of it, so a drag clipping one tile of a
+ * sixteen-tile express run takes the whole run. The preview shows that rather than letting
+ * the player find out afterwards.
+ */
+export function beltAtView(v: WorldView, tileX: number, tileY: number): BeltView | null {
+  for (let i = 0; i < v.belts.length; i++) {
+    const belt = v.belts[i]!;
+    const dx = belt.dir === Direction.East ? 1 : belt.dir === Direction.West ? -1 : 0;
+    const dy = belt.dir === Direction.South ? 1 : belt.dir === Direction.North ? -1 : 0;
+    if (dx !== 0) {
+      if (tileY !== belt.tileY) continue;
+      const along = (tileX - belt.tileX) * dx;
+      if (along >= 0 && along < belt.lengthTiles) return belt;
+      continue;
+    }
+    if (dy !== 0) {
+      if (tileX !== belt.tileX) continue;
+      const along = (tileY - belt.tileY) * dy;
+      if (along >= 0 && along < belt.lengthTiles) return belt;
+      continue;
+    }
+    // A facing this build has never heard of — a save from a newer sim. One tile, rather than
+    // an exception thrown at the player. The same rule `render/junction.ts` follows.
+    if (belt.tileX === tileX && belt.tileY === tileY) return belt;
+  }
+  return null;
+}
+
+/** Every tile one belt segment covers, in the order goods travel over them. */
+export function beltTiles(belt: BeltView): { tileX: number; tileY: number }[] {
+  const dx = belt.dir === Direction.East ? 1 : belt.dir === Direction.West ? -1 : 0;
+  const dy = belt.dir === Direction.South ? 1 : belt.dir === Direction.North ? -1 : 0;
+  const tiles: { tileX: number; tileY: number }[] = [];
+  for (let i = 0; i < belt.lengthTiles; i++) {
+    tiles.push({ tileX: belt.tileX + dx * i, tileY: belt.tileY + dy * i });
+  }
+  return tiles;
+}
+
+/** The pipe on a tile, if there is one. One tile each, so this is a straight comparison. */
+export function pipeAtView(v: WorldView, tileX: number, tileY: number): PipeView | null {
+  for (let i = 0; i < v.pipes.length; i++) {
+    const pipe = v.pipes[i]!;
+    if (pipe.tileX === tileX && pipe.tileY === tileY) return pipe;
   }
   return null;
 }

@@ -385,7 +385,38 @@ export interface SetDockZoneCommand {
 
 // --- belts and grabbers -------------------------------------------------------------
 
-/** Lay one straight belt segment. Corners are two segments meeting, not a curve. */
+/**
+ * Lay a belt run: one straight segment, or two meeting at a right angle.
+ *
+ * CORNERS ARE STILL TWO SEGMENTS AND NOTHING ABOUT THE WORLD CHANGED — `belts.ts` already
+ * hands an item from a belt onto whatever belt starts where its own ends, so a bend has
+ * always worked once both segments existed. What did not exist was a way to ASK for one in
+ * a single command, and that is the only thing these two fields buy.
+ *
+ * WHY ONE COMMAND RATHER THAN TWO `PlaceBelt`s FROM THE CLIENT. Two commands cannot be
+ * refused together. A drag whose second leg crosses a machine, the fence, or the field would
+ * lay the first leg and refuse the second, leaving a stub the player did not ask for and now
+ * has to find — and `applyPlaceBelt`'s whole rule, stated on the loop below, is that a run is
+ * refused WHOLE. An L is one gesture, so it is one entry in the trace and one decision by the
+ * reducer. (`PlacePipe` reaches the same place by carrying a `path`; see the note below on
+ * why a belt does not.)
+ *
+ * WHY TWO OPTIONAL FIELDS RATHER THAN A `path` ARRAY LIKE `PlacePipe`. A path can express a
+ * route, and an L is explicitly not one — no pathfinding was the constraint. Origin + dir +
+ * length is the belt grammar already, and a second one of exactly the same shape is the only
+ * bend this can encode: it cannot zigzag, cannot double back, and cannot be handed a
+ * disconnected list of tiles, because there is nowhere in the payload to put any of that.
+ * The shape enforces the constraint, which is the friction `TechNode` gets its numbers-free
+ * rule from. Optional rather than zero-valued so that every trace and every golden fixture
+ * recorded before this existed replays byte-identically: absent means straight, which is
+ * what they all were.
+ *
+ * THE ELBOW TILE BELONGS TO THE SECOND LEG, and the sim decides that rather than the client:
+ * the second leg starts at the first leg's EXIT tile — one step past its last tile, the tile
+ * `beltExitTileX/Y` already names as where it delivers. Get this backwards and the item rides
+ * to the end of leg one and hands off into empty ground, which is a stall with no visible
+ * cause. It is not a payload field for exactly that reason.
+ */
 export interface PlaceBeltCommand {
   type: 'PlaceBelt';
   tier: BeltTier;
@@ -393,6 +424,17 @@ export interface PlaceBeltCommand {
   tileY: number;
   dir: Direction;
   lengthTiles: number;
+  /**
+   * The second leg's direction. Absent — or `Direction.None` — for a straight run.
+   *
+   * Must be PERPENDICULAR to `dir`. Parallel would be a longer straight run written in two
+   * pieces and anti-parallel would be a belt doubling back onto itself; both are refused
+   * rather than normalised, because a command that quietly means something other than it
+   * says is worse in a trace than one that did nothing.
+   */
+  turnDir?: Direction;
+  /** Tiles in the second leg, starting at the first leg's exit tile. Capped per leg. */
+  turnLengthTiles?: number;
 }
 
 /** Take a belt back up. Refunds in full and returns whatever was riding it. */

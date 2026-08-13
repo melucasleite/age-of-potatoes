@@ -176,6 +176,16 @@ export interface MachineView {
   speedLevel: number;
   efficiencyLevel: number;
   capacityLevel: number;
+  /**
+   * The zone a bot dock has been told to work, or 0 for none.
+   *
+   * PUBLISHED BECAUSE A BINDING NOBODY CAN READ BACK IS NOT A BINDING. `SetDockZone` has
+   * been in the reducer, the hash and the save since [[038]], and the field never crossed
+   * the view — so a player could point a dock at a zone and the panel had no way to show
+   * which one, or whether it had worked. Zero is genuinely "unbound"; the dock card says so
+   * rather than leaving a working robot undescribed.
+   */
+  boundZone: number;
 
   // --- the liquid layer ---
 
@@ -882,6 +892,7 @@ function projectMachines(state: WorldState, out: WorldView): void {
         speedLevel: 0,
         efficiencyLevel: 0,
         capacityLevel: 0,
+        boundZone: 0,
         network: 0,
         flowMlPerMinute: 0,
         ticksToEmpty: -1,
@@ -925,6 +936,7 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.speedLevel = machine.speedLevel;
     mv.efficiencyLevel = machine.efficiencyLevel;
     mv.capacityLevel = machine.capacityLevel;
+    mv.boundZone = machine.boundZone;
     mv.network = machine.network;
     mv.flowMlPerMinute = machine.flowMlPerMinute;
     // Computed in the sim, not the renderer: plan §12 says the renderer computes no network

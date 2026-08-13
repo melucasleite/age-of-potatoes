@@ -97,14 +97,24 @@ export const ToolMode = {
   BuyDeed: 20,
 
   /**
-   * Box a machine up and put it in the pouch ([[054]]).
+   * Take anything off the lot ([[054]], widened by [[060]]).
+   *
+   * ONE CURSOR FOR EVERY REMOVAL IN THE GAME. It began as "Box Up" and worked on machines
+   * only — which was not a scoping decision so much as an accident of which sim verb had been
+   * wired up: `RemoveBelt`, `RemoveGrabber` and `RemovePipe` all existed, all refunded, and
+   * none of them had ever been reachable from the client. Now the tool dispatches on whatever
+   * is under it, so "how do I get rid of this?" has exactly one answer.
+   *
+   * IT COSTS NOTHING AND IT PAYS TWO DIFFERENT WAYS, which is the thing the ghost and the
+   * ribbon exist to say out loud: a machine goes into the bag as a box with its dials and no
+   * cash, and everything else is refunded on the spot. The money verb for a boxed machine is
+   * still `SellBoxedMachine`, from the inventory panel, one deliberate step later.
    *
    * IN THE BUILD PALETTE THOUGH IT BUYS NOTHING, and that is a considered exception to the
    * header above rather than an oversight. The toolbelt is six slots of muscle memory and
-   * full; this is the inverse of the fifteen rows next to it — you arm it, you click a
-   * machine, the lot changes — so it belongs to the surface that edits the lot rather than
-   * to the one you reach for every ten seconds. It costs nothing and pays nothing: the
-   * money verb is `SellBoxedMachine`, from the inventory panel, one deliberate step later.
+   * full; this is the inverse of the rows next to it — you arm it, you drag, the lot changes
+   * — so it belongs to the surface that edits the lot rather than to the one you reach for
+   * every ten seconds.
    */
   Deconstruct: 19,
 } as const;
@@ -130,9 +140,10 @@ export const TOOL_ORDER: readonly ToolMode[] = [
  *   `click` — one press is one command, on the press edge. No drag verb.
  *   `rect`  — press, drag a rectangle, release: ONE rect command (§16, and the reason is
  *             in `commands.ts` — a sixty-tile paint is one trace entry, not sixty).
- *   `line`  — press, drag, release: one straight run along the dominant axis. Belts are
- *             straight segments in the sim and corners are two segments meeting, so the
- *             gesture matches the data rather than papering over it.
+ *   `line`  — press, drag, release: ONE belt run, which may turn one corner ([[059]]). It
+ *             leads with the axis the cursor moved further along and R flips that; the sim
+ *             still stores two straight segments, because that is what a corner is, but the
+ *             player expresses it in one gesture and it enters the trace as one command.
  */
 export type GestureKind = 'click' | 'rect' | 'line';
 
@@ -214,19 +225,19 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
 
   [ToolMode.PlaceBeltBasic]: {
     label: 'Belt',
-    hint: 'drag a straight run off the field',
+    hint: 'drag a run off the field — it turns a corner; R flips it',
     costCents: beltPricePerTile(BeltTier.Basic),
     gesture: 'line',
   },
   [ToolMode.PlaceBeltFast]: {
     label: 'Fast Belt',
-    hint: 'drag a straight run off the field',
+    hint: 'drag a run off the field — it turns a corner; R flips it',
     costCents: beltPricePerTile(BeltTier.Fast),
     gesture: 'line',
   },
   [ToolMode.PlaceBeltExpress]: {
     label: 'Express Belt',
-    hint: 'drag a straight run off the field',
+    hint: 'drag a run off the field — it turns a corner; R flips it',
     costCents: beltPricePerTile(BeltTier.Express),
     gesture: 'line',
   },
@@ -350,10 +361,13 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
   },
 
   [ToolMode.Deconstruct]: {
-    label: 'Box Up',
-    hint: 'click a machine to box it — dials and wear come with it',
+    label: 'Teardown',
+    hint: 'click or drag: machines box up, belts and pipes refund',
     costCents: 0,
-    gesture: 'click',
+    // A RECT, LIKE ZONE PAINTING — and a click still works, because a click is a drag whose
+    // anchor and cursor are the same tile and therefore a 1×1 rectangle. That is what lets
+    // the single-machine walk-to errand survive the change; see `TeardownPlan.loneMachineTile`.
+    gesture: 'rect',
   },
 };
 
