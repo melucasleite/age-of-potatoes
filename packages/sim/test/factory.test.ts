@@ -12,6 +12,8 @@ import {
   type Command,
   type WorldState,
   BeltTier,
+  CONDITION_EFFECT_THRESHOLD,
+  CONDITION_MAX,
   CROP_SPECS,
   COMPOST_AFTER_TICKS,
   CropId,
@@ -21,6 +23,8 @@ import {
   GrabberTier,
   ItemId,
   MachineKind,
+  OVERCOOK_BLOCKED_TICKS,
+  REPAIR_PER_TOUCH,
   SUBTILE,
   TECH_NODES,
   TechId,
@@ -29,27 +33,33 @@ import {
   WILT_GRACE_TICKS,
   WILT_WINDOW_TICKS,
   WiltStage,
+  addItem,
   beltInsert,
   createWorld,
   createWorldView,
   dayOldPriceCents,
   effectiveInputCapacity,
+  effectiveWastePeriod,
   effectiveWear,
   effectiveWorkRate,
   hashState,
   itemCount,
   listPriceCents,
   machineSpec,
+  nextOutputItem,
+  rusticStylePriceCents,
   spawnBelt,
   spawnGrabber,
   spawnMachine,
   step,
   stepMany,
+  takeOneOutput,
   tileAt,
   upgradeCostCents,
   view,
   wiltStageForAge,
 } from '../src/index';
+import { loadFixture, replay } from './goldens';
 
 function run(state: WorldState, commands: Command[]): void {
   step(state, { tick: state.tick, commands });
@@ -121,6 +131,259 @@ describe('the chip line', () => {
     stepMany(state, 200);
     expect(washer.inputCount).toBe(5);
     expect(washer.outputCount).toBe(spec.outputCapacity);
+  });
+});
+
+// --- overcooking --------------------------------------------------------------------
+
+describe('Rustic Style', () => {
+  it('prices a burnt batch at exactly 70% of seasoned chips, floored', () => {
+    // Plan §2's number, and the criterion is "exactly". The table entry is multiplied out
+    // from the seasoned price rather than typed as a second literal, so this asserts the two
+    // agree — the day seasoning is repriced, a drifting 980 would show up right here.
+    expect(listPriceCents(ItemId.RusticStyleChips)).toBe(rusticStylePriceCents());
+    expect(listPriceCents(ItemId.RusticStyleChips)).toBe(
+      Math.floor((listPriceCents(ItemId.SeasonedChips) * 70) / 100),
+    );
+    // A discount, never a hole: burnt chips still sell, and for more than the unseasoned
+    // chips they were a moment ago. Nothing in this game pays zero (plan §4).
+    expect(listPriceCents(ItemId.RusticStyleChips)).toBeGreaterThan(0);
+  });
+
+  it('browns a chip only when the layout leaves the basket nowhere to go', () => {
+    // THE CAUSE IS A LAYOUT CONDITION, NOT A DIE ROLL (plan §7 ruling 5). The Fryer here is
+    // fed and unblocked; it must run for as long as you like without spoiling anything.
+    const state = createWorld(77);
+    const fryer = spawnMachine(state, MachineKind.Fryer, 0, 0)!;
+    fryer.inputCount = 5;
+
+    stepMany(state, OVERCOOK_BLOCKED_TICKS * 3);
+    expect(fryer.overcookedCount).toBe(0);
+    expect(fryer.blockedTicks).toBe(0);
+  });
+
+  it('turns one chip per interval while blocked, oldest first, and stops at the last', () => {
+    const state = createWorld(78);
+    const spec = machineSpec(MachineKind.Fryer)!;
+    const fryer = spawnMachine(state, MachineKind.Fryer, 0, 0)!;
+    fryer.inputCount = 10;
+    fryer.outputCount = spec.outputCapacity;
+
+    stepMany(state, OVERCOOK_BLOCKED_TICKS - 1);
+    expect(fryer.overcookedCount).toBe(0);
+    stepMany(state, 1);
+    expect(fryer.overcookedCount).toBe(1);
+    stepMany(state, OVERCOOK_BLOCKED_TICKS);
+    expect(fryer.overcookedCount).toBe(2);
+
+    // Demand-pull still holds: a blocked machine eats nothing while it browns.
+    expect(fryer.inputCount).toBe(10);
+    expect(fryer.outputCount).toBe(spec.outputCapacity);
+
+    // Left alone forever it browns the whole basket and then stops. There is no state past
+    // "all of it is rustic" — a machine cannot burn the same chip twice.
+    stepMany(state, OVERCOOK_BLOCKED_TICKS * (spec.outputCapacity + 5));
+    expect(fryer.overcookedCount).toBe(spec.outputCapacity);
+  });
+
+  it('resets the clock the moment anything is taken out', () => {
+    // A basket that moved is a basket out of the oil.
+    const state = createWorld(79);
+    const spec = machineSpec(MachineKind.Fryer)!;
+    const fryer = spawnMachine(state, MachineKind.Fryer, 0, 0)!;
+    fryer.outputCount = spec.outputCapacity;
+
+    stepMany(state, OVERCOOK_BLOCKED_TICKS - 10);
+    expect(takeOneOutput(fryer, spec)).toBe(ItemId.PlainChips);
+    expect(fryer.blockedTicks).toBe(0);
+
+    stepMany(state, 10);
+    expect(fryer.overcookedCount).toBe(0);
+  });
+
+  it('hands the burnt chips over first, to a hand and to an arm alike', () => {
+    const state = createWorld(80);
+    const spec = machineSpec(MachineKind.Fryer)!;
+    const fryer = spawnMachine(state, MachineKind.Fryer, 4, 4)!;
+    fryer.outputCount = 4;
+    fryer.overcookedCount = 2;
+
+    expect(nextOutputItem(fryer, spec)).toBe(ItemId.RusticStyleChips);
+
+    standOn(state, 4, 4);
+    run(state, [{ type: 'UnloadMachine', machineId: fryer.id, count: 4 }]);
+
+    // Two rustic and two good, not four of whichever was easier to count.
+    expect(itemCount(state, ItemId.RusticStyleChips)).toBe(2);
+    expect(itemCount(state, ItemId.PlainChips)).toBe(2);
+    expect(fryer.outputCount).toBe(0);
+    expect(fryer.overcookedCount).toBe(0);
+  });
+
+  it('spoils nothing anywhere else in the line', () => {
+    // Only the Fryer names an overcooked grade. A blocked Washer is just a blocked Washer,
+    // and it holds its washed potatoes indefinitely.
+    for (const kind of [
+      MachineKind.Washer,
+      MachineKind.Slicer,
+      MachineKind.Seasoner,
+      MachineKind.Bagger,
+      MachineKind.ChipKitchen,
+    ]) {
+      expect(machineSpec(kind)!.overcookOutputItem).toBeNull();
+    }
+
+    const state = createWorld(81);
+    const spec = machineSpec(MachineKind.Washer)!;
+    const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
+    washer.outputCount = spec.outputCapacity;
+    stepMany(state, OVERCOOK_BLOCKED_TICKS * 4);
+    expect(washer.overcookedCount).toBe(0);
+    expect(washer.outputCount).toBe(spec.outputCapacity);
+  });
+});
+
+// --- maintenance --------------------------------------------------------------------
+
+describe('wear and repair', () => {
+  it('loses no condition over 10,000 ticks when it completes no operations', () => {
+    // PLAN §4, STATED AS ABSOLUTE: wear is per operation, never per second. This reads the
+    // committed `idle-wear` golden fixture rather than a world built here, because the
+    // criterion asks for a fixture — a pinned world nobody can quietly adjust — and because
+    // the fixture's hash catches the same regression on every run.
+    const fixture = loadFixture('idle-wear');
+    const state = replay(fixture);
+
+    const kitchen = state.machines.find((machine) => machine.kind === MachineKind.ChipKitchen);
+    expect(kitchen).toBeDefined();
+    expect(kitchen!.opCount).toBe(0);
+    expect(kitchen!.condition).toBe(CONDITION_MAX);
+
+    // And the last ten thousand ticks of it really are untouched: no command lands after the
+    // kitchen goes down, so nothing but time passed.
+    const last = fixture.commands[fixture.commands.length - 1]!;
+    expect(fixture.ticks - last.tick).toBeGreaterThanOrEqual(10_000);
+  });
+
+  it('wastes an input on a cadence below the threshold, and never above it', () => {
+    // Plan §4 says "waste chance"; plan §7 ruling 5 bans rolls. The reconciliation is a
+    // period read off `opCount`, so the same world wastes the same potatoes every time.
+    const spec = machineSpec(MachineKind.ChipKitchen)!;
+    const healthy = { condition: CONDITION_MAX } as never;
+    expect(effectiveWastePeriod(spec, healthy)).toBe(0);
+
+    const state = createWorld(82);
+    const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
+    kitchen.condition = CONDITION_EFFECT_THRESHOLD;
+    kitchen.inputCount = 20;
+    stepMany(state, ticksPerOperation(MachineKind.ChipKitchen) * 3);
+    expect(state.stats.inputsWastedByMachine).toBe(0);
+
+    const worn = createWorld(83);
+    const spoiler = spawnMachine(worn, MachineKind.ChipKitchen, 0, 0)!;
+    spoiler.condition = CONDITION_EFFECT_THRESHOLD - 1;
+    spoiler.inputCount = 40;
+    const period = effectiveWastePeriod(spec, spoiler);
+    expect(period).toBeGreaterThan(1);
+
+    // Run just past the operation the cadence lands on, at half speed because it is worn.
+    // Short enough that wear has not moved the period underneath us, which is why the closed
+    // form below is legitimate rather than approximately true.
+    stepMany(worn, ticksPerOperation(MachineKind.ChipKitchen) * 2 * period + period);
+    expect(effectiveWastePeriod(spec, spoiler)).toBe(period);
+    expect(spoiler.opCount).toBeGreaterThanOrEqual(period);
+    expect(worn.stats.inputsWastedByMachine).toBeGreaterThan(0);
+    expect(worn.stats.inputsWastedByMachine).toBe(Math.floor(spoiler.opCount / period));
+    // The input is gone either way — that is what makes neglect cost margin, not progress.
+    expect(spoiler.inputCount).toBe(40 - spoiler.opCount);
+    expect(spoiler.outputCount).toBe(spoiler.opCount - worn.stats.inputsWastedByMachine);
+  });
+
+  it('wastes the same inputs on the same ticks in two identical worlds', () => {
+    // The criterion is "deterministic and reproducible from the same seed". There is no
+    // stream to consult here at all, which is the strongest form of that: two worlds cannot
+    // disagree about arithmetic.
+    const build = (): WorldState => {
+      const state = createWorld(87);
+      const machine = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
+      machine.condition = 120;
+      machine.inputCount = 30;
+      stepMany(state, 4000);
+      return state;
+    };
+
+    const a = build();
+    const b = build();
+    expect(a.stats.inputsWastedByMachine).toBeGreaterThan(1);
+    expect(hashState(a)).toBe(hashState(b));
+  });
+
+  it('shortens the waste cadence as the machine falls further apart', () => {
+    const spec = machineSpec(MachineKind.ChipKitchen)!;
+    const at = (condition: number): number => effectiveWastePeriod(spec, { condition } as never);
+
+    expect(at(CONDITION_EFFECT_THRESHOLD - 1)).toBeGreaterThan(at(1));
+    expect(at(1)).toBeGreaterThanOrEqual(2);
+    // Monotone all the way down, so "it got worse" is always true and never occasionally.
+    for (let condition = CONDITION_EFFECT_THRESHOLD - 1; condition > 1; condition--) {
+      expect(at(condition)).toBeGreaterThanOrEqual(at(condition - 1));
+    }
+  });
+
+  it("repairs every machine in the kit's radius in one use", () => {
+    // Plan §4: "one trip services a cell." That is the whole reason a kit is worth $8 when
+    // hands are free — it buys the walk, not the repair.
+    const state = createWorld(84);
+    const near = spawnMachine(state, MachineKind.Washer, 4, 4)!;
+    const alsoNear = spawnMachine(state, MachineKind.Slicer, 6, 6)!;
+    const far = spawnMachine(state, MachineKind.Fryer, 12, 12)!;
+    for (const machine of [near, alsoNear, far]) machine.condition = 200;
+    near.jammed = true;
+
+    addItem(state, ItemId.RepairKit, 1);
+    standOn(state, 5, 5);
+    run(state, [{ type: 'UseRepairKit', tileX: 5, tileY: 5 }]);
+
+    expect(near.condition).toBe(CONDITION_MAX);
+    expect(near.jammed).toBe(false);
+    expect(alsoNear.condition).toBe(CONDITION_MAX);
+    // Out of the cell, out of luck: the radius is what makes where you stand a decision.
+    expect(far.condition).toBe(200);
+
+    expect(itemCount(state, ItemId.RepairKit)).toBe(0);
+    expect(state.stats.repairKitsUsed).toBe(1);
+  });
+
+  it('refuses a kit that would do nothing rather than eating it', () => {
+    // Misplacement is never a fine (plan §4). A misclick that silently spent $8 would teach
+    // the player to distrust the tool.
+    const state = createWorld(85);
+    const machine = spawnMachine(state, MachineKind.Washer, 4, 4)!;
+    addItem(state, ItemId.RepairKit, 1);
+    standOn(state, 5, 5);
+
+    run(state, [{ type: 'UseRepairKit', tileX: 5, tileY: 5 }]);
+    expect(itemCount(state, ItemId.RepairKit)).toBe(1);
+    expect(state.trace).toHaveLength(0);
+    expect(machine.condition).toBe(CONDITION_MAX);
+  });
+
+  it('leaves hand repair free, unlimited, and enough on its own', () => {
+    // Plan §1: "Manual never rots." A player with $0 and no kits can bring a dead machine
+    // all the way back, and it costs nothing but time.
+    const state = createWorld(86);
+    const machine = spawnMachine(state, MachineKind.ChipKitchen, 4, 4)!;
+    machine.condition = 0;
+    standOn(state, 4, 4);
+
+    const moneyBefore = state.moneyCents;
+    for (let i = 0; i < CONDITION_MAX / REPAIR_PER_TOUCH; i++) {
+      run(state, [{ type: 'RepairMachine', machineId: machine.id }]);
+    }
+
+    expect(machine.condition).toBe(CONDITION_MAX);
+    expect(state.moneyCents).toBe(moneyBefore);
+    expect(itemCount(state, ItemId.RepairKit)).toBe(0);
   });
 });
 

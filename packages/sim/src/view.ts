@@ -126,6 +126,16 @@ export interface MachineView {
   /** `ItemId` the machine eats and makes, or 0. Saves the HUD a spec lookup. */
   inputItem: number;
   outputItem: number;
+  /**
+   * How many of `outputCount` have overcooked, and what they turned into (0 for machines
+   * whose output cannot spoil).
+   *
+   * Plan §5's "nothing invisible": a browning basket is a fact about the world the player is
+   * entitled to see on the machine, and the cause — a full buffer nobody is emptying — is
+   * standing right there next to it.
+   */
+  overcookedCount: number;
+  overcookedItem: number;
   /** 0..3 on each dial, so the renderer can bolt on chrome exhausts and bigger hoppers. */
   speedLevel: number;
   efficiencyLevel: number;
@@ -534,6 +544,8 @@ function projectMachines(state: WorldState, out: WorldView): void {
         outputCapacity: 0,
         inputItem: 0,
         outputItem: 0,
+        overcookedCount: 0,
+        overcookedItem: 0,
         speedLevel: 0,
         efficiencyLevel: 0,
         capacityLevel: 0,
@@ -570,6 +582,9 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.outputCapacity = spec === null ? 0 : effectiveOutputCapacity(spec, machine);
     mv.inputItem = spec === null || spec.inputItem === null ? 0 : spec.inputItem;
     mv.outputItem = spec === null || spec.outputItem === null ? 0 : spec.outputItem;
+    mv.overcookedCount = machine.overcookedCount;
+    mv.overcookedItem =
+      spec === null || spec.overcookOutputItem === null ? 0 : spec.overcookOutputItem;
     mv.speedLevel = machine.speedLevel;
     mv.efficiencyLevel = machine.efficiencyLevel;
     mv.capacityLevel = machine.capacityLevel;

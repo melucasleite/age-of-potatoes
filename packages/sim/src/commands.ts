@@ -98,6 +98,20 @@ export interface WhackJamCommand {
   machineId: number;
 }
 
+/**
+ * Spend one repair kit on a spot, servicing every machine around it.
+ *
+ * ADDRESSED TO A TILE RATHER THAN A MACHINE, on purpose. Plan §4 buys "one trip services a
+ * cell" with this command's shape: a kit aimed at a machine id would be a per-machine
+ * consumable that hand repair already does for free, and the player would rightly never buy
+ * one. Aimed at a spot on the ground, it is a different verb — it trades money for a walk.
+ */
+export interface UseRepairKitCommand {
+  type: 'UseRepairKit';
+  tileX: number;
+  tileY: number;
+}
+
 /** Sell from inventory at list, standing at the sell bin. */
 export interface SellItemCommand {
   type: 'SellItem';
@@ -309,6 +323,7 @@ export type Command =
   | RefillHopperCommand
   | RepairMachineCommand
   | WhackJamCommand
+  | UseRepairKitCommand
   | SellItemCommand
   | BuyItemCommand
   | MoveMachineCommand

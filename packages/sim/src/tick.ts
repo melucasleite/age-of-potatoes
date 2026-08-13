@@ -61,6 +61,7 @@ import {
   type SetZonePriorityCommand,
   type UnloadMachineCommand,
   type UpgradeMachineCommand,
+  type UseRepairKitCommand,
   type WalkAndActCommand,
   type WaterTileCommand,
   type WhackJamCommand,
@@ -87,10 +88,12 @@ import {
   MachineRole,
   type MachineSpec,
   NET_WORTH_SAMPLE_PERIOD_TICKS,
+  OVERCOOK_BLOCKED_TICKS,
   PIPE_MAX_PATH_TILES,
   PIPE_PRICE_CENTS_PER_TILE,
   PLAYER_SPEED_SUBTILES_PER_100_TICKS,
   RECIRCULATOR_ML_PER_MINUTE,
+  REPAIR_KIT_RADIUS_TILES,
   REPAIR_PER_TOUCH,
   SPRINKLER_POUR_ML,
   SPRINKLER_PERIOD_TICKS,
@@ -153,6 +156,7 @@ import {
   spawnPipe,
   spawnZone,
   streamFor,
+  takeOneOutput,
   tileAt,
   tileOccupied,
   zoneById,
@@ -172,6 +176,7 @@ import {
   effectiveInputCapacity,
   effectiveOutputCapacity,
   effectiveTankCapacityMl,
+  effectiveWastePeriod,
   effectiveWear,
   effectiveWorkRate,
   setUpgradeLevel,
@@ -267,6 +272,8 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applyRepairMachine(state, command);
     case 'WhackJam':
       return applyWhackJam(state, command);
+    case 'UseRepairKit':
+      return applyUseRepairKit(state, command);
     case 'SellItem':
       return applySellItem(state, command);
     case 'BuyItem':
@@ -620,8 +627,16 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
   const moved = Math.min(command.count, machine.outputCount);
   if (moved <= 0) return false;
 
-  machine.outputCount -= moved;
-  addItem(state, spec.outputItem, moved);
+  // One unit at a time through the one take path, rather than a single subtraction, because
+  // a buffer can hold two grades at once — a Fryer's burnt chips come out before its good
+  // ones — and a hand that emptied it in one arithmetic step would have to reimplement that
+  // rule to know what it was holding.
+  for (let i = 0; i < moved; i++) {
+    const item = takeOneOutput(machine, spec);
+    if (item === null) break;
+    addItem(state, item, 1);
+  }
+
   touch(state, 'handCarry');
   return true;
 }
@@ -672,6 +687,53 @@ function applyRepairMachine(state: WorldState, command: RepairMachineCommand): b
   return true;
 }
 
+/**
+ * Spend one kit on a spot and service the cell around it.
+ *
+ * WHAT THE PLAYER IS BUYING IS THE WALK, NOT THE REPAIR. Hand repair is free forever and
+ * always works (plan §1, §3), so a kit that merely repaired one machine would be a strictly
+ * worse version of a hand and nobody would ever buy one. What it actually saves is ten trips
+ * and ten holds: everything within `REPAIR_KIT_RADIUS_TILES` comes back to full at once,
+ * jams included, which is plan §4's "one trip services a cell" stated as arithmetic.
+ *
+ * REFUSED RATHER THAN WASTED when nothing in range wants anything. Misplacement is never a
+ * fine (plan §4), and a misclick that silently ate $8 would teach the player to distrust the
+ * tool — so a kit is consumed only when it did something.
+ */
+function applyUseRepairKit(state: WorldState, command: UseRepairKitCommand): boolean {
+  if (!isInsideWorld(command.tileX, command.tileY)) return false;
+  if (!withinReachOfTile(state, command.tileX, command.tileY)) return false;
+  if (itemCount(state, ItemId.RepairKit) <= 0) return false;
+
+  let serviced = 0;
+  for (let i = 0; i < state.machines.length; i++) {
+    const machine = state.machines[i]!;
+    if (!machineWithinKitRadius(machine, command.tileX, command.tileY)) continue;
+    if (machine.condition >= CONDITION_MAX && !machine.jammed) continue;
+
+    machine.condition = CONDITION_MAX;
+    machine.jammed = false;
+    serviced += 1;
+  }
+
+  if (serviced === 0) return false;
+
+  removeItem(state, ItemId.RepairKit, 1);
+  state.stats.repairKitsUsed += 1;
+  touch(state, 'handRepair');
+  return true;
+}
+
+/** Chebyshev distance from a tile to the nearest tile of a machine's footprint. */
+function machineWithinKitRadius(machine: Machine, tileX: number, tileY: number): boolean {
+  const spec = machineSpec(machine.kind);
+  if (spec === null) return false;
+
+  const dx = Math.max(machine.tileX - tileX, tileX - (machine.tileX + spec.tilesWide - 1), 0);
+  const dy = Math.max(machine.tileY - tileY, tileY - (machine.tileY + spec.tilesHigh - 1), 0);
+  return Math.max(dx, dy) <= REPAIR_KIT_RADIUS_TILES;
+}
+
 function applyWhackJam(state: WorldState, command: WhackJamCommand): boolean {
   const machine = machineById(state, command.machineId);
   if (machine === null || !withinReachOfMachine(state, machine)) return false;
@@ -706,6 +768,9 @@ function applyBuyItem(state: WorldState, command: BuyItemCommand): boolean {
 
   state.moneyCents -= cost;
   recordSpend(state.stats, cost);
+  // Counted at the till, not at the machine: plan §4 wants kit spend held near 5% of value
+  // added, and a kit bought and never used is money the factory cost you all the same.
+  if (command.item === ItemId.RepairKit) state.stats.repairKitSpendCents += cost;
   addItem(state, command.item, command.count);
   touch(state, 'handCarry');
   return true;
@@ -1533,17 +1598,34 @@ function advanceConverter(state: WorldState, machine: Machine): void {
   const spec = machineSpec(machine.kind);
   if (spec === null || spec.outputItem === null) return;
   if (machine.jammed || machine.condition <= 0) return;
+
+  if (machine.outputCount >= effectiveOutputCapacity(spec, machine)) {
+    // Stopped by demand-pull, with a full basket. This is the only clock overcooking has.
+    advanceOvercooking(machine, spec);
+    return;
+  }
+  machine.blockedTicks = 0;
+
   if (machine.inputCount <= 0) return;
-  if (machine.outputCount >= effectiveOutputCapacity(spec, machine)) return;
 
   machine.progress += effectiveWorkRate(spec, machine);
   if (machine.progress < spec.workPerOperation) return;
 
   machine.progress -= spec.workPerOperation;
   machine.inputCount -= 1;
-  machine.outputCount += 1;
   machine.opCount += 1;
-  state.stats.itemsProducedByMachine += 1;
+
+  // THE OPERATION HAPPENED EITHER WAY. A worn machine still turns, still swallows the input,
+  // and still wears — it just does not always produce anything. Waste is a cadence read off
+  // `opCount`, never a roll (see `WASTE_PERIOD_AT_THRESHOLD`).
+  const wastePeriod = effectiveWastePeriod(spec, machine);
+  if (wastePeriod > 0 && machine.opCount % wastePeriod === 0) {
+    state.stats.inputsWastedByMachine += 1;
+  } else {
+    machine.outputCount += 1;
+    state.stats.itemsProducedByMachine += 1;
+  }
+
   wear(machine, effectiveWear(spec, machine));
 
   if (
@@ -1552,6 +1634,36 @@ function advanceConverter(state: WorldState, machine: Machine): void {
   ) {
     machine.jammed = true;
   }
+}
+
+/**
+ * One tick of a machine that is stopped with a full output buffer.
+ *
+ * THE CAUSE IS THE PLAYER'S LAYOUT, NOT A DIE ROLL (plan §7 ruling 5). Standing still with a
+ * full basket is something a factory does — no belt off the Fryer, a grabber aimed at the
+ * wrong tile, or nobody coming back for it — and it is visible from in front of the machine.
+ * Every `OVERCOOK_BLOCKED_TICKS` of *continuous* blockage one more unit turns, oldest first,
+ * until the whole basket has gone rustic; any pull resets the clock in `takeOneOutput`.
+ *
+ * One unit per interval rather than the whole basket at once, deliberately. A cliff would
+ * make the loss binary and unreadable, and it would pay a player who deliberately let a
+ * basket sit — a chip at a time makes neglect a slope you can watch, and makes farming the
+ * rustic price take thirty seconds of stopped Fryer per chip, which is a terrible trade.
+ *
+ * Machines whose spec names no overcooked grade do nothing here but hold still. Neither does a
+ * jammed or halted one — the caller returns before it gets here, deliberately: plan §4 says a
+ * machine at zero condition "costs nothing", and a Fryer that kept browning its basket while
+ * dead would be charging the player for the one failure state that is supposed to be free.
+ */
+function advanceOvercooking(machine: Machine, spec: MachineSpec): void {
+  if (spec.overcookOutputItem === null) return;
+  if (machine.overcookedCount >= machine.outputCount) return;
+
+  machine.blockedTicks += 1;
+  if (machine.blockedTicks < OVERCOOK_BLOCKED_TICKS) return;
+
+  machine.blockedTicks = 0;
+  machine.overcookedCount += 1;
 }
 
 function wear(machine: Machine, amount: number): void {

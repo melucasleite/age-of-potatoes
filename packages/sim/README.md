@@ -132,6 +132,30 @@ makes it the honest early-game answer rather than a legacy wart.
 Machines are dispatched on `MachineSpec.role`, not on kind, so adding a converter is a data
 change rather than an edit to `tick.ts`.
 
+**Overcooking is a layout condition.** A Fryer that fills its output buffer stops dead — that
+is demand-pull, the same stop that leaves a Slicer idle — but the basket it has already fried
+is still in the oil. Every `OVERCOOK_BLOCKED_TICKS` of _continuous_ blockage one more chip
+turns into **Rustic Style**, priced at exactly 70% of seasoned chips by arithmetic on the real
+price rather than by a second literal that could drift. Burnt chips come out of the buffer
+first, because they were at the bottom of the basket, and any pull resets the clock. There is
+no roll anywhere in it: the cause is no belt off the Fryer, a grabber aimed elsewhere, or
+nobody coming back — all things a player can see standing in front of the machine. One chip
+per interval rather than the whole basket, so neglect is a slope you can watch rather than a
+cliff you fall off.
+
+**Maintenance wears per operation and never per second** (plan §4, stated as absolute).
+Nothing degrades while idle, and a closed tab degrades nothing at all, because `step()` is the
+only thing that moves any of it — `test/fixtures/idle-wear.json` pins exactly that. Below
+`CONDITION_EFFECT_THRESHOLD` a machine halves its work rate, jams every Nth operation, and
+spoils an input on a **cadence** whose period shortens as condition falls. Plan §4 calls that
+last one a "waste chance"; plan §7 ruling 5 bans rolls, and a cadence is the only reading that
+satisfies both. `effectiveWastePeriod()` in `upgrades.ts` is where that period is decided, and
+it is the seam the Efficiency dial's waste half hooks into. At zero condition the machine
+halts: it costs nothing, keeps its buffers, and never explodes. Hand repair is free forever;
+a **repair kit** buys the walk rather than the repair, servicing every machine in
+`REPAIR_KIT_RADIUS_TILES` in one use, and is refused rather than consumed when nothing in
+range wants it.
+
 **Belts.** A belt segment is a sorted list of `(distanceAlongBelt, itemTypeId)` — plan §13,
 and load-bearing. Items are not entities: they have no ids and no renderer counterparts, and
 the renderer derives particle positions from the list every frame. That is what makes

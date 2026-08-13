@@ -3,7 +3,7 @@
   "description": "Two plots planted and harvested in different corners of the field, so the field-init, crop-growth, and harvest streams have each advanced by a different amount. A change to stream derivation shows up here as a mismatch instead of as quietly different crop rolls.",
   "seed": 424242,
   "ticks": 4327,
-  "expectedHash": "c5a92066",
+  "expectedHash": "9aaddf99",
   "commands": [
     {
       "tick": 0,

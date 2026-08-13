@@ -14,11 +14,12 @@
 // 2029. See `test/fixtures/saves/`.
 // ────────────────────────────────────────────────────────────────────────────────────────
 //
-// The chain is three steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
+// The chain is four steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
 // format 2 (the factory — belts, grabbers, zones, tech unlocks, upgrade dials, and the
 // per-tile withering clock) up to format 3 (the liquid layer — reservoirs, pipes, one-ledger
 // networks, and the per-machine plumbing fields) up to format 4 (the walk-to errand — one
-// pending `PlayerIntent` on the player, or none).
+// pending `PlayerIntent` on the player, or none) up to format 5 (maintenance and overcooking
+// — a machine's blocked clock and burnt count, and the waste and repair-kit tallies).
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -29,7 +30,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 4;
+export const CURRENT_FORMAT_VERSION = 5;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -225,14 +226,68 @@ const migrateFormat3To4: SaveMigration = (payload) => {
 };
 
 /**
+ * Format 4 → 5.
+ *
+ * Maintenance and overcooking. Three new counters on the stats block and two new fields on
+ * every machine, and **zero is the right value for all five** — which is a claim worth
+ * spelling out rather than assuming, because "default to zero" is how a migration usually
+ * goes wrong.
+ *
+ * `blockedTicks` and `overcookedCount` are a Fryer's overcooking clock and its burnt count.
+ * A format-4 world never had them, so no chip in it ever browned; inventing a burnt batch for
+ * a returning player would take goods they earned and mark them down 30%. Zero says "nothing
+ * has spoiled", which is exactly what was true of the world they saved. The clock restarting
+ * is likewise correct rather than generous: it counts *continuous* blockage, and a world that
+ * was closed and reopened has not been standing still — time did not pass at all.
+ *
+ * `inputsWastedByMachine`, `repairKitsUsed`, and `repairKitSpendCents` are lifetime tallies,
+ * and zero is the only honest number for a world that could not waste an input or use a kit
+ * because neither existed. They are trophy stats rather than gates, so a returning player
+ * loses nothing by starting them here — the same call `wateredCount` made in format 3.
+ *
+ * Like the step above it, this one reads no balance data, so it needs no frozen-constant
+ * block: zero is zero in every build this file will ever run in.
+ */
+const migrateFormat4To5: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-4 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    machines.push({ ...oldMachines[i]!, blockedTicks: 0, overcookedCount: 0 });
+  }
+
+  const statsRaw = p['stats'];
+  if (typeof statsRaw !== 'object' || statsRaw === null || Array.isArray(statsRaw)) {
+    throw new SaveCorruptError('Cannot migrate: `payload.stats` is not an object.');
+  }
+
+  return {
+    ...p,
+    machines,
+    stats: {
+      ...(statsRaw as Record<string, unknown>),
+      inputsWastedByMachine: 0,
+      repairKitSpendCents: 0,
+      repairKitsUsed: 0,
+    },
+    version: 5,
+  };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
- * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, which
- * `MIGRATIONS[3]` then turns into a format-4 one.
+ * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
+ * chain to the current version.
  */
 export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   1: migrateFormat1To2,
   2: migrateFormat2To3,
   3: migrateFormat3To4,
+  4: migrateFormat4To5,
 };
 
 export interface MigrationOutcome {

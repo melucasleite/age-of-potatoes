@@ -94,6 +94,7 @@ export interface SaveCropTile {
 }
 
 export interface SaveMachine {
+  blockedTicks: number;
   capacityLevel: number;
   condition: number;
   cooldown: number;
@@ -107,6 +108,7 @@ export interface SaveMachine {
   network: number;
   opCount: number;
   outputCount: number;
+  overcookedCount: number;
   progress: number;
   scanCursor: number;
   skippedCount: number;
@@ -216,6 +218,7 @@ export interface SaveTouchCounts {
 }
 
 export interface SaveStats {
+  inputsWastedByMachine: number;
   itemsHarvestedByHand: number;
   itemsProducedByMachine: number;
   itemsSold: number;
@@ -226,6 +229,8 @@ export interface SaveStats {
   netWorthSamples: number[];
   nextNetWorthSampleTick: number;
   peakNetWorthCents: number;
+  repairKitSpendCents: number;
+  repairKitsUsed: number;
   ticksElapsed: number;
   ticksSinceManualTouch: number;
   touches: SaveTouchCounts;
@@ -295,6 +300,7 @@ export function toPayload(state: WorldState): SavePayload {
   for (let i = 0; i < state.machines.length; i++) {
     const machine = state.machines[i]!;
     machines.push({
+      blockedTicks: machine.blockedTicks,
       capacityLevel: machine.capacityLevel,
       condition: machine.condition,
       cooldown: machine.cooldown,
@@ -308,6 +314,7 @@ export function toPayload(state: WorldState): SavePayload {
       network: machine.network,
       opCount: machine.opCount,
       outputCount: machine.outputCount,
+      overcookedCount: machine.overcookedCount,
       progress: machine.progress,
       scanCursor: machine.scanCursor,
       skippedCount: machine.skippedCount,
@@ -469,6 +476,7 @@ export function toPayload(state: WorldState): SavePayload {
       ySub: state.player.ySub,
     },
     stats: {
+      inputsWastedByMachine: stats.inputsWastedByMachine,
       itemsHarvestedByHand: stats.itemsHarvestedByHand,
       itemsProducedByMachine: stats.itemsProducedByMachine,
       itemsSold: stats.itemsSold,
@@ -479,6 +487,8 @@ export function toPayload(state: WorldState): SavePayload {
       netWorthSamples: samples,
       nextNetWorthSampleTick: stats.nextNetWorthSampleTick,
       peakNetWorthCents: stats.peakNetWorthCents,
+      repairKitSpendCents: stats.repairKitSpendCents,
+      repairKitsUsed: stats.repairKitsUsed,
       ticksElapsed: stats.ticksElapsed,
       ticksSinceManualTouch: stats.ticksSinceManualTouch,
       touches: {
@@ -744,6 +754,8 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       condition: int(machine, 'condition', path),
       opCount: int(machine, 'opCount', path),
       jammed: bool(machine, 'jammed', path),
+      blockedTicks: int(machine, 'blockedTicks', path),
+      overcookedCount: int(machine, 'overcookedCount', path),
       cooldown: int(machine, 'cooldown', path),
       investedCents: int(machine, 'investedCents', path),
       speedLevel: int(machine, 'speedLevel', path),
@@ -933,6 +945,9 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     itemsSold: int(statsRaw, 'itemsSold', 'payload.stats'),
     itemsProducedByMachine: int(statsRaw, 'itemsProducedByMachine', 'payload.stats'),
     itemsHarvestedByHand: int(statsRaw, 'itemsHarvestedByHand', 'payload.stats'),
+    inputsWastedByMachine: int(statsRaw, 'inputsWastedByMachine', 'payload.stats'),
+    repairKitsUsed: int(statsRaw, 'repairKitsUsed', 'payload.stats'),
+    repairKitSpendCents: int(statsRaw, 'repairKitSpendCents', 'payload.stats'),
     netWorthCents: int(statsRaw, 'netWorthCents', 'payload.stats'),
     peakNetWorthCents: int(statsRaw, 'peakNetWorthCents', 'payload.stats'),
     netWorthSamples,

@@ -56,6 +56,23 @@ export interface WorldStats {
   itemsProducedByMachine: number;
   itemsHarvestedByHand: number;
 
+  /**
+   * Inputs a worn machine swallowed and produced nothing from. The Shift Report's waste row
+   * (plan §6) reads this, and it is the number that makes neglect cost margin rather than
+   * progress — the potato is gone, the line is not.
+   */
+  inputsWastedByMachine: number;
+  /** Repair kits actually used. One per `UseRepairKit`, however many machines it serviced. */
+  repairKitsUsed: number;
+  /**
+   * Cents spent on repair kits, counted at the till rather than at the machine.
+   *
+   * Separate from `lifetimeSpentCents` rather than derived from it: plan §4 wants kit spend
+   * held near 5% of value added, and that is not a question you can answer from one total
+   * that also contains every machine, seed, and belt the player has ever bought.
+   */
+  repairKitSpendCents: number;
+
   /** Cash + inventory at list + machines at invoice, recomputed every tick (plan §6). */
   netWorthCents: number;
   peakNetWorthCents: number;
@@ -97,6 +114,9 @@ export function createStats(): WorldStats {
     itemsSold: 0,
     itemsProducedByMachine: 0,
     itemsHarvestedByHand: 0,
+    inputsWastedByMachine: 0,
+    repairKitsUsed: 0,
+    repairKitSpendCents: 0,
     netWorthCents: 0,
     peakNetWorthCents: 0,
     netWorthSamples: [],

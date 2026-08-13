@@ -20,6 +20,8 @@ import {
   UPGRADE_COST_PERCENT_BY_LEVEL,
   UPGRADE_MAX_LEVEL,
   UpgradeDial,
+  WASTE_PERIOD_AT_THRESHOLD,
+  WASTE_PERIOD_AT_ZERO,
 } from './data';
 import type { Machine } from './state';
 import { divFloor } from './units';
@@ -129,6 +131,36 @@ export function effectiveWear(spec: MachineSpec, machine: Machine): number {
     100,
   );
   return cleaner < 1 ? 1 : cleaner;
+}
+
+/**
+ * How often a worn machine spoils an input, as "every Nth operation", or 0 for never.
+ *
+ * DETERMINISTIC BY CONSTRUCTION. Plan §4 calls this a "waste chance" and plan §7 ruling 5
+ * bans random failures; the reconciliation is a cadence read off `opCount`, with the period
+ * shortening as condition falls:
+ *
+ *   condition 400 (the threshold) → every 8th operation
+ *   condition 200                 → every 5th
+ *   condition   1                 → every 2nd
+ *
+ * A machine at or above `CONDITION_EFFECT_THRESHOLD` returns 0 and wastes nothing at all.
+ * Neglect costs margin; running a factory does not.
+ *
+ * THIS IS THE FUNCTION THE EFFICIENCY DIAL HOOKS. Plan §3 specifies Efficiency as reducing
+ * "both input waste and wear" — wear is already cut in `effectiveWear` above, and the waste
+ * half belongs here, as a term that *lengthens* this period per `efficiencyLevel`. It is
+ * deliberately not applied yet: the dial's waste half is work item 037's, and inventing its
+ * curve here would be a balance number nobody decided.
+ */
+export function effectiveWastePeriod(spec: MachineSpec, machine: Machine): number {
+  if (spec.workPerOperation <= 0) return 0;
+  if (machine.condition >= CONDITION_EFFECT_THRESHOLD) return 0;
+
+  const span = WASTE_PERIOD_AT_THRESHOLD - WASTE_PERIOD_AT_ZERO;
+  const period =
+    WASTE_PERIOD_AT_ZERO + divFloor(span * machine.condition, CONDITION_EFFECT_THRESHOLD);
+  return period < 2 ? 2 : period;
 }
 
 function capacityScaled(base: number, level: number): number {

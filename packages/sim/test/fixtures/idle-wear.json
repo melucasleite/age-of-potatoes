@@ -1,0 +1,568 @@
+{
+  "name": "idle-wear",
+  "description": "Hand-farms two rows of potatoes to afford a Chip Kitchen, places it, and then never touches it again for ten thousand ticks. Guards plan §4’s absolute rule that wear is per operation and never per second: the kitchen completes no operations, so it must still be at full condition at the end. A machine that aged on the clock would show up here as a changed hash and as a failed assertion in factory.test.ts.",
+  "seed": 606060,
+  "ticks": 14465,
+  "expectedHash": "5a503267",
+  "commands": [
+    {
+      "tick": 0,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 39,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 40,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 43,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 49,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 54,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 60,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 66,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 72,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 94,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 95,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 96,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 98,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 104,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 110,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 116,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2157,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2179,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2180,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2181,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2183,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2189,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2195,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2201,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2207,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 9,
+        "tileX": 2,
+        "tileY": 12,
+        "item": 2,
+        "count": 20
+      }
+    },
+    {
+      "tick": 2256,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2285,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2289,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2294,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2299,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2305,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2311,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2317,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2323,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2345,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2346,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2347,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2349,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2355,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2361,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2367,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4365,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4387,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4388,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4389,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4391,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4397,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4403,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4409,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4415,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 9,
+        "tileX": 2,
+        "tileY": 12,
+        "item": 2,
+        "count": 16
+      }
+    },
+    {
+      "tick": 4464,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 2,
+        "tileX": 14,
+        "tileY": 4
+      }
+    }
+  ]
+}

@@ -155,6 +155,8 @@ export function hashStateUint32(state: WorldState): number {
     d.num(machine.condition);
     d.num(machine.opCount);
     d.bool(machine.jammed);
+    d.num(machine.blockedTicks);
+    d.num(machine.overcookedCount);
     d.num(machine.cooldown);
     d.num(machine.investedCents);
     d.num(machine.speedLevel);
@@ -306,6 +308,9 @@ export function hashStateUint32(state: WorldState): number {
   d.num(stats.itemsSold);
   d.num(stats.itemsProducedByMachine);
   d.num(stats.itemsHarvestedByHand);
+  d.num(stats.inputsWastedByMachine);
+  d.num(stats.repairKitsUsed);
+  d.num(stats.repairKitSpendCents);
   d.num(stats.netWorthCents);
   d.num(stats.peakNetWorthCents);
   d.num(stats.nextNetWorthSampleTick);
@@ -383,6 +388,8 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].condition`, machine.condition);
     check(`machines[${i}].opCount`, machine.opCount);
     check(`machines[${i}].cooldown`, machine.cooldown);
+    check(`machines[${i}].blockedTicks`, machine.blockedTicks);
+    check(`machines[${i}].overcookedCount`, machine.overcookedCount);
     check(`machines[${i}].investedCents`, machine.investedCents);
     check(`machines[${i}].flowMlPerMinute`, machine.flowMlPerMinute);
     check(`machines[${i}].scanCursor`, machine.scanCursor);
@@ -437,6 +444,7 @@ export function findNonIntegerFields(state: WorldState): string[] {
   check('stats.lifetimeEarnedCents', stats.lifetimeEarnedCents);
   check('stats.lifetimeSpentCents', stats.lifetimeSpentCents);
   check('stats.waterDrawnMl', stats.waterDrawnMl);
+  check('stats.repairKitSpendCents', stats.repairKitSpendCents);
   check('stats.netWorthCents', stats.netWorthCents);
   check('stats.peakNetWorthCents', stats.peakNetWorthCents);
   for (let i = 0; i < stats.netWorthSamples.length; i++) {

@@ -30,6 +30,7 @@ import {
   ItemId,
   type LiquidId,
   MachineKind,
+  type MachineSpec,
   POND_ORIGIN_X,
   POND_ORIGIN_Y,
   PIPE_PRICE_CENTS_PER_TILE,
@@ -258,6 +259,23 @@ export interface Machine {
   opCount: number;
   /** Halted until whacked. Only ever set by a deterministic rule, never by a die roll. */
   jammed: boolean;
+  /**
+   * Consecutive ticks this machine has stood still with a full output buffer, reset to zero
+   * the moment anything is taken out of it. Stays at zero on every machine whose spec names
+   * no `overcookOutputItem`, because it is that rule's clock and nothing else's.
+   *
+   * IT COUNTS A LAYOUT CONDITION, NOT TIME. It only runs while demand-pull is holding the
+   * machine stopped, which is a fact about what the player built — no belt off the Fryer, a
+   * grabber pointed elsewhere, a basket nobody came back for. A closed tab advances it by
+   * exactly nothing, because `step()` is the only thing that moves it.
+   */
+  blockedTicks: number;
+  /**
+   * How many of `outputCount` have turned into the spec's `overcookOutputItem`. Always
+   * between 0 and `outputCount`, and always taken out FIRST — the burnt ones were at the
+   * bottom of the basket, so they are the ones a grabber's hand closes on.
+   */
+  overcookedCount: number;
   /** Ticks until this machine's next periodic action, for machines that have one. */
   cooldown: number;
   /** Purchase price plus every upgrade bought since. What net worth invoices it at. */
@@ -628,6 +646,8 @@ export function spawnMachine(
     condition: CONDITION_MAX,
     opCount: 0,
     jammed: false,
+    blockedTicks: 0,
+    overcookedCount: 0,
     cooldown: 0,
     investedCents: spec.priceCents,
     speedLevel: 0,
@@ -860,6 +880,42 @@ export function machineById(state: WorldState, id: number): Machine | null {
     if (machine.id === id) return machine;
   }
   return null;
+}
+
+/**
+ * What the next unit out of a machine's output buffer is, or `null` when it is empty.
+ *
+ * BURNT GOES FIRST. A Fryer's overcooked chips were at the bottom of the basket — they are
+ * the batch that sat there while the buffer stayed full — so they are what the next hand or
+ * grabber closes on. Taking them last would let a player drain the good chips and leave the
+ * burnt ones to be quietly forgotten, which is both wrong and unreadable.
+ */
+export function nextOutputItem(machine: Machine, spec: MachineSpec): ItemId | null {
+  if (machine.outputCount <= 0) return null;
+  if (machine.overcookedCount > 0 && spec.overcookOutputItem !== null) {
+    return spec.overcookOutputItem;
+  }
+  return spec.outputItem;
+}
+
+/**
+ * Take exactly one unit out of a machine's output buffer and say what it was.
+ *
+ * THE ONE PLACE OUTPUT LEAVES A MACHINE — grabbers and the player's own hands both come
+ * through here, for the same reason `takeWater()` is the only draw path: two code paths that
+ * both decrement `outputCount` would eventually disagree about which grade came out.
+ *
+ * Any pull resets the overcook clock. A basket that moved is a basket out of the oil.
+ */
+export function takeOneOutput(machine: Machine, spec: MachineSpec): ItemId | null {
+  const item = nextOutputItem(machine, spec);
+  if (item === null) return null;
+
+  const burnt = machine.overcookedCount > 0 && spec.overcookOutputItem !== null;
+  machine.outputCount -= 1;
+  if (burnt) machine.overcookedCount -= 1;
+  machine.blockedTicks = 0;
+  return item;
 }
 
 export function machineCoversTile(machine: Machine, tileX: number, tileY: number): boolean {
@@ -1133,7 +1189,13 @@ export function computeNetWorthCents(state: WorldState): number {
     if (spec === null) continue;
     total += divFloor(machine.investedCents * machine.condition, CONDITION_MAX);
     if (spec.outputItem !== null) {
-      total += listPriceCents(spec.outputItem) * machine.outputCount;
+      // A burnt batch is invoiced at what it will actually fetch, not at what it would have
+      // fetched. Net worth that quietly counted twenty rustic chips as twenty good ones would
+      // make neglect invisible on the one number plan §6's boards are read off.
+      const overcooked = spec.overcookOutputItem;
+      const burnt = overcooked === null ? 0 : machine.overcookedCount;
+      total += listPriceCents(spec.outputItem) * (machine.outputCount - burnt);
+      if (overcooked !== null && burnt > 0) total += listPriceCents(overcooked) * burnt;
     }
     if (spec.inputItem !== null) {
       total += listPriceCents(spec.inputItem) * machine.inputCount;

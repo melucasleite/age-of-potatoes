@@ -3,7 +3,7 @@
   "description": "The liquid layer end to end on one seed: hand-farms the field through three Chip Kitchens for the money, researches Hydraulics to the Irrigation Hub, drops a Pump on the pond bank, drag-routes one seventeen-tile pipe run around two sides of the field and a second one it tears straight back up, and hangs a Tank, two piped sprinkler heads and a Hub off the survivor — deliberately more demand than one pump can meet, so the round-robin throttle, the tank buffer, the reservoir draw and the Hub’s rotating dry-tile scan all run under load for 4,000 ticks. Pins the one-ledger flow model and the geometric network ids.",
   "seed": 51015,
   "ticks": 25267,
-  "expectedHash": "d46213f2",
+  "expectedHash": "a74511ed",
   "commands": [
     {
       "tick": 0,

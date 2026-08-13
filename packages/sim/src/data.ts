@@ -30,7 +30,7 @@ export const CropId = {
 export type CropId = (typeof CropId)[keyof typeof CropId];
 
 /**
- * Plan §5 caps the recipe graph at ~50 items. We are at 19. Numeric values are permanent —
+ * Plan §5 caps the recipe graph at ~50 items. We are at 20. Numeric values are permanent —
  * they are in every save and on every belt.
  */
 export const ItemId = {
@@ -62,6 +62,16 @@ export const ItemId = {
   ChiliSeed: 16,
   ChiliPepper: 17,
   DayOldChili: 18,
+
+  /**
+   * Chips that sat in a blocked Fryer until they caught colour. Plan §2: "overcooked chips
+   * sell as 'Rustic Style' at 70%." It is a joke rather than a punishment — the batch is
+   * still sellable, still a chip, and priced off seasoned chips in one place below.
+   */
+  RusticStyleChips: 19,
+
+  /** One trip's worth of maintenance. Plan §3's middle rung between hands and drones. */
+  RepairKit: 20,
 } as const;
 
 export type ItemId = (typeof ItemId)[keyof typeof ItemId];
@@ -143,6 +153,43 @@ export interface ItemSpec {
 }
 
 /**
+ * The seasoned rung of the chip ladder, hoisted out of the table because two prices are
+ * derived from it rather than typed beside it.
+ */
+export const SEASONED_CHIPS_PRICE_CENTS = 1400;
+
+/**
+ * Rustic Style is **exactly 70% of seasoned chips, floored to the cent** (plan §2), and the
+ * ratio is written here once. The table below multiplies this out rather than carrying a
+ * second literal, because a hardcoded 980 is a number that drifts the first time seasoning
+ * is repriced and nothing catches it — the two would simply disagree, quietly, forever.
+ */
+export const RUSTIC_STYLE_NUMERATOR = 70;
+export const RUSTIC_STYLE_DENOMINATOR = 100;
+
+/**
+ * Seventy percent of seasoned, floored. The one function anything pricing a burnt batch may
+ * call, and the same shape as `dayOldPriceCents` for the same reason.
+ *
+ * It reads the hoisted constant rather than `listPriceCents(ItemId.SeasonedChips)` because
+ * `ITEM_SPECS` below is initialised with this arithmetic, and a table that called back into
+ * itself while being built would read an undefined array.
+ */
+export function rusticStylePriceCents(): number {
+  return divFloor(SEASONED_CHIPS_PRICE_CENTS * RUSTIC_STYLE_NUMERATOR, RUSTIC_STYLE_DENOMINATOR);
+}
+
+/**
+ * $8 at the roadside stand (plan §3). It lives up here rather than with the rest of the
+ * maintenance numbers below because `ITEM_SPECS` is initialised a few lines down and a
+ * constant declared after it would still be in its temporal dead zone when the table runs.
+ *
+ * The $3 crafted rung of plan §3's ladder is deliberately absent: there is no crafting
+ * system in the sim yet, and a price for a recipe nobody can cook is balance data that lies.
+ */
+export const REPAIR_KIT_PRICE_CENTS = 800;
+
+/**
  * Plan §4's chip ladder, in cents: potato 200 → washed 300 → slices 450 → plain 900 →
  * seasoned 1400 → bagged 2000. Each step adds more absolute value than the last, which is
  * what makes finishing the line worth the belts it takes to feed it.
@@ -158,7 +205,21 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.WashedPotato, slug: 'washed-potato', listPriceCents: 300, purchasable: false },
   { id: ItemId.PotatoSlices, slug: 'potato-slices', listPriceCents: 450, purchasable: false },
   { id: ItemId.PlainChips, slug: 'plain-chips', listPriceCents: 900, purchasable: false },
-  { id: ItemId.SeasonedChips, slug: 'seasoned-chips', listPriceCents: 1400, purchasable: false },
+  {
+    id: ItemId.SeasonedChips,
+    slug: 'seasoned-chips',
+    listPriceCents: SEASONED_CHIPS_PRICE_CENTS,
+    purchasable: false,
+  },
+  {
+    id: ItemId.RusticStyleChips,
+    slug: 'rustic-style-chips',
+    listPriceCents: divFloor(
+      SEASONED_CHIPS_PRICE_CENTS * RUSTIC_STYLE_NUMERATOR,
+      RUSTIC_STYLE_DENOMINATOR,
+    ),
+    purchasable: false,
+  },
   { id: ItemId.DayOldPotato, slug: 'day-old-potato', listPriceCents: 100, purchasable: false },
   { id: ItemId.Compost, slug: 'compost', listPriceCents: 20, purchasable: false },
   { id: ItemId.CaneSeed, slug: 'cane-seed', listPriceCents: 80, purchasable: true },
@@ -170,6 +231,12 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.ChiliSeed, slug: 'chili-seed', listPriceCents: 90, purchasable: true },
   { id: ItemId.ChiliPepper, slug: 'chili-pepper', listPriceCents: 300, purchasable: false },
   { id: ItemId.DayOldChili, slug: 'day-old-chili', listPriceCents: 150, purchasable: false },
+  {
+    id: ItemId.RepairKit,
+    slug: 'repair-kit',
+    listPriceCents: REPAIR_KIT_PRICE_CENTS,
+    purchasable: true,
+  },
 ];
 
 export function itemSpec(id: ItemId): ItemSpec | null {
@@ -527,6 +594,15 @@ export interface MachineSpec {
   readonly wearPerOperation: number;
   readonly inputItem: ItemId | null;
   readonly outputItem: ItemId | null;
+  /**
+   * What this machine's output turns into when it is left sitting in a full buffer, or null
+   * for the machines whose output does not spoil — which is all of them but the Fryer.
+   *
+   * A SPEC FIELD RATHER THAN A CHECK ON KIND, for the same reason `moistureSensing` is one:
+   * the rule stays one line in one place, and the day a Roaster or a second fryer tier wants
+   * the same behaviour it is a data change rather than an edit to `tick.ts`.
+   */
+  readonly overcookOutputItem: ItemId | null;
   /** The node that makes this machine buildable, or null for the v0.1 three. */
   readonly requiresTech: string | null;
 
@@ -574,6 +650,52 @@ export const REPAIR_PER_TOUCH = 100;
  */
 export const JAM_EVERY_N_OPERATIONS_WHEN_WORN = 10;
 
+/**
+ * A worn machine also spoils its input every Nth operation, and N shortens as it falls apart.
+ *
+ * "WASTE CHANCE" IS NOT A CHANCE. Plan §4 says a machine below 40 condition brings a "waste
+ * chance", and plan §7 ruling 5 bans random and time-based failures outright; the only
+ * reading that satisfies both is a **cadence**, exactly like the jam above. The period is a
+ * straight-line function of condition, evaluated in `effectiveWastePeriod`:
+ *
+ *   period = AT_ZERO + floor((AT_THRESHOLD - AT_ZERO) × condition ÷ CONDITION_EFFECT_THRESHOLD)
+ *
+ * so a machine that has just crossed the threshold spoils one input in eight, and one held
+ * at death's door spoils one in two. Integer arithmetic, no stream, no roll: the same seed
+ * and the same commands waste the same potatoes on the same ticks forever.
+ *
+ * A machine at or above the threshold wastes nothing at all — this is a consequence of
+ * neglect, never a tax on running a factory.
+ */
+export const WASTE_PERIOD_AT_THRESHOLD = 8;
+export const WASTE_PERIOD_AT_ZERO = 2;
+
+/**
+ * How far a repair kit reaches, as a Chebyshev radius in tiles. Plan §4: "repair kits apply
+ * in a small radius (one trip services a cell)." Three tiles is a 7×7 cell — big enough that
+ * a hand-built chip line falls inside one, small enough that a factory needs more than one
+ * trip, which is the entire point of the number.
+ */
+export const REPAIR_KIT_RADIUS_TILES = 3;
+
+/**
+ * How long a full output buffer stands still before one more unit of it overcooks.
+ *
+ * OVERCOOKING IS A LAYOUT CONDITION, NEVER A DIE ROLL (plan §7 ruling 5). A Fryer stops dead
+ * when its output buffer fills — that is demand-pull, and it is the same stop that leaves a
+ * Slicer visibly idle — but the basket it has already fried is still sitting in the oil. Chips
+ * go rustic because the player built no belt off the Fryer, aimed the grabber somewhere else,
+ * or wandered off with a full basket: causes you can see, standing in front of the machine.
+ *
+ * The arithmetic: the Fryer takes 60 ticks an operation (`workPerOperation ÷ workRatePerTick`),
+ * so 600 ticks is ten cycles, or thirty active seconds of a machine that has not moved a chip.
+ * One unit turns per interval rather than the whole basket, so a 20-chip Fryer takes ten
+ * active minutes of total neglect to fully brown — the same "wants attention every ten
+ * minutes" scale plan §4 tunes maintenance to. Any pull from the buffer resets the clock,
+ * because a basket that moved is a basket out of the oil.
+ */
+export const OVERCOOK_BLOCKED_TICKS = 600;
+
 export const SPRINKLER_PERIOD_TICKS = 5 * TICKS_PER_SECOND;
 /** Chebyshev radius in tiles. A 5×5 patch, which is most of one 8×8 field's corner. */
 export const SPRINKLER_RADIUS_TILES = 2;
@@ -609,6 +731,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 0,
     inputItem: null,
     outputItem: null,
+    overcookOutputItem: null,
     requiresTech: null,
     liquid: LiquidId.None,
     pumpRateMlPerMinute: 0,
@@ -635,6 +758,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 5,
     inputItem: ItemId.RussetPotato,
     outputItem: ItemId.BaggedChips,
+    overcookOutputItem: null,
     requiresTech: null,
     liquid: LiquidId.None,
     pumpRateMlPerMinute: 0,
@@ -659,6 +783,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 1,
     inputItem: null,
     outputItem: null,
+    overcookOutputItem: null,
     requiresTech: null,
     liquid: LiquidId.None,
     pumpRateMlPerMinute: 0,
@@ -681,6 +806,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 1,
     inputItem: ItemId.RussetPotato,
     outputItem: ItemId.WashedPotato,
+    overcookOutputItem: null,
     requiresTech: TechId.WashAndSlice,
     liquid: LiquidId.None,
     pumpRateMlPerMinute: 0,
@@ -703,6 +829,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 2,
     inputItem: ItemId.WashedPotato,
     outputItem: ItemId.PotatoSlices,
+    overcookOutputItem: null,
     requiresTech: TechId.WashAndSlice,
     liquid: LiquidId.None,
     pumpRateMlPerMinute: 0,
@@ -726,6 +853,9 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 3,
     inputItem: ItemId.PotatoSlices,
     outputItem: ItemId.PlainChips,
+    // The only machine in the game whose output spoils, and only when the player's layout
+    // leaves it nowhere to go. See `OVERCOOK_BLOCKED_TICKS`.
+    overcookOutputItem: ItemId.RusticStyleChips,
     requiresTech: TechId.Fryer,
     liquid: LiquidId.None,
     pumpRateMlPerMinute: 0,
@@ -748,6 +878,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 2,
     inputItem: ItemId.PlainChips,
     outputItem: ItemId.SeasonedChips,
+    overcookOutputItem: null,
     requiresTech: TechId.Finishing,
     liquid: LiquidId.None,
     pumpRateMlPerMinute: 0,
@@ -770,6 +901,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 1,
     inputItem: ItemId.SeasonedChips,
     outputItem: ItemId.BaggedChips,
+    overcookOutputItem: null,
     requiresTech: TechId.Finishing,
     liquid: LiquidId.None,
     pumpRateMlPerMinute: 0,
@@ -794,6 +926,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 0,
     inputItem: null,
     outputItem: null,
+    overcookOutputItem: null,
     requiresTech: TechId.Pumps,
     liquid: LiquidId.Water,
     pumpRateMlPerMinute: PUMP_RATE_ML_PER_MINUTE,
@@ -820,6 +953,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 0,
     inputItem: null,
     outputItem: null,
+    overcookOutputItem: null,
     requiresTech: TechId.Pumps,
     liquid: LiquidId.Water,
     pumpRateMlPerMinute: 0,
@@ -848,6 +982,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 0,
     inputItem: null,
     outputItem: null,
+    overcookOutputItem: null,
     requiresTech: TechId.PipedSprinklers,
     liquid: LiquidId.Water,
     pumpRateMlPerMinute: 0,
@@ -875,6 +1010,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 0,
     inputItem: null,
     outputItem: null,
+    overcookOutputItem: null,
     requiresTech: TechId.IrrigationHub,
     liquid: LiquidId.Water,
     pumpRateMlPerMinute: 0,
@@ -902,6 +1038,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     wearPerOperation: 0,
     inputItem: null,
     outputItem: null,
+    overcookOutputItem: null,
     requiresTech: TechId.Recirculator,
     liquid: LiquidId.Water,
     pumpRateMlPerMinute: 0,
@@ -1139,7 +1276,7 @@ function balanceDigest(): string {
     const spec = MACHINE_SPECS[i]!;
     h = fnv1aString(
       h,
-      `${spec.kind}:${spec.slug}:${spec.role}:${spec.tilesWide}x${spec.tilesHigh}:${spec.priceCents}:${spec.workPerOperation}:${spec.workRatePerTick}:${spec.inputCapacity}:${spec.outputCapacity}:${spec.tankCapacityMl}:${spec.wearPerOperation}:${spec.inputItem}:${spec.outputItem}:${spec.requiresTech}:${spec.liquid}:${spec.pumpRateMlPerMinute}:${spec.intakeMlPerTick}:${spec.coverageRadiusTiles}:${spec.moistureSensing}`,
+      `${spec.kind}:${spec.slug}:${spec.role}:${spec.tilesWide}x${spec.tilesHigh}:${spec.priceCents}:${spec.workPerOperation}:${spec.workRatePerTick}:${spec.inputCapacity}:${spec.outputCapacity}:${spec.tankCapacityMl}:${spec.wearPerOperation}:${spec.inputItem}:${spec.outputItem}:${spec.overcookOutputItem}:${spec.requiresTech}:${spec.liquid}:${spec.pumpRateMlPerMinute}:${spec.intakeMlPerTick}:${spec.coverageRadiusTiles}:${spec.moistureSensing}`,
     );
   }
   for (let i = 0; i < LIQUID_SPECS.length; i++) {
@@ -1178,6 +1315,12 @@ function balanceDigest(): string {
   h = fnv1aString(
     h,
     `${UPGRADE_MAX_LEVEL}:${SPEED_RATE_BONUS_PERCENT_PER_LEVEL}:${SPEED_WEAR_PENALTY_PERCENT_PER_LEVEL}:${EFFICIENCY_WEAR_CUT_PERCENT_PER_LEVEL}:${CAPACITY_BONUS_PER_LEVEL}:${UPGRADE_COST_PERCENT_BY_LEVEL.join('|')}`,
+  );
+  // Maintenance and overcooking. The two condition constants are already folded in above with
+  // the world numbers; everything a worn or neglected machine actually *does* is here.
+  h = fnv1aString(
+    h,
+    `${REPAIR_PER_TOUCH}:${JAM_EVERY_N_OPERATIONS_WHEN_WORN}:${WASTE_PERIOD_AT_THRESHOLD}:${WASTE_PERIOD_AT_ZERO}:${REPAIR_KIT_PRICE_CENTS}:${REPAIR_KIT_RADIUS_TILES}:${OVERCOOK_BLOCKED_TICKS}:${RUSTIC_STYLE_NUMERATOR}/${RUSTIC_STYLE_DENOMINATOR}`,
   );
   return fnv1aToHex(h);
 }

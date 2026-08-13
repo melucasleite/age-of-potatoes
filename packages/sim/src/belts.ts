@@ -36,6 +36,8 @@ import {
   directionStepX,
   directionStepY,
   machineAt,
+  nextOutputItem,
+  takeOneOutput,
 } from './state';
 import { effectiveInputCapacity } from './upgrades';
 import { SUBTILE, divFloor } from './units';
@@ -194,10 +196,15 @@ function grabberTake(state: WorldState, grabber: Grabber, reachTiles: number): I
   if (machine !== null) {
     const spec = machineSpec(machine.kind);
     if (spec === null || spec.outputItem === null) return 0;
-    if (machine.outputCount <= 0) return 0;
-    if (grabber.filter !== 0 && spec.outputItem !== grabber.filter) return 0;
-    machine.outputCount -= 1;
-    return spec.outputItem;
+
+    // The filter judges what is actually next out of the buffer, not what the machine makes
+    // on a good day: a Fryer hands over its burnt chips first, and an arm filtered to plain
+    // chips must leave those alone rather than quietly relabelling them.
+    const next = nextOutputItem(machine, spec);
+    if (next === null) return 0;
+    if (grabber.filter !== 0 && next !== grabber.filter) return 0;
+
+    return takeOneOutput(machine, spec) ?? 0;
   }
 
   return 0;

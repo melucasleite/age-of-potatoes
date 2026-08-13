@@ -20,6 +20,8 @@ import {
   IntentAction,
   ItemId,
   MachineKind,
+  OVERCOOK_BLOCKED_TICKS,
+  REPAIR_KIT_PRICE_CENTS,
   SIM_CODE_VERSION,
   SIM_VERSION,
   SaveCorruptError,
@@ -41,6 +43,7 @@ import fixture from './fixtures/saves/format-1.json';
 import fixture2 from './fixtures/saves/format-2.json';
 import fixture3 from './fixtures/saves/format-3.json';
 import fixture4 from './fixtures/saves/format-4.json';
+import fixture5 from './fixtures/saves/format-5.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -303,18 +306,22 @@ describe('the permanent fixture set', () => {
   // real build and it must stay byte-identical forever; it is the only thing that will catch
   // a migration bug in 2029.
   //
-  // The expected DIGEST below is a different matter, and it has now moved three times, every
+  // The expected DIGEST below is a different matter, and it has now moved four times, every
   // time on purpose. Format 2 added belts, grabbers, zones, tech unlocks, upgrade dials, and
   // the per-tile withering clock; format 3 added reservoirs, pipes, one-ledger networks, and
-  // the per-machine plumbing fields; format 4 added the player's pending errand — all of them
-  // hashed — so the world this file restores to legitimately hashes differently each time.
-  // That is the migration working, not the save breaking: the tick, the seed, the money, and
-  // every machine came back unchanged, which is what the assertions around it check.
+  // the per-machine plumbing fields; format 4 added the player's pending errand; format 5
+  // added a machine's overcooking clock and its burnt count, plus the waste and repair-kit
+  // tallies — all of them hashed — so the world this file restores to legitimately hashes
+  // differently each time. That is the migration working, not the save breaking: the tick, the
+  // seed, the money, and every machine came back unchanged, which is what the assertions
+  // around it check.
   //
-  // Format 4 is the cheapest of the three to reason about and the easiest to get wrong. It
-  // adds ONE nullable field, and `null` is the only value that leaves the loaded world
-  // behaving like the saved one — a returning player must not find the farmer setting off
-  // across the field on an errand they never issued.
+  // Format 4 is the cheapest of them to reason about and the easiest to get wrong. It adds
+  // ONE nullable field, and `null` is the only value that leaves the loaded world behaving
+  // like the saved one — a returning player must not find the farmer setting off across the
+  // field on an errand they never issued. Format 5's five fields are all zero on the same
+  // argument: a world that never had an overcooking clock has burnt nothing, and a world that
+  // could not use a repair kit has used none.
   //
   // The rule this preserves: a red line here means "either a migration is missing, or the
   // format changed without one". If you are updating this hash, the commit had better also
@@ -323,11 +330,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture);
 
     expect(restored.migration.fromVersion).toBe(1);
-    expect(restored.migration.steps).toEqual([1, 2, 3]);
+    expect(restored.migration.steps).toEqual([1, 2, 3, 4]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('69618d29');
+    expect(hashState(restored.state)).toBe('0b060e89');
   });
 
   it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
@@ -396,10 +403,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture2);
 
     expect(restored.migration.fromVersion).toBe(2);
-    expect(restored.migration.steps).toEqual([2, 3]);
+    expect(restored.migration.steps).toEqual([2, 3, 4]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('55e73df5');
+    expect(hashState(restored.state)).toBe('0835254d');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -441,10 +448,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture3);
 
     expect(restored.migration.fromVersion).toBe(3);
-    expect(restored.migration.steps).toEqual([3]);
+    expect(restored.migration.steps).toEqual([3, 4]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(21_306);
-    expect(hashState(restored.state)).toBe('645ae2d9');
+    expect(hashState(restored.state)).toBe('3bc2c589');
   });
 
   it('brings the plumbing back exactly as it was left', () => {
@@ -497,11 +504,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture4);
 
     expect(restored.migration.fromVersion).toBe(4);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([4]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(3300);
     expect(restored.state.worldSeed).toBe(90210);
-    expect(hashState(restored.state)).toBe('a3599c88');
+    expect(hashState(restored.state)).toBe('97846740');
   });
 
   it('brings the errand back exactly as it was left', () => {
@@ -533,6 +540,56 @@ describe('the permanent fixture set', () => {
     stepMany(a, 500);
     stepMany(b, 500);
     expect(hashState(a)).toBe(hashState(b));
+  });
+
+  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
+  // format-5 is the first save with maintenance and overcooking in it, caught deliberately
+  // MID-BROWN: a Fryer standing on a full basket, three chips already gone Rustic Style and
+  // the clock part-way to a fourth. That moment is the whole point of the file. `blockedTicks`
+  // and `overcookedCount` exist only while a machine is stopped with nowhere to put its
+  // output, so a save taken with an empty Fryer would carry two zeroes, round-trip perfectly,
+  // and prove nothing whatsoever about the feature it was added for.
+  it('loads format-5.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture5);
+
+    expect(restored.migration.fromVersion).toBe(5);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(restored.state.tick).toBe(41_837);
+    expect(restored.state.worldSeed).toBe(50505);
+    expect(hashState(restored.state)).toBe('c925f559');
+  });
+
+  it('brings the browning basket and the maintenance tallies back as they were', () => {
+    const state = restoreWorld(fixture5).state;
+
+    const fryer = state.machines.find((machine) => machine.kind === MachineKind.Fryer);
+    expect(fryer).toBeDefined();
+    expect(fryer!.outputCount).toBe(20);
+    expect(fryer!.overcookedCount).toBe(3);
+    // Mid-count, not at either end: a clock that came back at zero would hand the player a
+    // free reset every time they reloaded, and one that came back at the interval would burn
+    // a chip for the privilege of closing the tab.
+    expect(fryer!.blockedTicks).toBeGreaterThan(0);
+    expect(fryer!.blockedTicks).toBeLessThan(OVERCOOK_BLOCKED_TICKS);
+
+    // The lifetime tallies the Shift Report reads, restored rather than recomputed.
+    expect(state.stats.inputsWastedByMachine).toBeGreaterThan(0);
+    expect(state.stats.repairKitsUsed).toBe(1);
+    expect(state.stats.repairKitSpendCents).toBe(REPAIR_KIT_PRICE_CENTS);
+  });
+
+  it('keeps a restored Fryer browning at the same rate', () => {
+    const a = restoreWorld(fixture5).state;
+    const b = restoreWorld(fixture5).state;
+    stepMany(a, 1000);
+    stepMany(b, 1000);
+    expect(hashState(a)).toBe(hashState(b));
+
+    // And it is still a layout condition after the reload: nobody emptied the basket, so it
+    // keeps browning on exactly the schedule it was on.
+    const fryer = a.machines.find((machine) => machine.kind === MachineKind.Fryer)!;
+    expect(fryer.overcookedCount).toBeGreaterThan(3);
   });
 
   it('finishes the restored errand rather than dropping it', () => {

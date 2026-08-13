@@ -53,6 +53,8 @@ export const FIXTURE_NAMES = [
   'withering',
   'water-works',
   'walk-errands',
+  'idle-wear',
+  'maintenance',
 ] as const;
 
 export type FixtureName = (typeof FIXTURE_NAMES)[number];
@@ -77,6 +79,7 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   RefillHopper: true,
   RepairMachine: true,
   WhackJam: true,
+  UseRepairKit: true,
   SellItem: true,
   BuyItem: true,
   MoveMachine: true,
