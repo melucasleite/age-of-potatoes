@@ -1,17 +1,26 @@
 // Receipt formatting. Percentages, volumes, durations — the units a ledger needs and the
 // Ticker does not.
 //
-// Money formatting is NOT reimplemented here. `hud/format.ts` already owns cents → dollars
-// and it is imported below rather than copied, because two money formatters in one app is
-// how "$1,234.56" and "$1234.56" end up on the same screen. That file is a leaf module with
-// no React in it, so importing it costs nothing and drags nothing along.
+// Money formatting is NOT reimplemented here. `format/money.ts` owns cents → dollars and is
+// imported below rather than copied, because two money formatters in one app is how
+// "$1,234.56" and "$1234.56" end up on the same screen. It is a leaf module with no React in
+// it, so importing it costs nothing and drags nothing along.
+//
+// That header was already true of `formatCents` and quietly false of the separator rule: this
+// file used to keep its OWN byte-identical `group()`, which `formatPerHour` reimplemented the
+// sign convention around — one edit away from being the thing the paragraph above warns about.
+// `formatPerHour` is now the shared whole-dollar rendering with "/hr" on the end, and renders
+// exactly what it did before.
 //
 // Nothing in this file rounds a sim quantity before it is displayed. Rounding is a
 // presentation decision and it happens here, at the last possible moment, exactly once.
 
 import { TICKS_PER_SECOND } from '@snack/sim';
 
-export { formatCents, formatCentsWhole, formatEta, countWord, plural } from '@/hud/format';
+import { formatCentsWhole } from '../format/money';
+
+export { formatCents, formatCentsWhole } from '../format/money';
+export { formatEta, countWord, plural } from '../hud/format';
 
 /**
  * Permille → "4.2%". Permille in, because the sim's integer world measures fractions in
@@ -68,20 +77,5 @@ export function formatCentiHours(centiHours: number): string {
  * the number instead of the lot.
  */
 export function formatPerHour(centsPerHour: number): string {
-  const negative = centsPerHour < 0;
-  const dollars = Math.floor(Math.abs(centsPerHour) / 100);
-  return `${negative ? '−' : ''}$${group(dollars)}/hr`;
-}
-
-/** Thousands separators, without `toLocaleString` and without a locale changing a receipt. */
-function group(whole: number): string {
-  const digits = String(whole);
-  if (digits.length <= 3) return digits;
-  let out = '';
-  for (let i = 0; i < digits.length; i++) {
-    const fromEnd = digits.length - i;
-    out += digits[i];
-    if (fromEnd > 1 && fromEnd % 3 === 1) out += ',';
-  }
-  return out;
+  return `${formatCentsWhole(centsPerHour)}/hr`;
 }

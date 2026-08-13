@@ -54,6 +54,8 @@ import {
   listPriceCents,
 } from '@snack/sim';
 
+import { formatCents, formatCentsWhole } from '../../format/money';
+
 import type { BandState } from './chrome';
 import type { HoverTile, InputHost } from './context';
 import {
@@ -723,7 +725,12 @@ function dragBand(view: WorldView, drag: Drag, crop: CropId): BandState {
     return {
       ...bounds,
       tone: clear && view.moneyCents >= cost ? 'belt' : 'blocked',
-      label: `${run.lengthTiles} tile${run.lengthTiles === 1 ? '' : 's'} · $${Math.round(cost / 100)} ${arrow(run.dir)}`,
+      // THE PENNIES ARE THE POINT ON A BELT RUN. Basic belt is 150 cents a tile, so an
+      // odd-length run costs a round number of dollars and fifty cents, and this label used to
+      // round it — a three-tile run cost $4.50 and advertised "$5", which is a quote the tone
+      // beside it can contradict: `moneyCents >= cost` is exact, so $4.60 in the pouch drew a
+      // green band under a label saying five dollars. It quotes the charge now.
+      label: `${run.lengthTiles} tile${run.lengthTiles === 1 ? '' : 's'} · ${formatCents(cost)} ${arrow(run.dir)}`,
       // No chevron on a belt run, and that is the point of the chevron. A belt's direction is
       // the direction it was dragged and R does not touch it (item 052's constraints say so
       // outright), so the shape that means "R turns this" must never appear on one.
@@ -785,6 +792,11 @@ function grabberBand(hover: HoverTile, grabber: { dir: number; withinReach: bool
  * THE BAND IS THE PRICE TAG AT THE MOMENT OF BUYING, and the sign standing on the parcel is
  * the one that is there before the player ever arms the tool (`chrome.ts`). Both read the same
  * `land.nextPriceCents`, so they cannot disagree about what a deed costs.
+ *
+ * They could still disagree about how to SAY it, and did: this label rounded and grouped via
+ * `toLocaleString`, the build-menu row rounded and did not group, and the ribbon in
+ * `render/index.ts` printed the pennies. Every deed price is a whole number of dollars, so all
+ * three were correct and only one could be right. They share `format/money.ts` now.
  */
 function deedBand(view: WorldView, hover: HoverTile): BandState | null {
   const query = tileAtView(view, hover.tileX, hover.tileY);
@@ -809,8 +821,8 @@ function deedBand(view: WorldView, hover: HoverTile): BandState | null {
       : !buyable
         ? 'buy the parcel next to it first'
         : affordable
-          ? `land deed · $${Math.round(price / 100).toLocaleString('en-US')}`
-          : `need $${Math.round(price / 100).toLocaleString('en-US')}`,
+          ? `land deed · ${formatCentsWhole(price)}`
+          : `need ${formatCentsWhole(price)}`,
     dir: Direction.None,
   };
 }

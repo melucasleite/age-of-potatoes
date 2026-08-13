@@ -1,36 +1,13 @@
 // Cents → dollars, ticks → English. All of it lives here and none of it lives in the sim.
 //
-// `packages/sim` deals in cents and never divides by 100 (§12: integer units, "cents for
-// money, never dollars"). "$1,234.56" is a presentation decision — thousands separators,
-// rounding policy, whether a negative wears a minus or parentheses — and presentation
-// decisions that leak into a deterministic core are how a locale change desyncs a replay.
+// MONEY IS NO LONGER IMPLEMENTED HERE. It lives in `format/money.ts`, which the renderer can
+// import as easily as React can — that was the whole reason four other copies of it existed.
+// The re-export below is deliberate rather than lazy: fifteen HUD components import
+// `formatCents` from this module, and pointing them all at a new path would have made a
+// two-line consolidation look like a fifteen-file change. Import either path; they are the
+// same function.
 
-/** Cents → "$1,234.56". Exact: no float division, no `toFixed` rounding surprises. */
-export function formatCents(cents: number): string {
-  const value = Math.trunc(cents);
-  const negative = value < 0;
-  const abs = Math.abs(value);
-  const whole = Math.floor(abs / 100);
-  const part = abs % 100;
-  return `${negative ? '−' : ''}$${group(whole)}.${String(part).padStart(2, '0')}`;
-}
-
-/** Cents → "$1,234" — no pennies, for figures where the pennies are visual noise. */
-export function formatCentsWhole(cents: number): string {
-  const value = Math.trunc(cents);
-  const negative = value < 0;
-  return `${negative ? '−' : ''}$${group(Math.floor(Math.abs(value) / 100))}`;
-}
-
-/**
- * The rate, signed. A rate reads as a direction and wants its sign even when positive —
- * "+$36.20" is a claim about where you are heading; "$36.20" is just a number.
- */
-export function formatRate(centsPerMin: number): string {
-  if (centsPerMin === 0) return '$0.00';
-  const sign = centsPerMin > 0 ? '+' : '';
-  return `${sign}${formatCents(centsPerMin)}`;
-}
+export { formatCents, formatCentsWhole, formatRate } from '../format/money';
 
 /**
  * Seconds → "~4 min". Deliberately vague: an ETA precise to the second invites the player
@@ -71,16 +48,4 @@ export function countWord(n: number): string {
 
 export function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many;
-}
-
-function group(whole: number): string {
-  const digits = String(whole);
-  if (digits.length <= 3) return digits;
-  let out = '';
-  for (let i = 0; i < digits.length; i++) {
-    const fromEnd = digits.length - i;
-    out += digits[i];
-    if (fromEnd > 1 && fromEnd % 3 === 1) out += ',';
-  }
-  return out;
 }

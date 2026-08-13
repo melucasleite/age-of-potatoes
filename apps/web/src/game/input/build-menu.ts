@@ -16,6 +16,8 @@
 import type { WorldView } from '@snack/sim';
 import { beltSpec, grabberSpec, machineSpec, techSatisfied } from '@snack/sim';
 
+import { formatCents, formatCentsWhole } from '../../format/money';
+
 import { TOOL_INFO, ToolMode, toolBeltTier, toolGrabberTier, toolMachineKind } from './tools';
 
 export interface BuildEntry {
@@ -188,7 +190,24 @@ function dynamicCostCents(entry: BuildEntry, view: WorldView | null): number {
   return view?.land.nextPriceCents ?? 0;
 }
 
+/**
+ * The price on a row, in the same words the rest of the game prices things in.
+ *
+ * TWO RENDERINGS, CHOSEN BY WHETHER THE PENNIES ARE LOAD-BEARING — which is the criterion
+ * `format/money.ts` documents and `hud/Shop.tsx` already applies to a fifty-cent seed.
+ *
+ * A PER-TILE PRICE GETS ITS PENNIES. A Basic Belt is 150 cents a tile, and it is the only
+ * sub-dollar price in the game — every machine, grabber, tech node and land deed is a whole
+ * number of dollars, which is why the disagreement below survived so long. This row used to
+ * print `Math.round(150 / 100)` = "$2/tile" while the React toolbelt printed
+ * `formatCentsWhole(150)` = "$1". The player is about to multiply this number by twenty, so
+ * the fifty cents is the opposite of noise, and neither old answer was the price.
+ *
+ * EVERYTHING ELSE IS WHOLE DOLLARS, matching the toolbelt and the tech tree exactly. That also
+ * puts the separators back on a land deed: the fifteenth costs $3,276,800 and this row printed
+ * it as "$3276800", eight digits with nothing to hold on to, while the placement band drawn
+ * over the parcel grouped it properly.
+ */
 function formatPrice(cents: number, perTile: boolean): string {
-  const dollars = Math.round(cents / 100);
-  return perTile ? `$${dollars}/tile` : `$${dollars}`;
+  return perTile ? `${formatCents(cents)}/tile` : formatCentsWhole(cents);
 }
