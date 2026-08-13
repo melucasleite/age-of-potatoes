@@ -1,0 +1,24 @@
+{
+  "id": "pipe_cap",
+  "provider": "local",
+  "model": "local:local/pipe_cap.png",
+  "seed": null,
+  "prompt": "One 16x16 pipe end — a sealed hub with a single run leaving EAST, the canonical east-first orientation — authored from the master palette by art/tools/make-pipes.mjs. The closed end is the only place a rim crosses the run: everywhere else the arms are drawn out past the tile edge and cropped back, so a run reads as continuing rather than beading at every tile seam.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "pipes",
+  "costUsd": 0,
+  "generatedAt": "2026-08-13T03:34:12.049Z"
+}

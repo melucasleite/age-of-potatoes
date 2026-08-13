@@ -22,9 +22,31 @@
       "anchorMode": "top-left",
       "group": "belts"
     },
-    "belt_straight": {
+    "belt_junction": {
       "frame": {
         "x": 17,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "belts"
+    },
+    "belt_straight": {
+      "frame": {
+        "x": 34,
         "y": 0,
         "w": 16,
         "h": 16
@@ -332,7 +354,7 @@
     },
     "grabber_arm": {
       "frame": {
-        "x": 34,
+        "x": 51,
         "y": 0,
         "w": 16,
         "h": 16
@@ -682,9 +704,53 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_chip_kitchen": {
+    "machine_bottler": {
       "frame": {
         "x": 33,
+        "y": 84,
+        "w": 48,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 48,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_carbonator": {
+      "frame": {
+        "x": 82,
+        "y": 84,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_chip_kitchen": {
+      "frame": {
+        "x": 115,
         "y": 84,
         "w": 32,
         "h": 32
@@ -706,7 +772,73 @@
     },
     "machine_fryer": {
       "frame": {
-        "x": 66,
+        "x": 148,
+        "y": 84,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_grinder": {
+      "frame": {
+        "x": 181,
+        "y": 84,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_juicer": {
+      "frame": {
+        "x": 214,
+        "y": 84,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_kettle": {
+      "frame": {
+        "x": 247,
         "y": 84,
         "w": 32,
         "h": 32
@@ -728,7 +860,7 @@
     },
     "machine_seasoner": {
       "frame": {
-        "x": 99,
+        "x": 280,
         "y": 84,
         "w": 32,
         "h": 32
@@ -750,7 +882,7 @@
     },
     "machine_slicer": {
       "frame": {
-        "x": 132,
+        "x": 313,
         "y": 84,
         "w": 32,
         "h": 32
@@ -772,7 +904,7 @@
     },
     "machine_sprinkler": {
       "frame": {
-        "x": 198,
+        "x": 412,
         "y": 84,
         "w": 16,
         "h": 16
@@ -788,13 +920,35 @@
       "sourceSize": {
         "w": 16,
         "h": 16
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_syrup_mixer": {
+      "frame": {
+        "x": 346,
+        "y": 84,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
       },
       "anchorMode": "bottom-center",
       "group": "machines"
     },
     "machine_washer": {
       "frame": {
-        "x": 165,
+        "x": 379,
         "y": 84,
         "w": 32,
         "h": 32
@@ -814,10 +968,142 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "player_walk_down": {
+    "pipe_cap": {
       "frame": {
         "x": 0,
         "y": 134,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "pipes"
+    },
+    "pipe_corner": {
+      "frame": {
+        "x": 17,
+        "y": 134,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "pipes"
+    },
+    "pipe_cross": {
+      "frame": {
+        "x": 34,
+        "y": 134,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "pipes"
+    },
+    "pipe_straight": {
+      "frame": {
+        "x": 51,
+        "y": 134,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "pipes"
+    },
+    "pipe_stub": {
+      "frame": {
+        "x": 68,
+        "y": 134,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "pipes"
+    },
+    "pipe_tee": {
+      "frame": {
+        "x": 85,
+        "y": 134,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "pipes"
+    },
+    "player_walk_down": {
+      "frame": {
+        "x": 0,
+        "y": 151,
         "w": 32,
         "h": 16
       },
@@ -839,7 +1125,7 @@
     "player_walk_side": {
       "frame": {
         "x": 33,
-        "y": 134,
+        "y": 151,
         "w": 32,
         "h": 16
       },
@@ -861,7 +1147,7 @@
     "status_lamp": {
       "frame": {
         "x": 0,
-        "y": 151,
+        "y": 168,
         "w": 4,
         "h": 4
       },
@@ -883,7 +1169,7 @@
     "tech_agronomy_cane": {
       "frame": {
         "x": 0,
-        "y": 156,
+        "y": 173,
         "w": 32,
         "h": 32
       },
@@ -905,7 +1191,7 @@
     "tech_agronomy_chili": {
       "frame": {
         "x": 33,
-        "y": 156,
+        "y": 173,
         "w": 32,
         "h": 32
       },
@@ -927,7 +1213,7 @@
     "tech_agronomy_corn": {
       "frame": {
         "x": 66,
-        "y": 156,
+        "y": 173,
         "w": 32,
         "h": 32
       },
@@ -949,7 +1235,7 @@
     "tech_agronomy_seed_hopper": {
       "frame": {
         "x": 99,
-        "y": 156,
+        "y": 173,
         "w": 32,
         "h": 32
       },
@@ -971,7 +1257,7 @@
     "tech_fabrication_fryer": {
       "frame": {
         "x": 132,
-        "y": 156,
+        "y": 173,
         "w": 32,
         "h": 32
       },
@@ -993,7 +1279,7 @@
     "tech_fabrication_wash_and_slice": {
       "frame": {
         "x": 165,
-        "y": 156,
+        "y": 173,
         "w": 32,
         "h": 32
       },
@@ -1015,7 +1301,7 @@
     "terrain_grass": {
       "frame": {
         "x": 0,
-        "y": 189,
+        "y": 206,
         "w": 16,
         "h": 16
       },
@@ -1037,7 +1323,7 @@
     "terrain_soil": {
       "frame": {
         "x": 17,
-        "y": 189,
+        "y": 206,
         "w": 16,
         "h": 16
       },
@@ -1059,7 +1345,7 @@
     "terrain_soil_tilled": {
       "frame": {
         "x": 34,
-        "y": 189,
+        "y": 206,
         "w": 16,
         "h": 16
       },
@@ -1103,7 +1389,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.d2c5a49c.png",
+    "image": "atlas.294f137b.png",
     "format": "RGBA8888",
     "size": {
       "w": 512,
@@ -1115,9 +1401,9 @@
         "group": "belts",
         "x": 0,
         "y": 0,
-        "width": 50,
+        "width": 67,
         "height": 16,
-        "count": 3
+        "count": 4
       },
       {
         "group": "crops",
@@ -1147,9 +1433,9 @@
         "group": "machines",
         "x": 0,
         "y": 84,
-        "width": 214,
+        "width": 428,
         "height": 32,
-        "count": 7
+        "count": 13
       },
       {
         "group": "overlay",
@@ -1160,9 +1446,17 @@
         "count": 1
       },
       {
-        "group": "player",
+        "group": "pipes",
         "x": 0,
         "y": 134,
+        "width": 101,
+        "height": 16,
+        "count": 6
+      },
+      {
+        "group": "player",
+        "x": 0,
+        "y": 151,
         "width": 65,
         "height": 16,
         "count": 2
@@ -1170,7 +1464,7 @@
       {
         "group": "status",
         "x": 0,
-        "y": 151,
+        "y": 168,
         "width": 4,
         "height": 4,
         "count": 1
@@ -1178,7 +1472,7 @@
       {
         "group": "tech",
         "x": 0,
-        "y": 156,
+        "y": 173,
         "width": 197,
         "height": 32,
         "count": 6
@@ -1186,7 +1480,7 @@
       {
         "group": "terrain",
         "x": 0,
-        "y": 189,
+        "y": 206,
         "width": 50,
         "height": 16,
         "count": 3

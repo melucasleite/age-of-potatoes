@@ -1,4 +1,5 @@
-// Authors art/local/pipe_straight.png, pipe_corner.png and pipe_junction.png.
+// Authors the six pipe frames the renderer asks for:
+//   pipe_stub, pipe_cap, pipe_straight, pipe_corner, pipe_tee, pipe_cross.
 //
 // WHY THESE ARE ARITHMETIC AND NOT PROMPTS
 //
@@ -8,25 +9,46 @@
 //
 //   * A straight pipe repeats along its run. Any mismatch between column 0 and column 15
 //     repeats every 16px in a row — the most visible artefact a tiling texture can have.
-//   * A corner has to MEET a straight. The cross-section where the corner's arm leaves the
-//     tile must be identical, pixel for pixel, to the straight's cross-section, or every
-//     bend in the network shows a visible jog.
-//   * All three are rotated 90 degrees by the renderer to get the other orientations, so
-//     the horizontal cross-section and the vertical cross-section have to be the same
-//     sequence of colours, or a pipe changes shading as it turns a corner.
+//   * A corner has to MEET a straight. The cross-section where an arm leaves the tile must
+//     be identical, pixel for pixel, on every frame that has an arm on that side, or every
+//     bend and every tee in the network shows a visible jog.
+//   * The renderer draws six frames and ROTATES them in quarter turns to cover all sixteen
+//     neighbour masks (`apps/web/src/game/render/pipe-shape.ts`). So the art must be turnable:
+//     a frame turned 90 degrees has to land exactly on the frame for the turned mask.
 //
-// None of those are things a diffusion model can be asked for. They are, however, four
-// lines of assertion each, run every time this file does. The measured evidence is already
-// in the repo: two paid takes at the belt corner came back as "a brown scribble on a
+// None of those are things a diffusion model can be asked for. They are, however, assertions
+// that run every time this file does — including the rotation law, which is checked over all
+// sixteen masks below. The measured evidence for reaching for `provider: "local"` here is
+// already in the repo: two paid takes at the belt corner came back as "a brown scribble on a
 // background that quantised to violet".
 //
-// Unlike a belt, a pipe is NOT drawn on a solid plate. A belt is a machine you walk items
-// along; a pipe is a tube lying on the ground, and the ground should show around it.
+// WHAT CHANGED, AND WHY THE OLD SET COULD NOT SHIP
 //
-// The cross-section is top-lit: dark rim, pale highlight, mid body, dark rim. Rotated 90
-// degrees that puts the highlight on the left, which is the same light doing the same thing.
+// This file used to author three frames — straight, corner and `pipe_junction` — and none of
+// the three could be packed as they were:
+//
+//   1. The renderer asks for SIX frames by name (`ART.pipeFrame`, and `PIPE_FRAMES` in
+//      pipe-shape.ts): stub, cap, straight, corner, tee, cross. `pipe_junction` is not a name
+//      it ever asks for, and stub/cap/cross had no art at all.
+//   2. The renderer's canonical corner is EAST-to-SOUTH. The old corner was drawn WEST-to-
+//      SOUTH — one quarter turn out — so every bend in the game would have been drawn facing
+//      the wrong way while looking perfectly deliberate.
+//   3. The old art was TOP-LIT (a pale highlight along the top of the run). A top-lit tile
+//      turned three quarters is a bottom-lit tile, so the light would have swung around the
+//      compass as pipes turned corners. The shading here is CONCENTRIC for that reason —
+//      exactly the reasoning the renderer's own placeholder records — and concentric shading
+//      is rotation-invariant by construction.
+//
+// The values are the placeholder's values on purpose: metal_dark rim, metal_pale body, paper
+// core. The pipe layer MULTIPLIES the sprite by its liquid's colour, so the art must be
+// near-neutral and bright — art baked amber would make water a muddy teal — and matching what
+// is already on screen means the atlas landing is a promotion, not a redesign.
+//
+// A pipe is NOT drawn on a solid plate. A belt is a machine you walk items along and fills
+// its tile; a pipe is a tube lying on the ground with the ground showing around it. That
+// contrast is §5's "belt cathedral next to a pipe organ" and it is worth more than detail.
 
-import { writeFileSync } from 'node:fs';
+import { unlinkSync, existsSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -34,6 +56,15 @@ import { loadMaster } from './palette-png.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SIZE = 16;
+
+/**
+ * Working canvas margin. Arms are drawn out past the tile edge and the result is cropped
+ * back, so a pixel on the tile boundary sees the run CONTINUING rather than ending. Without
+ * it the shading would put a dark rim across every tile seam — a bead every 16px down a
+ * straight run, which is the artefact this whole file exists to prevent.
+ */
+const PAD = 4;
+const CANVAS = SIZE + PAD * 2;
 
 const { swatches } = loadMaster();
 const hexOf = (name) => {
@@ -43,149 +74,195 @@ const hexOf = (name) => {
 };
 
 /**
- * The cross-section, outermost first, and the single source of truth for every tile here.
- * Four pixels thick and centred on 16, so rows 6..9 and columns 6..9 — symmetric about the
- * tile centre, which is what lets a 90-degree rotation land back on the grid exactly.
+ * Depth → colour, outermost first. Read off the renderer's placeholder (`PIPE` in
+ * textures.ts) so the shipped frame and the fallback frame are the same picture.
+ *
+ * Concentric, never top-lit: see the header. Depth is capped at the last entry, so the
+ * inside of a bend and the middle of a cross both read as the same lit core.
  */
-const SECTION = ['metal_dark', 'metal_pale', 'metal_mid', 'metal_dark'];
-const THICKNESS = SECTION.length;
+const SHADE = ['metal_dark', 'metal_pale', 'paper'];
+
+/** Half-width of the run: rows 5..10 of 16, symmetric about the tile centre. */
+const THICKNESS = 6;
 const LOW = (SIZE - THICKNESS) >> 1;
 const HIGH = LOW + THICKNESS - 1;
 
 if ((SIZE - THICKNESS) % 2 !== 0) {
-  throw new Error(`A ${THICKNESS}px section cannot be centred in ${SIZE}px without a half pixel.`);
+  throw new Error(`A ${THICKNESS}px run cannot be centred in ${SIZE}px without a half pixel.`);
 }
 
-function blank() {
-  return Array.from({ length: SIZE }, () => new Array(SIZE).fill(null));
+/** Neighbour bits, in the same order and with the same values pipe-shape.ts uses. */
+const N = 1;
+const E = 2;
+const S = 4;
+const W = 8;
+
+/**
+ * The canonical mask of each frame — the SAME table as `CANONICAL` in pipe-shape.ts, and it
+ * has to stay that way. Everything points east first: a cap reaches east, a corner joins east
+ * to south, a tee is the one missing its north arm.
+ */
+const FRAMES = [
+  ['pipe_stub', 0],
+  ['pipe_cap', E],
+  ['pipe_straight', E | W],
+  ['pipe_corner', E | S],
+  ['pipe_tee', E | S | W],
+  ['pipe_cross', N | E | S | W],
+];
+
+/** Turn a mask one quarter clockwise: N→E→S→W→N. Same arithmetic as the renderer's. */
+function rotateMask(mask) {
+  return ((mask << 1) | (mask >> 3)) & 0b1111;
 }
 
-/** The horizontal run, full width. Row `LOW + i` takes `SECTION[i]`. */
-function drawHorizontal(grid, fromX, toX) {
-  for (let i = 0; i < THICKNESS; i++) {
-    for (let x = fromX; x <= toX; x++) grid[LOW + i][x] = SECTION[i];
-  }
+/** Turn a grid one quarter clockwise. `out[r][c] = grid[n-1-c][r]` — top row becomes right column. */
+function rotateGrid(grid) {
+  const n = grid.length;
+  return Array.from({ length: n }, (_, r) =>
+    Array.from({ length: n }, (_, c) => grid[n - 1 - c][r]),
+  );
 }
 
 /**
- * The vertical run. Column `LOW + i` takes `SECTION[i]` — the same sequence read left to
- * right that the horizontal reads top to bottom, which is exactly what makes the 90-degree
- * rotation a no-op on the shading.
+ * The solid shape of a mask on the padded canvas: a centre block, plus an arm out through
+ * each connected side. Arms run past the canvas edge, which is what `PAD` is for.
  */
-function drawVertical(grid, fromY, toY) {
-  for (let i = 0; i < THICKNESS; i++) {
-    for (let y = fromY; y <= toY; y++) grid[y][LOW + i] = SECTION[i];
-  }
+function shapeOf(mask) {
+  const filled = Array.from({ length: CANVAS }, () => new Array(CANVAS).fill(false));
+  const lo = PAD + LOW;
+  const hi = PAD + HIGH;
+  const box = (fromY, toY, fromX, toX) => {
+    for (let y = fromY; y <= toY; y++) for (let x = fromX; x <= toX; x++) filled[y][x] = true;
+  };
+
+  // The hub is on EVERY frame, including the stub. An isolated pipe tile is a flange with no
+  // run — which is exactly what a one-tile pipe is, and is what the renderer draws for mask 0.
+  box(lo, hi, lo, hi);
+  if (mask & N) box(0, hi, lo, hi);
+  if (mask & E) box(lo, hi, lo, CANVAS - 1);
+  if (mask & S) box(lo, CANVAS - 1, lo, hi);
+  if (mask & W) box(lo, hi, 0, hi);
+  return filled;
 }
 
 /**
- * The elbow. Where the two runs overlap, the vertical is drawn second and would leave the
- * horizontal's dark bottom rim cutting across the inside of the bend; painting the overlap
- * as body with a rim only on the two outer edges is what makes a bend read as one tube
- * rather than two tubes crossing.
+ * How deep each pixel sits inside the shape, by 4-neighbour erosion, capped at the last
+ * shade.
+ *
+ * Off-canvas counts as FILLED: an arm that leaves the canvas is a run that continues into the
+ * next tile, not an end. That is the whole reason the straight tiles seamlessly, and it is
+ * why the cap and the stub — whose ends are inside the tile — are the only frames that get a
+ * rim across the run.
  */
-function roundElbow(grid) {
-  for (let y = LOW; y <= HIGH; y++) {
-    for (let x = LOW; x <= HIGH; x++) {
-      const outerEdge = y === LOW || x === LOW;
-      grid[y][x] = outerEdge ? 'metal_dark' : 'metal_mid';
+function depthsOf(filled) {
+  const depth = Array.from({ length: CANVAS }, () => new Array(CANVAS).fill(-1));
+  let current = filled.map((row) => [...row]);
+
+  for (let level = 0; level < SHADE.length; level++) {
+    const next = current.map((row) => [...row]);
+    for (let y = 0; y < CANVAS; y++) {
+      for (let x = 0; x < CANVAS; x++) {
+        if (!current[y][x]) continue;
+        const last = level === SHADE.length - 1;
+        const inside = (yy, xx) =>
+          yy < 0 || xx < 0 || yy >= CANVAS || xx >= CANVAS ? true : current[yy][xx];
+        const edge =
+          !inside(y - 1, x) || !inside(y + 1, x) || !inside(y, x - 1) || !inside(y, x + 1);
+        if (edge || last) {
+          if (depth[y][x] === -1) depth[y][x] = level;
+          if (!last) next[y][x] = false;
+        }
+      }
     }
+    current = next;
   }
-  grid[LOW + 1][LOW + 1] = 'metal_pale';
+  return depth;
 }
 
-function pipeStraight() {
-  const grid = blank();
-  drawHorizontal(grid, 0, SIZE - 1);
-  return grid;
-}
-
-/** In from the left edge, out through the bottom edge. The renderer rotates and mirrors. */
-function pipeCorner() {
-  const grid = blank();
-  drawHorizontal(grid, 0, HIGH);
-  drawVertical(grid, LOW, SIZE - 1);
-  roundElbow(grid);
-  return grid;
-}
-
-/** A tee: the run passes left to right, and a branch leaves through the bottom. */
-function pipeJunction() {
-  const grid = blank();
-  drawHorizontal(grid, 0, SIZE - 1);
-  drawVertical(grid, LOW, SIZE - 1);
-  // The branch reads as leaving the run rather than crossing it, so the run's bottom rim
-  // is opened where the branch departs and only the branch's own rims continue down.
-  for (let x = LOW + 1; x <= HIGH - 1; x++) grid[HIGH][x] = 'metal_mid';
-  return grid;
+/** One frame, cropped back to the tile. `null` is transparent — the ground shows through. */
+function render(mask) {
+  const depth = depthsOf(shapeOf(mask));
+  return Array.from({ length: SIZE }, (_, y) =>
+    Array.from({ length: SIZE }, (_, x) => {
+      const d = depth[y + PAD][x + PAD];
+      return d === -1 ? null : SHADE[Math.min(d, SHADE.length - 1)];
+    }),
+  );
 }
 
 // --- the guarantees, asserted rather than eyeballed ------------------------------------
 
-const straight = pipeStraight();
-const corner = pipeCorner();
-const junction = pipeJunction();
+const drawn = new Map(FRAMES.map(([name, mask]) => [name, render(mask)]));
+const straight = drawn.get('pipe_straight');
 
-/** A straight run must not seam: its left edge column must equal its right edge column. */
-for (let y = 0; y < SIZE; y++) {
-  if (straight[y][0] !== straight[y][SIZE - 1]) {
-    throw new Error(`pipe_straight seams at row ${y}.`);
+/**
+ * THE ROTATION LAW, over all sixteen masks.
+ *
+ * The renderer covers sixteen neighbour masks with six frames by turning them in quarter
+ * turns, so "the art for a turned mask" and "the art turned" have to be the same picture. A
+ * violation here is the failure this file exists to make impossible: a pipe that LOOKS
+ * connected and is not. Checking all sixteen rather than the six canonical ones is what
+ * catches an asymmetric highlight, which is invisible on the frame it was drawn for.
+ */
+for (let mask = 0; mask < 16; mask++) {
+  const turned = rotateGrid(render(mask));
+  const expected = render(rotateMask(mask));
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      if (turned[y][x] !== expected[y][x]) {
+        throw new Error(
+          `Mask ${mask} turned one quarter clockwise does not match mask ${rotateMask(mask)} ` +
+            `at ${x},${y}: "${turned[y][x]}" vs "${expected[y][x]}".`,
+        );
+      }
+    }
+  }
+}
+
+/** A straight run must not seam: every column of it is the same column. */
+for (let x = 0; x < SIZE; x++) {
+  for (let y = 0; y < SIZE; y++) {
+    if (straight[y][x] !== straight[y][0]) {
+      throw new Error(`pipe_straight is not uniform along its run: column ${x}, row ${y}.`);
+    }
   }
 }
 
 /**
- * Rotating the straight 90 degrees must land exactly on the vertical pipe this file would
- * have drawn by hand — same columns, same colour order, no half-pixel drift. That is the
- * claim the renderer relies on when it gets three of the four orientations for free, and
- * it holds only because the section is centred and the section order is read the same way
- * along both axes. Asserting the rotation equals *itself* would be the wrong test: a
- * horizontal pipe turned 90 degrees is a vertical pipe, and should be.
+ * Every arm that leaves a tile presents the straight's cross-section, and every side that has
+ * no arm is empty to the tile edge. The first half is why bends do not jog; the second is why
+ * a cap reads as an end rather than as a run that quietly stops.
  */
-const verticalByHand = blank();
-drawVertical(verticalByHand, 0, SIZE - 1);
-// The direction is counter-clockwise, and that is a real convention rather than an
-// arbitrary one: read anticlockwise, the section's top-to-bottom order becomes its
-// left-to-right order, so the top-lit highlight lands on the pipe's left. Rotating the
-// other way puts the highlight on the right — which still tiles and still joins, because
-// the joinery guarantees below are about edge cross-sections, not about which side is lit.
-for (let y = 0; y < SIZE; y++) {
-  for (let x = 0; x < SIZE; x++) {
-    if (straight[y][x] !== verticalByHand[SIZE - 1 - x][y]) {
+const SECTION = straight.map((row) => row[0]);
+const edgeOf = {
+  [N]: (grid) => [...grid[0]],
+  [S]: (grid) => [...grid[SIZE - 1]],
+  [W]: (grid) => grid.map((row) => row[0]),
+  [E]: (grid) => grid.map((row) => row[SIZE - 1]),
+};
+
+for (const [name, mask] of FRAMES) {
+  const grid = drawn.get(name);
+  for (const side of [N, E, S, W]) {
+    const edge = edgeOf[side](grid);
+    const want = mask & side ? SECTION : new Array(SIZE).fill(null);
+    if (edge.join('|') !== want.join('|')) {
       throw new Error(
-        `pipe_straight rotated 90 degrees anticlockwise does not match the vertical pipe at ` +
-          `${x},${y}: "${straight[y][x]}" vs "${verticalByHand[SIZE - 1 - x][y]}".`,
+        `${name} has the wrong cross-section on side ${side}: expected ` +
+          `${mask & side ? 'the straight run' : 'nothing'}, got ${edge.join('|')}.`,
       );
     }
   }
 }
 
-/** Every arm that leaves a tile must present the straight's cross-section, or bends jog. */
-const westSection = (grid) => grid.map((row) => row[0]);
-const southSection = (grid) => [...grid[SIZE - 1]];
-const reference = westSection(straight);
-const rotatedReference = Array.from({ length: SIZE }, (_, x) =>
-  x >= LOW && x <= HIGH ? SECTION[x - LOW] : null,
-);
-
-for (const [name, grid, expectSouth] of [
-  ['pipe_corner', corner, true],
-  ['pipe_junction', junction, true],
-]) {
-  const west = westSection(grid);
-  if (west.join('|') !== reference.join('|')) {
-    throw new Error(`${name} does not meet a straight pipe on its west edge.`);
-  }
-  if (expectSouth) {
-    const south = southSection(grid);
-    if (south.join('|') !== rotatedReference.join('|')) {
-      throw new Error(`${name} does not meet a straight pipe on its south edge.`);
+/** Nothing may be drawn off the master palette — every colour here is a swatch name. */
+for (const grid of drawn.values()) {
+  for (const row of grid) {
+    for (const role of row) {
+      if (role !== null) hexOf(role);
     }
   }
-}
-
-const junctionEast = junction.map((row) => row[SIZE - 1]);
-if (junctionEast.join('|') !== reference.join('|')) {
-  throw new Error('pipe_junction does not meet a straight pipe on its east edge.');
 }
 
 // --- emit -----------------------------------------------------------------------------
@@ -211,6 +288,12 @@ async function write(name, grid) {
   console.log(`Wrote art/local/${name}.png — ${SIZE}x${SIZE}, ${png.length} bytes.`);
 }
 
-await write('pipe_straight', straight);
-await write('pipe_corner', corner);
-await write('pipe_junction', junction);
+for (const [name] of FRAMES) await write(name, drawn.get(name));
+
+// The old three-frame set had a name the renderer never asks for. Leaving it on disk would
+// leave a plausible-looking pipe tile lying around for someone to pack by mistake.
+const stale = resolve(HERE, '../local/pipe_junction.png');
+if (existsSync(stale)) {
+  unlinkSync(stale);
+  console.log('Removed art/local/pipe_junction.png — superseded by pipe_tee.png.');
+}

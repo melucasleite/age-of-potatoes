@@ -1,0 +1,24 @@
+{
+  "id": "pipe_straight",
+  "provider": "local",
+  "model": "local:local/pipe_straight.png",
+  "seed": null,
+  "prompt": "One 16x16 straight pipe, the run passing EAST to WEST, authored from the master palette by art/tools/make-pipes.mjs. Hand-authored for the same reason the belts are, only more so: a pipe network has a joinery contract. A straight run must not seam, every arm leaving a tile must present this run's exact cross-section or every bend and tee shows a jog, and the renderer turns six frames in quarter turns to cover sixteen neighbour masks. All three are asserted on every build.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": true,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "pipes",
+  "costUsd": 0,
+  "generatedAt": "2026-08-13T03:34:12.049Z"
+}

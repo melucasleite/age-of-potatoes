@@ -1,0 +1,24 @@
+{
+  "id": "machine_syrup_mixer",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1811826243,
+  "prompt": "a bold simple pixel art machine, a huge wide syrup mixing vat, one enormous fat brass tank filling the whole frame edge to edge, one tall wide glass window down the middle of the tank brim full of golden amber syrup as one big solid block of amber, TWO enormous round copper pipe collars stacked one above the other on the left flank, one wide flat lid across the top, warm brass and copper, squat and heavy and very wide, low three-quarter view, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no wires, no bolts, no legs, no stand, no funnel, fills the entire frame corner to corner, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T03:39:45.139Z"
+}

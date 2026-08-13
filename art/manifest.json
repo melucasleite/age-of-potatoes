@@ -337,7 +337,7 @@
       "provider": "retro-diffusion",
       "width": 32,
       "height": 32,
-      "prompt": "a bold simple pixel art machine, a syrup mixing vat, one tall glass column in the middle brim full of golden amber syrup, TWO thick round copper pipe collars stacked on the left side, one wide metal chute on top, brass body, tall vertical silhouette, low three-quarter view, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no wires, no bolts, centred and filling the frame, transparent background, no text",
+      "prompt": "a bold simple pixel art machine, a huge wide syrup mixing vat, one enormous fat brass tank filling the whole frame edge to edge, one tall wide glass window down the middle of the tank brim full of golden amber syrup as one big solid block of amber, TWO enormous round copper pipe collars stacked one above the other on the left flank, one wide flat lid across the top, warm brass and copper, squat and heavy and very wide, low three-quarter view, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no wires, no bolts, no legs, no stand, no funnel, fills the entire frame corner to corner, transparent background, no text",
       "promptStyle": "rd_fast__default",
       "anchor": "bottom-center",
       "atlasGroup": "machines"
@@ -666,14 +666,37 @@
       "source": "local/belt_junction.png"
     },
     {
+      "id": "pipe_stub",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 pipe hub with no run leaving it — the frame for an isolated pipe tile — authored from the master palette by art/tools/make-pipes.mjs. Six frames, not three: apps/web/src/game/render/pipe-shape.ts covers all sixteen neighbour masks by turning stub, cap, straight, corner, tee and cross in quarter turns, and asks for them by exactly these names. Near-neutral on purpose, because the pipe layer MULTIPLIES the sprite by its liquid's colour. Shaded concentrically rather than top-lit, so a frame turned three quarters is not lit from underneath — that rotation law is asserted over all sixteen masks on every build.",
+      "anchor": "top-left",
+      "atlasGroup": "pipes",
+      "trim": false,
+      "source": "local/pipe_stub.png"
+    },
+    {
+      "id": "pipe_cap",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 pipe end — a sealed hub with a single run leaving EAST, the canonical east-first orientation — authored from the master palette by art/tools/make-pipes.mjs. The closed end is the only place a rim crosses the run: everywhere else the arms are drawn out past the tile edge and cropped back, so a run reads as continuing rather than beading at every tile seam.",
+      "anchor": "top-left",
+      "atlasGroup": "pipes",
+      "trim": false,
+      "source": "local/pipe_cap.png"
+    },
+    {
       "id": "pipe_straight",
       "provider": "local",
       "width": 16,
       "height": 16,
-      "prompt": "One 16x16 straight water pipe, authored from the master palette by art/tools/make-pipes.mjs. Hand-authored for the same reason the belts are, only more so: a pipe network has a joinery contract. A straight run must not seam, a corner's arm must present the straight's exact cross-section or every bend shows a jog, and the renderer gets three orientations from a 90-degree rotation. That script asserts all three on every build.",
+      "prompt": "One 16x16 straight pipe, the run passing EAST to WEST, authored from the master palette by art/tools/make-pipes.mjs. Hand-authored for the same reason the belts are, only more so: a pipe network has a joinery contract. A straight run must not seam, every arm leaving a tile must present this run's exact cross-section or every bend and tee shows a jog, and the renderer turns six frames in quarter turns to cover sixteen neighbour masks. All three are asserted on every build.",
       "anchor": "top-left",
       "atlasGroup": "pipes",
       "tileX": true,
+      "trim": false,
       "source": "local/pipe_straight.png"
     },
     {
@@ -681,20 +704,33 @@
       "provider": "local",
       "width": 16,
       "height": 16,
-      "prompt": "One 16x16 water pipe elbow, in from the west edge and out through the south, authored from the master palette by art/tools/make-pipes.mjs. Hand-authored for the same reason the belts are, only more so: a pipe network has a joinery contract. A straight run must not seam, a corner's arm must present the straight's exact cross-section or every bend shows a jog, and the renderer gets three orientations from a 90-degree rotation. That script asserts all three on every build.",
+      "prompt": "One 16x16 pipe elbow joining EAST to SOUTH — the canonical corner pipe-shape.ts rotates to reach the other three bends — authored from the master palette by art/tools/make-pipes.mjs. The lit core wraps the inside of the bend, which is what makes it read as one tube turning rather than two tubes crossing. Both arms are asserted equal to the straight's cross-section, so a bend dropped into a run shows no jog at either end.",
       "anchor": "top-left",
       "atlasGroup": "pipes",
+      "trim": false,
       "source": "local/pipe_corner.png"
     },
     {
-      "id": "pipe_junction",
+      "id": "pipe_tee",
       "provider": "local",
       "width": 16,
       "height": 16,
-      "prompt": "One 16x16 water pipe tee, run west to east with a branch leaving south, authored from the master palette by art/tools/make-pipes.mjs. Hand-authored for the same reason the belts are, only more so: a pipe network has a joinery contract. A straight run must not seam, a corner's arm must present the straight's exact cross-section or every bend shows a jog, and the renderer gets three orientations from a 90-degree rotation. That script asserts all three on every build.",
+      "prompt": "One 16x16 pipe tee — the run passes east to west and a branch leaves SOUTH, so the missing arm is the north one — authored from the master palette by art/tools/make-pipes.mjs. Named for the frame the renderer asks for: this shipped as pipe_junction for one round, which is a name nothing in the game has ever requested.",
       "anchor": "top-left",
       "atlasGroup": "pipes",
-      "source": "local/pipe_junction.png"
+      "trim": false,
+      "source": "local/pipe_tee.png"
+    },
+    {
+      "id": "pipe_cross",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 pipe crossing, all four arms — authored from the master palette by art/tools/make-pipes.mjs. Four-fold symmetric by construction, so its four quarter turns are the same picture and the auto-tiler can reach mask fifteen from any of them.",
+      "anchor": "top-left",
+      "atlasGroup": "pipes",
+      "trim": false,
+      "source": "local/pipe_cross.png"
     },
     {
       "id": "decal_speed_1",
