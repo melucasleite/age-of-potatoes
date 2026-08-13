@@ -132,6 +132,23 @@ makes it the honest early-game answer rather than a legacy wart.
 Machines are dispatched on `MachineSpec.role`, not on kind, so adding a converter is a data
 change rather than an edit to `tick.ts`.
 
+**There is one recipe executor, and a recipe is a list.** `MachineSpec.inputs` is a list of
+`(item, count)` lines and `MachineSpec.ports` is a list of typed liquid ports; `advanceConverter`
+reads both and knows nothing about which machine it is running. The chip line's rows are
+one-line recipes, the six-pack's is one line with a count of six, and the Snack Combo's is two
+lines. **Consumption is atomic** — every line or none — so there is no state in which a Bottler
+has swallowed the bottle and is waiting for the syrup, and no half-consumed operation to
+describe in a save. `machine.inputCounts` is parallel to `spec.inputs`, sized when the machine
+is built and re-sized on load; the single `inputItem` field it replaced is gone rather than
+kept beside it, because a general path with a legacy path beside it is two paths.
+
+**The sell bin does not buy seeds.** `ItemSpec.sellable` is data, not a check on `purchasable`
+— they are different facts and one item may eventually be both — and it exists because plan §4's
+anti-softlock floor is that a harvested potato always hands a seed back. A bin that bought seeds
+at list, from a stand that sells them at the same price, would turn a misclick into a world that
+can no longer plant. The reducer refuses, and `InventoryView.sellable` carries the same fact
+outward so the HUD greys the affordance rather than swallowing the click.
+
 **Overcooking is a layout condition.** A Fryer that fills its output buffer stops dead — that
 is demand-pull, the same stop that leaves a Slicer idle — but the basket it has already fried
 is still in the oil. Every `OVERCOOK_BLOCKED_TICKS` of _continuous_ blockage one more chip
@@ -242,6 +259,88 @@ exactly the friction the rule wants. `test/factory.test.ts` asserts the key set.
 Gates are money-only except the three Charters, which add a _visible_ milestone read off a
 counter the HUD already shows. There are no hidden behavioural gates.
 
+**The Efficiency dial cuts wear and waste, and it is the expensive track.** Plan §3 specifies it
+as reducing "both input waste and wear"; the wear half is `effectiveWear`, and the waste half is
+`effectiveWastePeriod`, which **stretches the cadence** rather than lowering a chance — there is
+no chance in it to lower. A machine just below the threshold spoils one input in seven, and one
+in twelve with the dial maxed; at death's door, one in two becomes one in three. It never
+reaches "never", for the same reason wear never reaches zero. Because it is now plainly the
+strongest dial on a hard-run machine, `UPGRADE_COST_PERCENT_BY_DIAL` charges 150% of the shared
+1x/2.5x/6x ladder for it — 5.7x the machine's price to max, against 3.8x for the other two.
+
+## The soda line
+
+Plan §5: the chip line is a **belt cathedral** and the soda line is a **pipe organ**. Same
+machine code, same roles, same demand-pull, same wear — what is different is that the ingredients
+arrive through pipes and a recipe may name several of them.
+
+```
+1 Sugar Cane       → Juicer     → 1000 ml cane juice
+1000 ml cane juice → Kettle     →  250 ml simple syrup     (a reduction — hence the boil)
+1 Kola Nut         → Grinder    → 1 Kola Powder
+125 ml simple syrup + 125 ml water + 1 Kola Powder
+                   → SyrupMixer →  250 ml soda syrup
+750 ml water       → Carbonator →  750 ml carbonated water
+250 ml soda syrup + 750 ml carbonated water + 1 Bottle
+                   → Bottler    → 1 Soda ($16)
+```
+
+**A typed port is the whole enforcement mechanism.** `MachineSpec.ports` declares which liquid
+each inlet accepts and which each outlet makes, and `pipePathRefusal()` refuses a run that would
+present any other liquid to a machine that has ports at all — the same function, the same
+`BuildRefusal` grammar, and the same "refused before it happens" as a two-pump network.
+`liquidPlacementRefusal()` refuses the identical mistake made in the other order, dropping a
+Carbonator onto a syrup main. Machines with no ports are invisible to the rule, so a water main
+may still run past a Fryer.
+
+**A liquid producer is a tank that fills itself, and it is not a pump.** An outlet port joins its
+network exactly as a `Tank` does: it covers the shortfall of whatever draws on the other end, and
+it never accepts surplus. That is how the whole line runs on the existing one-ledger model with
+no second source anywhere — **a juice network has no pump on it at all**, so plan §5's "one pump
+per network" is not stretched here, it is unspent. The Recirculator set the precedent a release
+early: a producer pours into a tank, never into the pipes.
+
+**Demand-pull is one rule, not two.** A Juicer whose outlet is full stops dead and eats nothing
+more, exactly as a Fryer with a full basket does. An unplumbed press that quietly destroyed cane
+would be a compost pile, which plan §4 rules out.
+
+**The 1:1:1 is a volume, not a count.** One Syrup Mixer operation makes exactly the soda syrup
+one Bottler operation drinks; one Carbonator operation makes exactly its carbonated water; all
+three take the same time. So the three run in lockstep, and a player who builds a second Bottler
+sees the pipes go amber rather than a machine go idle. Upstream the ratio is 1:1:2 (juicer :
+kettle : mixer), which falls out of one cane making two bottles' worth of syrup rather than being
+tuned in. `test/factory.test.ts` pins both, the same way it pins the chip line's 1:1:2:1:1.
+
+**Four liquids means four networks, and that constraint _is_ the puzzle.** One liquid per network
+is untouched; the soda line is simply the first thing in the game that makes the rule cost
+something.
+
+**The bundles answer the release gate.** Plan §8 asks whether players run both lines or one
+dominates into decoration. A Snack Combo is one bagged chip plus one soda at 125% of the two
+sold separately, and a six-pack is six sodas at 110% — both derived from the real prices rather
+than typed as literals. Running both districts therefore beats running either one twice, which
+is the mechanism rather than an opinion.
+
+### Vertical Integration: stubbed, and listed here rather than half-built
+
+Plan §4's consumable ladder is _"oil, seasoning, bags, bottles start store-bought at fixed
+prices; mid-game Vertical Integration lets you grow/craft them."_ The bought rungs exist — a
+**Bottle** is 120¢ and a **Kola Nut** is 150¢ at the stand, both posted and stable, because §8's
+cut-forever list opens with fluctuating market prices. The crafted rungs are **not built**, and
+naming them here is the point (§8: "fake the far side of every interface, stubs listed
+explicitly"):
+
+- **The oil press** — corn → corn oil. Corn is already a crop and `LiquidId` has room; nothing
+  consumes oil yet, and a liquid whose machines do not exist is a liquid that lies.
+- **The Evaporator** — water → salt, for seasoning.
+- **The chili grinder** — chili → chili powder. The Grinder that ships takes kola nuts only.
+- **Corn syrup** — a second sweetener route into the Syrup Mixer's syrup inlet.
+- **Kola as a crop.** There is none and there will not be one: §5 caps the roster at eight and
+  §7 ruling 8 closes it, which is exactly why kola arrives as a bought nut.
+
+`LiquidId` reserves **5 for kola syrup**, which the renderer already has a colour for. Skipping a
+number now is cheaper than renumbering a shipped save later.
+
 ## One-way doors
 
 Per plan §12, these were settled in v0.1 and cannot be revisited once worlds exist:
@@ -274,7 +373,9 @@ non-empty result is a bug in units, not in the hash.
 ## Saves
 
 `serialize(state)` produces a plain-JSON `SaveEnvelope`; `restoreWorld(value)` parses,
-migrates, and deserializes one. `SIM_VERSION` is the code version fused with `BALANCE_HASH`,
+migrates, and deserializes one. The chain is at **format 6** — the soda line made a recipe a
+list, so a machine holds one count per recipe line instead of a single `inputCount`, and a
+converter carries typed liquid ports. `SIM_VERSION` is the code version fused with `BALANCE_HASH`,
 because balance data is save-compatibility surface exactly as much as code is. The rules —
 released migrations are never edited, one real fixture is kept per released version forever —
 are in [`src/save/README.md`](src/save/README.md). The IndexedDB driver lives in

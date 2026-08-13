@@ -15,6 +15,7 @@ looked like, and the code that wrote it will be long gone.
 | `format-3.json` | 3      | 2026-08-12, `v0.4.0` | Seed 51015, tick 21306. The first save with plumbing in it: a drawn-down pond, a Pump on its bank, a seventeen-tile pipe run, and a Tank, two piped heads and an Irrigation Hub caught **mid-throttle** — demand 1,600 ml against a supply of 500, every consumer amber, the round-robin offset at 40, the Hub's scan cursor at 62, and both first-activation ceremonies already recorded.                                          |
 | `format-4.json` | 4      | 2026-08-12, `v0.3.0` | Seed 90210, tick 3300. The first save with an errand in it, caught **mid-walk**: the farmer is 27 ticks into a harvest errand aimed at tile 11,11, four potatoes and five seeds in the bag, three plots still in the ground, and `moveAccum` stopped at 40 hundredths of a subtile.                                                                                                                                                 |
 | `format-5.json` | 5      | 2026-08-12, `v0.6.0` | Seed 50505, tick 41837. The first save with maintenance and overcooking in it, caught deliberately **mid-brown**: a hand-built `Washer → Slicer → Fryer` line whose Fryer stands on a full basket of twenty chips, three of them already gone Rustic Style and the clock 250 ticks into a fourth, plus a Chip Kitchen run past the effect threshold and back to full by a single $8 repair kit, three inputs spoiled along the way. |
+| `format-6.json` | 6      | 2026-08-12, `v0.4.0` | Seed 60606, tick 42400. The first save with the soda line in it, caught deliberately **mid-pour**: five single-liquid networks all part-full, every machine part-way through an operation, a Syrup Mixer holding kola powder with liquid in both inlets, and the Bottler's soda-syrup inlet flagged amber while its carbonated-water inlet runs fine.                                                                               |
 
 `format-1.json` was produced by driving `step()` through a scripted play session — plant,
 water, harvest, walk, sell, buy the sprinkler, feed the kitchen — and calling `serialize()`
@@ -67,3 +68,11 @@ state hash. If that assertion fails, exactly one of two things happened:
 
 **Fixing the expectation to match the new output is not on that list.** Doing so converts a
 caught bug into a silent one, which is the exact failure this directory exists to prevent.
+
+`format-6.json` was recorded by replaying the `soda-line` golden fixture to tick 42,400 and
+calling `serialize()`. The moment is chosen for one field in particular: **a single throttled
+port on a machine whose other port is fine**. A machine-level `throttled` flag cannot express
+that, which is exactly why ports carry their own — and a save taken with the line at rest would
+round-trip perfectly while proving nothing about typed ports at all. Every machine is also
+mid-operation, so a `progress` that came back at zero would show up here rather than as a free
+restart nobody notices.

@@ -55,6 +55,7 @@ export const FIXTURE_NAMES = [
   'walk-errands',
   'idle-wear',
   'maintenance',
+  'soda-line',
 ] as const;
 
 export type FixtureName = (typeof FIXTURE_NAMES)[number];

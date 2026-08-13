@@ -48,6 +48,21 @@ export const TechId = {
   /** The upgrade bench: what makes `UpgradeMachine` legal at all. */
   UpgradeBench: 'commerce-upgrade-bench',
 
+  // The soda wing (plan §8's v0.5). It hangs off HYDRAULICS rather than fabrication, and that
+  // is the interlock plan §3 asks for: soda is a pipe organ, so a player who never laid a pipe
+  // cannot buy their way into one. Chips lead soda by half an era because the chip line needs
+  // no plumbing at all and this needs all of it.
+
+  /** The press, the kettle, and the grinder — cane and kola into juice, syrup, and powder. */
+  SodaPress: 'hydraulics-soda-press',
+  /** The Syrup Mixer, the Carbonator, and the Bottler: the half that finishes a bottle. */
+  SodaMixing: 'hydraulics-soda-mixing',
+  /**
+   * Six-packs and the Snack Combo. Requires BOTH lines finished — the Combo is chips plus soda,
+   * so a node that unlocked it without the Bagger would unlock a recipe nobody could cook.
+   */
+  Bundles: 'commerce-bundles',
+
   // Hydraulics. Plan §3 names the branch and plan §5 names its grammar:
   // `RESERVOIR → (Pump) → pipes → [Tank] → machines`. The nodes follow that sentence.
 
@@ -239,6 +254,35 @@ export const TECH_NODES: readonly TechNode[] = [
     branch: TechBranch.Fabrication,
     priceCents: 90_000,
     requires: [TechId.Belts],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    // Priced above the piped sprinklers and below the Hub: the soda wing is the second thing a
+    // player does with plumbing, not the first, and the pipes have to have paid for themselves
+    // watering a field before they are asked to carry syrup.
+    id: TechId.SodaPress,
+    branch: TechBranch.Hydraulics,
+    priceCents: 120_000,
+    requires: [TechId.Pumps, TechId.Cane],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    id: TechId.SodaMixing,
+    branch: TechBranch.Hydraulics,
+    priceCents: 220_000,
+    requires: [TechId.SodaPress],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    // Both lines, or neither. The Combo is the answer to §8's "does one line dominate into
+    // decoration?" gate, so it deliberately cannot be reached from one district alone.
+    id: TechId.Bundles,
+    branch: TechBranch.Commerce,
+    priceCents: 150_000,
+    requires: [TechId.SodaMixing, TechId.Finishing],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },

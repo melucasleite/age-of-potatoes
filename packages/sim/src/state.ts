@@ -68,8 +68,12 @@ import { SUBTILE, divFloor, tileCentreSubtiles } from './units';
  * 3 — the liquid layer: reservoirs with a finite level, pipes, one-ledger networks, and the
  *     per-machine plumbing fields (network, flow, throttle, the Hub's scan cursor).
  * 4 — the walk-to errand: one pending `PlayerIntent`, or none.
+ * 5 — maintenance and overcooking: a machine's blocked clock, its burnt count, and the waste
+ *     and repair-kit tallies.
+ * 6 — the soda line: recipes became lists, so a machine holds one input count PER RECIPE LINE
+ *     rather than one number, and a converter carries typed liquid ports of its own.
  */
-export const WORLD_STATE_VERSION = 4;
+export const WORLD_STATE_VERSION = 6;
 
 /**
  * A held direction, not a delta. Input tells the sim *which way the player is holding*,
@@ -241,6 +245,26 @@ export interface CropTile {
   zone: number;
 }
 
+/**
+ * One typed port's live state: what network it found, what it is holding, and whether it got
+ * everything it asked for last tick.
+ *
+ * The liquid is NOT stored here — it is in `MachineSpec.ports[i].liquid`, which is balance data
+ * and already folded into `BALANCE_HASH`. A copy on the entity would be a second opinion about
+ * what a machine's port accepts, and the port typing rule (`pipePathRefusal`) is only worth
+ * anything if there is exactly one.
+ */
+export interface MachinePort {
+  /** The pipe network this port is attached to, or 0. Recomputed on EDIT ONLY. */
+  network: number;
+  /** Millilitres held in this port's own buffer. */
+  ml: number;
+  /** Signed net flow over the last tick, in ml/min. Positive is in. */
+  flowMlPerMinute: number;
+  /** Asked its network for liquid and got less. Plan §5's amber, per port. */
+  throttled: boolean;
+}
+
 export interface Machine {
   id: number;
   kind: MachineKind;
@@ -249,7 +273,16 @@ export interface Machine {
   tileY: number;
   /** Work-points accrued toward the current operation. */
   progress: number;
-  inputCount: number;
+  /**
+   * How many of each of the spec's `inputs` this machine is holding, in the spec's order.
+   *
+   * PARALLEL TO THE RECIPE, NOT KEYED BY ITEM. A map from item id to count would be a second
+   * place the recipe is written down, and the two would disagree the first time a spec changed
+   * under a save. The array is sized from `spec.inputs.length` when the machine is built and
+   * re-sized on load, so index `j` is always recipe line `j` and a machine that eats nothing
+   * holds an empty array rather than a zero nobody reads.
+   */
+  inputCounts: number[];
   outputCount: number;
   /** Water held, in millilitres, for machines with a tank. */
   tankMl: number;
@@ -309,6 +342,16 @@ export interface Machine {
    * failure with a fixable cause rather than one machine mysteriously stopping.
    */
   throttled: boolean;
+  /**
+   * One entry per `MachineSpec.ports`, in the spec's order — empty for every machine whose
+   * plumbing is its `network` / `tankMl` pair above, which is all of the water layer.
+   *
+   * A converter's ports are ingredients rather than utilities: each one holds its own liquid,
+   * joins its own network, and is throttled on its own. That is what lets the Syrup Mixer be
+   * amber on syrup while perfectly happy on water — one machine, two independent answers to
+   * "is anything coming through", which is exactly what the player needs to know to fix it.
+   */
+  ports: MachinePort[];
   /**
    * Where the Irrigation Hub's rotating scan is up to, as an offset into its coverage patch.
    *
@@ -624,6 +667,25 @@ export function createWorld(seed: number): WorldState {
   return state;
 }
 
+/**
+ * A machine's recipe buffers, empty — one slot per line of the recipe, and none for a machine
+ * with no recipe. Exported because loading a save has to size them the same way a build does.
+ */
+export function emptyInputCounts(spec: MachineSpec): number[] {
+  const counts: number[] = [];
+  for (let i = 0; i < spec.inputs.length; i++) counts.push(0);
+  return counts;
+}
+
+/** A machine's typed ports, empty and unattached. */
+export function emptyPorts(spec: MachineSpec): MachinePort[] {
+  const ports: MachinePort[] = [];
+  for (let i = 0; i < spec.ports.length; i++) {
+    ports.push({ network: 0, ml: 0, flowMlPerMinute: 0, throttled: false });
+  }
+  return ports;
+}
+
 /** Place a machine without charging for it. Command handling does the money. */
 export function spawnMachine(
   state: WorldState,
@@ -640,7 +702,8 @@ export function spawnMachine(
     tileX,
     tileY,
     progress: 0,
-    inputCount: 0,
+    inputCounts: emptyInputCounts(spec),
+    ports: emptyPorts(spec),
     outputCount: 0,
     tankMl: 0,
     condition: CONDITION_MAX,
@@ -1204,8 +1267,12 @@ export function computeNetWorthCents(state: WorldState): number {
       total += listPriceCents(spec.outputItem) * (machine.outputCount - burnt);
       if (overcooked !== null && burnt > 0) total += listPriceCents(overcooked) * burnt;
     }
-    if (spec.inputItem !== null) {
-      total += listPriceCents(spec.inputItem) * machine.inputCount;
+    // Every line of the recipe, at list. A Bottler holding six bottles is holding six bottles'
+    // worth; liquid sitting in a port buffer is deliberately NOT counted, for the same reason a
+    // growing crop is not — it is work in progress, not inventory, and there is no price on a
+    // millilitre of anything anywhere in this game.
+    for (let j = 0; j < spec.inputs.length; j++) {
+      total += listPriceCents(spec.inputs[j]!.item) * (machine.inputCounts[j] ?? 0);
     }
   }
 

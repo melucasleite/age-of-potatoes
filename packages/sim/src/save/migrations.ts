@@ -14,12 +14,14 @@
 // 2029. See `test/fixtures/saves/`.
 // ────────────────────────────────────────────────────────────────────────────────────────
 //
-// The chain is four steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
+// The chain is five steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
 // format 2 (the factory — belts, grabbers, zones, tech unlocks, upgrade dials, and the
 // per-tile withering clock) up to format 3 (the liquid layer — reservoirs, pipes, one-ledger
 // networks, and the per-machine plumbing fields) up to format 4 (the walk-to errand — one
 // pending `PlayerIntent` on the player, or none) up to format 5 (maintenance and overcooking
-// — a machine's blocked clock and burnt count, and the waste and repair-kit tallies).
+// — a machine's blocked clock and burnt count, and the waste and repair-kit tallies) up to
+// format 6 (the soda line — one input count per recipe LINE instead of a single `inputCount`,
+// and typed liquid ports on a converter).
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -30,7 +32,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 5;
+export const CURRENT_FORMAT_VERSION = 6;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -279,6 +281,82 @@ const migrateFormat4To5: SaveMigration = (payload) => {
 };
 
 /**
+ * How many lines of recipe each machine kind had WHEN FORMAT 5 WAS CURRENT, frozen as literals.
+ *
+ * The same discipline as `FORMAT_1_MACHINE_PRICE_CENTS` above, and for the same reason: a
+ * migration that called `machineSpec()` would produce a different world every time the recipe
+ * table moved, so the same file read by two builds would become two different worlds. In
+ * format 5 the answer was always "one, or none" — `inputItem` was a single field — so this
+ * table is the record of which kinds had one.
+ *
+ * A kind that is not in this table is a kind that did not exist in format 5, so a format-5 save
+ * cannot contain one; `?? 0` is the honest reading of an id that could not have been written.
+ */
+const FORMAT_5_MACHINE_INPUT_SLOTS: Readonly<Record<number, number>> = {
+  1: 0, // SellBin
+  2: 1, // ChipKitchen
+  3: 0, // Sprinkler
+  4: 1, // Washer
+  5: 1, // Slicer
+  6: 1, // Fryer
+  7: 1, // Seasoner
+  8: 1, // Bagger
+  9: 0, // Pump
+  10: 0, // Tank
+  11: 0, // PipedSprinkler
+  12: 0, // IrrigationHub
+  13: 0, // Recirculator
+};
+
+/**
+ * Format 5 → 6.
+ *
+ * The soda line made a recipe a LIST. A machine that held one `inputCount` now holds one count
+ * per line of its recipe, and a converter may carry typed liquid ports of its own.
+ *
+ * The conversion is exact rather than defaulted, which is the whole reason the table above
+ * exists: a format-5 Washer holding six potatoes becomes `inputCounts: [6]`, and a format-5
+ * Pump — which had an `inputCount` field it never used, because every machine did — becomes
+ * `inputCounts: []`. Writing `[inputCount]` for both would give the Pump a buffer slot that a
+ * freshly built Pump does not have, and the two worlds would hash differently while being the
+ * same world. That is the exact failure mode this directory exists to prevent, and it is
+ * invisible without this table.
+ *
+ * `ports: []` for every machine, with no table needed: no machine in format 5 had one. The
+ * soda machines did not exist, and the water machines are plumbed through `network`/`tankMl`
+ * exactly as they were — this step does not touch them.
+ */
+const migrateFormat5To6: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-5 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    const machine = oldMachines[i]!;
+    const kind = machine['kind'];
+    const slots = typeof kind === 'number' ? (FORMAT_5_MACHINE_INPUT_SLOTS[kind] ?? 0) : 0;
+    const held = machine['inputCount'];
+    const count = typeof held === 'number' && Number.isInteger(held) ? held : 0;
+
+    const next: Record<string, unknown> = {
+      ...machine,
+      inputCounts: slots > 0 ? [count] : [],
+      ports: [],
+    };
+    // The old field goes, rather than lingering as a second opinion about what the machine
+    // holds. A payload with both would round-trip through `toPayload` without it anyway, so
+    // leaving it would make the migrated file differ from the re-saved one for one save only.
+    delete next['inputCount'];
+    machines.push(next);
+  }
+
+  return { ...p, machines, version: 6 };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -288,6 +366,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   2: migrateFormat2To3,
   3: migrateFormat3To4,
   4: migrateFormat4To5,
+  5: migrateFormat5To6,
 };
 
 export interface MigrationOutcome {

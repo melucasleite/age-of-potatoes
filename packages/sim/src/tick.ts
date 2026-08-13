@@ -87,6 +87,7 @@ import {
   MachineKind,
   MachineRole,
   type MachineSpec,
+  PortFlow,
   NET_WORTH_SAMPLE_PERIOD_TICKS,
   OVERCOOK_BLOCKED_TICKS,
   PIPE_MAX_PATH_TILES,
@@ -110,6 +111,7 @@ import {
   cropSpec,
   grabberSpec,
   isPurchasable,
+  isSellable,
   listPriceCents,
   machineSpec,
   wiltStageForAge,
@@ -175,6 +177,7 @@ import {
   acceptsUpgrades,
   effectiveInputCapacity,
   effectiveOutputCapacity,
+  effectivePortCapacityMl,
   effectiveTankCapacityMl,
   effectiveWastePeriod,
   effectiveWear,
@@ -597,23 +600,39 @@ function applyMoveMachine(state: WorldState, command: MoveMachineCommand): boole
   return true;
 }
 
+/**
+ * Load a machine by hand.
+ *
+ * THE COMMAND STAYS `{ machineId, count }` AND THE RECIPE LINE IS OPTIONAL, deliberately. Every
+ * machine in the game but one takes a single ingredient, and making the HUD name a line for the
+ * Washer would be a worse interface bought for one Combo Packer. With no line given, the machine
+ * takes the first ingredient the player is actually carrying and has room for — a total order
+ * over the recipe, so a replay picks the same one forever.
+ */
 function applyLoadMachine(state: WorldState, command: LoadMachineCommand): boolean {
   if (command.count <= 0) return false;
   const machine = machineById(state, command.machineId);
   if (machine === null || !withinReachOfMachine(state, machine)) return false;
 
   const spec = machineSpec(machine.kind);
-  if (spec === null || spec.inputItem === null) return false;
+  if (spec === null || spec.inputs.length === 0) return false;
 
-  const space = effectiveInputCapacity(spec, machine) - machine.inputCount;
-  const have = itemCount(state, spec.inputItem);
-  const moved = Math.min(command.count, Math.min(space, have));
-  if (moved <= 0) return false;
+  const capacity = effectiveInputCapacity(spec, machine);
+  for (let i = 0; i < spec.inputs.length; i++) {
+    const line = spec.inputs[i]!;
+    if (command.item !== undefined && command.item !== line.item) continue;
 
-  removeItem(state, spec.inputItem, moved);
-  machine.inputCount += moved;
-  touch(state, 'handCarry');
-  return true;
+    const space = capacity - (machine.inputCounts[i] ?? 0);
+    const have = itemCount(state, line.item);
+    const moved = Math.min(command.count, Math.min(space, have));
+    if (moved <= 0) continue;
+
+    removeItem(state, line.item, moved);
+    machine.inputCounts[i] = (machine.inputCounts[i] ?? 0) + moved;
+    touch(state, 'handCarry');
+    return true;
+  }
+  return false;
 }
 
 function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): boolean {
@@ -746,6 +765,12 @@ function applyWhackJam(state: WorldState, command: WhackJamCommand): boolean {
 
 function applySellItem(state: WorldState, command: SellItemCommand): boolean {
   if (command.count <= 0) return false;
+  // THE BIN DOES NOT BUY SEEDS. Plan §4's anti-softlock floor is that a harvested potato always
+  // hands one back, and a bin that bought them at list would let a misclick sell a world's
+  // ability to plant — for the same price the stand will sell it straight back, so it is not
+  // even a trade. Refused here rather than hidden in the HUD, and `InventoryView.sellable`
+  // carries the same fact outward so the affordance is greyed rather than merely ignored.
+  if (!isSellable(command.item)) return false;
   if (!nearSellBin(state)) return false;
   if (!removeItem(state, command.item, command.count)) return false;
 
@@ -810,7 +835,7 @@ function applyUpgradeMachine(state: WorldState, command: UpgradeMachineCommand):
   const level = upgradeLevel(machine, command.dial);
   if (level >= UPGRADE_MAX_LEVEL) return false;
 
-  const cost = upgradeCostCents(spec, level);
+  const cost = upgradeCostCents(spec, level, command.dial);
   if (cost < 0 || state.moneyCents < cost) return false;
 
   state.moneyCents -= cost;
@@ -1581,7 +1606,7 @@ function washerRunningBeside(state: WorldState, machine: Machine): boolean {
     neighbourMachine(state, machine, (candidate, spec) => {
       if (spec.kind !== MachineKind.Washer) return false;
       if (candidate.jammed || candidate.condition <= 0) return false;
-      if (candidate.inputCount <= 0) return false;
+      if ((candidate.inputCounts[0] ?? 0) <= 0) return false;
       return candidate.outputCount < effectiveOutputCapacity(spec, candidate);
     }) !== null
   );
@@ -1601,33 +1626,34 @@ function tankBeside(state: WorldState, machine: Machine): Machine | null {
  */
 function advanceConverter(state: WorldState, machine: Machine): void {
   const spec = machineSpec(machine.kind);
-  if (spec === null || spec.outputItem === null) return;
+  if (spec === null) return;
   if (machine.jammed || machine.condition <= 0) return;
 
-  if (machine.outputCount >= effectiveOutputCapacity(spec, machine)) {
+  if (!outputHasRoom(spec, machine)) {
     // Stopped by demand-pull, with a full basket. This is the only clock overcooking has.
     advanceOvercooking(machine, spec);
     return;
   }
   machine.blockedTicks = 0;
 
-  if (machine.inputCount <= 0) return;
+  if (!recipeSatisfied(spec, machine)) return;
 
   machine.progress += effectiveWorkRate(spec, machine);
   if (machine.progress < spec.workPerOperation) return;
 
   machine.progress -= spec.workPerOperation;
-  machine.inputCount -= 1;
+  consumeRecipe(spec, machine);
   machine.opCount += 1;
 
   // THE OPERATION HAPPENED EITHER WAY. A worn machine still turns, still swallows the input,
   // and still wears — it just does not always produce anything. Waste is a cadence read off
-  // `opCount`, never a roll (see `WASTE_PERIOD_AT_THRESHOLD`).
+  // `opCount`, never a roll (see `WASTE_PERIOD_AT_THRESHOLD`), and the Efficiency dial buys a
+  // longer cadence rather than a lower chance, because there is no chance in it to lower.
   const wastePeriod = effectiveWastePeriod(spec, machine);
   if (wastePeriod > 0 && machine.opCount % wastePeriod === 0) {
     state.stats.inputsWastedByMachine += 1;
   } else {
-    machine.outputCount += 1;
+    produceRecipe(spec, machine);
     state.stats.itemsProducedByMachine += 1;
   }
 
@@ -1638,6 +1664,75 @@ function advanceConverter(state: WorldState, machine: Machine): void {
     machine.opCount % JAM_EVERY_N_OPERATIONS_WHEN_WORN === 0
   ) {
     machine.jammed = true;
+  }
+}
+
+/**
+ * Demand-pull, asked of whichever side this machine's output comes out of.
+ *
+ * ONE RULE, TWO OUTLETS. Plan §7 ruling 6 is that a machine with nowhere to put its output stops
+ * dead rather than consuming an input — and a Juicer whose juice has nowhere to go is in exactly
+ * the same situation as a Fryer with a full basket. Writing it once is what makes "an idle
+ * Carbonator is a ratio lesson" true of the soda line as well as the chip line.
+ */
+function outputHasRoom(spec: MachineSpec, machine: Machine): boolean {
+  if (spec.outputItem !== null && machine.outputCount >= effectiveOutputCapacity(spec, machine)) {
+    return false;
+  }
+  for (let i = 0; i < spec.ports.length; i++) {
+    const port = spec.ports[i]!;
+    if (port.flow !== PortFlow.Outlet) continue;
+    const held = machine.ports[i];
+    if (held === undefined) return false;
+    // Room for a WHOLE operation, not a drop: a half-poured litre is the fractional state this
+    // whole model is arranged to never have.
+    if (held.ml + port.mlPerOperation > effectivePortCapacityMl(port, machine)) return false;
+  }
+  return true;
+}
+
+/** Every line of the recipe, solid and liquid, present in full. Checked before anything moves. */
+function recipeSatisfied(spec: MachineSpec, machine: Machine): boolean {
+  for (let i = 0; i < spec.inputs.length; i++) {
+    const line = spec.inputs[i]!;
+    if ((machine.inputCounts[i] ?? 0) < line.count) return false;
+  }
+  for (let i = 0; i < spec.ports.length; i++) {
+    const port = spec.ports[i]!;
+    if (port.flow !== PortFlow.Intake) continue;
+    const held = machine.ports[i];
+    if (held === undefined || held.ml < port.mlPerOperation) return false;
+  }
+  return true;
+}
+
+/**
+ * Take every input at once.
+ *
+ * ATOMIC, AND THE CALLER HAS ALREADY CHECKED. There is no state in which a Bottler has swallowed
+ * the bottle and is waiting for the syrup — a half-consumed recipe would be a machine the player
+ * cannot reason about and a save that cannot be described.
+ */
+function consumeRecipe(spec: MachineSpec, machine: Machine): void {
+  for (let i = 0; i < spec.inputs.length; i++) {
+    machine.inputCounts[i] = (machine.inputCounts[i] ?? 0) - spec.inputs[i]!.count;
+  }
+  for (let i = 0; i < spec.ports.length; i++) {
+    const port = spec.ports[i]!;
+    if (port.flow !== PortFlow.Intake) continue;
+    const held = machine.ports[i];
+    if (held !== undefined) held.ml -= port.mlPerOperation;
+  }
+}
+
+/** And put the output where it goes: the item buffer, an outlet port, or both if it ever wants. */
+function produceRecipe(spec: MachineSpec, machine: Machine): void {
+  if (spec.outputItem !== null) machine.outputCount += 1;
+  for (let i = 0; i < spec.ports.length; i++) {
+    const port = spec.ports[i]!;
+    if (port.flow !== PortFlow.Outlet) continue;
+    const held = machine.ports[i];
+    if (held !== undefined) held.ml += port.mlPerOperation;
   }
 }
 

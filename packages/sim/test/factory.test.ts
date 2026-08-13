@@ -9,9 +9,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  type BuildRefusal as BuildRefusalCode,
   type Command,
+  type LiquidPortSpec,
+  type Machine,
   type WorldState,
   BeltTier,
+  BuildRefusal,
   CONDITION_EFFECT_THRESHOLD,
   CONDITION_MAX,
   CROP_SPECS,
@@ -21,8 +25,13 @@ import {
   FIELD_ORIGIN_X,
   FIELD_ORIGIN_Y,
   GrabberTier,
+  ITEM_SPECS,
   ItemId,
+  LiquidId,
+  MACHINE_SPECS,
   MachineKind,
+  PIPE_MAX_PATH_TILES,
+  PortFlow,
   OVERCOOK_BLOCKED_TICKS,
   REPAIR_PER_TOUCH,
   SUBTILE,
@@ -36,6 +45,7 @@ import {
   addItem,
   beltInsert,
   createWorld,
+  divFloor,
   createWorldView,
   dayOldPriceCents,
   effectiveInputCapacity,
@@ -43,14 +53,20 @@ import {
   effectiveWear,
   effectiveWorkRate,
   hashState,
+  isSellable,
   itemCount,
+  liquidPlacementRefusal,
   listPriceCents,
   machineSpec,
   nextOutputItem,
+  pipePathRefusal,
+  rebuildNetworks,
   rusticStylePriceCents,
   spawnBelt,
   spawnGrabber,
   spawnMachine,
+  spawnPipe,
+  spawnReservoir,
   step,
   stepMany,
   takeOneOutput,
@@ -90,7 +106,7 @@ describe('the chip line', () => {
 
     for (const [kind, input, output] of chain) {
       const spec = machineSpec(kind)!;
-      expect(spec.inputItem).toBe(input);
+      expect(spec.inputs).toEqual([{ item: input, count: 1 }]);
       expect(spec.outputItem).toBe(output);
       // Plan §4: each processing step adds more absolute value than the last.
       expect(listPriceCents(output)).toBeGreaterThan(listPriceCents(input));
@@ -115,7 +131,7 @@ describe('the chip line', () => {
     // Every v0.1 save has one, and the v0.1 loop has to keep working untouched.
     const spec = machineSpec(MachineKind.ChipKitchen)!;
     expect(spec.requiresTech).toBeNull();
-    expect(spec.inputItem).toBe(ItemId.RussetPotato);
+    expect(spec.inputs).toEqual([{ item: ItemId.RussetPotato, count: 1 }]);
     expect(spec.outputItem).toBe(ItemId.BaggedChips);
   });
 
@@ -125,16 +141,350 @@ describe('the chip line', () => {
     const state = createWorld(3);
     const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
     const spec = machineSpec(MachineKind.Washer)!;
-    washer.inputCount = 5;
+    washer.inputCounts[0] = 5;
     washer.outputCount = spec.outputCapacity;
 
     stepMany(state, 200);
-    expect(washer.inputCount).toBe(5);
+    expect(washer.inputCounts[0]!).toBe(5);
     expect(washer.outputCount).toBe(spec.outputCapacity);
   });
 });
 
 // --- overcooking --------------------------------------------------------------------
+
+// --- the soda line ------------------------------------------------------------------
+
+/**
+ * Stand a whole soda line up directly, with pipes, and no economy in the way.
+ *
+ * The layout is the golden fixture's, one row along the top of the lot with a two-tile run of
+ * pipe between each pair of machines, because that is the arrangement a player actually builds
+ * and the one the port typing has to survive.
+ */
+function sodaLine(seed: number): WorldState {
+  const state = createWorld(seed);
+  spawnMachine(state, MachineKind.Juicer, 0, 0);
+  spawnMachine(state, MachineKind.Kettle, 3, 0);
+  spawnMachine(state, MachineKind.SyrupMixer, 6, 0);
+  spawnMachine(state, MachineKind.Bottler, 9, 0);
+  spawnMachine(state, MachineKind.Carbonator, 13, 0);
+
+  const runs: [LiquidId, number][] = [
+    [LiquidId.CaneJuice, 2],
+    [LiquidId.SimpleSyrup, 5],
+    [LiquidId.SodaSyrup, 8],
+    [LiquidId.CarbonatedWater, 12],
+  ];
+  for (const [liquid, x] of runs) {
+    spawnPipe(state, x, 0, liquid);
+    spawnPipe(state, x, 1, liquid);
+  }
+  // The water main, underneath, reaching up to the only two machines that drink.
+  for (let x = 6; x <= 13; x++) spawnPipe(state, x, 3, LiquidId.Water);
+  spawnPipe(state, 13, 2, LiquidId.Water);
+  spawnPipe(state, 6, 2, LiquidId.Water);
+  rebuildNetworks(state);
+  return state;
+}
+
+function machineOf(state: WorldState, kind: MachineKind): Machine {
+  return state.machines.find((machine) => machine.kind === kind)!;
+}
+
+/** The one liquid line of a spec that matches this liquid and direction. */
+function portSpec(kind: MachineKind, liquid: LiquidId, flow: PortFlow): LiquidPortSpec {
+  const spec = machineSpec(kind)!;
+  return spec.ports.find((port) => port.liquid === liquid && port.flow === flow)!;
+}
+
+describe('the soda line', () => {
+  it('chains cane → juice → syrup → soda, and a bottle sells for about $16', () => {
+    // Plan §4: "cane→juice→simple syrup; … syrup + carbonated water + bottle → soda (~$16)".
+    const juicer = machineSpec(MachineKind.Juicer)!;
+    expect(juicer.inputs).toEqual([{ item: ItemId.SugarCane, count: 1 }]);
+    expect(juicer.ports.map((port) => port.liquid)).toEqual([LiquidId.CaneJuice]);
+
+    const kettle = machineSpec(MachineKind.Kettle)!;
+    expect(kettle.ports.map((port) => port.liquid)).toEqual([
+      LiquidId.CaneJuice,
+      LiquidId.SimpleSyrup,
+    ]);
+
+    const mixer = machineSpec(MachineKind.SyrupMixer)!;
+    expect(mixer.inputs).toEqual([{ item: ItemId.KolaPowder, count: 1 }]);
+    expect(mixer.ports.map((port) => port.liquid)).toEqual([
+      LiquidId.SimpleSyrup,
+      LiquidId.Water,
+      LiquidId.SodaSyrup,
+    ]);
+
+    const bottler = machineSpec(MachineKind.Bottler)!;
+    expect(bottler.inputs).toEqual([{ item: ItemId.Bottle, count: 1 }]);
+    expect(bottler.outputItem).toBe(ItemId.Soda);
+    // §5: "machines mostly 2×2 (Bottler 3×2 flagship)".
+    expect([bottler.tilesWide, bottler.tilesHigh]).toEqual([3, 2]);
+
+    expect(listPriceCents(ItemId.Soda)).toBe(1_600);
+  });
+
+  it('gives the Syrup Mixer two pipe inlets and one belt inlet', () => {
+    // PLAN §5'S CENTREPIECE, and the one place solids and liquids meet in the open. Two liquid
+    // inlets, one solid inlet, and one outlet — if this ever collapses to a single port the
+    // machine has stopped being the thing the section describes.
+    const spec = machineSpec(MachineKind.SyrupMixer)!;
+    const intakes = spec.ports.filter((port) => port.flow === PortFlow.Intake);
+    expect(intakes).toHaveLength(2);
+    expect(spec.inputs).toHaveLength(1);
+    expect(spec.ports.filter((port) => port.flow === PortFlow.Outlet)).toHaveLength(1);
+  });
+
+  it('refuses a mismatched liquid at the port, and accepts the two it takes', () => {
+    // The refusal reuses the pipe grammar rather than inventing one: same function, same
+    // `BuildRefusal` codes, refused while the player is still dragging.
+    const state = createWorld(9001);
+    spawnMachine(state, MachineKind.SyrupMixer, 6, 0);
+
+    const at = (liquid: LiquidId): BuildRefusal =>
+      pipePathRefusal(state, [{ x: 6, y: 2 }], liquid, PIPE_MAX_PATH_TILES);
+
+    expect(at(LiquidId.SimpleSyrup)).toBe(BuildRefusal.None);
+    expect(at(LiquidId.Water)).toBe(BuildRefusal.None);
+    expect(at(LiquidId.SodaSyrup)).toBe(BuildRefusal.None);
+    // Carbonated water goes to the Bottler, not the Mixer. Nothing about the mixer accepts it.
+    expect(at(LiquidId.CarbonatedWater)).toBe(BuildRefusal.PortMismatch);
+    expect(at(LiquidId.CaneJuice)).toBe(BuildRefusal.PortMismatch);
+
+    // A machine with no ports at all is invisible to the rule — a water main may still run
+    // past a Fryer, which is the whole reason the check asks about ports and not about tiles.
+    spawnMachine(state, MachineKind.Fryer, 0, 6);
+    expect(pipePathRefusal(state, [{ x: 2, y: 6 }], LiquidId.Water, PIPE_MAX_PATH_TILES)).toBe(
+      BuildRefusal.None,
+    );
+  });
+
+  it('refuses the same mistake made in the other order', () => {
+    // Dropping a Carbonator onto a syrup main is the same error as dragging syrup into a
+    // Carbonator, and the rule has to hold from both ends or it does not hold.
+    const state = createWorld(9002);
+    spawnPipe(state, 5, 0, LiquidId.SimpleSyrup);
+    rebuildNetworks(state);
+
+    expect(liquidPlacementRefusal(state, MachineKind.Carbonator, 6, 0)).toBe(
+      BuildRefusal.PortMismatch,
+    );
+    // The Syrup Mixer takes simple syrup, so it may stand exactly where the Carbonator may not.
+    expect(liquidPlacementRefusal(state, MachineKind.SyrupMixer, 6, 0)).toBe(BuildRefusal.None);
+  });
+
+  it('runs the Carbonator and the Bottler at 1:1:1 without either starving the other', () => {
+    // THE SODA LINE'S RATIO LESSON, AND IT IS A VOLUME RATHER THAN A COUNT. One Mixer operation
+    // makes exactly the soda syrup one Bottler operation drinks, one Carbonator operation makes
+    // exactly the carbonated water it drinks, and all three take the same time — so the three
+    // of them run in lockstep and a second Bottler turns the pipes amber instead of idling a
+    // machine. `test/factory.test.ts` pins the chip line's 1:1:2:1:1 for the same reason: this
+    // is a design ruling, not an implementation detail, and it must not be "optimised".
+    expect(
+      portSpec(MachineKind.SyrupMixer, LiquidId.SodaSyrup, PortFlow.Outlet).mlPerOperation,
+    ).toBe(portSpec(MachineKind.Bottler, LiquidId.SodaSyrup, PortFlow.Intake).mlPerOperation);
+    expect(
+      portSpec(MachineKind.Carbonator, LiquidId.CarbonatedWater, PortFlow.Outlet).mlPerOperation,
+    ).toBe(portSpec(MachineKind.Bottler, LiquidId.CarbonatedWater, PortFlow.Intake).mlPerOperation);
+
+    const bottler = ticksPerOperation(MachineKind.Bottler);
+    expect(ticksPerOperation(MachineKind.SyrupMixer)).toBe(bottler);
+    expect(ticksPerOperation(MachineKind.Carbonator)).toBe(bottler);
+
+    // And in the world: run one of each with the supply they need and count operations. Equal
+    // counts are the ratio; a difference of more than one is one machine outrunning another.
+    const state = sodaLine(4711);
+    spawnReservoir(state, 12, 13, 3, 3);
+    spawnMachine(state, MachineKind.Pump, 12, 12);
+    for (let y = 4; y <= 12; y++) spawnPipe(state, 13, y, LiquidId.Water);
+    rebuildNetworks(state);
+
+    const mixer = machineOf(state, MachineKind.SyrupMixer);
+    const carbonator = machineOf(state, MachineKind.Carbonator);
+    const bottlerMachine = machineOf(state, MachineKind.Bottler);
+    // Feed the mixer's syrup inlet by hand, so this measures the finishing three rather than
+    // the press behind them — the upstream ratio is 1:1:2 and it is a different lesson.
+    mixer.inputCounts[0] = 60;
+    bottlerMachine.inputCounts[0] = 60;
+    for (let i = 0; i < 40; i++) {
+      mixer.ports[0]!.ml = 2_000;
+      stepMany(state, 15);
+    }
+
+    expect(bottlerMachine.outputCount).toBeGreaterThan(10);
+    expect(Math.abs(mixer.opCount - bottlerMachine.opCount)).toBeLessThanOrEqual(1);
+    expect(Math.abs(carbonator.opCount - bottlerMachine.opCount)).toBeLessThanOrEqual(1);
+    // Nobody went amber: supply matched demand exactly, which is what 1:1:1 means.
+    expect(bottlerMachine.ports.some((port) => port.throttled)).toBe(false);
+  });
+
+  it('carries a cane all the way to a bottle', () => {
+    const state = sodaLine(4712);
+    spawnReservoir(state, 12, 13, 3, 3);
+    spawnMachine(state, MachineKind.Pump, 12, 12);
+    for (let y = 4; y <= 12; y++) spawnPipe(state, 13, y, LiquidId.Water);
+    rebuildNetworks(state);
+
+    machineOf(state, MachineKind.Juicer).inputCounts[0] = 20;
+    machineOf(state, MachineKind.SyrupMixer).inputCounts[0] = 20;
+    machineOf(state, MachineKind.Bottler).inputCounts[0] = 20;
+
+    stepMany(state, 1_500);
+
+    const bottler = machineOf(state, MachineKind.Bottler);
+    expect(bottler.outputCount).toBeGreaterThan(0);
+    expect(nextOutputItem(bottler, machineSpec(MachineKind.Bottler)!)).toBe(ItemId.Soda);
+    // The cane really went through every machine rather than the Bottler running on nothing.
+    for (const kind of [
+      MachineKind.Juicer,
+      MachineKind.Kettle,
+      MachineKind.SyrupMixer,
+      MachineKind.Carbonator,
+    ]) {
+      expect(machineOf(state, kind).opCount).toBeGreaterThan(0);
+    }
+  });
+
+  it('stops a liquid producer dead when its outlet has nowhere to go', () => {
+    // DEMAND-PULL IS ONE RULE, NOT TWO (plan §7 ruling 6). A Juicer with no pipe on it is in
+    // exactly the position of a Fryer with a full basket: it fills its outlet, stops, and eats
+    // nothing more. An unplumbed press that quietly destroyed cane would be a compost pile.
+    const state = createWorld(4713);
+    const juicer = spawnMachine(state, MachineKind.Juicer, 0, 0)!;
+    juicer.inputCounts[0] = 20;
+
+    stepMany(state, 2_000);
+
+    const spec = machineSpec(MachineKind.Juicer)!;
+    const outlet = spec.ports[0]!;
+    expect(juicer.ports[0]!.ml).toBe(outlet.capacityMl);
+    // Four litres of buffer at a litre an operation: four cane in, sixteen still in the hopper.
+    expect(juicer.opCount).toBe(outlet.capacityMl / outlet.mlPerOperation);
+    expect(juicer.inputCounts[0]).toBe(20 - juicer.opCount);
+  });
+
+  it('takes every ingredient at once or none of them', () => {
+    // Atomic consumption: the Combo Packer is the only two-ingredient recipe in the game, and
+    // there is no state in which it has swallowed the chips and is waiting for the soda.
+    const state = createWorld(4714);
+    const packer = spawnMachine(state, MachineKind.ComboPacker, 0, 0)!;
+    packer.inputCounts[0] = 5;
+
+    stepMany(state, 500);
+    expect(packer.inputCounts[0]).toBe(5);
+    expect(packer.outputCount).toBe(0);
+
+    packer.inputCounts[1] = 5;
+    stepMany(state, 500);
+    expect(packer.outputCount).toBeGreaterThan(0);
+    expect(packer.inputCounts[0]).toBe(packer.inputCounts[1]);
+  });
+
+  it('prices the bundles above their parts, and the Combo above the six-pack', () => {
+    // Plan §4's "gentle bundle premiums", and the answer to §8's release gate: a Combo pays
+    // 125% of a bag plus a bottle, so running both districts beats running either one twice.
+    const parts = listPriceCents(ItemId.BaggedChips) + listPriceCents(ItemId.Soda);
+    expect(listPriceCents(ItemId.SnackCombo)).toBe(divFloor(parts * 125, 100));
+    expect(listPriceCents(ItemId.SixPack)).toBe(
+      divFloor(listPriceCents(ItemId.Soda) * 6 * 110, 100),
+    );
+
+    // The six-pack bundles one product with itself, so its premium is the smaller of the two —
+    // otherwise the Combo, which is the point, would be the worse buy. Both are "gentle": §4
+    // says premium, not jackpot, so neither pays half again as much as its parts.
+    const sixPackPercent = divFloor(
+      listPriceCents(ItemId.SixPack) * 100,
+      listPriceCents(ItemId.Soda) * 6,
+    );
+    const comboPercent = divFloor(listPriceCents(ItemId.SnackCombo) * 100, parts);
+    expect(comboPercent).toBe(125);
+    expect(sixPackPercent).toBe(110);
+    expect(comboPercent).toBeGreaterThan(sixPackPercent);
+    expect(comboPercent).toBeLessThanOrEqual(130);
+  });
+
+  it('keeps every liquid on its own network', () => {
+    // Plan §5: one liquid per network, enforced. Five liquids, five networks, no sharing —
+    // which is the constraint that makes routing the soda district a puzzle.
+    const state = sodaLine(4715);
+    const liquids = state.networks.map((network) => network.liquid).sort((a, b) => a - b);
+    expect(liquids).toEqual([
+      LiquidId.Water,
+      LiquidId.CaneJuice,
+      LiquidId.SimpleSyrup,
+      LiquidId.CarbonatedWater,
+      LiquidId.SodaSyrup,
+    ]);
+
+    // And each port found the network carrying its own liquid rather than the nearest one.
+    const mixer = machineOf(state, MachineKind.SyrupMixer);
+    const spec = machineSpec(MachineKind.SyrupMixer)!;
+    for (let i = 0; i < spec.ports.length; i++) {
+      const network = state.networks.find((n) => n.id === mixer.ports[i]!.network);
+      expect(network?.liquid).toBe(spec.ports[i]!.liquid);
+    }
+  });
+
+  it('agrees with itself about which liquid a machine advertises', () => {
+    // `MachineSpec.liquid` is what the renderer reads to decide a machine has a typed port at
+    // all, and for a converter it restates the first port. A restatement that drifted would
+    // give the renderer a second opinion about the plumbing.
+    for (const spec of MACHINE_SPECS) {
+      if (spec.ports.length === 0) continue;
+      expect(spec.liquid).toBe(spec.ports[0]!.liquid);
+    }
+  });
+});
+
+describe('the sell bin', () => {
+  it('refuses seeds, and says so before the player clicks', () => {
+    // A SELLABLE SEED IS A SOFTLOCK WITH A PRICE TAG: the stand sells seeds at the same price
+    // it would pay, so dumping them is not even a trade — it is a way to end up unable to
+    // plant. The reducer refuses, and the view carries the same fact so the HUD can grey it.
+    const state = createWorld(4716);
+    addItem(state, ItemId.PotatoSeed, 4);
+    addItem(state, ItemId.RussetPotato, 4);
+    standOn(state, FIELD_ORIGIN_X - 2, FIELD_ORIGIN_Y + 8);
+
+    const before = state.moneyCents;
+    const seeds = itemCount(state, ItemId.PotatoSeed);
+    run(state, [{ type: 'SellItem', item: ItemId.PotatoSeed, count: 4 }]);
+    expect(state.moneyCents).toBe(before);
+    expect(itemCount(state, ItemId.PotatoSeed)).toBe(seeds);
+    // A refused command is not in the trace, because it did not happen.
+    expect(state.trace).toHaveLength(0);
+
+    run(state, [{ type: 'SellItem', item: ItemId.RussetPotato, count: 4 }]);
+    expect(state.moneyCents).toBeGreaterThan(before);
+
+    const projected = view(state, createWorldView());
+    const seedRow = projected.inventory.find((slot) => slot.item === ItemId.PotatoSeed)!;
+    expect(seedRow.sellable).toBe(0);
+    expect(isSellable(ItemId.PotatoSeed)).toBe(false);
+  });
+
+  it('leaves every seed unsellable and everything else sellable', () => {
+    // Pinned over the whole table rather than one item, and pinned as "seeds" rather than as
+    // "the inverse of purchasable" — the two flags are different facts and a consumable that
+    // is both buyable and sellable must stay possible.
+    for (const spec of ITEM_SPECS) {
+      const isSeed = spec.slug.endsWith('-seed');
+      expect(spec.sellable).toBe(!isSeed);
+    }
+  });
+
+  it('buys and sells a consumable at the same price, so there is no arbitrage', () => {
+    // Every purchasable non-seed is sellable, which would be an infinite money machine if the
+    // two prices ever diverged. One price per item is what makes that structurally impossible.
+    for (const spec of ITEM_SPECS) {
+      if (!spec.purchasable || !spec.sellable) continue;
+      expect(listPriceCents(spec.id)).toBe(spec.listPriceCents);
+    }
+  });
+});
 
 describe('Rustic Style', () => {
   it('prices a burnt batch at exactly 70% of seasoned chips, floored', () => {
@@ -155,7 +505,7 @@ describe('Rustic Style', () => {
     // fed and unblocked; it must run for as long as you like without spoiling anything.
     const state = createWorld(77);
     const fryer = spawnMachine(state, MachineKind.Fryer, 0, 0)!;
-    fryer.inputCount = 5;
+    fryer.inputCounts[0] = 5;
 
     stepMany(state, OVERCOOK_BLOCKED_TICKS * 3);
     expect(fryer.overcookedCount).toBe(0);
@@ -166,7 +516,7 @@ describe('Rustic Style', () => {
     const state = createWorld(78);
     const spec = machineSpec(MachineKind.Fryer)!;
     const fryer = spawnMachine(state, MachineKind.Fryer, 0, 0)!;
-    fryer.inputCount = 10;
+    fryer.inputCounts[0] = 10;
     fryer.outputCount = spec.outputCapacity;
 
     stepMany(state, OVERCOOK_BLOCKED_TICKS - 1);
@@ -177,7 +527,7 @@ describe('Rustic Style', () => {
     expect(fryer.overcookedCount).toBe(2);
 
     // Demand-pull still holds: a blocked machine eats nothing while it browns.
-    expect(fryer.inputCount).toBe(10);
+    expect(fryer.inputCounts[0]!).toBe(10);
     expect(fryer.outputCount).toBe(spec.outputCapacity);
 
     // Left alone forever it browns the whole basket and then stops. There is no state past
@@ -275,14 +625,14 @@ describe('wear and repair', () => {
     const state = createWorld(82);
     const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
     kitchen.condition = CONDITION_EFFECT_THRESHOLD;
-    kitchen.inputCount = 20;
+    kitchen.inputCounts[0] = 20;
     stepMany(state, ticksPerOperation(MachineKind.ChipKitchen) * 3);
     expect(state.stats.inputsWastedByMachine).toBe(0);
 
     const worn = createWorld(83);
     const spoiler = spawnMachine(worn, MachineKind.ChipKitchen, 0, 0)!;
     spoiler.condition = CONDITION_EFFECT_THRESHOLD - 1;
-    spoiler.inputCount = 40;
+    spoiler.inputCounts[0] = 40;
     const period = effectiveWastePeriod(spec, spoiler);
     expect(period).toBeGreaterThan(1);
 
@@ -295,7 +645,7 @@ describe('wear and repair', () => {
     expect(worn.stats.inputsWastedByMachine).toBeGreaterThan(0);
     expect(worn.stats.inputsWastedByMachine).toBe(Math.floor(spoiler.opCount / period));
     // The input is gone either way — that is what makes neglect cost margin, not progress.
-    expect(spoiler.inputCount).toBe(40 - spoiler.opCount);
+    expect(spoiler.inputCounts[0]!).toBe(40 - spoiler.opCount);
     expect(spoiler.outputCount).toBe(spoiler.opCount - worn.stats.inputsWastedByMachine);
   });
 
@@ -307,7 +657,7 @@ describe('wear and repair', () => {
       const state = createWorld(87);
       const machine = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
       machine.condition = 120;
-      machine.inputCount = 30;
+      machine.inputCounts[0] = 30;
       stepMany(state, 4000);
       return state;
     };
@@ -320,13 +670,42 @@ describe('wear and repair', () => {
 
   it('shortens the waste cadence as the machine falls further apart', () => {
     const spec = machineSpec(MachineKind.ChipKitchen)!;
-    const at = (condition: number): number => effectiveWastePeriod(spec, { condition } as never);
+    const at = (condition: number): number =>
+      effectiveWastePeriod(spec, { condition, efficiencyLevel: 0 } as never);
 
     expect(at(CONDITION_EFFECT_THRESHOLD - 1)).toBeGreaterThan(at(1));
     expect(at(1)).toBeGreaterThanOrEqual(2);
     // Monotone all the way down, so "it got worse" is always true and never occasionally.
     for (let condition = CONDITION_EFFECT_THRESHOLD - 1; condition > 1; condition--) {
       expect(at(condition)).toBeGreaterThanOrEqual(at(condition - 1));
+    }
+  });
+
+  it('lengthens the waste cadence with the Efficiency dial, and never to never', () => {
+    // PLAN §3: Efficiency reduces "both input waste and wear". Wear has always been cut in
+    // `effectiveWear`; this is the other half. It stretches the PERIOD rather than lowering a
+    // chance, because plan §7 ruling 5 means there is no chance in it to lower.
+    const spec = machineSpec(MachineKind.ChipKitchen)!;
+    const at = (condition: number, efficiencyLevel: number): number =>
+      effectiveWastePeriod(spec, { condition, efficiencyLevel } as never);
+
+    // Just below the threshold: one input in seven becomes one in twelve at level 3.
+    const worn = CONDITION_EFFECT_THRESHOLD - 1;
+    expect(at(worn, 0)).toBe(7);
+    expect(at(worn, 3)).toBe(12);
+    for (let level = 1; level <= UPGRADE_MAX_LEVEL; level++) {
+      expect(at(worn, level)).toBeGreaterThan(at(worn, level - 1));
+    }
+
+    // At death's door the dial still helps and still does not save you: a machine at 1
+    // condition wastes one input in two, and one in three with the dial maxed. Never zero.
+    expect(at(1, 0)).toBe(2);
+    expect(at(1, UPGRADE_MAX_LEVEL)).toBe(3);
+    for (let level = 0; level <= UPGRADE_MAX_LEVEL; level++) {
+      expect(at(1, level)).toBeGreaterThanOrEqual(2);
+      // A HEALTHY MACHINE WASTES NOTHING, DIAL OR NO DIAL. Waste is a consequence of neglect
+      // and never a tax on running a factory, so the dial has nothing to improve up here.
+      expect(at(CONDITION_EFFECT_THRESHOLD, level)).toBe(0);
     }
   });
 
@@ -445,11 +824,11 @@ describe('grabbers', () => {
     spawnBelt(state, BeltTier.Basic, 3, 0, Direction.East, 2);
     spawnGrabber(state, GrabberTier.Mk1, 5, 0, Direction.East, 0);
 
-    washer.inputCount = 3;
+    washer.inputCounts[0] = 3;
     stepMany(state, 600);
 
     expect(washer.outputCount).toBe(0);
-    expect(slicer.opCount + slicer.inputCount).toBeGreaterThan(0);
+    expect(slicer.opCount + slicer.inputCounts[0]!).toBeGreaterThan(0);
   });
 
   it('leaves anything that does not match a filtered arm alone', () => {
@@ -737,12 +1116,26 @@ describe('tech and upgrades', () => {
     const spec = machineSpec(MachineKind.Fryer)!;
     let total = 0;
     for (let level = 0; level < UPGRADE_MAX_LEVEL; level++) {
-      const cost = upgradeCostCents(spec, level);
+      const cost = upgradeCostCents(spec, level, UpgradeDial.Speed);
       expect(cost).toBeGreaterThan(0);
       total += cost;
     }
-    expect(upgradeCostCents(spec, UPGRADE_MAX_LEVEL)).toBe(-1);
+    expect(upgradeCostCents(spec, UPGRADE_MAX_LEVEL, UpgradeDial.Speed)).toBe(-1);
     expect(total).toBeGreaterThan(spec.priceCents * 3);
+  });
+
+  it('charges more for Efficiency than for the other two dials', () => {
+    // Plan §3 calls Efficiency "the expensive track", and until the dial's waste half landed
+    // that was a comment rather than a price. It now cuts wear AND stretches the waste cadence,
+    // which makes it the strongest dial on a hard-run machine — so it costs half again as much.
+    const spec = machineSpec(MachineKind.Fryer)!;
+    for (let level = 0; level < UPGRADE_MAX_LEVEL; level++) {
+      const speed = upgradeCostCents(spec, level, UpgradeDial.Speed);
+      const efficiency = upgradeCostCents(spec, level, UpgradeDial.Efficiency);
+      const capacity = upgradeCostCents(spec, level, UpgradeDial.Capacity);
+      expect(speed).toBe(capacity);
+      expect(efficiency).toBeGreaterThan(speed);
+    }
   });
 
   it('refuses a dial until the upgrade bench is bought, then charges for it', () => {

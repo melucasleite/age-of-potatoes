@@ -44,6 +44,7 @@ import fixture2 from './fixtures/saves/format-2.json';
 import fixture3 from './fixtures/saves/format-3.json';
 import fixture4 from './fixtures/saves/format-4.json';
 import fixture5 from './fixtures/saves/format-5.json';
+import fixture6 from './fixtures/saves/format-6.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -330,11 +331,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture);
 
     expect(restored.migration.fromVersion).toBe(1);
-    expect(restored.migration.steps).toEqual([1, 2, 3, 4]);
+    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('0b060e89');
+    expect(hashState(restored.state)).toBe('d0053a79');
   });
 
   it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
@@ -403,10 +404,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture2);
 
     expect(restored.migration.fromVersion).toBe(2);
-    expect(restored.migration.steps).toEqual([2, 3, 4]);
+    expect(restored.migration.steps).toEqual([2, 3, 4, 5]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('0835254d');
+    expect(hashState(restored.state)).toBe('3176a44b');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -448,10 +449,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture3);
 
     expect(restored.migration.fromVersion).toBe(3);
-    expect(restored.migration.steps).toEqual([3, 4]);
+    expect(restored.migration.steps).toEqual([3, 4, 5]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(21_306);
-    expect(hashState(restored.state)).toBe('3bc2c589');
+    expect(hashState(restored.state)).toBe('3c8aed6d');
   });
 
   it('brings the plumbing back exactly as it was left', () => {
@@ -504,11 +505,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture4);
 
     expect(restored.migration.fromVersion).toBe(4);
-    expect(restored.migration.steps).toEqual([4]);
+    expect(restored.migration.steps).toEqual([4, 5]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(3300);
     expect(restored.state.worldSeed).toBe(90210);
-    expect(hashState(restored.state)).toBe('97846740');
+    expect(hashState(restored.state)).toBe('ba7d1b9a');
   });
 
   it('brings the errand back exactly as it was left', () => {
@@ -549,15 +550,15 @@ describe('the permanent fixture set', () => {
   // and `overcookedCount` exist only while a machine is stopped with nowhere to put its
   // output, so a save taken with an empty Fryer would carry two zeroes, round-trip perfectly,
   // and prove nothing whatsoever about the feature it was added for.
-  it('loads format-5.json at the current version with no migration', () => {
+  it('migrates format-5.json up to the current version', () => {
     const restored = restoreWorld(fixture5);
 
     expect(restored.migration.fromVersion).toBe(5);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([5]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(41_837);
     expect(restored.state.worldSeed).toBe(50505);
-    expect(hashState(restored.state)).toBe('c925f559');
+    expect(hashState(restored.state)).toBe('f19ff6ac');
   });
 
   it('brings the browning basket and the maintenance tallies back as they were', () => {
@@ -590,6 +591,68 @@ describe('the permanent fixture set', () => {
     // keeps browning on exactly the schedule it was on.
     const fryer = a.machines.find((machine) => machine.kind === MachineKind.Fryer)!;
     expect(fryer.overcookedCount).toBeGreaterThan(3);
+  });
+
+  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
+  // format-6 is the first save with the soda line in it, caught deliberately **mid-pour**: five
+  // single-liquid networks all part-full, every machine part-way through an operation, and the
+  // Bottler's soda-syrup inlet flagged amber while its carbonated-water inlet is fine. That
+  // last detail is the entire reason for the moment: a per-port throttle is the one fact a
+  // machine-level flag cannot carry, and a save taken with the line at rest would round-trip
+  // perfectly while proving nothing about typed ports at all.
+  it('migrates format-6.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture6);
+
+    expect(restored.migration.fromVersion).toBe(6);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(restored.state.tick).toBe(42_400);
+    expect(restored.state.worldSeed).toBe(60606);
+    expect(hashState(restored.state)).toBe('402c48c0');
+  });
+
+  it('brings every typed port back with its own liquid, level, and amber flag', () => {
+    const state = restoreWorld(fixture6).state;
+
+    // One network per liquid, which is plan §5's rule showing up as arithmetic: five liquids
+    // on five networks, none of them sharing.
+    const liquids = state.networks.map((network) => network.liquid).sort((a, b) => a - b);
+    expect(liquids).toEqual([1, 2, 3, 4, 6]);
+
+    const bottler = state.machines.find((machine) => machine.kind === MachineKind.Bottler)!;
+    expect(bottler.ports).toHaveLength(2);
+    // Syrup short, fizz fine — and the two are different networks, so the player is being told
+    // which way to walk.
+    expect(bottler.ports[0]!.throttled).toBe(true);
+    expect(bottler.ports[1]!.throttled).toBe(false);
+    expect(bottler.ports[0]!.network).not.toBe(bottler.ports[1]!.network);
+    expect(bottler.ports[1]!.ml).toBeGreaterThan(0);
+    // Mid-operation, not between them: progress that came back at zero would hand the player a
+    // free restart on every reload.
+    expect(bottler.progress).toBeGreaterThan(0);
+    // And its recipe line — one bottle per soda — with bottles still in the hopper.
+    expect(bottler.inputCounts).toHaveLength(1);
+    expect(bottler.inputCounts[0]!).toBeGreaterThan(0);
+
+    const mixer = state.machines.find((machine) => machine.kind === MachineKind.SyrupMixer)!;
+    // §5's centrepiece, restored as what it is: two inlets and an outlet, with liquid in both
+    // inlets and the kola powder still in the hopper.
+    expect(mixer.ports).toHaveLength(3);
+    expect(mixer.ports[0]!.ml).toBeGreaterThan(0);
+    expect(mixer.ports[1]!.ml).toBeGreaterThan(0);
+    expect(mixer.inputCounts[0]!).toBeGreaterThan(0);
+  });
+
+  it('keeps a restored soda line pouring identically', () => {
+    const a = restoreWorld(fixture6).state;
+    const b = restoreWorld(fixture6).state;
+    stepMany(a, 1000);
+    stepMany(b, 1000);
+    expect(hashState(a)).toBe(hashState(b));
+
+    // And it is still making soda after the reload rather than merely surviving it.
+    const bottler = a.machines.find((machine) => machine.kind === MachineKind.Bottler)!;
+    expect(bottler.opCount).toBeGreaterThan(2);
   });
 
   it('finishes the restored errand rather than dropping it', () => {

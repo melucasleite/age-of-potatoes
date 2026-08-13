@@ -71,6 +71,17 @@ export interface LoadMachineCommand {
   type: 'LoadMachine';
   machineId: number;
   count: number;
+  /**
+   * Which line of the recipe to fill, as an item id — or absent for "whatever fits".
+   *
+   * OPTIONAL, AND THAT IS THE WHOLE POINT. Every machine but the Combo Packer eats exactly one
+   * ingredient, so requiring the field would make every existing caller name the only possible
+   * answer, and every existing trace entry would have to be rewritten to carry it. Absent means
+   * the reducer fills the first line the player is carrying and has room for, which is what a
+   * single-ingredient machine has always done. The field is additive: an old trace replays
+   * identically, because `undefined` is exactly the behaviour it recorded.
+   */
+  item?: ItemId;
 }
 
 /** Take a machine's output by hand. Counts as a hand-carry touch. */

@@ -13,10 +13,13 @@
 import {
   CAPACITY_BONUS_PER_LEVEL,
   CONDITION_EFFECT_THRESHOLD,
+  EFFICIENCY_WASTE_STRETCH_PERCENT_PER_LEVEL,
   EFFICIENCY_WEAR_CUT_PERCENT_PER_LEVEL,
+  type LiquidPortSpec,
   type MachineSpec,
   SPEED_RATE_BONUS_PERCENT_PER_LEVEL,
   SPEED_WEAR_PENALTY_PERCENT_PER_LEVEL,
+  UPGRADE_COST_PERCENT_BY_DIAL,
   UPGRADE_COST_PERCENT_BY_LEVEL,
   UPGRADE_MAX_LEVEL,
   UpgradeDial,
@@ -63,11 +66,20 @@ export function setUpgradeLevel(machine: Machine, dial: UpgradeDial, level: numb
  * Priced off the machine's list price rather than what the player paid, so a discount or a
  * future sale can never make a dial cheaper on one machine than on its identical twin.
  */
-export function upgradeCostCents(spec: MachineSpec, currentLevel: number): number {
+export function upgradeCostCents(
+  spec: MachineSpec,
+  currentLevel: number,
+  dial: UpgradeDial,
+): number {
   if (currentLevel >= UPGRADE_MAX_LEVEL) return -1;
   const percent = UPGRADE_COST_PERCENT_BY_LEVEL[currentLevel];
   if (percent === undefined) return -1;
-  return divFloor(spec.priceCents * percent, 100);
+  const dialPercent = UPGRADE_COST_PERCENT_BY_DIAL[dial];
+  if (dialPercent === undefined) return -1;
+  // Two divisions, in this order, and never one combined `percent * dialPercent / 10000`:
+  // the ladder price is the number the player sees quoted, and the dial multiplier scales
+  // that quoted price. Folding them would floor once instead of twice and drift by a cent.
+  return divFloor(divFloor(spec.priceCents * percent, 100) * dialPercent, 100);
 }
 
 /**
@@ -147,11 +159,20 @@ export function effectiveWear(spec: MachineSpec, machine: Machine): number {
  * A machine at or above `CONDITION_EFFECT_THRESHOLD` returns 0 and wastes nothing at all.
  * Neglect costs margin; running a factory does not.
  *
- * THIS IS THE FUNCTION THE EFFICIENCY DIAL HOOKS. Plan §3 specifies Efficiency as reducing
- * "both input waste and wear" — wear is already cut in `effectiveWear` above, and the waste
- * half belongs here, as a term that *lengthens* this period per `efficiencyLevel`. It is
- * deliberately not applied yet: the dial's waste half is work item 037's, and inventing its
- * curve here would be a balance number nobody decided.
+ * THIS IS WHERE THE EFFICIENCY DIAL'S SECOND HALF LIVES. Plan §3 specifies Efficiency as
+ * reducing "both input waste and wear": wear is cut in `effectiveWear` above, and waste is
+ * cut here — by STRETCHING THE PERIOD, which is the only lever a cadence has. A dial cannot
+ * reduce the *chance* of something that has no chance in it.
+ *
+ *   condition 399 (just worn), no dial → every 7th operation
+ *   condition 399, level 3             → every 12th
+ *   condition   1 (nearly dead), no dial → every 2nd
+ *   condition   1, level 3               → every 3rd
+ *
+ * ORDER OF OPERATIONS IS FIXED, exactly as it is in `effectiveWear`: the condition curve
+ * first, the dial second. The other order floors the small numbers differently and the two
+ * would disagree by an operation on a worn machine — forever, on some engines and not others.
+ * The floor at 2 is the same floor the curve itself has: nothing here ever reaches "never".
  */
 export function effectiveWastePeriod(spec: MachineSpec, machine: Machine): number {
   if (spec.workPerOperation <= 0) return 0;
@@ -160,7 +181,11 @@ export function effectiveWastePeriod(spec: MachineSpec, machine: Machine): numbe
   const span = WASTE_PERIOD_AT_THRESHOLD - WASTE_PERIOD_AT_ZERO;
   const period =
     WASTE_PERIOD_AT_ZERO + divFloor(span * machine.condition, CONDITION_EFFECT_THRESHOLD);
-  return period < 2 ? 2 : period;
+  const stretched = divFloor(
+    period * (100 + EFFICIENCY_WASTE_STRETCH_PERCENT_PER_LEVEL * machine.efficiencyLevel),
+    100,
+  );
+  return stretched < 2 ? 2 : stretched;
 }
 
 function capacityScaled(base: number, level: number): number {
@@ -178,4 +203,16 @@ export function effectiveOutputCapacity(spec: MachineSpec, machine: Machine): nu
 
 export function effectiveTankCapacityMl(spec: MachineSpec, machine: Machine): number {
   return capacityScaled(spec.tankCapacityMl, machine.capacityLevel);
+}
+
+/**
+ * One typed port's buffer after the Capacity dial.
+ *
+ * The dial scales a converter's liquid ports exactly as it scales its item buffers, and for the
+ * same reason: Capacity is the jam-smoother, and on the soda line the thing that jams is a
+ * Bottler that ran dry between deliveries. A dial that grew the bottle hopper and not the syrup
+ * inlet would be half a purchase.
+ */
+export function effectivePortCapacityMl(port: LiquidPortSpec, machine: Machine): number {
+  return capacityScaled(port.capacityMl, machine.capacityLevel);
 }

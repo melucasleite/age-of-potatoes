@@ -27,13 +27,14 @@
 // `WorldState` and inside the hash; recomputing them on load would produce a world that
 // hashes differently from the one that was saved, which is the definition of a broken save.
 
-import { BeltTier, CropId, GrabberTier, ItemId, LiquidId, MachineKind } from '../data';
+import { BeltTier, CropId, GrabberTier, ItemId, LiquidId, MachineKind, machineSpec } from '../data';
 import type { RngState } from '../rng';
 import {
   type Belt,
   type CropTile,
   type Grabber,
   type Machine,
+  type MachinePort,
   type Pipe,
   type PipeNetwork,
   type PlayerIntent,
@@ -93,6 +94,14 @@ export interface SaveCropTile {
   zone: number;
 }
 
+/** One typed liquid port's stored state. The liquid itself is balance data, never saved. */
+export interface SaveMachinePort {
+  flowMlPerMinute: number;
+  ml: number;
+  network: number;
+  throttled: boolean;
+}
+
 export interface SaveMachine {
   blockedTicks: number;
   capacityLevel: number;
@@ -101,7 +110,8 @@ export interface SaveMachine {
   efficiencyLevel: number;
   flowMlPerMinute: number;
   id: number;
-  inputCount: number;
+  /** One count per line of the machine's recipe, in recipe order. */
+  inputCounts: number[];
   investedCents: number;
   jammed: boolean;
   kind: number;
@@ -109,6 +119,7 @@ export interface SaveMachine {
   opCount: number;
   outputCount: number;
   overcookedCount: number;
+  ports: SaveMachinePort[];
   progress: number;
   scanCursor: number;
   skippedCount: number;
@@ -307,7 +318,7 @@ export function toPayload(state: WorldState): SavePayload {
       efficiencyLevel: machine.efficiencyLevel,
       flowMlPerMinute: machine.flowMlPerMinute,
       id: machine.id,
-      inputCount: machine.inputCount,
+      inputCounts: machine.inputCounts.slice(),
       investedCents: machine.investedCents,
       jammed: machine.jammed,
       kind: machine.kind,
@@ -315,6 +326,12 @@ export function toPayload(state: WorldState): SavePayload {
       opCount: machine.opCount,
       outputCount: machine.outputCount,
       overcookedCount: machine.overcookedCount,
+      ports: machine.ports.map((port) => ({
+        flowMlPerMinute: port.flowMlPerMinute,
+        ml: port.ml,
+        network: port.network,
+        throttled: port.throttled,
+      })),
       progress: machine.progress,
       scanCursor: machine.scanCursor,
       skippedCount: machine.skippedCount,
@@ -595,6 +612,60 @@ function list(source: Record<string, unknown>, key: string, path: string): unkno
   return value;
 }
 
+/**
+ * A machine's recipe buffers, SIZED FROM TODAY'S SPEC rather than from the file.
+ *
+ * THIS IS NOT A MIGRATION AND IT MUST NOT BECOME ONE. A migration turns yesterday's shape into
+ * today's and is frozen forever once released; this is the loader refusing to build a machine
+ * whose buffers do not match its own recipe, which is a thing that can happen for reasons a
+ * migration cannot see — a spec that gained a line, a save hand-edited at 2 a.m. Extra counts
+ * are dropped and missing ones read zero, so a rebalance costs a player the contents of a
+ * hopper rather than the world.
+ */
+function readInputCounts(
+  source: Record<string, unknown>,
+  path: string,
+  kind: MachineKind,
+): number[] {
+  const spec = machineSpec(kind);
+  const slots = spec === null ? 0 : spec.inputs.length;
+  const raw = list(source, 'inputCounts', path);
+  const counts: number[] = [];
+  for (let i = 0; i < slots; i++) {
+    const value = raw[i];
+    counts.push(typeof value === 'number' && Number.isInteger(value) ? value : 0);
+  }
+  return counts;
+}
+
+/** The same, for typed ports. The liquid comes from the spec; only the contents are saved. */
+function readPorts(
+  source: Record<string, unknown>,
+  path: string,
+  kind: MachineKind,
+): MachinePort[] {
+  const spec = machineSpec(kind);
+  const slots = spec === null ? 0 : spec.ports.length;
+  const raw = list(source, 'ports', path);
+  const ports: MachinePort[] = [];
+  for (let i = 0; i < slots; i++) {
+    const entry = raw[i];
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      ports.push({ network: 0, ml: 0, flowMlPerMinute: 0, throttled: false });
+      continue;
+    }
+    const portPath = `${path}.ports[${String(i)}]`;
+    const port = entry as Record<string, unknown>;
+    ports.push({
+      network: int(port, 'network', portPath),
+      ml: int(port, 'ml', portPath),
+      flowMlPerMinute: int(port, 'flowMlPerMinute', portPath),
+      throttled: bool(port, 'throttled', portPath),
+    });
+  }
+  return ports;
+}
+
 const CROP_IDS: readonly number[] = [
   CropId.None,
   CropId.RussetPotato,
@@ -621,6 +692,17 @@ const ITEM_IDS: readonly number[] = [
   ItemId.ChiliSeed,
   ItemId.ChiliPepper,
   ItemId.DayOldChili,
+  // Rustic Style and the repair kit were missing from this list, which made a save holding
+  // either of them refuse to load — a real world can hold both. Adding them is a fix, not a
+  // format change: the ids were always legal, this list simply did not say so.
+  ItemId.RusticStyleChips,
+  ItemId.RepairKit,
+  ItemId.KolaNut,
+  ItemId.KolaPowder,
+  ItemId.Bottle,
+  ItemId.Soda,
+  ItemId.SixPack,
+  ItemId.SnackCombo,
 ];
 /** A grabber's filter and its hand both accept 0 for "nothing", on top of the real ids. */
 const ITEM_IDS_OR_NONE: readonly number[] = [0, ...ITEM_IDS];
@@ -638,9 +720,23 @@ const MACHINE_KINDS: readonly number[] = [
   MachineKind.PipedSprinkler,
   MachineKind.IrrigationHub,
   MachineKind.Recirculator,
+  MachineKind.Juicer,
+  MachineKind.Kettle,
+  MachineKind.Grinder,
+  MachineKind.SyrupMixer,
+  MachineKind.Carbonator,
+  MachineKind.Bottler,
+  MachineKind.SixPacker,
+  MachineKind.ComboPacker,
 ];
 /** `None` is not a legal liquid for a pipe: a pipe that carries nothing is not a pipe. */
-const LIQUIDS: readonly number[] = [LiquidId.Water];
+const LIQUIDS: readonly number[] = [
+  LiquidId.Water,
+  LiquidId.CaneJuice,
+  LiquidId.SimpleSyrup,
+  LiquidId.CarbonatedWater,
+  LiquidId.SodaSyrup,
+];
 const BELT_TIERS: readonly number[] = [BeltTier.Basic, BeltTier.Fast, BeltTier.Express];
 const GRABBER_TIERS: readonly number[] = [GrabberTier.Mk1, GrabberTier.Mk2, GrabberTier.Long];
 /** Belts and grabbers face a compass direction. `None` is not a legal facing for either. */
@@ -742,13 +838,15 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
   for (let i = 0; i < machinesRaw.length; i++) {
     const path = `payload.machines[${String(i)}]`;
     const machine = record(machinesRaw[i], path);
+    const kind = idInt(machine, 'kind', path, MACHINE_KINDS) as MachineKind;
     machines.push({
       id: int(machine, 'id', path),
-      kind: idInt(machine, 'kind', path, MACHINE_KINDS) as MachineKind,
+      kind,
       tileX: int(machine, 'tileX', path),
       tileY: int(machine, 'tileY', path),
       progress: int(machine, 'progress', path),
-      inputCount: int(machine, 'inputCount', path),
+      inputCounts: readInputCounts(machine, path, kind),
+      ports: readPorts(machine, path, kind),
       outputCount: int(machine, 'outputCount', path),
       tankMl: int(machine, 'tankMl', path),
       condition: int(machine, 'condition', path),

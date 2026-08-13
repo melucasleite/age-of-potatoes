@@ -37,7 +37,9 @@
 
 import {
   MachineRole,
+  type MachineSpec,
   PIPE_RR_MODULUS,
+  PortFlow,
   type LiquidId,
   LiquidId as Liquids,
   WORLD_TILES_WIDE,
@@ -46,6 +48,7 @@ import {
 } from './data';
 import {
   type Machine,
+  type MachinePort,
   type Pipe,
   type PipeNetwork,
   type WorldState,
@@ -55,7 +58,11 @@ import {
   machineCoversTile,
   tileOccupied,
 } from './state';
-import { effectivePumpRateMlPerMinute, effectiveTankCapacityMl } from './upgrades';
+import {
+  effectivePortCapacityMl,
+  effectivePumpRateMlPerMinute,
+  effectiveTankCapacityMl,
+} from './upgrades';
 import { TICKS_PER_MINUTE, divFloor } from './units';
 import {
   WaterDraw,
@@ -93,6 +100,20 @@ export const BuildRefusal = {
   Unaffordable: 8,
   /** The tech node that makes this legal is not researched. */
   Locked: 9,
+  /**
+   * This run would present a liquid to a machine that has no port for it.
+   *
+   * THE SAME RULE AS `LiquidMismatch`, ONE STEP FURTHER IN. That one keeps two liquids from
+   * meeting in a pipe; this one keeps the wrong liquid from meeting a machine. Plan §5 puts
+   * typed ports at the centre of the whole layer — "they meet only inside machines with typed
+   * ports" — and a port that could be fed anything is not typed. Dragging carbonated water into
+   * the Syrup Mixer is refused while the player is still dragging, on the object, exactly as a
+   * two-pump network is.
+   *
+   * Machines with no ports at all — every belt machine — are invisible to this rule, so a water
+   * main may still run past a Fryer.
+   */
+  PortMismatch: 10,
 } as const;
 
 export type BuildRefusal = (typeof BuildRefusal)[keyof typeof BuildRefusal];
@@ -195,7 +216,14 @@ export function pipePathRefusal(
       }
 
       const machine = machineAt(state, nx, ny);
-      if (machine !== null && isPump(machine)) pushUnique(joinedPumps, machine.id);
+      if (machine !== null) {
+        if (isPump(machine)) pushUnique(joinedPumps, machine.id);
+        // TYPED PORTS, ENFORCED AT THE PORT. A machine that has ports at all only accepts what
+        // its ports declare; everything else is refused here rather than attached and ignored.
+        if (machineHasPorts(machine) && !machineAcceptsLiquid(machine, liquid)) {
+          return BuildRefusal.PortMismatch;
+        }
+      }
     }
   }
 
@@ -249,12 +277,59 @@ export function liquidPlacementRefusal(
     }
   }
 
+  // THE PORT RULE, FROM THE MACHINE'S SIDE. `pipePathRefusal` stops a pipe being dragged into
+  // the wrong machine; this stops the same mistake made in the other order — dropping a
+  // Carbonator onto a syrup main. The rule has to hold from both ends or it does not hold.
+  if (spec.liquid !== Liquids.None || spec.ports.length > 0) {
+    for (let dy = 0; dy < spec.tilesHigh; dy++) {
+      for (let dx = 0; dx < spec.tilesWide; dx++) {
+        for (let n = 0; n < 4; n++) {
+          const neighbour = pipeAt(
+            state,
+            tileX + dx + NEIGHBOUR_DX[n]!,
+            tileY + dy + NEIGHBOUR_DY[n]!,
+          );
+          if (neighbour === null) continue;
+          if (specAcceptsLiquid(spec, neighbour.liquid)) continue;
+          return BuildRefusal.PortMismatch;
+        }
+      }
+    }
+  }
+
   return BuildRefusal.None;
 }
 
 function isPump(machine: Machine): boolean {
   const spec = machineSpec(machine.kind);
   return spec !== null && spec.role === MachineRole.Pump;
+}
+
+/** Whether this machine is plumbed at all — a single utility port, or a converter's list. */
+function machineHasPorts(machine: Machine): boolean {
+  const spec = machineSpec(machine.kind);
+  if (spec === null) return false;
+  return spec.liquid !== Liquids.None || spec.ports.length > 0;
+}
+
+/**
+ * Whether any of a machine's ports accepts this liquid.
+ *
+ * ONE FUNCTION, BOTH DIRECTIONS: it answers "may this pipe touch that machine" for a pipe being
+ * laid and "may this machine land beside that pipe" for a machine being placed. Two
+ * implementations of the same question is how a preview ends up disagreeing with a reducer.
+ */
+function machineAcceptsLiquid(machine: Machine, liquid: LiquidId): boolean {
+  const spec = machineSpec(machine.kind);
+  return spec !== null && specAcceptsLiquid(spec, liquid);
+}
+
+function specAcceptsLiquid(spec: MachineSpec, liquid: LiquidId): boolean {
+  if (spec.liquid === liquid) return true;
+  for (let i = 0; i < spec.ports.length; i++) {
+    if (spec.ports[i]!.liquid === liquid) return true;
+  }
+  return false;
 }
 
 function pushUnique(list: number[], value: number): void {
@@ -372,27 +447,67 @@ function attachMachines(state: WorldState, assigned: Map<number, number>): void 
   for (let i = 0; i < state.machines.length; i++) {
     const machine = state.machines[i]!;
     const spec = machineSpec(machine.kind);
-    if (spec === null || spec.liquid === Liquids.None) {
+    if (spec === null) {
       machine.network = 0;
       continue;
     }
 
-    let best = 0;
-    for (let dy = 0; dy < spec.tilesHigh; dy++) {
-      for (let dx = 0; dx < spec.tilesWide; dx++) {
-        for (let n = 0; n < 4; n++) {
-          const nx = machine.tileX + dx + NEIGHBOUR_DX[n]!;
-          const ny = machine.tileY + dy + NEIGHBOUR_DY[n]!;
-          if (!isInsideWorld(nx, ny)) continue;
-          if (machineCoversTile(machine, nx, ny)) continue;
-          const network = assigned.get(worldTileIndex(nx, ny));
-          if (network === undefined) continue;
-          if (best === 0 || network < best) best = network;
-        }
+    // Each port finds its own network, and finds ONLY a network carrying its own liquid. That
+    // is the port typing doing its second job: placement refuses the mistake, and membership
+    // refuses to make sense of it anyway if a hand-edited save ever presents one.
+    for (let p = 0; p < machine.ports.length; p++) {
+      const portSpec = spec.ports[p];
+      machine.ports[p]!.network =
+        portSpec === undefined
+          ? 0
+          : lowestAdjacentNetwork(state, machine, spec, assigned, portSpec.liquid);
+    }
+
+    if (spec.liquid === Liquids.None) {
+      machine.network = 0;
+    } else if (machine.ports.length > 0) {
+      // A converter's headline network is its first port's, which is the one the renderer
+      // highlights and the one its status ribbon names. The ledger never reads it.
+      machine.network = machine.ports[0]!.network;
+    } else {
+      machine.network = lowestAdjacentNetwork(state, machine, spec, assigned, spec.liquid);
+    }
+  }
+}
+
+/**
+ * The lowest-numbered network of a given liquid touching a machine's footprint, or 0.
+ *
+ * A machine that touches two networks joins the LOWER-NUMBERED one (plan §5 allows one pump per
+ * network, not one network per machine), and picking by a total order is what keeps the ledger
+ * a division rather than an argument. The liquid filter is new with the soda line and it can
+ * only ever *reduce* the candidates, so a water-only world attaches exactly as it always did.
+ */
+function lowestAdjacentNetwork(
+  state: WorldState,
+  machine: Machine,
+  spec: MachineSpec,
+  assigned: Map<number, number>,
+  liquid: LiquidId,
+): number {
+  if (liquid === Liquids.None) return 0;
+  let best = 0;
+  for (let dy = 0; dy < spec.tilesHigh; dy++) {
+    for (let dx = 0; dx < spec.tilesWide; dx++) {
+      for (let n = 0; n < 4; n++) {
+        const nx = machine.tileX + dx + NEIGHBOUR_DX[n]!;
+        const ny = machine.tileY + dy + NEIGHBOUR_DY[n]!;
+        if (!isInsideWorld(nx, ny)) continue;
+        if (machineCoversTile(machine, nx, ny)) continue;
+        const pipe = pipeAt(state, nx, ny);
+        if (pipe === null || pipe.liquid !== liquid) continue;
+        const network = assigned.get(worldTileIndex(nx, ny));
+        if (network === undefined) continue;
+        if (best === 0 || network < best) best = network;
       }
     }
-    machine.network = best;
   }
+  return best;
 }
 
 // --- the ledger tick --------------------------------------------------------------------
@@ -412,11 +527,53 @@ export function advancePipes(state: WorldState): void {
     if (spec === null || spec.liquid === Liquids.None) continue;
     machine.flowMlPerMinute = 0;
     machine.throttled = false;
+    for (let p = 0; p < machine.ports.length; p++) {
+      const port = machine.ports[p]!;
+      port.flowMlPerMinute = 0;
+      port.throttled = false;
+    }
   }
 
   for (let i = 0; i < state.networks.length; i++) {
     advanceNetwork(state, state.networks[i]!);
   }
+}
+
+/**
+ * One consumer or one source on a network: a machine, and which of its buffers is involved.
+ *
+ * `port === null` means the machine's own single utility port — the `tankMl` a head pours from
+ * and a hand refills. A non-null port is one line of a converter's `ports` list. Everything
+ * below the collection loop works on these refs and never asks which kind it has, which is what
+ * keeps the round-robin, the shortfall, and the surplus one implementation each.
+ */
+interface PortRef {
+  machine: Machine;
+  port: MachinePort | null;
+  /** Effective buffer size, after the Capacity dial. */
+  capacityMl: number;
+}
+
+function refMl(ref: PortRef): number {
+  return ref.port === null ? ref.machine.tankMl : ref.port.ml;
+}
+
+function addRefMl(ref: PortRef, amount: number): void {
+  if (ref.port === null) ref.machine.tankMl += amount;
+  else ref.port.ml += amount;
+}
+
+function addRefFlow(ref: PortRef, mlPerMinute: number): void {
+  if (ref.port === null) ref.machine.flowMlPerMinute += mlPerMinute;
+  else ref.port.flowMlPerMinute += mlPerMinute;
+}
+
+function setRefThrottled(ref: PortRef, throttled: boolean): void {
+  if (ref.port === null) ref.machine.throttled = throttled;
+  else ref.port.throttled = throttled;
+  // A converter with one starved port is a starved converter. The per-port flag says WHICH
+  // inlet is short; the machine-level flag is what the lamp and the ribbon already read.
+  if (throttled && ref.port !== null) ref.machine.throttled = true;
 }
 
 /** Scratch arrays, rebuilt per network. Locals, never module state — see the header. */
@@ -425,30 +582,65 @@ function advanceNetwork(state: WorldState, network: PipeNetwork): void {
   network.demandMl = 0;
   network.deliveredMl = 0;
 
-  const heads: Machine[] = [];
+  const heads: PortRef[] = [];
   const wants: number[] = [];
-  const tanks: Machine[] = [];
+  const tanks: PortRef[] = [];
+  /**
+   * Outlet ports: a converter's finished liquid, waiting for someone to draw it.
+   *
+   * THEY ARE TANKS THAT FILL THEMSELVES, AND THEY ARE NOT PUMPS. A juice network has no pump on
+   * it at all — plan §5's "one pump per network" is not stretched here, it is unspent. The
+   * Recirculator set this precedent a release early: a producer pours into a tank, never into
+   * the pipes, because a second *source* on a pumped network would turn the ledger into a
+   * solver. A source list plus a demand list is still one division.
+   */
+  const sources: PortRef[] = [];
   let pump: Machine | null = null;
 
   // `state.machines` is kept sorted by id, so these lists come out in id order for free —
-  // which is exactly the total order the round-robin rotates over.
+  // which is exactly the total order the round-robin rotates over. Ports within a machine
+  // follow their spec order, which is likewise fixed.
   for (let i = 0; i < state.machines.length; i++) {
     const machine = state.machines[i]!;
-    if (machine.network !== network.id) continue;
     const spec = machineSpec(machine.kind);
-    if (spec === null || spec.liquid !== network.liquid) continue;
+    if (spec === null) continue;
 
-    if (spec.role === MachineRole.Pump) {
-      // One pump per network is enforced at placement; the lowest id wins if a hand-edited
-      // save ever presents two, so behaviour stays defined rather than merely unlikely.
-      if (pump === null) pump = machine;
-    } else if (spec.role === MachineRole.Tank) {
-      tanks.push(machine);
-    } else if (spec.role === MachineRole.PipedSprinkler) {
-      const room = effectiveTankCapacityMl(spec, machine) - machine.tankMl;
-      const want = room < spec.intakeMlPerTick ? room : spec.intakeMlPerTick;
-      heads.push(machine);
-      wants.push(want > 0 ? want : 0);
+    if (
+      machine.network === network.id &&
+      spec.liquid === network.liquid &&
+      spec.ports.length === 0
+    ) {
+      if (spec.role === MachineRole.Pump) {
+        // One pump per network is enforced at placement; the lowest id wins if a hand-edited
+        // save ever presents two, so behaviour stays defined rather than merely unlikely.
+        if (pump === null) pump = machine;
+      } else if (spec.role === MachineRole.Tank) {
+        tanks.push({ machine, port: null, capacityMl: effectiveTankCapacityMl(spec, machine) });
+      } else if (spec.role === MachineRole.PipedSprinkler) {
+        const capacityMl = effectiveTankCapacityMl(spec, machine);
+        const room = capacityMl - machine.tankMl;
+        const want = room < spec.intakeMlPerTick ? room : spec.intakeMlPerTick;
+        heads.push({ machine, port: null, capacityMl });
+        wants.push(want > 0 ? want : 0);
+      }
+    }
+
+    for (let p = 0; p < machine.ports.length; p++) {
+      const port = machine.ports[p]!;
+      const portSpec = spec.ports[p];
+      if (portSpec === undefined) continue;
+      if (port.network !== network.id || portSpec.liquid !== network.liquid) continue;
+
+      const capacityMl = effectivePortCapacityMl(portSpec, machine);
+      const ref: PortRef = { machine, port, capacityMl };
+      if (portSpec.flow === PortFlow.Outlet) {
+        sources.push(ref);
+      } else {
+        const room = capacityMl - port.ml;
+        const want = room < portSpec.intakeMlPerTick ? room : portSpec.intakeMlPerTick;
+        heads.push(ref);
+        wants.push(want > 0 ? want : 0);
+      }
     }
   }
 
@@ -481,8 +673,8 @@ function advanceNetwork(state: WorldState, network: PipeNetwork): void {
   let tankSpace = 0;
   for (let i = 0; i < tanks.length; i++) {
     const tank = tanks[i]!;
-    const spec = machineSpec(tank.kind)!;
-    const room = effectiveTankCapacityMl(spec, tank) - tank.tankMl;
+    const spec = machineSpec(tank.machine.kind)!;
+    const room = tank.capacityMl - refMl(tank);
     const take = room < spec.intakeMlPerTick ? room : spec.intakeMlPerTick;
     if (take > 0) tankSpace += take;
   }
@@ -492,20 +684,32 @@ function advanceNetwork(state: WorldState, network: PipeNetwork): void {
   const drawnMl = pump === null ? 0 : takeWater(state, source, request, WaterDraw.Metered);
   if (pump !== null) pump.flowMlPerMinute = drawnMl * TICKS_PER_MINUTE;
 
-  // --- tanks cover the shortfall, in id order ---
+  // --- sources, then tanks, cover the shortfall — both in id order ---
+  //
+  // Outlets go first because they are the point: on a juice network they are the ONLY supply,
+  // and on a network that somehow has both, draining the thing that regenerates before the
+  // thing that merely stores is the order that keeps the buffer for when it is needed.
   let availableMl = drawnMl;
-  const shortfall = totalDemand - drawnMl;
-  if (shortfall > 0) {
-    let remaining = shortfall;
-    for (let i = 0; i < tanks.length && remaining > 0; i++) {
-      const tank = tanks[i]!;
-      const take = tank.tankMl < remaining ? tank.tankMl : remaining;
-      if (take <= 0) continue;
-      tank.tankMl -= take;
-      tank.flowMlPerMinute -= take * TICKS_PER_MINUTE;
-      remaining -= take;
-      availableMl += take;
-    }
+  let remaining = totalDemand - drawnMl;
+  for (let i = 0; i < sources.length && remaining > 0; i++) {
+    const ref = sources[i]!;
+    const held = refMl(ref);
+    const take = held < remaining ? held : remaining;
+    if (take <= 0) continue;
+    addRefMl(ref, -take);
+    addRefFlow(ref, -take * TICKS_PER_MINUTE);
+    remaining -= take;
+    availableMl += take;
+  }
+  for (let i = 0; i < tanks.length && remaining > 0; i++) {
+    const tank = tanks[i]!;
+    const held = refMl(tank);
+    const take = held < remaining ? held : remaining;
+    if (take <= 0) continue;
+    addRefMl(tank, -take);
+    addRefFlow(tank, -take * TICKS_PER_MINUTE);
+    remaining -= take;
+    availableMl += take;
   }
 
   // --- the division ---
@@ -513,16 +717,21 @@ function advanceNetwork(state: WorldState, network: PipeNetwork): void {
   network.deliveredMl = deliveredMl;
 
   // --- and the surplus buffers, which is what a tank is for ---
+  //
+  // Outlets are deliberately absent here: a source that could absorb the surplus it just
+  // supplied would be a loop, and a converter's outlet fills from ITS OWN OPERATIONS or not at
+  // all. They fall out anyway — an outlet's `intakeMlPerTick` is zero — but the rule is stated
+  // rather than left to arithmetic.
   let surplus = availableMl - deliveredMl;
   for (let i = 0; i < tanks.length && surplus > 0; i++) {
     const tank = tanks[i]!;
-    const spec = machineSpec(tank.kind)!;
-    const room = effectiveTankCapacityMl(spec, tank) - tank.tankMl;
+    const spec = machineSpec(tank.machine.kind)!;
+    const room = tank.capacityMl - refMl(tank);
     const cap = room < spec.intakeMlPerTick ? room : spec.intakeMlPerTick;
     const put = cap < surplus ? cap : surplus;
     if (put <= 0) continue;
-    tank.tankMl += put;
-    tank.flowMlPerMinute += put * TICKS_PER_MINUTE;
+    addRefMl(tank, put);
+    addRefFlow(tank, put * TICKS_PER_MINUTE);
     surplus -= put;
   }
 }
@@ -543,7 +752,7 @@ function advanceNetwork(state: WorldState, network: PipeNetwork): void {
  */
 function distribute(
   network: PipeNetwork,
-  heads: readonly Machine[],
+  heads: readonly PortRef[],
   wants: readonly number[],
   availableMl: number,
 ): number {
@@ -594,14 +803,15 @@ function distribute(
 
   let delivered = 0;
   for (let i = 0; i < n; i++) {
-    const machine = heads[i]!;
+    const ref = heads[i]!;
     const amount = granted[i]!;
-    machine.tankMl += amount;
-    machine.flowMlPerMinute = amount * TICKS_PER_MINUTE;
+    addRefMl(ref, amount);
+    addRefFlow(ref, amount * TICKS_PER_MINUTE);
     // AMBER (plan §5): asked for water, got less. `LampState.Starved` is the existing amber
     // "look upstream" lamp, and upstream of a head is the pump — exactly the right place to
-    // send the player.
-    machine.throttled = amount < wants[i]!;
+    // send the player. On a converter's inlet, upstream is whatever machine makes that liquid,
+    // which is exactly as useful and one step further along the organ.
+    setRefThrottled(ref, amount < wants[i]!);
     delivered += amount;
   }
 

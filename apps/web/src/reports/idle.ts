@@ -191,7 +191,12 @@ function valueAddedPerOp(machine: MachineView): number {
   const spec = machineSpec(machine.kind as MachineKind);
   if (spec === null || spec.outputItem === null) return 0;
   const out = listPriceCents(spec.outputItem);
-  const inn = spec.inputItem === null ? 0 : listPriceCents(spec.inputItem);
+  // Recipes are multi-input since the soda line (`inputs: RecipeInput[]`); the value a
+  // machine adds is its output at list less EVERY input line at list. Liquids drawn from
+  // ports are deliberately not counted — water has no list price, and juice/syrup cost is
+  // already paid at the machine that consumed the cane.
+  let inn = 0;
+  for (const line of spec.inputs) inn += listPriceCents(line.item) * line.count;
   return out - inn;
 }
 

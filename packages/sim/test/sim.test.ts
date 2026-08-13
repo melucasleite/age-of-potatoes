@@ -77,7 +77,7 @@ describe('determinism', () => {
   it('pins the scripted run to a known hash', () => {
     // If this changes, either the sim changed on purpose or determinism broke by accident.
     // There is no third option, which is the entire point of the fixture.
-    expect(hashState(runScript(1234, 1000))).toBe('8a638616');
+    expect(hashState(runScript(1234, 1000))).toBe('79efacc8');
   });
 
   it('gives different seeds different worlds', () => {
@@ -137,7 +137,11 @@ describe('the trace', () => {
       '2:WaterTile',
       '3:SetMoveDirection',
       '33:SetMoveDirection',
-      '40:SellItem',
+      // The script's tick-40 `SellItem` is NOT here, and that absence is the point. It sells
+      // two potato seeds, and the sell bin no longer buys seeds — so the command is refused and
+      // a refused command never reaches the trace. The script keeps issuing it deliberately:
+      // `canary-1000`'s command list is frozen input, and a verb the simulation started
+      // rejecting is a finding worth keeping in front of whoever reads this next.
       '41:SetMoveDirection',
       '71:SetMoveDirection',
       '90:WaterTile',

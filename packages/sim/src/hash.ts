@@ -149,7 +149,11 @@ export function hashStateUint32(state: WorldState): number {
     d.num(machine.tileX);
     d.num(machine.tileY);
     d.num(machine.progress);
-    d.num(machine.inputCount);
+    // Recipe buffers, in recipe order, length first. Length first because a machine holding
+    // [1] and one holding [1, 0] are different worlds and a bare concatenation would say
+    // otherwise — the same reason every other collection here is preceded by its count.
+    d.num(machine.inputCounts.length);
+    for (let j = 0; j < machine.inputCounts.length; j++) d.num(machine.inputCounts[j]!);
     d.num(machine.outputCount);
     d.num(machine.tankMl);
     d.num(machine.condition);
@@ -168,6 +172,14 @@ export function hashStateUint32(state: WorldState): number {
     d.num(machine.scanCursor);
     d.num(machine.wateredCount);
     d.num(machine.skippedCount);
+    d.num(machine.ports.length);
+    for (let j = 0; j < machine.ports.length; j++) {
+      const port = machine.ports[j]!;
+      d.num(port.network);
+      d.num(port.ml);
+      d.num(port.flowMlPerMinute);
+      d.bool(port.throttled);
+    }
   }
 
   // Reservoirs, pipes, and networks. All three are already sorted — reservoirs and pipes by
@@ -385,6 +397,12 @@ export function findNonIntegerFields(state: WorldState): string[] {
     const machine = state.machines[i]!;
     check(`machines[${i}].progress`, machine.progress);
     check(`machines[${i}].tankMl`, machine.tankMl);
+    for (let j = 0; j < machine.inputCounts.length; j++) {
+      check(`machines[${i}].inputCounts[${j}]`, machine.inputCounts[j]!);
+    }
+    for (let j = 0; j < machine.ports.length; j++) {
+      check(`machines[${i}].ports[${j}].ml`, machine.ports[j]!.ml);
+    }
     check(`machines[${i}].condition`, machine.condition);
     check(`machines[${i}].opCount`, machine.opCount);
     check(`machines[${i}].cooldown`, machine.cooldown);

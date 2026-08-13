@@ -27,6 +27,8 @@ import {
   MOISTURE_DRY_THRESHOLD,
   MOISTURE_MAX,
   MachineRole,
+  type MachineSpec,
+  PortFlow,
   SPRINKLER_POUR_ML,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
@@ -34,12 +36,13 @@ import {
   cropSpec,
   grabberSpec,
   isNetworkConsumer,
+  isSellable,
   machineSpec,
   wiltStageForAge,
 } from './data';
 import { networkFlowPermille, tankTicksToEmpty } from './pipes';
 import { reservoirLevelPermille, reservoirThrottle } from './water';
-import { type CropTile, type WorldState, tileAt } from './state';
+import { type CropTile, type Machine, type WorldState, tileAt } from './state';
 import {
   bestTrailingGainCents,
   centiActiveHoursElapsed,
@@ -47,7 +50,11 @@ import {
   lifetimeNetEarningsCents,
   totalManualTouches,
 } from './stats';
-import { effectiveInputCapacity, effectiveOutputCapacity } from './upgrades';
+import {
+  effectiveInputCapacity,
+  effectiveOutputCapacity,
+  effectivePortCapacityMl,
+} from './upgrades';
 import { beatIndex, clampInt, divFloor, permille } from './units';
 
 /**
@@ -164,6 +171,41 @@ export interface MachineView {
   wateredCount: number;
   /** Tiles looked at, found wet, and skipped — lifetime. The Hub's saving is the gap. */
   skippedCount: number;
+
+  /**
+   * Every line of the recipe and every typed port, for the machines that have more than one of
+   * either. Empty for the whole chip line, which is why `inputItem` / `inputCount` above stay
+   * exactly what they were: the single-ingredient reading is still true of almost everything,
+   * and a HUD that never opens a Syrup Mixer never has to learn a second shape.
+   */
+  recipe: RecipeLineView[];
+  ports: MachinePortView[];
+}
+
+/** One line of a machine's recipe, already reduced: what it wants, how much, what it has. */
+export interface RecipeLineView {
+  item: number;
+  /** How many one operation takes. */
+  perOperation: number;
+  /** How many are sitting in the hopper. */
+  count: number;
+}
+
+/**
+ * One typed liquid port. THE ONE PLACE THE RENDERER LEARNS WHICH INLET IS STARVED.
+ *
+ * A Syrup Mixer amber on syrup and happy on water is one machine with two answers, and the
+ * machine-level `throttled` flag can only carry one of them. `flow` is `PortFlow`: 1 in, 2 out.
+ */
+export interface MachinePortView {
+  liquid: number;
+  flow: number;
+  network: number;
+  ml: number;
+  capacityMl: number;
+  fillPermille: number;
+  flowMlPerMinute: number;
+  throttled: number;
 }
 
 /**
@@ -275,6 +317,14 @@ export interface ZoneView {
 export interface InventoryView {
   item: number;
   count: number;
+  /**
+   * 1 when the sell bin will take this, 0 when it will refuse it — seeds, today.
+   *
+   * PROJECTED RATHER THAN LOOKED UP, so the HUD greys the affordance off the same fact the
+   * reducer refuses on. `isSellable()` is exported too and says the same thing; this is here so
+   * a list of inventory rows can be rendered without a spec lookup per row per frame.
+   */
+  sellable: number;
 }
 
 /** The numbers the HUD panel reads, already reduced. All integers, all cents or counts. */
@@ -557,6 +607,8 @@ function projectMachines(state: WorldState, out: WorldView): void {
         moistureSensing: 0,
         wateredCount: 0,
         skippedCount: 0,
+        recipe: [],
+        ports: [],
       };
       out.machines.push(mv);
     }
@@ -576,11 +628,13 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.conditionPermille = permille(machine.condition, CONDITION_MAX);
     mv.tankPermille =
       spec === null || spec.tankCapacityMl <= 0 ? 0 : permille(machine.tankMl, spec.tankCapacityMl);
-    mv.inputCount = machine.inputCount;
+    // The FIRST recipe line, which is the whole recipe for every machine but one. `mv.recipe`
+    // below carries the rest; nothing that only ever meets a Washer has to read it.
+    mv.inputCount = machine.inputCounts[0] ?? 0;
     mv.outputCount = machine.outputCount;
     mv.inputCapacity = spec === null ? 0 : effectiveInputCapacity(spec, machine);
     mv.outputCapacity = spec === null ? 0 : effectiveOutputCapacity(spec, machine);
-    mv.inputItem = spec === null || spec.inputItem === null ? 0 : spec.inputItem;
+    mv.inputItem = spec === null || spec.inputs.length === 0 ? 0 : spec.inputs[0]!.item;
     mv.outputItem = spec === null || spec.outputItem === null ? 0 : spec.outputItem;
     mv.overcookedCount = machine.overcookedCount;
     mv.overcookedItem =
@@ -600,9 +654,67 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.moistureSensing = spec !== null && spec.moistureSensing ? 1 : 0;
     mv.wateredCount = machine.wateredCount;
     mv.skippedCount = machine.skippedCount;
+    projectRecipe(machine, spec, mv);
+    projectPorts(machine, spec, mv);
   }
 
   out.machines.length = count;
+}
+
+/**
+ * The recipe and the ports, written into the view's own reused arrays.
+ *
+ * REUSED, NOT REALLOCATED, like every other buffer in this file: `view()` is called every frame
+ * and a fresh array per machine per frame is exactly the allocation churn the projection buffer
+ * exists to avoid. The arrays are truncated rather than emptied for the same reason.
+ */
+function projectRecipe(machine: Machine, spec: MachineSpec | null, mv: MachineView): void {
+  const count = spec === null ? 0 : spec.inputs.length;
+  for (let i = 0; i < count; i++) {
+    const line = spec!.inputs[i]!;
+    let lv = mv.recipe[i];
+    if (lv === undefined) {
+      lv = { item: 0, perOperation: 0, count: 0 };
+      mv.recipe.push(lv);
+    }
+    lv.item = line.item;
+    lv.perOperation = line.count;
+    lv.count = machine.inputCounts[i] ?? 0;
+  }
+  mv.recipe.length = count;
+}
+
+function projectPorts(machine: Machine, spec: MachineSpec | null, mv: MachineView): void {
+  const count = spec === null ? 0 : Math.min(spec.ports.length, machine.ports.length);
+  for (let i = 0; i < count; i++) {
+    const portSpec = spec!.ports[i]!;
+    const port = machine.ports[i]!;
+    const capacityMl = effectivePortCapacityMl(portSpec, machine);
+
+    let pv = mv.ports[i];
+    if (pv === undefined) {
+      pv = {
+        liquid: 0,
+        flow: 0,
+        network: 0,
+        ml: 0,
+        capacityMl: 0,
+        fillPermille: 0,
+        flowMlPerMinute: 0,
+        throttled: 0,
+      };
+      mv.ports.push(pv);
+    }
+    pv.liquid = portSpec.liquid;
+    pv.flow = portSpec.flow;
+    pv.network = port.network;
+    pv.ml = port.ml;
+    pv.capacityMl = capacityMl;
+    pv.fillPermille = permille(port.ml, capacityMl);
+    pv.flowMlPerMinute = port.flowMlPerMinute;
+    pv.throttled = port.throttled ? 1 : 0;
+  }
+  mv.ports.length = count;
 }
 
 function projectReservoirs(state: WorldState, out: WorldView): void {
@@ -945,8 +1057,31 @@ function lampFor(state: WorldState, index: number): LampState {
   if (spec.workPerOperation <= 0) return LampState.Off;
   // Blocked before starved: a machine that is both is a downstream problem, and plan §5's
   // grammar says a red lamp means look downstream while amber means look upstream.
-  if (machine.outputCount >= effectiveOutputCapacity(spec, machine)) return LampState.Blocked;
-  if (machine.inputCount <= 0) return LampState.Starved;
+  if (spec.outputItem !== null && machine.outputCount >= effectiveOutputCapacity(spec, machine)) {
+    return LampState.Blocked;
+  }
+  for (let i = 0; i < spec.ports.length; i++) {
+    const portSpec = spec.ports[i]!;
+    const port = machine.ports[i];
+    if (port === undefined) continue;
+    // A full OUTLET is red for the same reason a full basket is: the machine has finished
+    // something and nobody has come for it. A Juicer with 4 litres of juice and no kettle on
+    // the end of the pipe is a blocked machine, not a broken one.
+    if (portSpec.flow === PortFlow.Outlet) {
+      if (port.ml + portSpec.mlPerOperation > effectivePortCapacityMl(portSpec, machine)) {
+        return LampState.Blocked;
+      }
+      continue;
+    }
+    // And a dry INLET is blue — "the utility behind me is missing" — while a throttled one is
+    // amber. Same grammar as a piped sprinkler, because it is the same situation one machine
+    // further down the organ.
+    if (port.ml < portSpec.mlPerOperation) return LampState.UtilityMissing;
+    if (port.throttled) return LampState.Starved;
+  }
+  for (let i = 0; i < spec.inputs.length; i++) {
+    if ((machine.inputCounts[i] ?? 0) < spec.inputs[i]!.count) return LampState.Starved;
+  }
   return LampState.Running;
 }
 
@@ -956,11 +1091,12 @@ function projectInventory(state: WorldState, out: WorldView): void {
     const slot = state.inventory[i]!;
     let iv = out.inventory[i];
     if (iv === undefined) {
-      iv = { item: 0, count: 0 };
+      iv = { item: 0, count: 0, sellable: 0 };
       out.inventory.push(iv);
     }
     iv.item = slot.item;
     iv.count = slot.count;
+    iv.sellable = isSellable(slot.item) ? 1 : 0;
   }
   out.inventory.length = count;
 }

@@ -226,11 +226,20 @@ function grabberPlace(state: WorldState, grabber: Grabber): boolean {
   const machine = machineAt(state, to.tileX, to.tileY);
   if (machine !== null) {
     const machineSpecFor = machineSpec(machine.kind);
-    if (machineSpecFor === null || machineSpecFor.inputItem === null) return false;
-    if (machineSpecFor.inputItem !== grabber.held) return false;
-    if (machine.inputCount >= effectiveInputCapacity(machineSpecFor, machine)) return false;
-    machine.inputCount += 1;
-    return true;
+    if (machineSpecFor === null) return false;
+    // An arm puts what it is holding into the line of the recipe that wants it, and stands there
+    // holding it if no line does. That is the same "look downstream" stall a blocked arm has
+    // always had — a Combo Packer with a full chip hopper and an empty soda hopper takes the
+    // soda and refuses the chips, which is the machine telling the player which belt is behind.
+    for (let i = 0; i < machineSpecFor.inputs.length; i++) {
+      if (machineSpecFor.inputs[i]!.item !== grabber.held) continue;
+      if ((machine.inputCounts[i] ?? 0) >= effectiveInputCapacity(machineSpecFor, machine)) {
+        return false;
+      }
+      machine.inputCounts[i] = (machine.inputCounts[i] ?? 0) + 1;
+      return true;
+    }
+    return false;
   }
 
   return false;

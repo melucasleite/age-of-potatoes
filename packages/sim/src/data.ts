@@ -30,8 +30,9 @@ export const CropId = {
 export type CropId = (typeof CropId)[keyof typeof CropId];
 
 /**
- * Plan §5 caps the recipe graph at ~50 items. We are at 20. Numeric values are permanent —
- * they are in every save and on every belt.
+ * Plan §5 caps the recipe graph at ~50 items. We are at **26 items plus 5 liquids = 31 nodes**
+ * (the soda line spent 6 item slots and 4 liquid slots). Numeric values are permanent — they
+ * are in every save and on every belt.
  */
 export const ItemId = {
   PotatoSeed: 1,
@@ -72,6 +73,24 @@ export const ItemId = {
 
   /** One trip's worth of maintenance. Plan §3's middle rung between hands and drones. */
   RepairKit: 20,
+
+  // The soda line. Plan §4: "cane→juice→simple syrup; kola→powder; syrup + carbonated water
+  // + bottle → soda (~$16); six-packs and the Snack Combo as gentle bundle premiums."
+  //
+  // JUICE, SYRUP, AND CARBONATED WATER ARE NOT HERE. They are LIQUIDS — they ride pipes, not
+  // belts, and giving them item ids as well would be the one thing plan §5 rules out flat:
+  // "solids ride belts, liquids ride pipes, and they meet only inside machines with typed
+  // ports." An id in both spaces is a bucket of syrup on a conveyor.
+  /** Bought at the stand. There is no kola crop and there will not be one (§5, §7 ruling 8). */
+  KolaNut: 21,
+  /** §5: "flavors are powders" — the Syrup Mixer's belt inlet, and the only solid it eats. */
+  KolaPowder: 22,
+  /** §4's store-bought consumable. Vertical Integration's crafted route is a stub, not a lie. */
+  Bottle: 23,
+  Soda: 24,
+  SixPack: 25,
+  /** Chips + soda. The item that makes running both lines beat running either one twice. */
+  SnackCombo: 26,
 } as const;
 
 export type ItemId = (typeof ItemId)[keyof typeof ItemId];
@@ -99,6 +118,21 @@ export const MachineKind = {
   PipedSprinkler: 11,
   IrrigationHub: 12,
   Recirculator: 13,
+
+  // The soda line — plan §5's PIPE ORGAN, where the chip line is a belt cathedral. Every one
+  // of these is an ordinary `Converter`: the roles, the buffers, the dials, the wear, and the
+  // demand-pull stop are the same code the Washer runs. What is new is that a recipe may name
+  // several inputs and either side of it may be a liquid.
+  Juicer: 14,
+  Kettle: 15,
+  Grinder: 16,
+  /** §5's centrepiece: two pipe inlets and one belt inlet, the one place the layers meet. */
+  SyrupMixer: 17,
+  Carbonator: 18,
+  /** §5: "machines mostly 2×2 (Bottler 3×2 flagship)". */
+  Bottler: 19,
+  SixPacker: 20,
+  ComboPacker: 21,
 } as const;
 
 export type MachineKind = (typeof MachineKind)[keyof typeof MachineKind];
@@ -106,13 +140,22 @@ export type MachineKind = (typeof MachineKind)[keyof typeof MachineKind];
 /**
  * What a pipe carries. Plan §5: **one liquid per network, enforced**.
  *
- * Water is the only one the plumbing item needs. Syrup, juice, and carbonated water arrive
- * with the soda line and are deliberately not invented here — a liquid whose machines do not
- * exist is a liquid that lies. The ids are save surface and permanent.
+ * FOUR LIQUIDS MEANS FOUR NETWORKS, AND THAT CONSTRAINT IS THE PUZZLE. The soda line does not
+ * relax the one-liquid rule by an inch; it is the first thing in the game that makes the rule
+ * *cost* something, which is what turns pipe routing into the mid-game layout problem §5 wants.
+ *
+ * The ids are save surface and permanent. **5 is deliberately left empty**: it is kola syrup,
+ * which the renderer already has a colour for and Vertical Integration will need, and skipping
+ * a number now is cheaper than renumbering a shipped save later.
  */
 export const LiquidId = {
   None: 0,
   Water: 1,
+  CaneJuice: 2,
+  SimpleSyrup: 3,
+  CarbonatedWater: 4,
+  // 5 — reserved for kola syrup.
+  SodaSyrup: 6,
 } as const;
 
 export type LiquidId = (typeof LiquidId)[keyof typeof LiquidId];
@@ -128,8 +171,22 @@ export interface LiquidSpec {
   readonly tintRgb: number;
 }
 
+/**
+ * The tints are lifted from the renderer's `render/liquids.ts` vocabulary, which was authored
+ * against `art/palette/master.json` and checked by a test that fails when two steps of the soda
+ * chain converge in RGB. The sim owns the table and its `tintRgb` wins, so adopting the colours
+ * that were already measured is strictly better than picking new ones nobody has looked at.
+ *
+ * Water keeps the blue it shipped with rather than moving to the renderer's near-identical
+ * fallback: it is on screen in every existing world, and a colour that shifts under a save is a
+ * change with no upside.
+ */
 export const LIQUID_SPECS: readonly LiquidSpec[] = [
   { id: LiquidId.Water, slug: 'water', tintRgb: 0x4f9ed8 },
+  { id: LiquidId.CaneJuice, slug: 'cane-juice', tintRgb: 0x74a340 },
+  { id: LiquidId.SimpleSyrup, slug: 'simple-syrup', tintRgb: 0xd9ab6e },
+  { id: LiquidId.CarbonatedWater, slug: 'carbonated-water', tintRgb: 0x9fdcef },
+  { id: LiquidId.SodaSyrup, slug: 'soda-syrup', tintRgb: 0x9e2f27 },
 ];
 
 export function liquidSpec(id: LiquidId): LiquidSpec | null {
@@ -146,10 +203,27 @@ export interface ItemSpec {
   readonly id: ItemId;
   /** Stable slug for the renderer's atlas lookup and for save debugging. */
   readonly slug: string;
-  /** List price in cents. Everything is sellable (plan §5). */
+  /** List price in cents. */
   readonly listPriceCents: number;
-  /** True for items the roadside stand will sell *to* the player. Seeds, for now. */
+  /** True for items the roadside stand will sell *to* the player. Seeds and consumables. */
   readonly purchasable: boolean;
+  /**
+   * True for items the sell bin will take. **False for seeds**, and that is the whole reason
+   * this field exists.
+   *
+   * A SELLABLE SEED IS A SOFTLOCK WITH A PRICE TAG. Seeds are the one thing in the game the
+   * player can run out of permanently — plan §4's anti-softlock floor is that a harvested
+   * potato always hands one back — and a bin that buys them at list turns "I clicked the wrong
+   * stack" into a world that can no longer plant anything. The stand sells them *to* you at
+   * the same price it would pay, so it is not even a trade; it is a way to lose.
+   *
+   * IT IS DATA RATHER THAN A CHECK ON `purchasable`, though today the two are exact opposites.
+   * They are different facts — "the stand stocks it" and "the bin takes it" — and the moment
+   * one item is both (a bottle the player over-bought and wants to dump) or neither, a rule
+   * that inferred one from the other would be silently wrong. `test/sim.test.ts` pins that
+   * every seed is unsellable rather than pinning the two flags to be inverses.
+   */
+  readonly sellable: boolean;
 }
 
 /**
@@ -190,6 +264,52 @@ export function rusticStylePriceCents(): number {
 export const REPAIR_KIT_PRICE_CENTS = 800;
 
 /**
+ * The end of the chip chain, hoisted for the same reason seasoned chips are: the Snack Combo's
+ * price is arithmetic on it rather than a second literal that drifts.
+ */
+export const BAGGED_CHIPS_PRICE_CENTS = 2000;
+
+/** Plan §4: "syrup + carbonated water + bottle → soda (~$16)". This is the ~$16. */
+export const SODA_PRICE_CENTS = 1600;
+
+/**
+ * The two bundles, and the reason they exist.
+ *
+ * Plan §4 calls them "gentle bundle premiums", and plan §8's release gate for the soda wing is
+ * *"do players run both lines, or does one dominate into decoration?"* — the **Snack Combo is
+ * the answer to that gate**, not a shop feature. One bagged chip plus one soda pays 125% of the
+ * two sold separately, so a mature chip line and a growing soda line beat either line doubled,
+ * and neither district becomes scenery.
+ *
+ * The six-pack is the smaller premium (110%) on purpose: it bundles one product with itself, so
+ * it rewards throughput rather than breadth, and pricing it as generously as the Combo would
+ * make the Combo pointless.
+ *
+ * Both are computed from the real prices below rather than typed as literals — the same rule
+ * `rusticStylePriceCents` follows, and for the same reason: a hardcoded 4500 is a number that
+ * silently stops being 125% the first time a bag of chips is repriced.
+ */
+export const SIX_PACK_COUNT = 6;
+export const SIX_PACK_PREMIUM_NUMERATOR = 110;
+export const SIX_PACK_PREMIUM_DENOMINATOR = 100;
+export const SNACK_COMBO_PREMIUM_NUMERATOR = 125;
+export const SNACK_COMBO_PREMIUM_DENOMINATOR = 100;
+
+export function sixPackPriceCents(): number {
+  return divFloor(
+    SODA_PRICE_CENTS * SIX_PACK_COUNT * SIX_PACK_PREMIUM_NUMERATOR,
+    SIX_PACK_PREMIUM_DENOMINATOR,
+  );
+}
+
+export function snackComboPriceCents(): number {
+  return divFloor(
+    (BAGGED_CHIPS_PRICE_CENTS + SODA_PRICE_CENTS) * SNACK_COMBO_PREMIUM_NUMERATOR,
+    SNACK_COMBO_PREMIUM_DENOMINATOR,
+  );
+}
+
+/**
  * Plan §4's chip ladder, in cents: potato 200 → washed 300 → slices 450 → plain 900 →
  * seasoned 1400 → bagged 2000. Each step adds more absolute value than the last, which is
  * what makes finishing the line worth the belts it takes to feed it.
@@ -199,17 +319,55 @@ export const REPAIR_KIT_PRICE_CENTS = 800;
  * literals here can never drift away from the rule.
  */
 export const ITEM_SPECS: readonly ItemSpec[] = [
-  { id: ItemId.PotatoSeed, slug: 'potato-seed', listPriceCents: 50, purchasable: true },
-  { id: ItemId.RussetPotato, slug: 'russet-potato', listPriceCents: 200, purchasable: false },
-  { id: ItemId.BaggedChips, slug: 'bagged-chips', listPriceCents: 2000, purchasable: false },
-  { id: ItemId.WashedPotato, slug: 'washed-potato', listPriceCents: 300, purchasable: false },
-  { id: ItemId.PotatoSlices, slug: 'potato-slices', listPriceCents: 450, purchasable: false },
-  { id: ItemId.PlainChips, slug: 'plain-chips', listPriceCents: 900, purchasable: false },
+  // Seeds: bought at the stand, never sold back. See `ItemSpec.sellable`.
+  {
+    id: ItemId.PotatoSeed,
+    slug: 'potato-seed',
+    listPriceCents: 50,
+    purchasable: true,
+    sellable: false,
+  },
+  {
+    id: ItemId.RussetPotato,
+    slug: 'russet-potato',
+    listPriceCents: 200,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.BaggedChips,
+    slug: 'bagged-chips',
+    listPriceCents: BAGGED_CHIPS_PRICE_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.WashedPotato,
+    slug: 'washed-potato',
+    listPriceCents: 300,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.PotatoSlices,
+    slug: 'potato-slices',
+    listPriceCents: 450,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.PlainChips,
+    slug: 'plain-chips',
+    listPriceCents: 900,
+    purchasable: false,
+    sellable: true,
+  },
   {
     id: ItemId.SeasonedChips,
     slug: 'seasoned-chips',
     listPriceCents: SEASONED_CHIPS_PRICE_CENTS,
     purchasable: false,
+    sellable: true,
   },
   {
     id: ItemId.RusticStyleChips,
@@ -219,23 +377,118 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
       RUSTIC_STYLE_DENOMINATOR,
     ),
     purchasable: false,
+    sellable: true,
   },
-  { id: ItemId.DayOldPotato, slug: 'day-old-potato', listPriceCents: 100, purchasable: false },
-  { id: ItemId.Compost, slug: 'compost', listPriceCents: 20, purchasable: false },
-  { id: ItemId.CaneSeed, slug: 'cane-seed', listPriceCents: 80, purchasable: true },
-  { id: ItemId.SugarCane, slug: 'sugar-cane', listPriceCents: 250, purchasable: false },
-  { id: ItemId.DayOldCane, slug: 'day-old-cane', listPriceCents: 125, purchasable: false },
-  { id: ItemId.CornSeed, slug: 'corn-seed', listPriceCents: 70, purchasable: true },
-  { id: ItemId.Corn, slug: 'corn', listPriceCents: 220, purchasable: false },
-  { id: ItemId.DayOldCorn, slug: 'day-old-corn', listPriceCents: 110, purchasable: false },
-  { id: ItemId.ChiliSeed, slug: 'chili-seed', listPriceCents: 90, purchasable: true },
-  { id: ItemId.ChiliPepper, slug: 'chili-pepper', listPriceCents: 300, purchasable: false },
-  { id: ItemId.DayOldChili, slug: 'day-old-chili', listPriceCents: 150, purchasable: false },
+  {
+    id: ItemId.DayOldPotato,
+    slug: 'day-old-potato',
+    listPriceCents: 100,
+    purchasable: false,
+    sellable: true,
+  },
+  { id: ItemId.Compost, slug: 'compost', listPriceCents: 20, purchasable: false, sellable: true },
+  {
+    id: ItemId.CaneSeed,
+    slug: 'cane-seed',
+    listPriceCents: 80,
+    purchasable: true,
+    sellable: false,
+  },
+  {
+    id: ItemId.SugarCane,
+    slug: 'sugar-cane',
+    listPriceCents: 250,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.DayOldCane,
+    slug: 'day-old-cane',
+    listPriceCents: 125,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.CornSeed,
+    slug: 'corn-seed',
+    listPriceCents: 70,
+    purchasable: true,
+    sellable: false,
+  },
+  { id: ItemId.Corn, slug: 'corn', listPriceCents: 220, purchasable: false, sellable: true },
+  {
+    id: ItemId.DayOldCorn,
+    slug: 'day-old-corn',
+    listPriceCents: 110,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.ChiliSeed,
+    slug: 'chili-seed',
+    listPriceCents: 90,
+    purchasable: true,
+    sellable: false,
+  },
+  {
+    id: ItemId.ChiliPepper,
+    slug: 'chili-pepper',
+    listPriceCents: 300,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.DayOldChili,
+    slug: 'day-old-chili',
+    listPriceCents: 150,
+    purchasable: false,
+    sellable: true,
+  },
   {
     id: ItemId.RepairKit,
     slug: 'repair-kit',
     listPriceCents: REPAIR_KIT_PRICE_CENTS,
     purchasable: true,
+    sellable: true,
+  },
+
+  // --- the soda line (plan §4's chain, §5's pipe organ) ---
+  //
+  // Kola arrives as a bought nut rather than a grown one: plan §5 caps the crop roster at
+  // eight and §7 ruling 8 closes it, so "kola → powder" is a CONSUMABLE LADDER (§4: "oil,
+  // seasoning, bags, bottles start store-bought") rather than a ninth crop. The grinder is
+  // the crafted rung; the nut is the bought one.
+  { id: ItemId.KolaNut, slug: 'kola-nut', listPriceCents: 150, purchasable: true, sellable: true },
+  {
+    id: ItemId.KolaPowder,
+    slug: 'kola-powder',
+    listPriceCents: 220,
+    purchasable: false,
+    sellable: true,
+  },
+  // §4: bottles start store-bought at a posted, stable price. The Evaporator and the oil press
+  // are stubs — see `README.md`'s Vertical Integration note.
+  { id: ItemId.Bottle, slug: 'bottle', listPriceCents: 120, purchasable: true, sellable: true },
+  {
+    id: ItemId.Soda,
+    slug: 'soda',
+    listPriceCents: SODA_PRICE_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.SixPack,
+    slug: 'six-pack',
+    listPriceCents: sixPackPriceCents(),
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.SnackCombo,
+    slug: 'snack-combo',
+    listPriceCents: snackComboPriceCents(),
+    purchasable: false,
+    sellable: true,
   },
 ];
 
@@ -255,6 +508,19 @@ export function listPriceCents(id: ItemId): number {
 export function isPurchasable(id: ItemId): boolean {
   const spec = itemSpec(id);
   return spec !== null && spec.purchasable;
+}
+
+/**
+ * Whether the sell bin will take this at all.
+ *
+ * The reducer refuses a `SellItem` for anything this says no to, and the HUD reads the same
+ * function to grey the affordance out — one rule, both sides, the way `pipePathRefusal` is
+ * shared by the placement ghost and the reducer. An item nobody defined is not sellable:
+ * defaulting the other way would make an id typo pay out.
+ */
+export function isSellable(id: ItemId): boolean {
+  const spec = itemSpec(id);
+  return spec !== null && spec.sellable;
 }
 
 // --- withering and spoilage -------------------------------------------------------
@@ -572,6 +838,56 @@ export function isNetworkConsumer(role: MachineRole): boolean {
   return role === MachineRole.PipedSprinkler || role === MachineRole.Tank;
 }
 
+/**
+ * One line of a recipe: an item and how many of it one operation eats.
+ *
+ * CONSUMPTION IS ATOMIC. A machine takes every line of its recipe or it takes none, so a
+ * half-consumed operation cannot exist — there is no state in which a Bottler has swallowed the
+ * bottle and is waiting for the syrup. That is checked once in `advanceConverter` before
+ * anything is decremented, and it is why the Snack Combo cannot eat a bag of chips and stall.
+ */
+export interface RecipeInput {
+  readonly item: ItemId;
+  readonly count: number;
+}
+
+/** Which way a typed port moves liquid. */
+export const PortFlow = {
+  /** Draws from its network into the machine's own buffer. */
+  Intake: 1,
+  /** Fills from the machine's operations, and gives to its network's consumers. */
+  Outlet: 2,
+} as const;
+
+export type PortFlow = (typeof PortFlow)[keyof typeof PortFlow];
+
+/**
+ * ONE TYPED PORT — plan §5's "solids ride belts, liquids ride pipes, and they meet only inside
+ * machines with typed ports", written as data.
+ *
+ * The port declares WHICH liquid it accepts, and that declaration is the enforcement: a port
+ * only ever attaches to a network carrying its own liquid, and `pipePathRefusal` refuses a run
+ * that would present any other liquid to a machine that has ports at all. The Syrup Mixer's
+ * "two pipe inlets and one belt inlet" is three lines of data, not a new machine class.
+ *
+ * AN OUTLET IS A TANK THAT FILLS ITSELF. It joins its network exactly as a `Tank` does — it
+ * covers the shortfall of whatever is drawing on the other end, it never accepts surplus, and
+ * it is not a pump. That is what lets the whole soda line run on the existing one-ledger model
+ * with no second source anywhere: a juice network has **no pump at all**, and plan §5's "one
+ * pump per network" is not bent, it is unused. The Recirculator established this exact grammar
+ * a release early — a producer pours into a tank, never into the pipes.
+ */
+export interface LiquidPortSpec {
+  readonly liquid: LiquidId;
+  readonly flow: PortFlow;
+  /** This port's own buffer, in millilitres. Scaled by the Capacity dial like any tank. */
+  readonly capacityMl: number;
+  /** The most an INTAKE port pulls off its network per tick. Zero on an outlet. */
+  readonly intakeMlPerTick: number;
+  /** Millilitres one operation consumes (intake) or produces (outlet). */
+  readonly mlPerOperation: number;
+}
+
 export interface MachineSpec {
   readonly kind: MachineKind;
   readonly slug: string;
@@ -592,7 +908,21 @@ export interface MachineSpec {
   readonly tankCapacityMl: number;
   /** Condition lost per completed operation. Wear is per-operation, never per second. */
   readonly wearPerOperation: number;
-  readonly inputItem: ItemId | null;
+  /**
+   * Every solid one operation eats, in a fixed order. Empty for a machine that eats no solids.
+   *
+   * A LIST RATHER THAN THE SINGLE `inputItem` IT REPLACED, and every machine in the game went
+   * through it — there is one recipe executor, not a general one beside a legacy one. The chip
+   * line's rows are one-line recipes; the Snack Combo's is two lines; the six-pack's is one
+   * line with a count of six. `machine.inputCounts` is sized from this and indexed by it.
+   */
+  readonly inputs: readonly RecipeInput[];
+  /**
+   * The one solid an operation makes, or null when the output is a liquid and leaves through an
+   * outlet port instead. Exactly one of the two, never both: a machine that produced a bottle
+   * *and* a litre of something would need two demand-pull answers to "is there room", and the
+   * player would have no way to see which one stopped it.
+   */
   readonly outputItem: ItemId | null;
   /**
    * What this machine's output turns into when it is left sitting in a full buffer, or null
@@ -613,8 +943,30 @@ export interface MachineSpec {
   // has no pipe connection at all and the ledger skips it, so a belt machine can never be
   // accidentally plumbed and a pipe can never carry a potato.
 
-  /** The liquid this machine's pipe port accepts, or `LiquidId.None` for no port. */
+  /**
+   * The liquid this machine's pipe port accepts, or `LiquidId.None` for no port.
+   *
+   * For the plumbing machines — Pump, Tank, heads, Recirculator — this IS their port, driven by
+   * `role` in the ledger, exactly as it has been since the liquid layer shipped. For a machine
+   * with a `ports` list this field is the FIRST port's liquid, restated: the renderer reads it
+   * as "does this machine have a typed port at all", and `test/factory.test.ts` pins the two to
+   * agree so the restatement cannot drift into a second opinion.
+   */
   readonly liquid: LiquidId;
+  /**
+   * Every typed port a *converter* has, in a fixed order — an empty list for the plumbing
+   * machines, whose single port is the `liquid` / `intakeMlPerTick` / `tankCapacityMl` trio
+   * above and always has been.
+   *
+   * THE SPLIT IS DELIBERATE AND IT IS NOT TWO CODE PATHS TO THE SAME PLACE. A head, a tank and
+   * a pump are *made of* their plumbing — the ledger dispatches them on `role` and they have no
+   * recipe at all. A converter's ports are ingredients: they fill buffers that an operation then
+   * consumes atomically alongside its solids. Collapsing the two would mean giving the Pump a
+   * recipe, and `machine.tankMl` — the barrel a player refills BY HAND — would become port state
+   * that hand-refilling has to reach through. The ledger reads both lists in one loop; it is the
+   * MEANING that differs, not the mechanism.
+   */
+  readonly ports: readonly LiquidPortSpec[];
   /** A pump's throughput at a full source, in ml per minute. Zero for everything else. */
   readonly pumpRateMlPerMinute: number;
   /**
@@ -729,11 +1081,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 0,
     tankCapacityMl: 0,
     wearPerOperation: 0,
-    inputItem: null,
+    inputs: [],
     outputItem: null,
     overcookOutputItem: null,
     requiresTech: null,
     liquid: LiquidId.None,
+    ports: [],
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
@@ -756,11 +1109,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 20,
     tankCapacityMl: 0,
     wearPerOperation: 5,
-    inputItem: ItemId.RussetPotato,
+    inputs: [{ item: ItemId.RussetPotato, count: 1 }],
     outputItem: ItemId.BaggedChips,
     overcookOutputItem: null,
     requiresTech: null,
     liquid: LiquidId.None,
+    ports: [],
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
@@ -781,11 +1135,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 0,
     tankCapacityMl: 30_000,
     wearPerOperation: 1,
-    inputItem: null,
+    inputs: [],
     outputItem: null,
     overcookOutputItem: null,
     requiresTech: null,
     liquid: LiquidId.None,
+    ports: [],
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: SPRINKLER_RADIUS_TILES,
@@ -804,11 +1159,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 20,
     tankCapacityMl: 0,
     wearPerOperation: 1,
-    inputItem: ItemId.RussetPotato,
+    inputs: [{ item: ItemId.RussetPotato, count: 1 }],
     outputItem: ItemId.WashedPotato,
     overcookOutputItem: null,
     requiresTech: TechId.WashAndSlice,
     liquid: LiquidId.None,
+    ports: [],
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
@@ -827,11 +1183,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 20,
     tankCapacityMl: 0,
     wearPerOperation: 2,
-    inputItem: ItemId.WashedPotato,
+    inputs: [{ item: ItemId.WashedPotato, count: 1 }],
     outputItem: ItemId.PotatoSlices,
     overcookOutputItem: null,
     requiresTech: TechId.WashAndSlice,
     liquid: LiquidId.None,
+    ports: [],
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
@@ -851,13 +1208,14 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 20,
     tankCapacityMl: 0,
     wearPerOperation: 3,
-    inputItem: ItemId.PotatoSlices,
+    inputs: [{ item: ItemId.PotatoSlices, count: 1 }],
     outputItem: ItemId.PlainChips,
     // The only machine in the game whose output spoils, and only when the player's layout
     // leaves it nowhere to go. See `OVERCOOK_BLOCKED_TICKS`.
     overcookOutputItem: ItemId.RusticStyleChips,
     requiresTech: TechId.Fryer,
     liquid: LiquidId.None,
+    ports: [],
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
@@ -876,11 +1234,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 20,
     tankCapacityMl: 0,
     wearPerOperation: 2,
-    inputItem: ItemId.PlainChips,
+    inputs: [{ item: ItemId.PlainChips, count: 1 }],
     outputItem: ItemId.SeasonedChips,
     overcookOutputItem: null,
     requiresTech: TechId.Finishing,
     liquid: LiquidId.None,
+    ports: [],
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
@@ -899,11 +1258,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 20,
     tankCapacityMl: 0,
     wearPerOperation: 1,
-    inputItem: ItemId.SeasonedChips,
+    inputs: [{ item: ItemId.SeasonedChips, count: 1 }],
     outputItem: ItemId.BaggedChips,
     overcookOutputItem: null,
     requiresTech: TechId.Finishing,
     liquid: LiquidId.None,
+    ports: [],
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
@@ -924,11 +1284,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 0,
     tankCapacityMl: 0,
     wearPerOperation: 0,
-    inputItem: null,
+    inputs: [],
     outputItem: null,
     overcookOutputItem: null,
     requiresTech: TechId.Pumps,
     liquid: LiquidId.Water,
+    ports: [],
     pumpRateMlPerMinute: PUMP_RATE_ML_PER_MINUTE,
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
@@ -951,11 +1312,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     /** 1,000 L — about a hundred seconds of a pump at full tilt. */
     tankCapacityMl: 1_000_000,
     wearPerOperation: 0,
-    inputItem: null,
+    inputs: [],
     outputItem: null,
     overcookOutputItem: null,
     requiresTech: TechId.Pumps,
     liquid: LiquidId.Water,
+    ports: [],
     pumpRateMlPerMinute: 0,
     /** A tank fills fast enough to soak up a whole pump's surplus and no faster. */
     intakeMlPerTick: 600,
@@ -980,11 +1342,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     /** Ten pours of head-room, so a brief throttle does not stop the cycle dead. */
     tankCapacityMl: 15_000,
     wearPerOperation: 0,
-    inputItem: null,
+    inputs: [],
     outputItem: null,
     overcookOutputItem: null,
     requiresTech: TechId.PipedSprinklers,
     liquid: LiquidId.Water,
+    ports: [],
     pumpRateMlPerMinute: 0,
     /** 400 ml/tick — a touch over the 375 it averages, so it stays topped up when it can. */
     intakeMlPerTick: 400,
@@ -1008,11 +1371,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 0,
     tankCapacityMl: 60_000,
     wearPerOperation: 0,
-    inputItem: null,
+    inputs: [],
     outputItem: null,
     overcookOutputItem: null,
     requiresTech: TechId.IrrigationHub,
     liquid: LiquidId.Water,
+    ports: [],
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 800,
     coverageRadiusTiles: IRRIGATION_HUB_RADIUS_TILES,
@@ -1036,11 +1400,331 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 0,
     tankCapacityMl: 0,
     wearPerOperation: 0,
-    inputItem: null,
+    inputs: [],
     outputItem: null,
     overcookOutputItem: null,
     requiresTech: TechId.Recirculator,
     liquid: LiquidId.Water,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+
+  // --- the soda line (plan §5's pipe organ) ---------------------------------------------
+  //
+  // THE RATIO IS AGAIN THE LESSON, AND IT IS A DIFFERENT LESSON. The chip line teaches 1:1:2:1:1
+  // with a visibly bored Slicer; the soda line teaches that a ratio can be a *volume* — the
+  // Bottler eats exactly what one Mixer and one Carbonator make, so the three run 1:1:1 in
+  // lockstep, and a player who builds a second Bottler sees the pipes go amber rather than a
+  // machine go idle. Upstream the numbers are 1:1:2 (juicer : kettle : mixer), which falls out
+  // of one cane making two bottles' worth of syrup rather than being tuned in afterwards.
+  //
+  // The whole chain, in one place:
+  //
+  //   1 Sugar Cane        → Juicer     → 1000 ml cane juice
+  //   1000 ml cane juice  → Kettle     →  250 ml simple syrup   (a reduction — hence the boil)
+  //   1 Kola Nut          → Grinder    → 1 Kola Powder
+  //   125 ml simple syrup + 125 ml water + 1 Kola Powder
+  //                       → SyrupMixer →  250 ml soda syrup
+  //   750 ml water        → Carbonator →  750 ml carbonated water
+  //   250 ml soda syrup + 750 ml carbonated water + 1 Bottle
+  //                       → Bottler    → 1 Soda ($16)
+  //
+  // so one cane is two bottles, and a bottle costs 125¢ of cane plus 220¢ of powder plus 120¢
+  // of bottle against a $16 list. Chips still clear more per machine-second, which is plan §3's
+  // "chips lead soda by half an era" holding on its own; the Snack Combo is what stops that
+  // from making the chip line the only line worth running.
+  {
+    kind: MachineKind.Juicer,
+    slug: 'juicer',
+    role: MachineRole.Converter,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 20_000,
+    workPerOperation: 30 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 20,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 2,
+    inputs: [{ item: ItemId.SugarCane, count: 1 }],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.SodaPress,
+    liquid: LiquidId.CaneJuice,
+    // Four operations of head-room in the outlet, so a briefly starved Kettle downstream does
+    // not stop the press dead — and once the outlet IS full, demand-pull stops the press
+    // exactly the way a full output buffer stops a Fryer. There is one stop rule, not a
+    // second one for liquids.
+    ports: [
+      {
+        liquid: LiquidId.CaneJuice,
+        flow: PortFlow.Outlet,
+        capacityMl: 4_000,
+        intakeMlPerTick: 0,
+        mlPerOperation: 1_000,
+      },
+    ],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    kind: MachineKind.Kettle,
+    slug: 'kettle',
+    role: MachineRole.Converter,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 22_000,
+    workPerOperation: 30 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 0,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    /** The hottest thing on the soda side, and the only one there that wears like a Fryer. */
+    wearPerOperation: 3,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.SodaPress,
+    liquid: LiquidId.CaneJuice,
+    ports: [
+      {
+        liquid: LiquidId.CaneJuice,
+        flow: PortFlow.Intake,
+        capacityMl: 4_000,
+        intakeMlPerTick: 200,
+        mlPerOperation: 1_000,
+      },
+      {
+        liquid: LiquidId.SimpleSyrup,
+        flow: PortFlow.Outlet,
+        capacityMl: 2_000,
+        intakeMlPerTick: 0,
+        mlPerOperation: 250,
+      },
+    ],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // §5: "flavors are powders". The grinder is the crafted rung of §4's consumable ladder —
+    // the bought rung is the nut itself, because the crop roster is shut at eight.
+    kind: MachineKind.Grinder,
+    slug: 'grinder',
+    role: MachineRole.Converter,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 12_000,
+    workPerOperation: 30 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 20,
+    outputCapacity: 20,
+    tankCapacityMl: 0,
+    wearPerOperation: 2,
+    inputs: [{ item: ItemId.KolaNut, count: 1 }],
+    outputItem: ItemId.KolaPowder,
+    overcookOutputItem: null,
+    requiresTech: TechId.SodaPress,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // PLAN §5'S CENTREPIECE: "the Syrup Mixer (2 pipe inlets + 1 belt inlet) is the one machine
+    // where the two layers visibly cooperate, and the soda mid-game's puzzle centerpiece."
+    //
+    // It is not an exception to the separation between belts and pipes — it is that separation
+    // stated at its strongest. Three typed ports, two liquid and one solid, and a pipe carrying
+    // anything but simple syrup or water is refused AT THE PORT rather than quietly mixed in.
+    kind: MachineKind.SyrupMixer,
+    slug: 'syrup-mixer',
+    role: MachineRole.Converter,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 30_000,
+    workPerOperation: 30 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 20,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 2,
+    inputs: [{ item: ItemId.KolaPowder, count: 1 }],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.SodaMixing,
+    liquid: LiquidId.SimpleSyrup,
+    ports: [
+      {
+        liquid: LiquidId.SimpleSyrup,
+        flow: PortFlow.Intake,
+        capacityMl: 2_000,
+        intakeMlPerTick: 100,
+        mlPerOperation: 125,
+      },
+      {
+        liquid: LiquidId.Water,
+        flow: PortFlow.Intake,
+        capacityMl: 2_000,
+        intakeMlPerTick: 100,
+        mlPerOperation: 125,
+      },
+      {
+        liquid: LiquidId.SodaSyrup,
+        flow: PortFlow.Outlet,
+        capacityMl: 2_000,
+        intakeMlPerTick: 0,
+        mlPerOperation: 250,
+      },
+    ],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // Plan §4 rules out a power system outright, so carbonation costs consumables and wear and
+    // never energy. What it does cost is WATER, from the same pond the sprinklers drink — which
+    // is why a soda wing shows up on plan §6's Dry County board rather than on a meter.
+    kind: MachineKind.Carbonator,
+    slug: 'carbonator',
+    role: MachineRole.Converter,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 25_000,
+    workPerOperation: 30 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 0,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 2,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.SodaMixing,
+    liquid: LiquidId.Water,
+    ports: [
+      {
+        liquid: LiquidId.Water,
+        flow: PortFlow.Intake,
+        capacityMl: 3_000,
+        intakeMlPerTick: 300,
+        mlPerOperation: 750,
+      },
+      {
+        liquid: LiquidId.CarbonatedWater,
+        flow: PortFlow.Outlet,
+        capacityMl: 3_000,
+        intakeMlPerTick: 0,
+        mlPerOperation: 750,
+      },
+    ],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // §5: "machines mostly 2×2 (Bottler 3×2 flagship)". The only machine wider than it is tall,
+    // and the only one that takes two liquids and a solid and hands back something sellable.
+    kind: MachineKind.Bottler,
+    slug: 'bottler',
+    role: MachineRole.Converter,
+    tilesWide: 3,
+    tilesHigh: 2,
+    priceCents: 40_000,
+    workPerOperation: 30 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 20,
+    outputCapacity: 20,
+    tankCapacityMl: 0,
+    wearPerOperation: 2,
+    inputs: [{ item: ItemId.Bottle, count: 1 }],
+    outputItem: ItemId.Soda,
+    overcookOutputItem: null,
+    requiresTech: TechId.SodaMixing,
+    liquid: LiquidId.SodaSyrup,
+    ports: [
+      {
+        liquid: LiquidId.SodaSyrup,
+        flow: PortFlow.Intake,
+        capacityMl: 2_000,
+        intakeMlPerTick: 100,
+        mlPerOperation: 250,
+      },
+      {
+        liquid: LiquidId.CarbonatedWater,
+        flow: PortFlow.Intake,
+        capacityMl: 3_000,
+        intakeMlPerTick: 300,
+        mlPerOperation: 750,
+      },
+    ],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // The two bundle machines exist to answer plan §8's release gate with arithmetic instead of
+    // an opinion. Both are ordinary converters; the only thing that makes them worth building is
+    // the price of what comes out, and both of those prices are derived from their parts.
+    kind: MachineKind.SixPacker,
+    slug: 'six-packer',
+    role: MachineRole.Converter,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 15_000,
+    workPerOperation: 30 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    /** Six sodas an operation, so twenty-four slots is four operations, not twenty. */
+    inputCapacity: 24,
+    outputCapacity: 20,
+    tankCapacityMl: 0,
+    wearPerOperation: 1,
+    inputs: [{ item: ItemId.Soda, count: SIX_PACK_COUNT }],
+    outputItem: ItemId.SixPack,
+    overcookOutputItem: null,
+    requiresTech: TechId.Bundles,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // THE ONE TRUE TWO-INGREDIENT RECIPE IN THE GAME, and the reason a recipe is a list rather
+    // than a field: one bag of chips from one district, one bottle from the other.
+    kind: MachineKind.ComboPacker,
+    slug: 'combo-packer',
+    role: MachineRole.Converter,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 18_000,
+    workPerOperation: 30 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 20,
+    outputCapacity: 20,
+    tankCapacityMl: 0,
+    wearPerOperation: 1,
+    inputs: [
+      { item: ItemId.BaggedChips, count: 1 },
+      { item: ItemId.Soda, count: 1 },
+    ],
+    outputItem: ItemId.SnackCombo,
+    overcookOutputItem: null,
+    requiresTech: TechId.Bundles,
+    liquid: LiquidId.None,
+    ports: [],
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
@@ -1065,7 +1749,7 @@ export function machineSpec(kind: MachineKind): MachineSpec | null {
 export const UpgradeDial = {
   /** +30% work rate per level, and +25% wear — faster machines break more. */
   Speed: 1,
-  /** −20% wear per level. The expensive track. */
+  /** −20% wear and a longer waste cadence per level. The expensive track. */
   Efficiency: 2,
   /** +100% buffer per level, no catch. The jam-smoother. */
   Capacity: 3,
@@ -1081,10 +1765,46 @@ export const EFFICIENCY_WEAR_CUT_PERCENT_PER_LEVEL = 20;
 export const CAPACITY_BONUS_PER_LEVEL = 100;
 
 /**
+ * THE OTHER HALF OF THE EFFICIENCY DIAL. Plan §3 specifies Efficiency as reducing "both
+ * input waste and wear"; the wear half has always been `EFFICIENCY_WEAR_CUT_PERCENT_PER_LEVEL`
+ * above, and this is the waste half.
+ *
+ * Waste is a **cadence**, not a chance (see `WASTE_PERIOD_AT_THRESHOLD`), so the dial's only
+ * honest lever on it is to LENGTHEN THE PERIOD — a machine just under the threshold spoils one
+ * input in seven, and one in twelve with the dial maxed. It is a
+ * percentage stretch rather than a flat `+N` because the period itself already varies with
+ * condition: a flat bonus would erase waste entirely on a machine at death's door (period 2)
+ * while barely touching one that just crossed the line, which is backwards.
+ *
+ * It never reaches "no waste", for the same reason `effectiveWear` never reaches zero: the
+ * dial is a discount on neglect, not an exemption from it.
+ */
+export const EFFICIENCY_WASTE_STRETCH_PERCENT_PER_LEVEL = 25;
+
+/**
  * Cost of each level as a percentage of the machine's invoice price: 1× / 2.5× / 6×
  * escalation (plan §3), so maxing one Fryer competes with buying a second one.
  */
 export const UPGRADE_COST_PERCENT_BY_LEVEL: readonly number[] = [40, 100, 240];
+
+/**
+ * And what each DIAL costs relative to that ladder, as a percentage.
+ *
+ * EFFICIENCY IS THE EXPENSIVE TRACK, AND UNTIL NOW ONLY THE COMMENT SAID SO. Plan §3 names it
+ * that way, `UpgradeDial` above has always described it that way, and every dial charged the
+ * same 40/100/240% — which made the claim decoration. Now that Efficiency cuts wear *and*
+ * stretches the waste cadence it is plainly the strongest dial on a hard-run machine, so it
+ * costs half again as much: 60/150/360%, or 5.7× the machine's price to max.
+ *
+ * A multiplier rather than a second ladder, deliberately. The 1×/2.5×/6× escalation is plan
+ * §3's shape and applies to every dial; which dial you are buying scales that shape, and
+ * writing it as one number per dial keeps the escalation defined in exactly one place.
+ */
+export const UPGRADE_COST_PERCENT_BY_DIAL: Readonly<Record<UpgradeDial, number>> = {
+  [UpgradeDial.Speed]: 100,
+  [UpgradeDial.Efficiency]: 150,
+  [UpgradeDial.Capacity]: 100,
+};
 
 // --- belts and grabbers -----------------------------------------------------------
 //
@@ -1259,11 +1979,34 @@ export const NET_WORTH_SAMPLE_LIMIT = 600;
 
 // --- balance version --------------------------------------------------------------
 
+/** One recipe, as a string. `2x11|1x23` reads "two of item 11 and one of item 23". */
+function recipeDigest(inputs: readonly RecipeInput[]): string {
+  let out = '';
+  for (let i = 0; i < inputs.length; i++) {
+    const line = inputs[i]!;
+    out += `${i === 0 ? '' : '|'}${line.count}x${line.item}`;
+  }
+  return out;
+}
+
+/** One machine's typed ports, as a string. Ports are ordered, so this is order-sensitive. */
+function portsDigest(ports: readonly LiquidPortSpec[]): string {
+  let out = '';
+  for (let i = 0; i < ports.length; i++) {
+    const port = ports[i]!;
+    out += `${i === 0 ? '' : '|'}${port.liquid}/${port.flow}/${port.capacityMl}/${port.intakeMlPerTick}/${port.mlPerOperation}`;
+  }
+  return out;
+}
+
 function balanceDigest(): string {
   let h = fnv1aInit();
   for (let i = 0; i < ITEM_SPECS.length; i++) {
     const spec = ITEM_SPECS[i]!;
-    h = fnv1aString(h, `${spec.id}:${spec.slug}:${spec.listPriceCents}:${spec.purchasable}`);
+    h = fnv1aString(
+      h,
+      `${spec.id}:${spec.slug}:${spec.listPriceCents}:${spec.purchasable}:${spec.sellable}`,
+    );
   }
   for (let i = 0; i < CROP_SPECS.length; i++) {
     const spec = CROP_SPECS[i]!;
@@ -1276,7 +2019,7 @@ function balanceDigest(): string {
     const spec = MACHINE_SPECS[i]!;
     h = fnv1aString(
       h,
-      `${spec.kind}:${spec.slug}:${spec.role}:${spec.tilesWide}x${spec.tilesHigh}:${spec.priceCents}:${spec.workPerOperation}:${spec.workRatePerTick}:${spec.inputCapacity}:${spec.outputCapacity}:${spec.tankCapacityMl}:${spec.wearPerOperation}:${spec.inputItem}:${spec.outputItem}:${spec.overcookOutputItem}:${spec.requiresTech}:${spec.liquid}:${spec.pumpRateMlPerMinute}:${spec.intakeMlPerTick}:${spec.coverageRadiusTiles}:${spec.moistureSensing}`,
+      `${spec.kind}:${spec.slug}:${spec.role}:${spec.tilesWide}x${spec.tilesHigh}:${spec.priceCents}:${spec.workPerOperation}:${spec.workRatePerTick}:${spec.inputCapacity}:${spec.outputCapacity}:${spec.tankCapacityMl}:${spec.wearPerOperation}:${recipeDigest(spec.inputs)}:${spec.outputItem}:${spec.overcookOutputItem}:${spec.requiresTech}:${spec.liquid}:${portsDigest(spec.ports)}:${spec.pumpRateMlPerMinute}:${spec.intakeMlPerTick}:${spec.coverageRadiusTiles}:${spec.moistureSensing}`,
     );
   }
   for (let i = 0; i < LIQUID_SPECS.length; i++) {
@@ -1314,13 +2057,19 @@ function balanceDigest(): string {
   );
   h = fnv1aString(
     h,
-    `${UPGRADE_MAX_LEVEL}:${SPEED_RATE_BONUS_PERCENT_PER_LEVEL}:${SPEED_WEAR_PENALTY_PERCENT_PER_LEVEL}:${EFFICIENCY_WEAR_CUT_PERCENT_PER_LEVEL}:${CAPACITY_BONUS_PER_LEVEL}:${UPGRADE_COST_PERCENT_BY_LEVEL.join('|')}`,
+    `${UPGRADE_MAX_LEVEL}:${SPEED_RATE_BONUS_PERCENT_PER_LEVEL}:${SPEED_WEAR_PENALTY_PERCENT_PER_LEVEL}:${EFFICIENCY_WEAR_CUT_PERCENT_PER_LEVEL}:${EFFICIENCY_WASTE_STRETCH_PERCENT_PER_LEVEL}:${CAPACITY_BONUS_PER_LEVEL}:${UPGRADE_COST_PERCENT_BY_LEVEL.join('|')}:${UPGRADE_COST_PERCENT_BY_DIAL[UpgradeDial.Speed]}/${UPGRADE_COST_PERCENT_BY_DIAL[UpgradeDial.Efficiency]}/${UPGRADE_COST_PERCENT_BY_DIAL[UpgradeDial.Capacity]}`,
   );
   // Maintenance and overcooking. The two condition constants are already folded in above with
   // the world numbers; everything a worn or neglected machine actually *does* is here.
   h = fnv1aString(
     h,
     `${REPAIR_PER_TOUCH}:${JAM_EVERY_N_OPERATIONS_WHEN_WORN}:${WASTE_PERIOD_AT_THRESHOLD}:${WASTE_PERIOD_AT_ZERO}:${REPAIR_KIT_PRICE_CENTS}:${REPAIR_KIT_RADIUS_TILES}:${OVERCOOK_BLOCKED_TICKS}:${RUSTIC_STYLE_NUMERATOR}/${RUSTIC_STYLE_DENOMINATOR}`,
+  );
+  // The soda line's derived prices. The bundle premiums are ratios rather than literals, so the
+  // digest folds in the ratio — a repriced bag of chips moves the Combo, and the digest with it.
+  h = fnv1aString(
+    h,
+    `${SODA_PRICE_CENTS}:${SIX_PACK_COUNT}:${SIX_PACK_PREMIUM_NUMERATOR}/${SIX_PACK_PREMIUM_DENOMINATOR}:${SNACK_COMBO_PREMIUM_NUMERATOR}/${SNACK_COMBO_PREMIUM_DENOMINATOR}`,
   );
   return fnv1aToHex(h);
 }
