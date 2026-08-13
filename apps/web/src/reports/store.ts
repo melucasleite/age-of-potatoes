@@ -1,0 +1,700 @@
+// The reports' read boundary. One store, four slices, the same three rules as `hud/store.ts`.
+//
+// This is a SECOND external store rather than four more slices on the HUD's, and that is a
+// deliberate call with a reason on both sides. Against: two stores means two `subscribe`
+// sets. For: the reports own a ledger, a per-machine idle watch, an IndexedDB connection and
+// a command sink, none of which the Ticker or the toolbelt has any business carrying — and
+// the HUD is being extended by another agent right now, so a second file is also a second
+// merge that never conflicts. The publish path is identical, the cadence is identical, and
+// nothing in either store reads the other.
+//
+// THE THREE RULES, RESTATED BECAUSE THEY STILL BITE:
+//
+//   1. PUBLISHED AT THE HUD'S CADENCE, NOT ON A TIMER. `GameHost` calls `publishWorld` from
+//      inside the tick loop. There is no `setInterval` here, because a second clock in an
+//      app with a fixed-timestep clock is a bug waiting for a slow frame.
+//   2. `getSnapshot` NEVER ALLOCATES. Each slice is rebuilt only when one of its fields
+//      actually moved, and the top-level snapshot only when a slice was rebuilt. When
+//      nothing changed, `publishWorld` returns without notifying anybody.
+//   3. THE HOST OWNS THE STORE, BY TOKEN. StrictMode mounts, unmounts and remounts, so two
+//      hosts exist briefly and the dying one must not reset the store under the live one.
+//
+// THE DAWN CARD'S LIFETIME IS COUNTED IN TICKS. Five seconds is a hundred ticks, and they
+// are counted by the loop that is already running rather than by a `setTimeout`. It matters
+// beyond tidiness: the card is supposed to be non-blocking and cosmetic, so it must not
+// outlive a tab that stopped ticking, and it must not be the one thing in the app keeping a
+// timer alive. Dismissing it early is free and immediate.
+//
+// NOTHING HERE MUTATES THE WORLD. The commerce panel's buttons enqueue a `Command` through
+// a sink the host attaches; the sink is null until it does, and the panel disables itself
+// rather than pretending (§12: every mutation is a command applied at a tick).
+
+import { listPriceCents, machineSpec } from '@snack/sim';
+import type { ItemId, MachineKind, WorldView } from '@snack/sim';
+
+import { deriveBoards, emptyBests, foldBests, readBoardValues } from './boards';
+import type { BoardValues, PersonalBests } from './boards';
+import { dawnCount, dayNumber, ticksUntilDawn } from './day';
+import { IdleWatch } from './idle';
+import { loadBests, loadLedger, saveBests, saveLedger } from './persist';
+import { centsPerActiveHour, rateIsSettled } from './rate';
+import { ShiftLedger } from './shift';
+import {
+  DESTINATIONS,
+  readCommerce,
+  readGrossAndSpend,
+  readSalesByItem,
+  readSpoilagePermille,
+  readWastePermille,
+} from './sim-contract';
+import type { CommandSink, CommerceCommand, CommerceView } from './sim-contract';
+import {
+  NOT_YET_MEASURED,
+  ZERO_BOARDS,
+  ZERO_COMMERCE,
+  ZERO_DAWN,
+  ZERO_REPORTS,
+  ZERO_SHIFT,
+} from './types';
+import type {
+  BoardsSlice,
+  CartRow,
+  CommerceSlice,
+  ContractRow,
+  DawnCard,
+  DawnSlice,
+  DepotRow,
+  ReportsSliceName,
+  ReportsSnapshot,
+  ShiftBucket,
+  ShiftSlice,
+  StubbedRatio,
+} from './types';
+
+/** Plan §2: "a 5-second non-blocking card". A hundred ticks, counted by the sim's clock. */
+const DAWN_CARD_TICKS = 100;
+
+/** How often the ledger and the bests are written back. Thirty seconds of sim time. */
+const PERSIST_PERIOD_TICKS = 600;
+
+export type Unsubscribe = () => void;
+
+export class ReportsStore {
+  private readonly listeners = new Set<() => void>();
+
+  private shift: ShiftSlice = ZERO_SHIFT;
+  private dawn: DawnSlice = ZERO_DAWN;
+  private boards: BoardsSlice = ZERO_BOARDS;
+  private commerce: CommerceSlice = ZERO_COMMERCE;
+  private snapshot: ReportsSnapshot = ZERO_REPORTS;
+
+  private owner: object | null = null;
+  private sink: CommandSink | null = null;
+  private worldSeed = 0;
+
+  private readonly ledger = new ShiftLedger();
+  private readonly idle = new IdleWatch();
+
+  private bests: PersonalBests = emptyBests();
+  private bestsLoaded = false;
+  private bestsDirty = false;
+
+  /** Lifetime net earnings the moment the world crossed ten active hours. −1 before that. */
+  private firstTenCents = -1;
+
+  private lastCommerce: CommerceView | null = null;
+  private lastPublishedTick = 0;
+  private lastValues: BoardValues | null = null;
+  private lastHistoryRevision = -1;
+  private historySnapshot: readonly ShiftBucket[] = Object.freeze([]);
+
+  private lastDawn = -1;
+  private dawnClearTick = -1;
+  private dayMarkNetCents = 0;
+  private dayMarkEarnedCents = 0;
+  private persistDueTick = 0;
+
+  // --- React's three functions -------------------------------------------------------
+
+  readonly subscribe = (listener: () => void): Unsubscribe => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+
+  /** Stable per-slice getters, built once. A closure per render would allocate per render. */
+  readonly getters: { readonly [K in ReportsSliceName]: () => ReportsSnapshot[K] } = {
+    shift: () => this.snapshot.shift,
+    dawn: () => this.snapshot.dawn,
+    boards: () => this.snapshot.boards,
+    commerce: () => this.snapshot.commerce,
+  };
+
+  /**
+   * The server render, and the client's first render before any publish. Returns the one
+   * frozen zero snapshot every time — React requires this to be cached, and a fresh object
+   * here is an infinite-loop error rather than a hydration warning.
+   */
+  readonly serverGetters: { readonly [K in ReportsSliceName]: () => ReportsSnapshot[K] } = {
+    shift: () => ZERO_REPORTS.shift,
+    dawn: () => ZERO_REPORTS.dawn,
+    boards: () => ZERO_REPORTS.boards,
+    commerce: () => ZERO_REPORTS.commerce,
+  };
+
+  getSnapshot(): ReportsSnapshot {
+    return this.snapshot;
+  }
+
+  // --- ownership ---------------------------------------------------------------------
+
+  /**
+   * Called by a starting `GameHost`. Wipes whatever the previous host left behind and kicks
+   * off the two storage reads, which resolve whenever they resolve — the panels render a
+   * dash for "best" until then rather than blocking on a database.
+   */
+  claim(token: object, worldSeed: number): void {
+    this.owner = token;
+    this.worldSeed = worldSeed;
+    this.ledger.reset();
+    this.idle.reset();
+    this.bests = emptyBests();
+    this.bestsLoaded = false;
+    this.bestsDirty = false;
+    this.firstTenCents = -1;
+    this.lastDawn = -1;
+    this.dawnClearTick = -1;
+    this.dayMarkNetCents = 0;
+    this.dayMarkEarnedCents = 0;
+    this.persistDueTick = 0;
+    this.lastCommerce = null;
+    this.lastPublishedTick = 0;
+    this.lastValues = null;
+    this.lastHistoryRevision = -1;
+    this.historySnapshot = Object.freeze([]);
+    this.lastSellable = Object.freeze([]);
+    this.lastSellableKey = '';
+    this.resetSlices();
+
+    void this.restore(token, worldSeed);
+  }
+
+  /** Called by a disposing `GameHost`. A stale host calling this is ignored, by design. */
+  release(token: object): void {
+    if (this.owner !== token) return;
+    // Flush before letting go. The player navigating away mid-hour should not lose the hour.
+    void this.flush();
+    this.owner = null;
+    this.sink = null;
+    this.resetSlices();
+  }
+
+  /**
+   * Attach the way OUT: a function that puts a `Command` on the host's queue.
+   *
+   * Separate from `claim` because the commerce commands do not exist in the sim's `Command`
+   * union yet (see `sim-contract.ts`). A host that cannot accept them simply never calls
+   * this, the slice reports `wired: 0`, and the panel's buttons disable themselves — which
+   * is the honest state, and visibly better than a button that looks live and does nothing.
+   */
+  attachCommandSink(token: object, sink: CommandSink): void {
+    if (this.owner !== token) return;
+    this.sink = sink;
+    // Republish immediately rather than waiting for the next tick boundary: the panel's
+    // buttons are disabled while `wired` is 0, and a control that stays greyed for 150 ms
+    // after it became usable reads as a UI that did not hear you.
+    if (this.setCommerce(this.lastCommerce, true)) this.commit();
+  }
+
+  private async restore(token: object, worldSeed: number): Promise<void> {
+    const [bests, stored] = await Promise.all([loadBests(), loadLedger(worldSeed)]);
+    // The host may have been swapped while IndexedDB was thinking. Restoring into a store
+    // somebody else now owns would hand the live world another world's records.
+    if (this.owner !== token) return;
+
+    this.bests = bests ?? emptyBests();
+    this.bestsLoaded = true;
+    if (stored !== null) {
+      this.firstTenCents = stored.firstTenCents;
+      this.ledger.hydrate(stored.ledger, this.lastPublishedTick);
+    }
+    // Nothing to notify with yet if no publish has happened; the next one picks it up.
+    this.commitIfChanged(this.rebuildBoardsFromLast());
+  }
+
+  private rebuildBoardsFromLast(): boolean {
+    if (this.lastValues === null) return false;
+    return this.setBoards(this.lastValues);
+  }
+
+  private resetSlices(): void {
+    this.shift = ZERO_SHIFT;
+    this.dawn = ZERO_DAWN;
+    this.boards = ZERO_BOARDS;
+    this.commerce = ZERO_COMMERCE;
+    this.snapshot = ZERO_REPORTS;
+    this.notify();
+  }
+
+  // --- the way in --------------------------------------------------------------------
+
+  /**
+   * Publish one world reading. Called from the tick loop at the HUD's cadence.
+   *
+   * `view` is the host's REUSED projection buffer and is only valid for the duration of this
+   * call. Everything kept from it below is copied out as a primitive.
+   */
+  publishWorld(token: object, view: WorldView): void {
+    if (this.owner !== token) return;
+    this.lastPublishedTick = view.tick;
+
+    let changed = false;
+
+    this.idle.observe(view);
+    if (this.ledger.read(view)) changed = true;
+    if (this.setShift(view)) changed = true;
+
+    const values = readBoardValues(view, this.firstTenCents);
+    this.lastValues = values;
+
+    // First Ten is scored AT ten active hours and then never again (§7 ruling 4). Freezing
+    // it the first time the world crosses the mark is what makes it a First Ten score
+    // rather than a Dynasty score wearing its name.
+    if (this.firstTenCents < 0 && values.firstTenFinal === 1) {
+      this.firstTenCents = values.firstTenCents;
+      this.bestsDirty = true;
+    }
+    if (this.bestsLoaded && foldBests(this.bests, values)) this.bestsDirty = true;
+    if (this.setBoards(values)) changed = true;
+
+    this.refreshSellable(view);
+    this.lastCommerce = readCommerce(view);
+    if (this.setCommerce(this.lastCommerce, this.sink !== null)) changed = true;
+    if (this.advanceDawn(view)) changed = true;
+
+    if (view.tick >= this.persistDueTick) {
+      this.persistDueTick = view.tick + PERSIST_PERIOD_TICKS;
+      void this.flush();
+    }
+
+    if (!changed) return;
+    this.commit();
+  }
+
+  /**
+   * Dismiss the Dawn Report early. Free, immediate, and the only thing the card's own click
+   * handler does — it does not pause anything, because there is nothing to pause.
+   */
+  dismissDawn(): void {
+    if (this.dawn.card === null) return;
+    this.dawnClearTick = -1;
+    this.dawn = Object.freeze({ version: this.dawn.version + 1, card: null });
+    this.commit();
+  }
+
+  /** The commerce panel's one door to the world. A no-op until a host attaches a sink. */
+  submit(command: CommerceCommand): void {
+    this.sink?.(command);
+  }
+
+  private notify(): void {
+    for (const listener of this.listeners) listener();
+  }
+
+  private commit(): void {
+    this.snapshot = {
+      shift: this.shift,
+      dawn: this.dawn,
+      boards: this.boards,
+      commerce: this.commerce,
+    };
+    this.notify();
+  }
+
+  private commitIfChanged(changed: boolean): void {
+    if (changed) this.commit();
+  }
+
+  private async flush(): Promise<void> {
+    const writes: Promise<void>[] = [];
+    if (this.bestsDirty && this.bestsLoaded) {
+      this.bestsDirty = false;
+      writes.push(saveBests(this.bests));
+    }
+    // The ledger is only worth storing while the renderer owns it. Once the sim projects
+    // its own buckets they ride along in the ordinary save and this store would be a stale
+    // second copy of them, which is worse than no copy.
+    if (!this.ledger.simOwned && this.worldSeed !== 0) {
+      writes.push(
+        saveLedger({
+          worldSeed: this.worldSeed,
+          ledger: this.ledger.toPersisted(),
+          firstTenCents: this.firstTenCents,
+        }),
+      );
+    }
+    await Promise.all(writes);
+  }
+
+  // --- slice writers -----------------------------------------------------------------
+
+  private setShift(view: WorldView): boolean {
+    const current = this.ledger.current;
+    if (this.ledger.historyRevision !== this.lastHistoryRevision) {
+      this.lastHistoryRevision = this.ledger.historyRevision;
+      this.historySnapshot = Object.freeze(this.ledger.closed.slice());
+    }
+    const history = this.historySnapshot;
+    const best = this.ledger.bestCentsPerHour;
+    const perHour = centsPerActiveHour(current.netCents, current.ticks);
+    const settled = rateIsSettled(current.ticks) ? 1 : 0;
+    const untilDawn = ticksUntilDawn(view.tick);
+    const waste = ratio(readWastePermille(view));
+    const spoilage = ratio(readSpoilagePermille(view));
+
+    const previous = this.shift;
+    if (
+      previous.current === current &&
+      previous.history === history &&
+      previous.centsPerHour === perHour &&
+      previous.settled === settled &&
+      previous.bestCentsPerHour === best &&
+      previous.waste.measured === waste.measured &&
+      previous.waste.permille === waste.permille &&
+      previous.spoilage.measured === spoilage.measured &&
+      previous.spoilage.permille === spoilage.permille &&
+      // The dawn countdown is quantised to whole seconds before comparison. Unquantised it
+      // moves on every publish and would re-render the panel 6.7 times a second to redraw
+      // the same string.
+      Math.floor(previous.ticksUntilDawn / 20) === Math.floor(untilDawn / 20)
+    ) {
+      return false;
+    }
+
+    this.shift = Object.freeze({
+      version: previous.version + 1,
+      current,
+      history,
+      centsPerHour: perHour,
+      settled,
+      bestCentsPerHour: best,
+      waste,
+      spoilage,
+      ticksUntilDawn: untilDawn,
+    });
+    return true;
+  }
+
+  private setBoards(values: BoardValues): boolean {
+    const rows = deriveBoards(values, this.bests);
+    const previous = this.boards;
+    if (
+      previous.rows.length === rows.length &&
+      previous.centiActiveHours === values.centiActiveHours &&
+      previous.loaded === (this.bestsLoaded ? 1 : 0)
+    ) {
+      let same = true;
+      for (let i = 0; i < rows.length; i++) {
+        const a = previous.rows[i]!;
+        const b = rows[i]!;
+        if (a.value !== b.value || a.best !== b.best || a.eligible !== b.eligible) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return false;
+    }
+
+    this.boards = Object.freeze({
+      version: previous.version + 1,
+      rows: Object.freeze(rows),
+      centiActiveHours: values.centiActiveHours,
+      loaded: this.bestsLoaded ? 1 : 0,
+    });
+    return true;
+  }
+
+  private setCommerce(commerce: CommerceView | null, wired: boolean): boolean {
+    const previous = this.commerce;
+    const installed = commerce === null ? 0 : 1;
+    const wiredFlag = wired ? 1 : 0;
+
+    const carts: CartRow[] =
+      commerce === null
+        ? []
+        : commerce.carts.map((cart, index) =>
+            Object.freeze({
+              id: cart.id,
+              label: `Cart ${String.fromCharCode(65 + (index % 26))}`,
+              loaded: cart.loaded,
+              capacity: cart.capacity,
+              valueCents: cart.item === 0 ? 0 : listPriceCents(cart.item as ItemId) * cart.loaded,
+              away: cart.away,
+              ticksRemaining: cart.ticksRemaining,
+              runTicks: cart.runTicks,
+            }),
+          );
+
+    const depots: DepotRow[] =
+      commerce === null
+        ? []
+        : commerce.depots.map((depot, index) =>
+            Object.freeze({
+              id: depot.id,
+              label: `Depot ${String.fromCharCode(65 + (index % 26))}`,
+              contractIds: Object.freeze(depot.contractIds.slice()),
+              stocked: depot.stocked,
+              capacity: depot.capacity,
+            }),
+          );
+
+    const contracts: ContractRow[] =
+      commerce === null
+        ? []
+        : commerce.contracts.map((contract) =>
+            Object.freeze({
+              id: contract.id,
+              item: contract.item,
+              itemLabel: itemLabel(contract.item),
+              destination: contract.destination,
+              quantityPerRun: contract.quantityPerRun,
+              // Posted list price × quantity. DISPLAYED, never chosen — a contract is a
+              // logistics object and there is no negotiation anywhere in this UI.
+              runValueCents: listPriceCents(contract.item as ItemId) * contract.quantityPerRun,
+              stocked: contract.stocked,
+              runsCompleted: contract.runsCompleted,
+              grossCents: contract.grossCents,
+              phase: contract.phase,
+              ticksRemaining: contract.ticksRemaining,
+            }),
+          );
+
+    const sellable = this.lastSellable;
+
+    if (
+      previous.installed === installed &&
+      previous.wired === wiredFlag &&
+      previous.carts.length === carts.length &&
+      previous.depots.length === depots.length &&
+      previous.contracts.length === contracts.length &&
+      previous.automatedGrossCents === (commerce?.automatedGrossCents ?? 0) &&
+      previous.sellable === sellable &&
+      sameCarts(previous.carts, carts) &&
+      sameContracts(previous.contracts, contracts)
+    ) {
+      return false;
+    }
+
+    this.commerce = Object.freeze({
+      version: previous.version + 1,
+      installed,
+      carts: Object.freeze(carts),
+      depots: Object.freeze(depots),
+      contracts: Object.freeze(contracts),
+      sellable,
+      automatedGrossCents: commerce?.automatedGrossCents ?? 0,
+      wired: wiredFlag,
+    });
+    return true;
+  }
+
+  /**
+   * Products the lot can write a contract for: whatever its machines actually make.
+   *
+   * Rebuilt only when the machine census changes shape, because the list is stable for
+   * minutes at a time and allocating six objects seven times a second to hand React an
+   * identical array is exactly the allocation the version dance exists to avoid.
+   */
+  private lastSellable: CommerceSlice['sellable'] = Object.freeze([]);
+  private lastSellableKey = '';
+
+  private refreshSellable(view: WorldView): void {
+    let key = '';
+    const items: number[] = [];
+    for (let i = 0; i < view.machines.length; i++) {
+      const spec = machineSpec(view.machines[i]!.kind as MachineKind);
+      if (spec === null || spec.outputItem === null) continue;
+      if (items.includes(spec.outputItem)) continue;
+      items.push(spec.outputItem);
+      key += `${spec.outputItem},`;
+    }
+    if (key === this.lastSellableKey) return;
+    this.lastSellableKey = key;
+    items.sort((a, b) => a - b);
+    this.lastSellable = Object.freeze(
+      items.map((item) =>
+        Object.freeze({ item, label: itemLabel(item), priceCents: listPriceCents(item as ItemId) }),
+      ),
+    );
+  }
+
+  /**
+   * Fire the Dawn Report on the tick the dawn count moves, and clear it a hundred ticks
+   * later. Non-blocking throughout: nothing is paused, nothing takes focus, and the card
+   * cannot swallow a click meant for the lot.
+   */
+  private advanceDawn(view: WorldView): boolean {
+    const count = dawnCount(view.tick);
+    const stats = view.stats;
+
+    if (this.lastDawn < 0) {
+      // First publish of a session. A world restored at 3pm on day nine must not open with
+      // nine days of card, so the count is adopted silently and the marks are taken here.
+      this.lastDawn = count;
+      this.dayMarkNetCents = stats.lifetimeNetEarningsCents;
+      this.dayMarkEarnedCents = readGrossAndSpend(view)?.earned ?? 0;
+      return false;
+    }
+
+    if (count > this.lastDawn) {
+      this.lastDawn = count;
+      const flag = this.idle.worst();
+      this.idle.rollDay();
+
+      const netCents = stats.lifetimeNetEarningsCents - this.dayMarkNetCents;
+      this.dayMarkNetCents = stats.lifetimeNetEarningsCents;
+
+      const split = readGrossAndSpend(view);
+      const earnedCents = split === null ? netCents : split.earned - this.dayMarkEarnedCents;
+      this.dayMarkEarnedCents = split?.earned ?? 0;
+
+      const card: DawnCard = Object.freeze({
+        id: count,
+        day: dayNumber(view.tick),
+        earnedCents,
+        netCents,
+        split: split === null ? 0 : 1,
+        bestSeller: bestSellerFrom(view),
+        flag,
+      });
+      this.dawn = Object.freeze({ version: this.dawn.version + 1, card });
+      this.dawnClearTick = view.tick + DAWN_CARD_TICKS;
+      // A dawn is a good moment to write the day down, and it is the one moment a player
+      // reliably reads the report — so the numbers behind it should already be on disk.
+      void this.flush();
+      return true;
+    }
+
+    if (this.dawnClearTick >= 0 && view.tick >= this.dawnClearTick) {
+      this.dawnClearTick = -1;
+      if (this.dawn.card !== null) {
+        this.dawn = Object.freeze({ version: this.dawn.version + 1, card: null });
+        return true;
+      }
+    }
+    return false;
+  }
+}
+
+function ratio(permille: number): StubbedRatio {
+  return permille < 0 ? NOT_YET_MEASURED : Object.freeze({ permille, measured: 1 });
+}
+
+/**
+ * The day's best seller, or null.
+ *
+ * NULL IS THE HONEST ANSWER TODAY. `StatsView` projects `itemsSold` as one total with no
+ * per-item breakdown, and there is no arithmetic on the projection that recovers which
+ * product it was — an average price back-solved from gross would be a guess dressed as a
+ * receipt. `sim-contract.ts` names the field the sim needs (`stats.salesByItem`); the row
+ * prints its own absence until that lands, per plan §8's "stubs listed explicitly".
+ */
+function bestSellerFrom(view: WorldView): DawnCard['bestSeller'] {
+  const sales = readSalesByItem(view);
+  if (sales === null) return null;
+
+  let best: DawnCard['bestSeller'] = null;
+  let bestGross = 0;
+  for (let i = 0; i < sales.length; i++) {
+    const entry = sales[i]!;
+    if (entry.dayGrossCents <= bestGross) continue;
+    bestGross = entry.dayGrossCents;
+    best = Object.freeze({
+      label: itemLabel(entry.item),
+      count: entry.dayCount,
+      grossCents: entry.dayGrossCents,
+    });
+  }
+  return best;
+}
+
+/**
+ * Item names for the paperwork.
+ *
+ * Longer and more formal than `hud/derive.ts`'s pouch labels ("russets", "chips"), on
+ * purpose: the pouch is what is in your hands and a receipt is a document. "Bagged chips ×
+ * 40" belongs on a contract; "chips" belongs in a pocket.
+ */
+const ITEM_LABELS: Readonly<Record<number, string>> = {
+  1: 'Potato seed',
+  2: 'Russet potato',
+  3: 'Bagged chips',
+  4: 'Washed potato',
+  5: 'Potato slices',
+  6: 'Plain chips',
+  7: 'Seasoned chips',
+  8: 'Day-old potato',
+  9: 'Compost',
+  10: 'Cane seed',
+  11: 'Sugar cane',
+  12: 'Day-old cane',
+  13: 'Corn seed',
+  14: 'Corn',
+  15: 'Day-old corn',
+  16: 'Chili seed',
+  17: 'Chili pepper',
+  18: 'Day-old chili',
+};
+
+export function itemLabel(item: number): string {
+  return ITEM_LABELS[item] ?? `Item ${item}`;
+}
+
+/** A destination name for a new contract. Flavour only; every one of them pays list. */
+export function destinationFor(contractCount: number): string {
+  return DESTINATIONS[contractCount % DESTINATIONS.length] ?? DESTINATIONS[0]!;
+}
+
+function sameCarts(a: readonly CartRow[], b: readonly CartRow[]): boolean {
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (
+      x.loaded !== y.loaded ||
+      x.away !== y.away ||
+      x.valueCents !== y.valueCents ||
+      // Quantised: the countdown moves every tick and nobody reads a truck's ETA to the
+      // twentieth of a second.
+      Math.floor(x.ticksRemaining / 20) !== Math.floor(y.ticksRemaining / 20)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameContracts(a: readonly ContractRow[], b: readonly ContractRow[]): boolean {
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (
+      x.id !== y.id ||
+      x.item !== y.item ||
+      x.quantityPerRun !== y.quantityPerRun ||
+      x.stocked !== y.stocked ||
+      x.runsCompleted !== y.runsCompleted ||
+      x.phase !== y.phase ||
+      Math.floor(x.ticksRemaining / 20) !== Math.floor(y.ticksRemaining / 20)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * The singleton. Safe at module scope in a way a `GameHost` is not — it holds no GPU
+ * resources, and the token dance above makes a StrictMode double-mount a non-event.
+ */
+export const reportsStore = new ReportsStore();

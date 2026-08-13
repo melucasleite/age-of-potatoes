@@ -1,0 +1,745 @@
+/*
+ * The paperwork. Same forty colours as everything else.
+ *
+ * Every value below is from art/palette/master.json — the hand-authored palette every cooked
+ * pixel in the game is quantised to. The HUD is DOM rather than canvas so nothing enforces
+ * that; it is a discipline, and `hud/hud.module.css` states it first. A panel painted in
+ * off-palette colours reads as a different game sitting on top of this one.
+ *
+ *   ink #14100e · umber #2b2119 · stone_dark #46392f · stone_mid #6d5c4d
+ *   stone_light #9a8873 · bone #cbb99b · paper #efe2c6
+ *   gold #8a6234 #b58b4d #d9b475 #f5d382     (money)
+ *   grass #35571f #4e7c2e #74a340 #a3c65c     (a rate going the right way)
+ *   red #5e1c1a #9e2f27 #d94f36 #ef8f68       (bleeding, blocked, over budget)
+ *   water #163348 #2c6a8d #4fa3d1 #9fdcef     (countdowns, in transit)
+ *   lamp accents #5fd44a #f2a93b
+ *
+ * Corners are notched, never rounded — a 6px border-radius on a 16px-tile pixel game is the
+ * fastest way to make the UI look bolted on from a component library.
+ *
+ * THE ONE LAYOUT RULE THAT IS NOT TASTE: the root is `pointer-events: none` and the Dawn
+ * Report never opts back in except on its own dismiss button. Plan §2 calls the card
+ * non-blocking, and a card that can eat a click meant for a tile is blocking whatever its
+ * z-index says.
+ */
+
+.layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #efe2c6;
+  user-select: none;
+  /* Above the canvas, below nothing. The HUD root sits at 10; the reports sit over it so a
+     dawn card is never half-hidden behind the Ticker it is reporting on. */
+  z-index: 11;
+}
+
+/* --- shared card chrome ---------------------------------------------------------- */
+
+.card {
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f,
+    inset 0 4px 0 -3px #6d5c4d;
+  clip-path: polygon(
+    5px 0,
+    calc(100% - 5px) 0,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    5px 100%,
+    0 calc(100% - 5px),
+    0 5px
+  );
+  padding: 12px 14px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9a8873;
+}
+
+.sub {
+  font-size: 10px;
+  color: #6d5c4d;
+  letter-spacing: 0.06em;
+}
+
+.rule {
+  height: 2px;
+  margin: 9px 0;
+  background: #14100e;
+  box-shadow: 0 1px 0 #46392f;
+}
+
+/* --- the docked panels ----------------------------------------------------------- */
+
+/*
+ * Docked to the right edge and vertically centred rather than to a corner: the four corners
+ * are spoken for (Ticker, perf overlay, clipboard, toolbelt), and a report is a thing you
+ * open, read, and close rather than a thing you glance at while playing.
+ */
+.dock {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+  max-height: calc(100% - 28px);
+  pointer-events: none;
+}
+
+.panel {
+  pointer-events: auto;
+  width: 336px;
+  max-height: 46vh;
+  overflow-y: auto;
+  /* A pixel-game scrollbar is a lost cause; hide the track and keep the overflow. */
+  scrollbar-width: thin;
+  scrollbar-color: #46392f transparent;
+}
+
+/* --- the ledger table ------------------------------------------------------------ */
+
+.headline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.headlineValue {
+  font-size: 26px;
+  font-weight: 700;
+  color: #f5d382;
+  text-shadow:
+    0 2px 0 #8a6234,
+    0 3px 0 #14100e;
+  font-variant-numeric: tabular-nums;
+}
+
+.headlineDown {
+  color: #ef8f68;
+  text-shadow:
+    0 2px 0 #5e1c1a,
+    0 3px 0 #14100e;
+}
+
+.headlineUnit {
+  font-size: 11px;
+  color: #9a8873;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rowKey {
+  color: #9a8873;
+  font-size: 11.5px;
+}
+
+.rowValue {
+  color: #efe2c6;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.rowMoney {
+  color: #d9b475;
+}
+
+.rowGood {
+  color: #a3c65c;
+}
+
+.rowWater {
+  color: #9fdcef;
+}
+
+/*
+ * "Not yet measured". Struck through in stone_mid rather than hidden, because plan §8's
+ * standing rule is that stubs are listed explicitly — a report that grows two new rows three
+ * releases from now is worse than one whose shape was stable from its first hour.
+ */
+.rowStub {
+  color: #6d5c4d;
+  font-size: 12px;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.stubNote {
+  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #6d5c4d;
+}
+
+/* --- the hour strip -------------------------------------------------------------- */
+
+/*
+ * One bar per closed hour, newest on the right. Not a chart — a chart of eight numbers is a
+ * chart nobody reads. It is here so the shape of a good hour and a bad one are the same
+ * shape, which is the sloppiness tax made visible in one glance.
+ */
+.strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 34px;
+  margin-top: 4px;
+}
+
+.bar {
+  flex: 1 1 0;
+  min-width: 4px;
+  background: repeating-linear-gradient(90deg, #b58b4d 0px, #b58b4d 3px, #8a6234 3px, #8a6234 4px);
+  box-shadow: inset 0 2px 0 #d9b475;
+}
+
+.barBest {
+  background: repeating-linear-gradient(90deg, #74a340 0px, #74a340 3px, #4e7c2e 3px, #4e7c2e 4px);
+  box-shadow: inset 0 2px 0 #a3c65c;
+}
+
+.barLoss {
+  background: repeating-linear-gradient(90deg, #9e2f27 0px, #9e2f27 3px, #5e1c1a 3px, #5e1c1a 4px);
+  box-shadow: inset 0 2px 0 #d94f36;
+}
+
+.stripEmpty {
+  font-size: 11px;
+  color: #6d5c4d;
+  padding: 8px 0 2px;
+}
+
+/* --- the boards ------------------------------------------------------------------ */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 0;
+  border-top: 2px solid #14100e;
+}
+
+.board:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.boardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.boardName {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #efe2c6;
+}
+
+.boardValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f5d382;
+  font-variant-numeric: tabular-nums;
+}
+
+.boardBlurb {
+  font-size: 10.5px;
+  color: #6d5c4d;
+  line-height: 1.45;
+}
+
+.boardFoot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  color: #9a8873;
+  font-variant-numeric: tabular-nums;
+}
+
+.boardLocked .boardName,
+.boardLocked .boardValue {
+  color: #6d5c4d;
+}
+
+.boardGate {
+  color: #8a6234;
+  letter-spacing: 0.04em;
+}
+
+/* A record that is being set right now. The one place this UI is allowed to be pleased. */
+.boardFresh {
+  color: #5fd44a;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 9px;
+}
+
+.boardsFoot {
+  margin-top: 10px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #6d5c4d;
+}
+
+/* --- the Dawn Report card -------------------------------------------------------- */
+
+/*
+ * Top centre, well clear of the toolbelt and the clipboard, and `pointer-events: none` on
+ * everything except its own dismiss button. It fades in over 240 ms and out over 400 ms; it
+ * never slides, because a card that moves while you are reading it is a card you re-read.
+ */
+.dawn {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 380px;
+  pointer-events: none;
+  animation: dawnIn 240ms ease-out;
+}
+
+.dawnLeaving {
+  animation: dawnOut 400ms ease-in forwards;
+}
+
+@keyframes dawnIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes dawnOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* The one warm-light surface, like the Clipboard. A sunrise should not arrive in umber. */
+.dawnCard {
+  position: relative;
+  padding: 13px 16px 12px;
+  color: #46392f;
+  background: linear-gradient(180deg, #f5d382 0%, #efe2c6 42%, #cbb99b 100%);
+  box-shadow:
+    inset 0 0 0 2px #8a6234,
+    inset 0 0 0 4px #f5d382,
+    0 6px 0 -2px rgba(20, 16, 14, 0.35);
+  clip-path: polygon(
+    6px 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% calc(100% - 6px),
+    calc(100% - 6px) 100%,
+    6px 100%,
+    0 calc(100% - 6px),
+    0 6px
+  );
+}
+
+.dawnHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+}
+
+.dawnTitle {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #8a6234;
+}
+
+.dawnDay {
+  font-size: 11px;
+  color: #6d5c4d;
+  font-variant-numeric: tabular-nums;
+}
+
+.dawnMoney {
+  font-size: 25px;
+  font-weight: 700;
+  color: #35571f;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 0 rgba(239, 226, 198, 0.9);
+}
+
+.dawnMoneyDown {
+  color: #9e2f27;
+}
+
+.dawnLines {
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dawnLine {
+  display: flex;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #46392f;
+}
+
+.dawnDot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  background: #4e7c2e;
+  box-shadow: 0 0 0 1px rgba(20, 16, 14, 0.45);
+}
+
+.dawnDotFlag {
+  background: #9e2f27;
+}
+
+.dawnDotStub {
+  background: #9a8873;
+}
+
+.dawnStub {
+  color: #6d5c4d;
+  font-style: italic;
+}
+
+/* The dismiss button is the ONLY thing in the card that takes a pointer event. */
+.dawnClose {
+  pointer-events: auto;
+  cursor: pointer;
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: #8a6234;
+  background: transparent;
+}
+
+.dawnClose:hover {
+  color: #9e2f27;
+}
+
+/*
+ * The five-second drain bar.
+ *
+ * A CSS animation rather than a width driven from the tick: the bar is decoration on a card
+ * whose real deadline the store owns in ticks, and re-rendering a component seven times a
+ * second to move a three-pixel strip would be the most expensive cosmetic in the game. The
+ * two clocks can disagree by a frame and nobody will ever know; if they disagree by more
+ * than that, the sim is running slow and the bar is the least of it.
+ */
+.dawnTrack {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: #b58b4d;
+  box-shadow: 0 -1px 0 rgba(20, 16, 14, 0.25);
+  transform-origin: left center;
+  animation: dawnDrain 5s linear forwards;
+}
+
+@keyframes dawnDrain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* Somebody who asked the operating system for less motion gets a static bar, not a nothing. */
+@media (prefers-reduced-motion: reduce) {
+  .dawn,
+  .dawnLeaving,
+  .dawnTrack {
+    animation: none;
+  }
+}
+
+/* --- the commerce panel ---------------------------------------------------------- */
+
+.commerceRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-top: 2px solid #14100e;
+}
+
+.commerceRow:first-of-type {
+  border-top: 0;
+}
+
+.commerceHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.commerceName {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #efe2c6;
+}
+
+.commerceMeta {
+  font-size: 10.5px;
+  color: #9a8873;
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  position: relative;
+  height: 9px;
+  background: #14100e;
+  box-shadow: inset 0 0 0 1px #46392f;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: repeating-linear-gradient(90deg, #d9b475 0px, #d9b475 3px, #b58b4d 3px, #b58b4d 4px);
+  box-shadow: inset 0 2px 0 #f5d382;
+  transition: width 220ms linear;
+}
+
+/* In transit. Water blue is the countdown colour everywhere else in this HUD, so it is the
+   countdown colour here too — the truck is a countdown with wheels. */
+.fillAway {
+  background: repeating-linear-gradient(90deg, #4fa3d1 0px, #4fa3d1 3px, #2c6a8d 3px, #2c6a8d 4px);
+  box-shadow: inset 0 2px 0 #9fdcef;
+}
+
+.fillReady {
+  background: repeating-linear-gradient(90deg, #74a340 0px, #74a340 3px, #4e7c2e 3px, #4e7c2e 4px);
+  box-shadow: inset 0 2px 0 #a3c65c;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.button {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 5px 9px 6px;
+  border: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbb99b;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+  transition: transform 70ms steps(2, end);
+}
+
+.button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  color: #efe2c6;
+}
+
+.buttonPrimary {
+  color: #14100e;
+  background: linear-gradient(180deg, #f5d382 0%, #d9b475 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #8a6234;
+}
+
+.button:disabled {
+  cursor: default;
+  color: #46392f;
+  background: linear-gradient(180deg, #211a13 0%, #1a140f 100%);
+}
+
+.select {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 4px 6px 5px;
+  border: 0;
+  font: inherit;
+  font-size: 11px;
+  color: #cbb99b;
+  background: #14100e;
+  box-shadow: inset 0 0 0 2px #46392f;
+}
+
+.select:disabled {
+  cursor: default;
+  color: #46392f;
+}
+
+/*
+ * The stub banner. Says exactly what is missing and stops talking — plan §8 wants stubs
+ * listed explicitly, and "coming soon" is not a listing, it is an apology.
+ */
+.pending {
+  margin-top: 4px;
+  padding: 9px 10px;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: #9a8873;
+  background: rgba(20, 16, 14, 0.55);
+  box-shadow: inset 0 0 0 2px #14100e;
+}
+
+.pendingTitle {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f2a93b;
+}
+
+.pendingList {
+  margin: 5px 0 0;
+  padding-left: 14px;
+  color: #6d5c4d;
+}
+
+/* --- the tab strip --------------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: 5px;
+  pointer-events: auto;
+}
+
+.tab {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 5px 10px 6px;
+  border: 0;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9a8873;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+}
+
+.tab:hover {
+  color: #efe2c6;
+}
+
+.tabActive {
+  color: #14100e;
+  background: linear-gradient(180deg, #f5d382 0%, #d9b475 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #8a6234;
+}
+
+.tabKey {
+  opacity: 0.7;
+  margin-left: 5px;
+  font-size: 9px;
+}
+
+/* --- small screens --------------------------------------------------------------- */
+
+/*
+ * The docked panels go before the Dawn Report does. A report you opened is a thing you can
+ * open again; a card that appears once at sunrise and is the reason for "one more day" is
+ * not, and §2 is explicit about which of those is load-bearing.
+ */
+@media (max-width: 1040px) {
+  .dock {
+    display: none;
+  }
+  .dawn {
+    width: min(380px, calc(100vw - 28px));
+  }
+}
