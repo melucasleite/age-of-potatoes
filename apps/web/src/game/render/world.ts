@@ -21,6 +21,8 @@ import type { ItemPage } from './belt-items';
 import { ArtSheet, artSheetRequested } from './artsheet';
 import { BeltStructureLayer } from './belt-structure';
 import type { Camera } from './camera';
+import { Ceremony } from './ceremony';
+import { FarmFx } from './farm-fx';
 import { GrabberLayer } from './grabbers';
 import { Hud } from './hud';
 import { createLayers, destroyLayers, LAYER_ORDER } from './layers';
@@ -100,6 +102,10 @@ export interface WorldScene {
   /** Where a pending walk-to errand is headed. Hidden whenever there is no errand. */
   readonly destination: Sprite;
   readonly droplets: Droplet[];
+  /** The drink-bounce and the harvest pop-and-magnet. Derived from the projection. */
+  readonly farmFx: FarmFx;
+  /** Plan §3's Hall of Hands: ~10 seconds of theatre, once per world, ever. */
+  readonly ceremony: Ceremony;
   readonly hud: Hud;
   readonly overlay: DevOverlay;
   /** The `?artsheet` screen, or null when the URL did not ask for it. */
@@ -228,8 +234,15 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     layers.groundEntities.attach(wet);
     soil.push(wet);
 
+    // ANCHORED AT ITS BASE, not its top-left. The drink-bounce is a squash-stretch, and a
+    // squash about a sprite's corner slides the plant sideways out of its own tile; about
+    // its middle it shrinks like a deflating balloon. About the base it presses into the
+    // soil and springs back, which is the only one of the three that reads as drinking.
+    // The rect drawn at rest is identical to the top-left version — this moves nothing
+    // until something scales it.
     const crop = new Sprite(art.get(ART.cropStage(1, 1)));
-    crop.position.set(tileX * TILE_PX, tileY * TILE_PX);
+    crop.anchor.set(0.5, 1);
+    crop.position.set(tileX * TILE_PX + TILE_PX / 2, tileY * TILE_PX + TILE_PX);
     crop.visible = false;
     contentRoot.addChild(crop);
     layers.groundEntities.attach(crop);
@@ -291,6 +304,15 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
 
   const itemPage = buildItemPage(app.renderer, art);
 
+  // The harvest magnet flies an ITEM, so it needs the item page — which is why this is built
+  // here with the factory rather than up with the crop sprites it decorates.
+  const farmFx = new FarmFx(itemPage, FIELD_TILE_COUNT, (sprite) => {
+    contentRoot.addChild(sprite);
+    // Above the player: a potato being sucked into somebody's pocket passes in front of
+    // them, and one that vanishes behind the farmer reads as having been dropped.
+    layers.worldUi.attach(sprite);
+  });
+
   const pipes = new PipeLayer(app.renderer, art, (sprite) => {
     contentRoot.addChild(sprite);
     layers.pipes.attach(sprite);
@@ -312,9 +334,20 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     layers.player.attach(visual.cargo);
   });
 
+  // The frame rather than the whole art set: `ceremony.ts` stays free of `textures.ts` so it
+  // can be loaded by a test. See the note at the top of that file.
+  const ceremony = new Ceremony(art.get(ART.uiHover), (sprite) => {
+    contentRoot.addChild(sprite);
+    layers.worldUi.attach(sprite);
+  });
+
   const hud = new Hud();
   const overlay = new DevOverlay();
-  screenRoot.addChild(hud.root, overlay.root);
+  // The ceremony's screen chrome goes in FIRST, so the HUD and the dev overlay draw over
+  // it. Ten seconds of theatre that hides the money counter is ten seconds of theatre that
+  // has started blocking the game, and the whole constraint on this feature is that it does
+  // not — the sim keeps running and the player keeps playing straight through it.
+  screenRoot.addChild(ceremony.screenRoot, hud.root, overlay.root);
 
   // `?artsheet` — the whole sprite set on one screen. Off by default, built only when asked
   // for, and it reads nothing but the art set. See `artsheet.ts` for why it earns its place.
@@ -340,6 +373,8 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     hover,
     destination,
     droplets,
+    farmFx,
+    ceremony,
     hud,
     overlay,
     artSheet,
@@ -397,6 +432,10 @@ export function destroyWorldScene(scene: WorldScene): void {
   scene.hud.destroy();
   scene.overlay.destroy();
   scene.artSheet?.destroy();
+  // Before the roots are torn down: the ceremony holds window listeners for its skip, and a
+  // torn-down scene that still answers keystrokes is a leak with a visible symptom.
+  scene.ceremony.destroy();
+  scene.farmFx.destroy();
   // The particle container before the item page: the page owns the shared texture source
   // every particle points at, and freeing it first hands the container dead frames.
   scene.beltItems.destroy();

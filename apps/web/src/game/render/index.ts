@@ -27,6 +27,7 @@ import { TOOL_INFO, ToolMode, toolMachineKind } from '../input/tools';
 import type { HoverTile } from '../input/context';
 import { tileAtView } from '../input/picking';
 import { beltItemAtTile } from './belt-items';
+import { FarmFx } from './farm-fx';
 import { money } from './hud';
 import { lampAlpha, lampTint } from './lamps';
 import { liquidName, liquidTint, portHintTint } from './liquids';
@@ -39,6 +40,9 @@ export interface RenderUiState {
   hover: HoverTile | null;
   tool: ToolMode;
 }
+
+/** Reused so the per-frame camera blend allocates nothing. Renderer-local, write-only. */
+const cameraTarget = { x: 0, y: 0 };
 
 /**
  * Fold one simulated tick into the renderer's interpolation state.
@@ -91,7 +95,14 @@ export function render(
   scene.player.texture = scene.art.get(facingTexture(view.player.facing));
 
   // 3. Camera follows the interpolated position, then clamps and snaps.
-  scene.camera.lookAt(playerWorldX, playerWorldY);
+  //
+  //    A running ceremony LEANS this toward whatever it is celebrating. That is all it does
+  //    to the camera: a bias on the look-at target, with the clamp and the pixel snap still
+  //    running underneath exactly as before. The player keeps walking, and the camera keeps
+  //    following them — it is simply doing it from a little further over for ten seconds.
+  scene.ceremony.observe(view);
+  scene.ceremony.cameraTarget(playerWorldX, playerWorldY, cameraTarget);
+  scene.camera.lookAt(cameraTarget.x, cameraTarget.y);
   scene.camera.clampToWorld(WORLD_WIDTH_PX, WORLD_HEIGHT_PX);
   scene.camera.apply(scene.worldRoot);
 
@@ -101,7 +112,7 @@ export function render(
   scene.terrain.cull(rect);
 
   // 5. The field.
-  updateField(scene, view, deltaMs);
+  updateField(scene, view, deltaMs, playerWorldX, playerWorldY);
 
   // 6. The factory. Belt surfaces scroll their UVs, belt items are derived fresh into a
   //    pooled particle buffer sized to `rect` — not to the world — and grabber arms read
@@ -126,17 +137,31 @@ export function render(
   // 9. Day/night: one colour matrix on the world root.
   applyDayNight(scene, view.tick);
 
-  // 10. Chrome.
+  // 10. Chrome. The ceremony's plaque is laid out before it is advanced, so its first frame
+  //     is already sized to the viewport rather than sliding in from the wrong place.
   const t = scene.camera.transform;
   scene.overlay.layout(t.viewWidth);
+  scene.ceremony.layout(t.viewWidth, t.viewHeight);
+  scene.ceremony.update(deltaMs);
   scene.hud.update(view, ui.tool, { status: statusFor(view, ui) });
 }
 
 // --- field ---------------------------------------------------------------------------
 
-function updateField(scene: WorldScene, view: WorldView, deltaMs: number): void {
+function updateField(
+  scene: WorldScene,
+  view: WorldView,
+  deltaMs: number,
+  playerWorldX: number,
+  playerWorldY: number,
+): void {
   const field = view.field;
   const now = performance.now();
+
+  // The harvest diff, before anything reads the field this frame. It spots a ripe crop that
+  // vanished and throws a potato at the player — see `farm-fx.ts` for why that is derived
+  // here rather than pushed by the sim, and for why it can never write anything back.
+  scene.farmFx.observe(field);
 
   for (let i = 0; i < scene.soil.length; i++) {
     const moisture = field.moisturePermille[i] ?? 0;
@@ -147,11 +172,15 @@ function updateField(scene: WorldScene, view: WorldView, deltaMs: number): void 
     wet.alpha = (moisture / 1000) * 0.72;
 
     // A rise in moisture means somebody — hand or sprinkler — just poured. Spray a few
-    // droplets. Cosmetic randomness lives in the renderer and uses `Math.random` freely
-    // (§12); it must never touch a sim RNG stream, and it does not.
+    // droplets, and bounce whatever is planted here: item 009's "plants bounce when they
+    // drink", which together with the darkening soil is the three-part feedback the design
+    // gate rests on. ONE diff drives both effects rather than two passes over 64 numbers.
+    // Cosmetic randomness lives in the renderer and uses `Math.random` freely (§12); it
+    // must never touch a sim RNG stream, and it does not.
     const previous = scene.lastMoisture[i] ?? 0;
-    if (moisture > previous + 40) {
+    if (FarmFx.isPour(moisture, previous)) {
       spawnDroplets(scene, i, field.originX, field.originY, field.tilesWide);
+      scene.farmFx.pour(i);
     }
     scene.lastMoisture[i] = moisture;
 
@@ -180,7 +209,16 @@ function updateField(scene: WorldScene, view: WorldView, deltaMs: number): void 
     const tileTop = (field.originY + Math.floor(i / field.tilesWide)) * TILE_PX;
     crop.tint =
       wilt === WiltStage.Wilted ? 0x9a8c6a : wilt === WiltStage.Wilting ? 0xd8cf7a : 0xffffff;
-    crop.y = tileTop + (wilt === WiltStage.Wilted ? 2 : wilt === WiltStage.Wilting ? 1 : 0);
+    // `+ TILE_PX` because the crop sprite is anchored at its BASE (see `world.ts`): its y is
+    // where the stem meets the soil, not where the leaves start.
+    crop.y =
+      tileTop + TILE_PX + (wilt === WiltStage.Wilted ? 2 : wilt === WiltStage.Wilting ? 1 : 0);
+
+    // The drink-bounce. A flat transform when the tile is not bouncing, so this is an
+    // unconditional two-number write rather than a branch — and the crop's scale is owned
+    // here and only here, which is what keeps it from fighting the wilt sag above.
+    const bounce = scene.farmFx.bounceAt(i);
+    crop.scale.set(bounce.scaleX, bounce.scaleY);
 
     const ready = field.ready[i] === 1;
     const mark = scene.readyMarks[i]!;
@@ -199,6 +237,11 @@ function updateField(scene: WorldScene, view: WorldView, deltaMs: number): void 
   }
 
   updateDroplets(scene, deltaMs);
+
+  // The bounce clocks and the potatoes in flight. The magnet reads the player's INTERPOLATED
+  // position — the same write-only value the sprite was drawn at a few lines above — so a
+  // potato chases the farmer as he walks rather than flying to where he used to be.
+  scene.farmFx.update(deltaMs, playerWorldX, playerWorldY);
 }
 
 function spawnDroplets(

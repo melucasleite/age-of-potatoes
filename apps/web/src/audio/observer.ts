@@ -89,7 +89,20 @@ export class WorldObserver {
   private harvestStreak = 0;
   private lastHarvestTick = -1000;
 
-  /** §3's ceremony fires once a session, the first time a sprinkler ever pours. */
+  /**
+   * Whether a sprinkler has ever poured in THIS WORLD — not in this session.
+   *
+   * It used to be the latter, and that made §3's first-run fanfare replay every time the
+   * page was reloaded, which is the precise opposite of what a ceremony is. It is primed in
+   * `primeCeremonies` from `wateredCount`, a lifetime counter that lives in `WorldState` and
+   * is therefore hashed and saved — so a world whose sprinkler has already run opens quietly.
+   *
+   * The honest fix is still one line in `packages/sim`: `advanceSprinkler` should call
+   * `markCeremony` the way the piped head and the Irrigation Hub already do, and this should
+   * read `view.ceremonies`. See the note in `game/render/ceremony.ts`. Until then this reads
+   * the closest persisted fact there is, and gets one corner wrong: demolish the only
+   * sprinkler after it has poured, build a new one, and the fanfare plays again.
+   */
   private sprinklerHasRun = false;
 
   private readonly ensemble: EnsembleVoice[] = [];
@@ -112,6 +125,7 @@ export class WorldObserver {
     // emitting, or loading a save would fire every sound in the catalogue at once.
     if (!this.initialized || view.tick < this.prevTick) {
       this.snapshot(view);
+      this.primeCeremonies(view);
       this.initialized = true;
       this.prevTick = view.tick;
       this.rebuildEnsemble(view, rect);
@@ -137,6 +151,24 @@ export class WorldObserver {
     this.prevMachines.clear();
     this.ensemble.length = 0;
     this.harvestStreak = 0;
+    // Cleared so that `primeCeremonies` is the ONLY thing that can set it. Left true, a
+    // teardown followed by a fresh world would silently suppress that world's first run.
+    this.sprinklerHasRun = false;
+  }
+
+  /**
+   * Read the world's own memory of what has already happened, so a reload is not a first time.
+   *
+   * Runs on the same branch that snapshots without emitting — a restored save must neither
+   * fire every sound in the catalogue nor forget which fanfares it has already earned.
+   */
+  private primeCeremonies(view: WorldView): void {
+    for (const machine of view.machines) {
+      if (machine.kind === MachineKind.Sprinkler && machine.wateredCount > 0) {
+        this.sprinklerHasRun = true;
+        return;
+      }
+    }
   }
 
   // --- the diffs ------------------------------------------------------------------------
