@@ -16,10 +16,19 @@
 // is just a field to assign. No DOM, no camera, no Pixi, nothing mocked.
 
 import { describe, expect, it } from 'vitest';
-import { CropId, IntentAction, ItemId, MachineKind, SUBTILE, createWorldView } from '@snack/sim';
+import {
+  CropId,
+  Direction,
+  IntentAction,
+  ItemId,
+  MachineKind,
+  SUBTILE,
+  createWorldView,
+} from '@snack/sim';
 import type { Command, WorldView } from '@snack/sim';
 
-import { reachAdjusted } from './pointer';
+import { bestSellable, counterPanelFor, primaryCommand, reachAdjusted } from './pointer';
+import { ToolMode } from './tools';
 
 /** Stand the farmer on the centre of a tile. Reach is measured from tile centres. */
 function standingOn(tileX: number, tileY: number): WorldView {
@@ -33,15 +42,33 @@ function standingOn(tileX: number, tileY: number): WorldView {
  * A machine occupying one tile. `reachAdjusted` finds it the same way a click does — by
  * asking `tileAtView` what covers the clicked tile — so it only has to be in `view.machines`.
  */
-function withMachine(view: WorldView, tileX: number, tileY: number, kind: number): WorldView {
+function withMachine(
+  view: WorldView,
+  tileX: number,
+  tileY: number,
+  kind: number,
+  id = 1,
+): WorldView {
   view.machines.push({
-    id: 1,
+    id,
     kind,
     tileX,
     tileY,
     tilesWide: 1,
     tilesHigh: 1,
   } as WorldView['machines'][number]);
+  return view;
+}
+
+/** One inventory row. `sellable` is the only field the bin's hand verb reads. */
+function withItem(view: WorldView, item: number, count: number, sellable: number): WorldView {
+  view.inventory.push({
+    item,
+    count,
+    sellable,
+    boxedMachineKind: 0,
+    boxes: [],
+  } as WorldView['inventory'][number]);
   return view;
 }
 
@@ -117,6 +144,115 @@ describe('reachAdjusted — out of reach', () => {
       item: ItemId.RussetPotato,
       count: 3,
     });
+  });
+});
+
+describe('reachAdjusted — the two verbs 054 added', () => {
+  // Same wiring as Repair, which is what the sim's `IntentAction.Deconstruct` was modelled on.
+  // A wrong action here walks the farmer across the lot to whack a machine he meant to box.
+  it('walks to a distant machine to box it', () => {
+    const view = withMachine(standingOn(1, 1), FAR.tileX, FAR.tileY, MachineKind.Fryer);
+    const direct: Command = { type: 'DeconstructMachine', machineId: 1 };
+    expect(reachAdjusted(view, FAR, direct)).toEqual({
+      type: 'WalkAndAct',
+      action: IntentAction.Deconstruct,
+      tileX: 14,
+      tileY: 14,
+      item: 0,
+      count: 0,
+    });
+  });
+
+  it('boxes it where it stands when the machine is already in reach', () => {
+    const view = withMachine(standingOn(4, 4), 4, 4, MachineKind.Fryer);
+    const direct: Command = { type: 'DeconstructMachine', machineId: 1 };
+    expect(reachAdjusted(view, { tileX: 4, tileY: 4 }, direct)).toBe(direct);
+  });
+
+  // A buy carries no tile of its own — the board is a panel, not a click on the world — so the
+  // errand has to find the counter. Aiming at the clicked tile instead would send the farmer to
+  // wherever the cursor happened to be, and `intentTargetSubtiles` would refuse it on arrival.
+  it('finds the stand itself and walks there to buy', () => {
+    const view = withMachine(standingOn(1, 1), FAR.tileX, FAR.tileY, MachineKind.SellBin);
+    const direct: Command = { type: 'BuyItem', item: ItemId.PotatoSeed, count: 10 };
+    expect(reachAdjusted(view, { tileX: 0, tileY: 0 }, direct)).toEqual({
+      type: 'WalkAndAct',
+      action: IntentAction.Buy,
+      tileX: 14,
+      tileY: 14,
+      item: ItemId.PotatoSeed,
+      count: 10,
+    });
+  });
+
+  it('buys on the spot when the farmer is already at the counter', () => {
+    const view = withMachine(standingOn(4, 4), 4, 4, MachineKind.SellBin);
+    const direct: Command = { type: 'BuyItem', item: ItemId.PotatoSeed, count: 10 };
+    expect(reachAdjusted(view, { tileX: 4, tileY: 4 }, direct)).toBe(direct);
+  });
+
+  it('walks to the nearest stand rather than the lowest id', () => {
+    const view = standingOn(1, 1);
+    withMachine(view, 14, 14, MachineKind.SellBin, 1);
+    withMachine(view, 4, 4, MachineKind.SellBin, 2);
+    const direct: Command = { type: 'BuyItem', item: ItemId.PotatoSeed, count: 1 };
+    const walk = reachAdjusted(view, { tileX: 0, tileY: 0 }, direct);
+    expect(walk).toMatchObject({ type: 'WalkAndAct', tileX: 4, tileY: 4 });
+  });
+});
+
+describe('the sell bin is a counter with two sides', () => {
+  // The old rule was a hard-coded `PotatoSeed` skip, which was right about one of the four
+  // seeds in the game: cane, corn and chili seeds all have list prices and are all refused by
+  // `applySellItem`, so a pouch holding only those built a command the sim threw away and the
+  // click died silently. `sellable` is the fact itself.
+  it('never offers to sell something the bin refuses', () => {
+    const view = withItem(standingOn(4, 4), ItemId.CaneSeed, 9, 0);
+    expect(bestSellable(view)).toBeNull();
+  });
+
+  it('picks the most valuable stack the bin will take', () => {
+    const view = standingOn(4, 4);
+    withItem(view, ItemId.PotatoSeed, 40, 0);
+    withItem(view, ItemId.RussetPotato, 3, 1);
+    expect(bestSellable(view)).toEqual({ item: ItemId.RussetPotato, count: 3 });
+  });
+
+  it('opens the board when a Hand click on the bin has nothing to sell', () => {
+    const view = withMachine(standingOn(4, 4), 4, 4, MachineKind.SellBin);
+    expect(primaryCommand(view, { tileX: 4, tileY: 4 }, ToolMode.Hand, Direction.East)).toBeNull();
+    expect(counterPanelFor(view, { tileX: 4, tileY: 4 }, ToolMode.Hand)).toBe('shop');
+  });
+
+  it('sells rather than opening anything when the pouch has goods', () => {
+    const view = withMachine(standingOn(4, 4), 4, 4, MachineKind.SellBin);
+    withItem(view, ItemId.RussetPotato, 2, 1);
+    expect(primaryCommand(view, { tileX: 4, tileY: 4 }, ToolMode.Hand, Direction.East)).toEqual({
+      type: 'SellItem',
+      item: ItemId.RussetPotato,
+      count: 2,
+    });
+  });
+
+  it('leaves every other machine alone — only the counter opens a panel', () => {
+    const view = withMachine(standingOn(4, 4), 4, 4, MachineKind.Fryer);
+    expect(counterPanelFor(view, { tileX: 4, tileY: 4 }, ToolMode.Hand)).toBeNull();
+  });
+});
+
+describe('the Box Up tool', () => {
+  it('names the machine under the cursor and lets the sim judge it', () => {
+    const view = withMachine(standingOn(4, 4), 4, 4, MachineKind.Fryer, 7);
+    expect(
+      primaryCommand(view, { tileX: 4, tileY: 4 }, ToolMode.Deconstruct, Direction.East),
+    ).toEqual({ type: 'DeconstructMachine', machineId: 7 });
+  });
+
+  it('does nothing on bare ground', () => {
+    const view = standingOn(4, 4);
+    expect(
+      primaryCommand(view, { tileX: 4, tileY: 4 }, ToolMode.Deconstruct, Direction.East),
+    ).toBeNull();
   });
 });
 

@@ -10,10 +10,16 @@
 // six hundred. A per-frame emission would bloat the trace to nothing-per-second and make
 // the diff between two sessions unreadable, which is the whole value of having it.
 //
-// EVERYTHING ELSE IN THIS FILE IS UI STATE AND ENTERS NOTHING. Zoom is not a command and
-// is never traced or hashed (§12, and the header of `packages/sim/src/commands.ts` says so
-// by name). Nor is the build menu, the armed tool, the placement rotation, or the crop a
+// ALMOST EVERYTHING ELSE IN THIS FILE IS UI STATE AND ENTERS NOTHING. Zoom is not a command
+// and is never traced or hashed (§12, and the header of `packages/sim/src/commands.ts` says
+// so by name). Nor is the build menu, the armed tool, the placement rotation, or the crop a
 // new zone will be assigned. A replay must not depend on which panel was open.
+//
+// THE EXCEPTION, AND IT IS EXACTLY ONE: R over a placed grabber emits `RotateGrabber` ([[052]]).
+// Turning an arm that is standing on the lot is a change to the WORLD — it changes where goods
+// go on the next tick — so it is a command, at a tick boundary, in the trace, like every other
+// verb. R with no arm under the cursor still only cycles the ghost's facing and still enters
+// nothing. Both live behind `system.rotate()` so this file never has to know which is which.
 //
 // THE BUILD MENU IS MODAL OVER EXACTLY TWO THINGS — the digits and the arrow keys — and it
 // stops the player walking while it is up. That last part is a deliberate courtesy rather
@@ -113,8 +119,12 @@ export class KeyboardInput {
         event.preventDefault();
         this.system.toggleBuildMenu();
         return;
+      // The one key in this switch that can emit a command. `rotate()` decides which of the two
+      // things R means here — turning the placed arm under the cursor is a `RotateGrabber`,
+      // turning the ghost is cursor state — and the decision needs hover, which is the
+      // pointer's business rather than this file's.
       case 'KeyR':
-        this.system.rotatePlacement();
+        this.system.rotate();
         return;
       case 'KeyC':
         this.system.cycleZoneCrop();

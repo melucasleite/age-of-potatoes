@@ -57,6 +57,18 @@ export const ToolMode = {
   PlaceFryer: 16,
   PlaceSeasoner: 17,
   PlaceBagger: 18,
+
+  /**
+   * Box a machine up and put it in the pouch ([[054]]).
+   *
+   * IN THE BUILD PALETTE THOUGH IT BUYS NOTHING, and that is a considered exception to the
+   * header above rather than an oversight. The toolbelt is six slots of muscle memory and
+   * full; this is the inverse of the fifteen rows next to it — you arm it, you click a
+   * machine, the lot changes — so it belongs to the surface that edits the lot rather than
+   * to the one you reach for every ten seconds. It costs nothing and pays nothing: the
+   * money verb is `SellBoxedMachine`, from the inventory panel, one deliberate step later.
+   */
+  Deconstruct: 19,
 } as const;
 
 export type ToolMode = (typeof ToolMode)[keyof typeof ToolMode];
@@ -230,6 +242,13 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     costCents: machinePrice(MachineKind.Bagger),
     gesture: 'click',
   },
+
+  [ToolMode.Deconstruct]: {
+    label: 'Box Up',
+    hint: 'click a machine to box it — dials and wear come with it',
+    costCents: 0,
+    gesture: 'click',
+  },
 };
 
 /** The crop a brand-new zone is assigned. Others are picked with `C` once researched. */
@@ -262,6 +281,36 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       return null;
   }
 }
+
+/**
+ * The inverse: which tool puts THIS machine kind down. `null` for a kind nothing places.
+ *
+ * DERIVED FROM `toolMachineKind` RATHER THAN WRITTEN OUT AGAIN, because a second switch is a
+ * second switch that can disagree — and the way it would disagree is a boxed Fryer whose
+ * "place" button arms the Seasoner, which is a silent, expensive, entirely plausible bug. The
+ * scan is over seven entries and runs when a player clicks a row in the inventory panel, not
+ * per frame.
+ *
+ * Exists for [[054]]'s inventory panel: a boxed row's place affordance arms the build tool for
+ * `InventoryView.boxedMachineKind`, and `PlaceMachine` then opens the box instead of buying.
+ */
+export function toolForMachineKind(kind: MachineKind): ToolMode | null {
+  for (let i = 0; i < PLACEMENT_TOOLS.length; i++) {
+    const tool = PLACEMENT_TOOLS[i]!;
+    if (toolMachineKind(tool) === kind) return tool;
+  }
+  return null;
+}
+
+const PLACEMENT_TOOLS: readonly ToolMode[] = [
+  ToolMode.PlaceSprinkler,
+  ToolMode.PlaceChipKitchen,
+  ToolMode.PlaceWasher,
+  ToolMode.PlaceSlicer,
+  ToolMode.PlaceFryer,
+  ToolMode.PlaceSeasoner,
+  ToolMode.PlaceBagger,
+];
 
 export function toolBeltTier(tool: ToolMode): BeltTier | null {
   switch (tool) {

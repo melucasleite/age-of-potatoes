@@ -25,7 +25,7 @@
 // So picking asks the SIM what occupies a tile — `tileAtView()` below — and never asks
 // the display. When belts land they need no new mechanism.
 
-import type { MachineView, WorldView } from '@snack/sim';
+import type { GrabberView, MachineView, WorldView } from '@snack/sim';
 import { HAND_REACH_SUBTILES, SUBTILE } from '@snack/sim';
 
 import type { Camera } from '../render/camera';
@@ -141,6 +141,24 @@ export function tileAtView(v: WorldView, tileX: number, tileY: number): TileQuer
     machine,
     withinReach: tileWithinReach(v, tileX, tileY),
   };
+}
+
+/**
+ * The arm standing on a tile, if there is one.
+ *
+ * SEPARATE FROM `TileQuery` RATHER THAN A FIELD ON IT, deliberately. `tileAtView` is called
+ * for every tile of a drag's footprint and for the status ribbon on every pointer move; a
+ * grabber scan folded into it would run on every one of those calls for the benefit of the
+ * two callers that care — R, and the ribbon line that tells the player R exists. An arm
+ * occupies exactly one tile and has no footprint, so this is a straight comparison rather
+ * than the rectangle test machines need.
+ */
+export function grabberAtView(v: WorldView, tileX: number, tileY: number): GrabberView | null {
+  for (let i = 0; i < v.grabbers.length; i++) {
+    const g = v.grabbers[i]!;
+    if (g.tileX === tileX && g.tileY === tileY) return g;
+  }
+  return null;
 }
 
 /**

@@ -21,12 +21,13 @@ import {
   itemSpec,
   machineSpec,
 } from '@snack/sim';
-import type { MachineView, WorldView } from '@snack/sim';
+import type { GrabberView, MachineView, WorldView } from '@snack/sim';
 
 import { TOOL_INFO, ToolMode, toolMachineKind } from '../input/tools';
 import { beltItemsVisibleAt } from '../input/lod';
 import type { HoverTile } from '../input/context';
-import { tileAtView } from '../input/picking';
+import { grabberAtView, tileAtView, tileWithinReach } from '../input/picking';
+import { bestSellable } from '../input/pointer';
 import { beltItemAtTile } from './belt-items';
 import { FarmFx } from './farm-fx';
 import { money } from './hud';
@@ -765,7 +766,12 @@ export function statusFor(view: WorldView, ui: RenderUiState): string {
 
   const query = tileAtView(view, ui.hover.tileX, ui.hover.tileY);
   if (!query.insideWorld) return 'outside the lot';
-  if (query.machine !== null) return machineStatus(query.machine);
+  if (query.machine !== null) return machineStatus(view, query.machine);
+
+  // An arm is not a machine and has no `MachineView`, so this is the only line in the game
+  // that can tell the player which way one is pointing and that R will turn it ([[052]]).
+  const arm = grabberAtView(view, ui.hover.tileX, ui.hover.tileY);
+  if (arm !== null) return grabberStatus(view, arm);
 
   // Belt items are picked SIM-SIDE, by tile — never by hit-testing a particle, which has
   // no interactivity to hit-test. See `belt-items.ts`.
@@ -807,7 +813,40 @@ function machineName(kind: number): string {
   return spec === null ? 'machine' : spec.slug.split('-').join(' ');
 }
 
-function machineStatus(m: MachineView): string {
+/**
+ * The arm under the cursor: which way it points, what it is holding, and whether R reaches.
+ *
+ * SAYS "TOO FAR" RATHER THAN "CLICK TO WALK THERE", because rotate is the one hand verb with
+ * no errand behind it — there is no `IntentAction` for it and item 052 says a visible refusal
+ * is the right answer. Promising a walk this key cannot perform would be worse than the
+ * papercut it was filed for.
+ */
+function grabberStatus(view: WorldView, g: GrabberView): string {
+  const facing = compass(g.dir);
+  if (!tileWithinReach(view, g.tileX, g.tileY)) {
+    return `arm facing ${facing} — too far to turn it`;
+  }
+  return g.held !== 0
+    ? `arm facing ${facing}, holding ${itemName(g.held)} — R turns it`
+    : `arm facing ${facing} — R turns it`;
+}
+
+function compass(dir: number): string {
+  switch (dir) {
+    case Direction.North:
+      return 'north';
+    case Direction.East:
+      return 'east';
+    case Direction.South:
+      return 'south';
+    case Direction.West:
+      return 'west';
+    default:
+      return 'nowhere';
+  }
+}
+
+function machineStatus(view: WorldView, m: MachineView): string {
   const name = machineName(m.kind);
   switch (m.lamp) {
     case LampState.Jammed:
@@ -825,6 +864,15 @@ function machineStatus(m: MachineView): string {
     case LampState.Running:
       return m.kind === MachineKind.Sprinkler ? 'sprinkler running' : `${name} running`;
     default:
-      return 'the roadside stand — click to sell';
+      // `LampState.Off` is "no work cycle", which is the sell bin AND every tank, pump and
+      // decorative slab — so the bin's own sentence has to be gated on the KIND rather than on
+      // the lamp, or a water tank claims to be the roadside stand.
+      if (m.kind !== MachineKind.SellBin) return `${name} idle`;
+      // Two halves of one counter ([[051]], and lane C's handoff): the bin sells, and clicking
+      // it empty-handed opens the board it buys from. The sentence says whichever one this
+      // click would actually do, read off the same function the click reads.
+      return bestSellable(view) === null
+        ? 'the roadside stand — click to open the board'
+        : 'the roadside stand — click to sell';
   }
 }

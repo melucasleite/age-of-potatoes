@@ -22,6 +22,7 @@
 // APPLIED this frame, and calls back into the host when a menu row is chosen.
 
 import type { WorldView } from '@snack/sim';
+import { Direction } from '@snack/sim';
 
 import type { Camera } from '../render/camera';
 import { TILE_PX } from '../render/pixel';
@@ -39,6 +40,16 @@ const CSS = `
 .sm-ix-band[data-tone="erase"] { border-color:rgba(233,124,110,0.95); background:rgba(233,124,110,0.18); }
 .sm-ix-band[data-tone="belt"] { border-color:rgba(226,190,101,0.95); background:rgba(226,190,101,0.16); }
 .sm-ix-band[data-tone="blocked"] { border-color:rgba(233,124,110,0.9); background:rgba(233,124,110,0.10); }
+/* The facing chevron. A ROTATED TRIANGLE RATHER THAN A GLYPH: work item 052's whole
+   complaint is that "R rotate" was a text arrow nobody read as motion, and a shape that
+   physically swings a quarter turn under the cursor is the one version of this that cannot
+   be mistaken for nothing happening. Clipped from a square so a single size sets it, and
+   drop-shadowed so it survives being drawn over a bright tile. */
+.sm-ix-chev { position:absolute; display:none; background:rgba(126,214,142,0.98);
+  clip-path:polygon(50% 0%, 100% 100%, 0% 100%);
+  filter:drop-shadow(0 1px 1px rgba(0,0,0,0.75)); }
+.sm-ix-chev[data-tone="blocked"], .sm-ix-chev[data-tone="erase"] { background:rgba(233,124,110,0.98); }
+.sm-ix-chev[data-tone="belt"] { background:rgba(226,190,101,0.98); }
 .sm-ix-tag { position:absolute; display:none; transform:translate(0,-140%); white-space:nowrap;
   padding:2px 6px; border-radius:3px; background:rgba(20,16,25,0.88); border:1px solid rgba(255,255,255,0.14); }
 /* Top-CENTRE, not top-left: the HUD's money panel owns the top-left corner and the
@@ -84,6 +95,15 @@ export interface BandState {
   h: number;
   label: string;
   tone: 'zone' | 'erase' | 'belt' | 'blocked';
+  /**
+   * The facing to draw a chevron for: a `Direction`, or `Direction.None` for no chevron.
+   *
+   * Only ever set on a one-tile band, because only arms have a facing — a machine's ports are
+   * typed by liquid rather than by geometry, so no machine in this game points anywhere
+   * (`packages/sim/src/commands.ts`, `RotateGrabberCommand`). The chevron is therefore drawn
+   * at the band's centre with no special case for a footprint it can never have.
+   */
+  dir: number;
 }
 
 export interface ChromeHooks {
@@ -101,6 +121,7 @@ export interface ChromeHooks {
 export class InputChrome {
   private root: HTMLElement | null = null;
   private band: HTMLElement | null = null;
+  private chev: HTMLElement | null = null;
   private tag: HTMLElement | null = null;
   private hint: HTMLElement | null = null;
   private menu: HTMLElement | null = null;
@@ -126,6 +147,8 @@ export class InputChrome {
 
     const band = document.createElement('div');
     band.className = 'sm-ix-band';
+    const chev = document.createElement('div');
+    chev.className = 'sm-ix-chev';
     const tag = document.createElement('div');
     tag.className = 'sm-ix-tag';
     const hint = document.createElement('div');
@@ -133,11 +156,12 @@ export class InputChrome {
     const menu = document.createElement('div');
     menu.className = 'sm-ix-menu';
 
-    root.append(band, tag, hint, menu);
+    root.append(band, chev, tag, hint, menu);
     this.container.appendChild(root);
 
     this.root = root;
     this.band = band;
+    this.chev = chev;
     this.tag = tag;
     this.hint = hint;
     this.menu = menu;
@@ -147,6 +171,7 @@ export class InputChrome {
     this.root?.remove();
     this.root = null;
     this.band = null;
+    this.chev = null;
     this.tag = null;
     this.hint = null;
     this.menu = null;
@@ -176,6 +201,7 @@ export class InputChrome {
     if (state === null) {
       band.style.display = 'none';
       tag.style.display = 'none';
+      this.setChevron(null, 0, 0, 0, 0);
       return;
     }
 
@@ -191,6 +217,8 @@ export class InputChrome {
     band.style.width = `${width}px`;
     band.style.height = `${height}px`;
 
+    this.setChevron(state, origin.x, origin.y, width, height);
+
     if (state.label === '') {
       tag.style.display = 'none';
       return;
@@ -201,19 +229,65 @@ export class InputChrome {
     tag.style.top = `${origin.y}px`;
   }
 
+  /**
+   * The facing chevron, centred on the band.
+   *
+   * Rotated in CSS rather than swapped between four glyphs, so the turn is a transform on one
+   * element and the shape is identical in all four states — four hand-drawn arrows are four
+   * chances for east to be a pixel fatter than west, which reads as a wobble every time the
+   * player presses R.
+   */
+  private setChevron(
+    state: BandState | null,
+    left: number,
+    top: number,
+    width: number,
+    height: number,
+  ): void {
+    const chev = this.chev;
+    if (chev === null) return;
+
+    const degrees = state === null ? null : chevronDegrees(state.dir);
+    if (state === null || degrees === null) {
+      chev.style.display = 'none';
+      return;
+    }
+
+    // Two fifths of the tile: big enough to read at 2× zoom, small enough that the band's
+    // own outline still shows around it at 6×.
+    const size = Math.max(9, Math.round(Math.min(width, height) * 0.4));
+    chev.style.display = 'block';
+    chev.dataset.tone = state.tone;
+    chev.style.width = `${size}px`;
+    chev.style.height = `${size}px`;
+    chev.style.left = `${left + width / 2}px`;
+    chev.style.top = `${top + height / 2}px`;
+    chev.style.transform = `translate(-50%,-50%) rotate(${degrees}deg)`;
+  }
+
   // --- the hint strip ------------------------------------------------------------------
 
-  setHint(tool: ToolMode, zoom: number): void {
+  /**
+   * `rotates` is the fix for work item 052's fourth instruction: the strip promised "R rotate"
+   * in every context this game has, including the ones where R does nothing at all, which is
+   * why the feature read as broken rather than as absent. The caller decides — it is the only
+   * layer that knows both what is armed and what is under the cursor — and the flag is part of
+   * the cache key, or the strip would keep the first answer it ever gave.
+   */
+  setHint(tool: ToolMode, zoom: number, rotates: boolean): void {
     const hint = this.hint;
     if (hint === null) return;
-    const key = `${tool}:${zoom}`;
+    const key = `${tool}:${zoom}:${rotates ? 1 : 0}`;
     if (key === this.lastHintKey) return;
     this.lastHintKey = key;
 
     const info = TOOL_INFO[tool];
+    const keys = ['wheel or +/-', 'B build', rotates ? 'R rotate' : '', 'Esc cancel'].filter(
+      (part) => part !== '',
+    );
     hint.innerHTML =
       `<b>${escapeHtml(info.label)}</b> <span>${escapeHtml(info.hint)}</span><br>` +
-      `<span>${zoom}× zoom · wheel or +/- · B build · R rotate · Esc cancel</span>`;
+      `<span>${zoom}× zoom · ${keys.join(' · ')}</span>`;
   }
 
   // --- the build menu ------------------------------------------------------------------
@@ -332,6 +406,30 @@ export class InputChrome {
         this.armCursor();
       });
     }
+  }
+}
+
+/**
+ * Which way to turn the chevron, or `null` for "draw nothing".
+ *
+ * NORTH IS ZERO because the triangle is clipped pointing up, and the compass then runs
+ * clockwise exactly as `rotateDirectionClockwise()` does in the sim — so the shape on screen
+ * turns the same way and by the same step as the arm in the world. A direction this build has
+ * never heard of draws no chevron rather than an arbitrary one: a save from a newer version is
+ * a real thing, and a confident wrong arrow is worse than none.
+ */
+function chevronDegrees(dir: number): number | null {
+  switch (dir) {
+    case Direction.North:
+      return 0;
+    case Direction.East:
+      return 90;
+    case Direction.South:
+      return 180;
+    case Direction.West:
+      return 270;
+    default:
+      return null;
   }
 }
 

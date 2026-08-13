@@ -83,7 +83,7 @@ export class InputSystem {
   update(): void {
     const tool = this.host.getTool();
     this.chrome.setBand(this.pointer.band());
-    this.chrome.setHint(tool, this.host.camera.transform.zoom);
+    this.chrome.setHint(tool, this.host.camera.transform.zoom, this.pointer.rotateAdvertised(tool));
     this.chrome.tick(tool);
   }
 
@@ -155,6 +155,36 @@ export class InputSystem {
     this.pointer.cancelDrag();
   }
 
+  /**
+   * R. One press, one quarter turn — of the arm under the cursor if there is one, and of the
+   * ghost otherwise.
+   *
+   * THE PLACED ARM WINS, AND THE ORDER IS THE FEATURE. Item 052 exists because R only ever
+   * meant "cycle a variable that nothing visible reads": rotating an arm you had already put
+   * down was impossible, so a player who placed one facing the wrong way had to sell it and
+   * place another. Hovering the thing you want to turn is the most direct statement of intent
+   * available, so it outranks the ghost.
+   *
+   * THE ROTATE IS A COMMAND AND THE GHOST IS NOT, which is the whole seam in one method. One
+   * press is one `RotateGrabber` in the trace, applied at a tick boundary and re-validated by
+   * the sim; `placeDir` is cursor state that is never traced, never hashed and never saved.
+   *
+   * MID-DRAG R KEEPS ITS OLD MEANING, per the item's constraints. Nothing draggable rotates,
+   * so this is a promise not to surprise a player halfway through a belt run rather than a
+   * behaviour anybody will notice.
+   */
+  rotate(): void {
+    if (!this.dragging) {
+      const command = this.pointer.rotateCommand();
+      if (command !== null) {
+        this.host.queue.push(command);
+        return;
+      }
+    }
+    this.rotatePlacement();
+  }
+
+  /** Cycle the direction the NEXT arm will face. Cursor state; emits nothing. */
   rotatePlacement(): void {
     const index = DIR_CYCLE.indexOf(this.placeDir);
     this.placeDir = DIR_CYCLE[(index + 1) % DIR_CYCLE.length]!;

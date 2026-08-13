@@ -103,6 +103,19 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   machineEntry('Chip line', ToolMode.PlaceChipKitchen),
 
   machineEntry('Field', ToolMode.PlaceSprinkler),
+
+  // The one row in here that spends nothing, and the only one that takes something away.
+  // Last, in a group of its own, because a teardown verb sitting between two machines you
+  // are shopping for is a misclick waiting for a Fryer — and because "unbuild" is the
+  // natural bottom of a list of buys. See `ToolMode.Deconstruct` for why it lives on this
+  // surface rather than on the toolbelt.
+  {
+    tool: ToolMode.Deconstruct,
+    group: 'Teardown',
+    requiresTech: null,
+    costCents: 0,
+    perTile: false,
+  },
 ];
 
 export interface BuildRow {
