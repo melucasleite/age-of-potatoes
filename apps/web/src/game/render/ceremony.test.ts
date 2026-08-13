@@ -67,7 +67,7 @@ describe('ceremony triggering', () => {
 
     // A save whose sprinkler has already run. This is the reload case, and it is the whole
     // point: the world remembers, so the celebration does not happen again.
-    ceremony.observe(view([], POURED));
+    ceremony.observe(view([CeremonyId.Sprinkler], POURED));
     expect(ceremony.playing).toBe(false);
 
     advance(ceremony, 200);
@@ -79,14 +79,14 @@ describe('ceremony triggering', () => {
     ceremony.observe(view([], DRY));
     expect(ceremony.playing).toBe(false);
 
-    ceremony.observe(view([], POURED));
+    ceremony.observe(view([CeremonyId.Sprinkler], POURED));
     expect(ceremony.playing).toBe(true);
   });
 
   it('never fires the same celebration twice', () => {
     const ceremony = make();
     ceremony.observe(view([], DRY));
-    ceremony.observe(view([], POURED));
+    ceremony.observe(view([CeremonyId.Sprinkler], POURED));
     expect(ceremony.playing).toBe(true);
 
     // Run it out, then keep pouring. The machine is still watering every five seconds and
@@ -94,8 +94,23 @@ describe('ceremony triggering', () => {
     advance(ceremony, 11_000);
     expect(ceremony.playing).toBe(false);
 
-    ceremony.observe(view([], POURED));
-    ceremony.observe(view([], POURED));
+    ceremony.observe(view([CeremonyId.Sprinkler], POURED));
+    ceremony.observe(view([CeremonyId.Sprinkler], POURED));
+    expect(ceremony.playing).toBe(false);
+  });
+
+  // THE CASE THE STAND-IN GOT WRONG, now pinned. Deriving "has it poured?" from a machine's
+  // lifetime counter meant a demolish-and-rebuild reset the fact and replayed the ceremony.
+  // The sim's own flag is on the WORLD, so a second sprinkler earns nothing.
+  it('stays silent for a replacement sprinkler in a world that already celebrated', () => {
+    const ceremony = make();
+    ceremony.observe(view([], DRY));
+    ceremony.observe(view([CeremonyId.Sprinkler], POURED));
+    advance(ceremony, 11_000);
+    expect(ceremony.playing).toBe(false);
+
+    // Old one demolished, a fresh one built and now pouring. The id is still on the world.
+    ceremony.observe(view([CeremonyId.Sprinkler], [machine({ wateredCount: 1 })]));
     expect(ceremony.playing).toBe(false);
   });
 
@@ -133,7 +148,7 @@ describe('ceremony playback', () => {
   it('runs for about ten seconds and then stops on its own', () => {
     const ceremony = make();
     ceremony.observe(view([], DRY));
-    ceremony.observe(view([], POURED));
+    ceremony.observe(view([CeremonyId.Sprinkler], POURED));
 
     advance(ceremony, 9_000);
     expect(ceremony.playing).toBe(true);
@@ -151,7 +166,7 @@ describe('ceremony playback', () => {
     expect(out).toEqual({ x: 10, y: 20 });
 
     ceremony.observe(view([], DRY));
-    ceremony.observe(view([], POURED));
+    ceremony.observe(view([CeremonyId.Sprinkler], POURED));
     advance(ceremony, 1_000);
 
     // The machine sits at tile (4,4), i.e. world pixel 72 — well right of the player at 10.

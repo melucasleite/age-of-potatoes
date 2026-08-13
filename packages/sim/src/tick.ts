@@ -1369,6 +1369,11 @@ function advanceMachines(state: WorldState): void {
     // is a number in `advancePipes` has nothing left to do on its own.
     if (spec.role === MachineRole.Sprinkler) {
       advanceSprinkler(state, machine, spec, effectiveWear(spec, machine));
+      // Marked here rather than inside `advanceSprinkler`, which the piped head shares and
+      // which owes a different id. `wateredCount` is lifetime and hashed, so the mark is
+      // idempotent and survives a reload — the renderer no longer has to infer "has it ever
+      // poured?" from a counter that a demolish-and-rebuild resets.
+      if (machine.wateredCount > 0) markCeremony(state, CeremonyId.Sprinkler);
     } else if (spec.role === MachineRole.PipedSprinkler) {
       advancePipedSprinkler(state, machine, spec);
     } else if (spec.role === MachineRole.Recirculator) {

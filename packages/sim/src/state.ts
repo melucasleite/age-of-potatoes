@@ -722,6 +722,13 @@ export const CeremonyId = {
   IrrigationHub: 'irrigation-hub-first-run',
   /** The first piped head that pours without anyone having filled it. */
   PipedSprinkler: 'piped-sprinkler-first-run',
+  /**
+   * THE ONE THE WHOLE v0.1 GATE IS ABOUT: the first time the $150 barrel sprinkler pours by
+   * itself. It arrived last, after its two automated descendants already had ids, which is
+   * exactly backwards — plan §8's ship/no-ship question is whether a fresh player grins at
+   * THIS moment, and it was the only one of the three that could not be marked.
+   */
+  Sprinkler: 'sprinkler-first-run',
 } as const;
 
 export type CeremonyId = (typeof CeremonyId)[keyof typeof CeremonyId];

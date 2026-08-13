@@ -71,33 +71,6 @@ const FLASH_MS = 900;
 /** Never grow the flash pool past this. Radius 4 is a 9x9 patch and nothing covers more. */
 const MAX_FLASHES = 81;
 
-/**
- * The v0.1 barrel sprinkler's trigger, derived rather than published.
- *
- * ────────────────────────────────────────────────────────────────────────────────────
- *  THIS ONE IS A STAND-IN, AND THE REAL FIX IS ONE LINE IN `packages/sim`.
- *
- *  `CeremonyId` has ids for the v0.4 piped head and the Irrigation Hub, and `tick.ts`
- *  calls `markCeremony` for both. The v0.1 barrel sprinkler — the machine this entire
- *  project is a delivery mechanism for — has NEITHER. `advanceSprinkler` never marks
- *  anything, so its first activation is not recorded in world state at all.
- *
- *  The correct fix is `CeremonyId.Sprinkler` plus one `markCeremony` call in
- *  `advanceSprinkler`. That is sim-lane work and is not done here.
- *
- *  Until then this derives the same fact from state that IS hashed and saved: a sprinkler
- *  whose lifetime `wateredCount` has left zero. Priming on the first frame makes it
- *  survive a reload correctly, which is the property the acceptance criterion names. The
- *  one case it gets wrong and the sim's own flag would not: demolish the only sprinkler
- *  after it has watered, build another, and the ceremony plays a second time. That is a
- *  real gap, it is deliberate, and it closes the moment the sim marks the ceremony itself.
- *
- *  Deliberately NOT a value from `CeremonyId` — this string is renderer-local and must
- *  never be mistaken for save surface.
- * ────────────────────────────────────────────────────────────────────────────────────
- */
-const DERIVED_SPRINKLER = 'renderer:barrel-sprinkler-first-run';
-
 interface CeremonyCopy {
   title: string;
   subtitle: string;
@@ -106,7 +79,7 @@ interface CeremonyCopy {
 
 /** What each celebration says. Short: it is read at a glance, mid-stride, while playing. */
 const COPY: Record<string, CeremonyCopy> = {
-  [DERIVED_SPRINKLER]: {
+  [CeremonyId.Sprinkler]: {
     title: 'THE SPRINKLER',
     subtitle: 'it waters without you',
     tint: 0x7ac8f0,
@@ -222,7 +195,6 @@ export class Ceremony {
     // Prime without firing. See constraint 2 in the header.
     if (!this.primed) {
       for (const id of view.ceremonies) this.seen.add(id);
-      if (derivedSprinklerFired(view)) this.seen.add(DERIVED_SPRINKLER);
       this.primed = true;
       return;
     }
@@ -231,11 +203,6 @@ export class Ceremony {
       if (this.seen.has(id)) continue;
       this.seen.add(id);
       this.start(id, view);
-    }
-
-    if (!this.seen.has(DERIVED_SPRINKLER) && derivedSprinklerFired(view)) {
-      this.seen.add(DERIVED_SPRINKLER);
-      this.start(DERIVED_SPRINKLER, view);
     }
   }
 
@@ -486,20 +453,6 @@ export class Ceremony {
   }
 }
 
-/**
- * Has a v0.1 barrel sprinkler ever poured in this world?
- *
- * `wateredCount` is lifetime and lives in `WorldState`, so it is hashed and saved — which
- * is the property that makes this survive a reload. See `DERIVED_SPRINKLER` for why this is
- * derived at all and what it gets wrong.
- */
-function derivedSprinklerFired(view: WorldView): boolean {
-  for (const machine of view.machines) {
-    if (machine.kind === MachineKind.Sprinkler && machine.wateredCount > 0) return true;
-  }
-  return false;
-}
-
 /** The machine a ceremony is about, or null when nothing in the world matches. */
 function locate(id: string, view: WorldView): MachineView | null {
   let fallback: MachineView | null = null;
@@ -508,7 +461,7 @@ function locate(id: string, view: WorldView): MachineView | null {
     if (machine.coverageRadius <= 0) continue;
     if (fallback === null) fallback = machine;
 
-    if (id === DERIVED_SPRINKLER) {
+    if (id === CeremonyId.Sprinkler) {
       if (machine.kind === MachineKind.Sprinkler && machine.wateredCount > 0) return machine;
     } else if (id === CeremonyId.IrrigationHub) {
       if (machine.moistureSensing === 1 && machine.wateredCount > 0) return machine;
