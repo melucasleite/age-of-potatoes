@@ -109,6 +109,40 @@ holding the registry — names, timestamps and card summaries, every field of wh
 `meta` is another again, holding host-side facts about the player's visits and never world
 state — see below.
 
+## A save is loaded before it is written
+
+Rotation only buys a survivable corrupt write if what replaces `current` is loadable. Hand the
+layer two unloadable saves a minute apart and it faithfully destroys the good record with the
+first and the evidence with the second. That is not hypothetical — it is the **frankensave**, on
+the item-041 log: an HMR window stamped a save with the new format version using a reloaded
+migrations module while a stale canonical module wrote the payload, so it claimed the current
+format and was missing a field that format requires.
+
+The lesson is narrow and worth stating exactly: **every check that reads a save's own claim about
+itself is defeated by a save that lies about itself.** A version gate cannot catch a bad version
+stamp. So `verify.ts` does not check the save — it _loads_ it, through `restoreWorld`, the same
+call on the same kind of value that boot makes, then compares `hashState` in and out to catch the
+save that loads into a subtly different world. Do not replace this with a cheaper structural
+check; the cheaper check is precisely the one that already failed.
+
+The order is serialize → verify → **write**, not write → verify. Verifying afterwards is too
+late: the rotation has already pushed the last good save down a slot. A save that fails is never
+written at all, so `current` and `previous` are exactly as they were, the bytes are filed under a
+`rejected-write` label in `quarantine` (the only copy — nothing reached disk), and the player is
+told. `saveWorld` then rejects with `SaveRejectedError`.
+
+It runs on **every** save, with no sampling. Measured at ~1.1 ms for a 214 KB, 556-machine lot
+against a 60-second cadence (`verify-cost.test.ts` asserts a 25 ms ceiling), and roughly half of
+that was already being paid to stringify the world for `bytes`. Sampling would save nothing worth
+having and would leave gaps in the one guarantee the check exists to make.
+
+Because a rejected save means the live world still produces unloadable bytes, `autosave.ts` backs
+off — `rejectBackoff`, doubling 1→2→4→8→16 intervals, capped so a long session keeps trying — and
+says the new interval in the same notice. Retrying on the ordinary cadence would deep-copy,
+stringify, parse and rebuild the world on the main thread every minute, forever, for a condition
+that usually survives until a reload. An explicit `flush()` ignores the backoff: a player who
+pressed save is owed an attempt and an answer.
+
 ## The trace has its own store
 
 `state.trace` is an append-only log of every command that applied. Seed + trace is a bug report
@@ -234,6 +268,7 @@ first minute AGENTS.md says the whole project is in service of.
 | `db.ts`         | The connection, the schema, the store names                 |
 | `worlds.ts`     | The world registry, the record keys, and the delete window  |
 | `saves.ts`      | `loadWorld`, `saveWorld`, `clearSavedWorld`, `readRawSaves` |
+| `verify.ts`     | Loading a save back before agreeing to write it             |
 | `trace.ts`      | Draining, reading, and exporting the input trace            |
 | `persist.ts`    | `navigator.storage.persist()` and the quota estimate        |
 | `autosave.ts`   | The tick-driven cadence and the best-effort flush           |

@@ -39,6 +39,15 @@ export const NoticeId = {
   QuotaFull: 'save-quota-full',
   /** A save failed for some reason that is not quota. */
   WriteFailed: 'save-write-failed',
+  /**
+   * A save was read back before writing, could not be loaded, and was refused.
+   *
+   * Separate from `WriteFailed` because the news is genuinely different and the difference is
+   * the reassuring half: nothing broke on the way to the disk, the game *caught* something and
+   * declined to keep it. Sharing an id would let the general "stopped saving" wording overwrite
+   * the specific one, which reads as a vaguer version of a thing the game actually understands.
+   */
+  SaveRejected: 'save-rejected',
   /** The browser declined to make this origin's storage permanent. */
   NotPersistent: 'storage-not-persistent',
 } as const;

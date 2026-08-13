@@ -16,16 +16,55 @@
 
 import type { WorldState } from '@snack/sim';
 
-import { logError, logInfo } from './log';
+import { logError, logInfo, logWarn } from './log';
 import { NoticeId, publishNotice } from './notices';
 import { isQuotaError } from './quota';
 import { type SaveResult, saveWorld } from './saves';
+import { SaveRejectedError, saveRejectedMessage } from './verify';
 
 /** 1,200 ticks at 20 Hz — 60 seconds of *active* play. */
 export const AUTOSAVE_INTERVAL_TICKS = 1_200;
 
 /** How often to look at the clock. Cheap: it reads one integer and usually returns. */
 export const AUTOSAVE_POLL_MS = 1_000;
+
+/**
+ * How far the cadence stretches after a save is refused, as multiples of the interval.
+ *
+ * WHY THERE IS A LADDER AT ALL. A rejected save is not a transient write error — it means
+ * `serialize` produced something the loader cannot read, and the world that produced it is
+ * still sitting in memory producing it. Retrying on the ordinary cadence therefore fails
+ * again, and again, at a cost that is nothing like a no-op: every attempt deep-copies the
+ * world, stringifies it, parses it back and rebuilds it, ON THE MAIN THREAD, forever, while
+ * the player is trying to play. The frankensave condition survives until a reload, so "try
+ * again in a minute" is a promise the layer cannot keep and should stop making.
+ *
+ * It stretches rather than stopping because the other way this fires is a genuinely transient
+ * fault — a half-applied hot reload settling, a world that was briefly mid-mutation — and
+ * giving up permanently on a world that would save fine in five minutes is the worse mistake.
+ * Capped at 16 so a long session still attempts roughly every quarter hour.
+ */
+export const REJECT_BACKOFF_STEPS = [1, 2, 4, 8, 16] as const;
+
+/**
+ * How long to wait after the `streak`-th consecutive refusal (0 for the first).
+ *
+ * Split out and exported because it is the part that can be wrong without looking wrong: an
+ * off-by-one reads as "waits too long once", and a ladder that failed to cap would read as
+ * "eventually stops saving", both of which are invisible until someone loses a session. The
+ * wiring around it needs a browser; this does not.
+ */
+export function rejectBackoff(
+  streak: number,
+  intervalTicks: number = AUTOSAVE_INTERVAL_TICKS,
+): { multiplier: number; ticks: number; minutes: number } {
+  const index = Math.min(Math.max(streak, 0), REJECT_BACKOFF_STEPS.length - 1);
+  const multiplier = REJECT_BACKOFF_STEPS[index]!;
+  const ticks = intervalTicks * multiplier;
+  // Ticks accrue only while the player is present (§6), so this is minutes of ACTIVE play —
+  // the honest number, because a paused world is not failing to save, it is just not saving.
+  return { multiplier, ticks, minutes: Math.round(ticks / AUTOSAVE_INTERVAL_TICKS) };
+}
 
 export type AutosaveReason = 'cadence' | 'hidden' | 'manual';
 
@@ -80,6 +119,13 @@ export function startAutosave(
   let stopped = false;
   let inFlight: Promise<boolean> = Promise.resolve(false);
 
+  // How many times in a row a save has been read back and refused, and the tick the cadence is
+  // allowed to try again at. Both reset on any successful write — one good save means whatever
+  // was wrong with the world is not wrong now, and the next fault deserves a prompt first try
+  // rather than inheriting a fifteen-minute penalty from an unrelated one.
+  let rejectedStreak = 0;
+  let retryAtTick: number | null = null;
+
   const write = (reason: AutosaveReason): Promise<boolean> => {
     inFlight = inFlight.then(async () => {
       if (stopped && reason !== 'hidden' && reason !== 'manual') return false;
@@ -93,12 +139,39 @@ export function startAutosave(
         const result = await saveWorld(state);
         lastSavedTick = result.tick;
         markTick = result.tick;
+        rejectedStreak = 0;
+        retryAtTick = null;
         options.onSaved?.({ ...result, reason, durationMs: Date.now() - startedAt });
         return true;
       } catch (error) {
         // A failed save is not a reason to stop the game. Log it, keep the mark where it was
         // so the next cadence tick retries, and let the player carry on.
         logError(`Autosave failed (${reason}).`, error);
+
+        // A REFUSED SAVE IS THE ONE FAILURE THAT MUST NOT BE RETRIED ON THE ORDINARY CADENCE.
+        // `saveWorld` read this save back through the real boot path and could not load it, so
+        // the same world will produce the same unloadable bytes a minute from now — at the cost
+        // of a full serialize, stringify, parse and rebuild each time. Stretch the cadence, and
+        // say so in the same card rather than a new one, because "still broken" and "no longer
+        // hammering at it" are one piece of news to the person watching.
+        if (error instanceof SaveRejectedError) {
+          const backoff = rejectBackoff(rejectedStreak, intervalTicks);
+          rejectedStreak++;
+          retryAtTick = state.tick + backoff.ticks;
+
+          logWarn(
+            `Save refused ${String(rejectedStreak)}x in a row; next attempt in ` +
+              `${String(backoff.minutes)} minutes of play.`,
+          );
+          publishNotice({
+            id: NoticeId.SaveRejected,
+            tone: 'warning',
+            title: 'This save was checked, and it did not pass.',
+            body: saveRejectedMessage(error.reason, backoff.minutes),
+          });
+          options.onError?.(error, reason);
+          return false;
+        }
 
         // ...but it IS a reason to say something out loud. A quota failure has already spoken
         // for itself in `saveWorld` with wording specific to being out of room; anything else
@@ -131,6 +204,10 @@ export function startAutosave(
       return;
     }
     if (state.tick - markTick < intervalTicks) return;
+    // Held back after a refused save. Only the cadence waits — an explicit `flush()` still goes
+    // through, because a player who just pressed save is owed an attempt and an answer, and a
+    // manual save is not the thing that can loop.
+    if (retryAtTick !== null && state.tick < retryAtTick) return;
     // Move the mark before the write so a slow save cannot queue a second one behind it.
     markTick = state.tick;
     void write('cadence');

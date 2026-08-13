@@ -106,6 +106,11 @@ export {
 export { quarantineRecord, readQuarantine } from './quarantine';
 export type { QuarantineOutcome } from './quarantine';
 export { StorageFullError, isQuotaError } from './quota';
+// Public for the same reason `StorageFullError` is: a caller that catches a failed save needs to
+// tell "there is no room" from "this save would not have loaded", because only one of those is
+// about the player's disk and they call for different words.
+export { SaveRejectedError, verifySave } from './verify';
+export type { SaveVerification, SaveVerifyReason } from './verify';
 // The player-facing channel. The HUD subscribes to these three; storage publishes. Anything
 // that renders a notice needs `dismissNotice` too — a card with no way to close it is a card
 // the player resents by the third look.

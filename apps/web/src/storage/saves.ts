@@ -25,6 +25,14 @@
 //      backup, both reach the player as sentences through `notices.ts`. The console lines are
 //      still here, but they are for the developer; the notice is for the person whose factory
 //      it is. A silent save failure looks exactly like a working game until the tab closes.
+//
+// RULE 1 HAS A HOLE IN IT, AND `verify.ts` IS THE PATCH. Rotating the last good save into
+// `previous` is only insurance if what replaces it is loadable. Hand this file two unloadable
+// saves a minute apart and the rotation faithfully destroys the good record with the first and
+// the evidence with the second — which is exactly what the frankensave did. So a save is now
+// read back through the real boot path BEFORE the rotation is allowed to happen, and one that
+// cannot be read never becomes the newest record. See `verify.ts` for why that check has to be
+// the load itself rather than anything cheaper.
 
 import {
   type RestoredWorld,
@@ -39,9 +47,15 @@ import {
 import { SAVES_STORE, TRACES_STORE, getDb, isStorageAvailable } from './db';
 import { logError, logInfo, logWarn } from './log';
 import { NoticeId, dismissNotice, publishNotice } from './notices';
-import { quarantineRecord } from './quarantine';
+import { describeError, quarantineRecord } from './quarantine';
 import { StorageFullError, withQuotaRetry } from './quota';
 import { clearTraceForWorld, drainTrace, resetTraceCursor } from './trace';
+import {
+  type SaveVerification,
+  SaveRejectedError,
+  saveRejectedMessage,
+  verifySave,
+} from './verify';
 import {
   activeWorldId,
   conflictKeyFor,
@@ -162,6 +176,17 @@ export function memorySaveStore(
 export interface SaveTarget {
   worldId?: string;
   store?: SaveRecordStore;
+  /**
+   * How to turn the world into an envelope. Defaults to the sim's `serialize`.
+   *
+   * A TEST SEAM, and the same kind as `store` above rather than a new idea. The guard this file
+   * now runs exists because a *broken serializer* once produced a save nothing could load, so
+   * the only honest test of it is one that hands `saveWorld` a broken serializer and checks
+   * that the previous record survived. `serialize` is a module import, so without this the test
+   * would have to mock the sim's whole module graph to reach the one function — which tests the
+   * mock rather than this file. Nothing in the game ever passes it.
+   */
+  serialize?: (state: WorldState) => SaveEnvelope;
 }
 
 /**
@@ -228,6 +253,16 @@ export interface SaveResult {
    * outgrowing the browser it lives in.
    */
   freed: string | null;
+  /**
+   * What the read-back check cost, in milliseconds.
+   *
+   * Here so the dev overlay can watch it on a real machine with a real world, which is the one
+   * measurement that could not be taken from a test — see the agent log on work item 041 for
+   * the numbers that were. If this ever stops being a rounding error, sampling the check rather
+   * than running it every time is the lever, and this number is how that decision gets made
+   * from evidence instead of from nerves.
+   */
+  verifyMs: number;
 }
 
 /**
@@ -242,9 +277,18 @@ export interface SaveResult {
  * and carry on rather than interrupting play; a failed save is not a reason to stop the game.
  */
 export async function saveWorld(state: WorldState, target: SaveTarget = {}): Promise<SaveResult> {
-  const envelope = serialize(state);
+  const envelope = (target.serialize ?? serialize)(state);
   const worldId = await resolveWorld(target);
   const store = target.store ?? idbSaveStore;
+
+  // THE GUARD, AND IT IS BEFORE THE WRITE RATHER THAN AFTER IT. Read the save back through the
+  // real boot path first; only a save that loads is allowed to become the newest record. After
+  // the write would be too late — the rotation would already have pushed the last good save
+  // down a slot to make room for one that cannot be read.
+  const verification = verifySave(envelope, state);
+  if (!verification.ok) {
+    await rejectSave(worldId, envelope, verification);
+  }
 
   const write = (): Promise<void> => store.rotate(worldId, envelope);
 
@@ -305,11 +349,76 @@ export async function saveWorld(state: WorldState, target: SaveTarget = {}): Pro
 
   return {
     tick: envelope.tick,
-    bytes: JSON.stringify(envelope).length,
+    // Not stringified a second time: the check above already did it, and the world is not worth
+    // serialising twice to count the same characters.
+    bytes: verification.bytes,
     traceEntriesWritten,
     freed,
+    verifyMs: verification.durationMs,
   };
 }
+
+/**
+ * A save failed its read-back. File it, say so, and refuse — writing nothing.
+ *
+ * Always throws. Returning `never` rather than a result is the point: there is no path out of
+ * here that reaches the rotation, because the entire value of the check is that a save which
+ * cannot be loaded never becomes the newest record.
+ */
+async function rejectSave(
+  worldId: string,
+  envelope: SaveEnvelope,
+  verification: SaveVerification,
+): Promise<never> {
+  const failure = verification.failure!;
+  const message = saveRejectedMessage(failure.reason, null);
+
+  logError(
+    `The save for world ${worldId} could not be read back and was NOT written. The previous ` +
+      'record is still the newest one.',
+    failure.error,
+  );
+
+  // Keep the rejected bytes. They are the only copy of the evidence — the record was never
+  // written, so unlike a load failure there is nothing left on disk to go back to afterwards,
+  // which makes this copy the whole investigation rather than a convenience.
+  //
+  // ONCE PER SESSION PER FAULT, and the reason is specific rather than tidiness: the quarantine
+  // store dedupes on a fingerprint that includes the tick, and a world that is still being
+  // played has a different tick every single time this fires. So the dedupe that stops five
+  // reloads filing five copies is exactly no help here, and without this the layer would file a
+  // fresh 25 KB record every backoff interval, for hours, into a database whose being full is
+  // one of the things that could have caused this. The second copy is the same bug one minute
+  // later; it is not evidence, it is just weight.
+  const described = describeError(failure.error);
+  const signature = `${worldId}:${failure.reason}:${described.name}:${described.message}`;
+  if (!rejectedWritesFiled.has(signature)) {
+    rejectedWritesFiled.add(signature);
+    await quarantineRecord({
+      // A LABEL, NOT A KEY. Nothing was ever stored under this name and nothing ever will be —
+      // it exists so triage can tell a save that was refused on the way out from one that broke
+      // on the way in, which are different bugs with the same symptom.
+      slot: `w:${worldId}:rejected-write`,
+      record: envelope,
+      error: failure.error,
+    });
+  }
+
+  publishNotice({
+    id: NoticeId.SaveRejected,
+    tone: 'warning',
+    title: 'This save was checked, and it did not pass.',
+    body: message,
+  });
+
+  throw new SaveRejectedError(message, failure.reason, failure.error);
+}
+
+/**
+ * Faults already filed this session. Reset on reload, deliberately — a new page load may be a
+ * new build, and the first failure under a build that has changed is worth keeping again.
+ */
+const rejectedWritesFiled = new Set<string>();
 
 /**
  * Give something up so the save can land. Returns what went, or null when nothing is left.
