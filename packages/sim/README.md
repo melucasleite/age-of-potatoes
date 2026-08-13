@@ -108,13 +108,57 @@ makes this infuriating in other games.
 world is solid enough to walk into, so today the errand always arrives long before the ceiling
 and no fixture can honestly reach it. It is there because an errand that can never complete is
 a farmer who can never move again, and the day something finally blocks a footstep is the day
-that stops being hypothetical.
+that stops being hypothetical. It **scales with the map**: land deeds took the lot to 64 tiles
+a side, where the longest honest walk is 21.9 seconds, so the ceiling went from 600 ticks to
+1,200 to keep a margin rather than start cancelling errands that were merely long.
 
 `state.trace` is an append-only log of every command that actually applied, in application
 order. **It is not dead anti-cheat code and must not be deleted as such.** Leaderboards are
 only lightly validated. The trace is here because seed + trace is a bug report that
 reproduces exactly — the single most valuable debugging asset a solo dev can have — and it
 costs an append-only array.
+
+## The lot
+
+The world is **64×64 tiles — a 4×4 grid of 16-tile parcels** — and the player owns one of them
+to start with. Plan §8's roadmap is the only place the design names a map size ("64×64 map"),
+and plan §5 is the only place it describes land: _"the starter lot is free; adjacent parcels
+are purchasable land deeds at escalating prices"_. Everything else about it was decided here
+and the arithmetic is written down in `data.ts`.
+
+**`WORLD_TILES_WIDE/HIGH` are the MAXIMUM extent, not the lot.** How much of it is yours is
+`WorldState.ownedParcels`, a sorted list of parcel indices — sorted for the reason `unlocked`
+is, because two players who bought the same two parcels in the opposite order own the same
+land and must hash the same. `isInsideWorld` and `isOwnedTile` are different questions and
+every build path asks both: outside the world is nowhere, and unowned land is a real place
+with a price standing on it.
+
+**The grid grew outward from an origin that did not move.** Parcel 0 is the north-west 16×16,
+which is exactly the map every pre-deed world was born on, so a save from before deeds loads
+with its field at (4,4), its pond at (12,13), and every machine, belt and pipe where it was
+left. The format 7 → 8 migration adds `ownedParcels: [0]` and translates one thing only —
+**pipe network ids, which are row-major tile indices and therefore arithmetic on the map's
+width**. Not a tile moves; a network is simply called 844 where it used to be called 220.
+
+**Deeds are priced by how many you have bought, never by which parcel you are buying**
+(`DEED_PRICE_CENTS_BY_PURCHASE`, doubling from $200), so two players who expanded in opposite
+directions paid the same money and hash the same. `BuyDeed` carries no price in its payload
+for the same reason `RotateGrabber` carries no direction: what land costs is the sim's rule.
+It is refused unless the parcel is unowned, on the map, **orthogonally adjacent to land you
+already hold** (plan §5's "adjacent", which is what stops a player owning two disconnected
+islands), and affordable.
+
+**Land is on the net-worth books at what it cost.** Plan §6 wants investing during a scoring
+window to be neutral, and a deed that only subtracted cash would make expanding the one
+purchase in the game that costs you a rung on the leaderboard.
+
+**Building is gated on ownership; walking is not.** Plan §5 sells deeds as the answer to "is
+space free?", which is a question about building — nothing in the design fences the farmer in,
+and an invisible wall around unowned land would be the first collision geometry in the game,
+put there to stop the player walking over to read the price of the thing they are meant to
+buy. A footprint that straddles the fence is refused whole, and so is a belt run or a pipe run
+that crosses it: `BuildRefusal.Unowned` is a separate code from `OutsideWorld` precisely
+because the sentence the renderer prints for it is an offer rather than a wall.
 
 ## The factory
 
@@ -401,10 +445,12 @@ non-empty result is a bug in units, not in the hash.
 ## Saves
 
 `serialize(state)` produces a plain-JSON `SaveEnvelope`; `restoreWorld(value)` parses,
-migrates, and deserializes one. The chain is at **format 7** — a machine can come off the lot
-as a boxed item, so an inventory slot carries the boxed machines in it beside its count.
-Format 6 was the soda line, which made a recipe a list, so a machine holds one count per recipe
-line instead of a single `inputCount` and a converter carries typed liquid ports. `SIM_VERSION` is the code version fused with `BALANCE_HASH`,
+migrates, and deserializes one. The chain is at **format 8** — land deeds, so a world records
+the parcels it owns and its pipe network ids are re-expressed on the wider map. Format 7 was
+deconstruct-to-inventory: a machine can come off the lot as a boxed item, so an inventory slot
+carries the boxed machines in it beside its count. Format 6 was the soda line, which made a
+recipe a list, so a machine holds one count per recipe line instead of a single `inputCount`
+and a converter carries typed liquid ports. `SIM_VERSION` is the code version fused with `BALANCE_HASH`,
 because balance data is save-compatibility surface exactly as much as code is. The rules —
 released migrations are never edited, one real fixture is kept per released version forever —
 are in [`src/save/README.md`](src/save/README.md). The IndexedDB driver lives in

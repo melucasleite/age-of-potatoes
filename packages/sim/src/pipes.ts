@@ -54,6 +54,7 @@ import {
   type WorldState,
   isFieldTile,
   isInsideWorld,
+  isOwnedTile,
   machineAt,
   machineCoversTile,
   tileOccupied,
@@ -114,6 +115,15 @@ export const BuildRefusal = {
    * main may still run past a Fryer.
    */
   PortMismatch: 10,
+  /**
+   * This is on land the player has not bought the deed to (plan §5).
+   *
+   * A SEPARATE CODE FROM `OutsideWorld`, and the difference is the whole feature. Outside the
+   * world is nowhere — there is nothing there and there never will be. Unowned land is a real
+   * place with a price on it, standing in the world where the player can read it, and the
+   * sentence the renderer prints for this code is an offer rather than a wall.
+   */
+  Unowned: 11,
 } as const;
 
 export type BuildRefusal = (typeof BuildRefusal)[keyof typeof BuildRefusal];
@@ -175,6 +185,10 @@ export function pipePathRefusal(
     const node = path[i]!;
     if (!Number.isInteger(node.x) || !Number.isInteger(node.y)) return BuildRefusal.BadPath;
     if (!isInsideWorld(node.x, node.y)) return BuildRefusal.OutsideWorld;
+    // Before every other rule about the tile, because "you do not own this" outranks "something
+    // is on it" — a pipe dragged across the neighbour's grass is refused for the reason the
+    // player can act on, and the price is standing right there.
+    if (!isOwnedTile(state, node.x, node.y)) return BuildRefusal.Unowned;
     if (isFieldTile(node.x, node.y)) return BuildRefusal.OnField;
     if (reservoirAt(state, node.x, node.y) !== null) return BuildRefusal.Occupied;
     if (pipeAt(state, node.x, node.y) !== null) return BuildRefusal.Occupied;

@@ -35,6 +35,9 @@ import {
   ItemId,
   LiquidId,
   MachineKind,
+  PARCELS_HIGH,
+  PARCELS_WIDE,
+  isParcelIndex,
   machineSpec,
 } from '../data';
 import type { RngState } from '../rng';
@@ -286,6 +289,14 @@ export interface SavePayload {
   nextPipeId: number;
   nextReservoirId: number;
   nextZoneId: number;
+  /**
+   * Row-major indices of the parcels this world holds the deed to, sorted ascending.
+   *
+   * Indices rather than coordinates, and never a per-tile flag: the grid's shape is folded
+   * into `BALANCE_HASH`, so a save that recorded parcel 5 can only be read by a build that
+   * agrees where parcel 5 is — which is the same guarantee every other id in this file has.
+   */
+  ownedParcels: number[];
   pipes: SavePipe[];
   reservoirs: SaveReservoir[];
   player: SavePlayer;
@@ -469,6 +480,9 @@ export function toPayload(state: WorldState): SavePayload {
   const ceremonies: string[] = [];
   for (let i = 0; i < state.ceremonies.length; i++) ceremonies.push(state.ceremonies[i]!);
 
+  const ownedParcels: number[] = [];
+  for (let i = 0; i < state.ownedParcels.length; i++) ownedParcels.push(state.ownedParcels[i]!);
+
   const unlocked: string[] = [];
   for (let i = 0; i < state.unlocked.length; i++) unlocked.push(state.unlocked[i]!);
 
@@ -501,6 +515,7 @@ export function toPayload(state: WorldState): SavePayload {
     nextPipeId: state.nextPipeId,
     nextReservoirId: state.nextReservoirId,
     nextZoneId: state.nextZoneId,
+    ownedParcels,
     pipes,
     reservoirs,
     player: {
@@ -1017,6 +1032,42 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     });
   }
 
+  // THE ONE LIST THAT IS VALIDATED AGAINST THIS BUILD'S GEOMETRY RATHER THAN KEPT AS WRITTEN,
+  // and the contrast with `unlocked` below is the argument. An unknown tech id is a string
+  // nothing looks up — harmless to carry, rude to drop. A parcel index is a place: index 20 in
+  // a 4×4 grid names land that does not exist, so a world carrying one cannot be drawn, built
+  // on, or hashed against the build that wrote it. `BALANCE_HASH` records the grid's shape but
+  // a mismatch there is deliberately non-blocking, so this is where a lot from a differently
+  // shaped map actually stops — loudly, naming the index, rather than as a machine placed on
+  // land the renderer has no chunk for.
+  const parcelsRaw = list(p, 'ownedParcels', 'payload');
+  const ownedParcels: number[] = [];
+  for (let i = 0; i < parcelsRaw.length; i++) {
+    const value = parcelsRaw[i];
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+      fail(`payload.ownedParcels[${String(i)}]`, 'expected an integer parcel index');
+    }
+    if (!isParcelIndex(value)) {
+      fail(
+        `payload.ownedParcels[${String(i)}]`,
+        `${String(value)} is not a parcel on this build's ${String(PARCELS_WIDE)}×${String(PARCELS_HIGH)} map`,
+      );
+    }
+    ownedParcels.push(value);
+  }
+  // Sorted here rather than trusted, exactly as `unlocked` and `ceremonies` are: the order is
+  // a hashed invariant, and a file that lost it would restore to a world that hashes
+  // differently from the one that was saved while being the same lot.
+  ownedParcels.sort((a, b) => a - b);
+  for (let i = 1; i < ownedParcels.length; i++) {
+    if (ownedParcels[i] === ownedParcels[i - 1]) {
+      fail(`payload.ownedParcels[${String(i)}]`, 'the same parcel is owned twice');
+    }
+  }
+  // A world with no land cannot be played — nothing can be built or planted on it — and none
+  // was ever written, since the starting parcel is a gift every world is born holding.
+  if (ownedParcels.length === 0) fail('payload.ownedParcels', 'a world owns at least one parcel');
+
   // Unknown node ids are kept rather than rejected: a save written by a newer balance patch
   // that this build then reads has already passed the formatVersion gate, and dropping a
   // node the player paid for would be worse than carrying a string nothing looks up.
@@ -1096,6 +1147,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     moneyCents: int(p, 'moneyCents', 'payload'),
     player,
     inventory,
+    ownedParcels,
     field,
     machines,
     nextMachineId: int(p, 'nextMachineId', 'payload'),

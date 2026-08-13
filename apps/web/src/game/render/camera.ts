@@ -109,7 +109,12 @@ export class Camera {
 
   /**
    * Keep the world on screen: centre it on whichever axes it fits, clamp on the rest.
-   * v0.1's lot is 256×256 world px, so at 3× it usually fits entirely and this centres it.
+   *
+   * The centring branch is a leftover kindness from the 16×16 lot, which at 3× fitted inside
+   * most viewports whole. Land deeds took the world to 64×64 tiles — 1,024 world px, 3,072 CSS
+   * px at the default zoom — so on any ordinary screen this now clamps on both axes and the
+   * camera genuinely follows the player. The branch stays because it is still reachable: at 2×
+   * zoom on a very large display, or if a future scenario ships a small lot.
    */
   clampToWorld(worldWidthPx: number, worldHeightPx: number): void {
     const zoom = this.zoom;

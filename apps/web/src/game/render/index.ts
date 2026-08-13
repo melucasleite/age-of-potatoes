@@ -83,6 +83,13 @@ export function render(
   //    drain, and lands one frame later rather than one frame plus one paint later.
   //    Nothing re-bakes on a frame with no edits — the dev overlay's "chunks baked" reads 0
   //    in steady state, and a number that stays non-zero is a bug.
+  //
+  //    A DEED IS AN EDIT EVENT LIKE A PAINT IS, and a rarer one: ownership changes on the tick
+  //    a parcel is bought and on the frame a world loads, and on no other frame in a session.
+  //    So it re-bakes the whole map rather than diffing tiles — the wash and the fence line
+  //    both move, on both sides of a boundary sixteen tiles long, and `drainDirty` spreads the
+  //    cost over the next few frames anyway.
+  if (scene.landOverlay.sync(view)) scene.terrain.markAllDirty();
   scene.zoneOverlay.sync(view, (tileX, tileY) => scene.terrain.markTileDirty(tileX, tileY));
   scene.terrain.drainDirty();
 
@@ -755,7 +762,7 @@ function updateDestination(scene: WorldScene, view: WorldView): void {
  */
 export function statusFor(view: WorldView, ui: RenderUiState): string {
   const tool = ui.tool;
-  const cost = TOOL_INFO[tool].costCents;
+  const cost = tool === ToolMode.BuyDeed ? view.land.nextPriceCents : TOOL_INFO[tool].costCents;
   if (cost > 0 && view.moneyCents < cost) {
     return `need ${money(cost)} — you have ${money(view.moneyCents)}`;
   }
@@ -766,6 +773,12 @@ export function statusFor(view: WorldView, ui: RenderUiState): string {
 
   const query = tileAtView(view, ui.hover.tileX, ui.hover.tileY);
   if (!query.insideWorld) return 'outside the lot';
+
+  // UNOWNED LAND OUTRANKS EVERYTHING ELSE ON THE TILE, and that ordering is the readable
+  // reason item 053 asks for: a player who drags a belt across the fence gets "you do not own
+  // this" rather than "bare ground", which is true and useless. It sits above the machine
+  // line because nothing can be standing there anyway.
+  if (!query.owned) return unownedStatus(view, query.parcel);
   if (query.machine !== null) return machineStatus(view, query.machine);
 
   // An arm is not a machine and has no `MachineView`, so this is the only line in the game
@@ -800,6 +813,26 @@ export function statusFor(view: WorldView, ui: RenderUiState): string {
   if (query.ready) return 'ripe — harvest it';
   if (query.crop !== 0) return query.dry ? 'growing, but thirsty' : 'growing';
   return query.dry ? 'bare soil, dry' : 'bare soil';
+}
+
+/**
+ * What to say about a tile the player does not own.
+ *
+ * THREE SENTENCES, BECAUSE THERE ARE THREE SITUATIONS AND THEY ASK FOR DIFFERENT THINGS: this
+ * parcel is for sale and you can afford it, it is for sale and you cannot, or it is not for
+ * sale yet because nothing you own touches it. Collapsing them into "you do not own this land"
+ * would be the readable-refusal box ticked and the question left unanswered.
+ */
+function unownedStatus(view: WorldView, parcel: number): string {
+  const price = view.land.nextPriceCents;
+  const buyable = view.land.buyable.includes(parcel);
+
+  if (!buyable) return 'not for sale yet — buy the parcel next to it first';
+  if (price < 0) return 'unowned land';
+  if (view.moneyCents < price) {
+    return `land deed ${money(price)} — you have ${money(view.moneyCents)}`;
+  }
+  return `unowned land — ${money(price)} for the deed`;
 }
 
 /** Item names for the status ribbon. The sim's slug, made readable. */

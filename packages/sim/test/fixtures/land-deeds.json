@@ -1,0 +1,4302 @@
+{
+  "name": "land-deeds",
+  "description": "Hand-farms the field through two full cycles, buys the deed to parcel 1 for $200, and builds a 2x2 Chip Kitchen and a 1x1 Sprinkler on ground that did not exist to build on before. Guards BuyDeed, the ownership gate every placement verb shares, and land on the net-worth books.",
+  "seed": 480480,
+  "ticks": 6721,
+  "expectedHash": "c5ae23f8",
+  "commands": [
+    {
+      "tick": 0,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 11,
+        "tileX": 2,
+        "tileY": 12,
+        "item": 1,
+        "count": 56
+      }
+    },
+    {
+      "tick": 24,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 59,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 62,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 67,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 72,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 78,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 84,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 90,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 96,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 118,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 119,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 120,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 122,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 128,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 134,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 140,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 146,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 168,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 169,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 170,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 172,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 178,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 184,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 190,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 196,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 219,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 220,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 221,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 224,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 230,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 236,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 242,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 248,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 271,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 272,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 273,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 275,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 281,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 287,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 293,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 299,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 321,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 322,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 323,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 325,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 331,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 337,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 343,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 349,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 371,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 372,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 373,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 375,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 381,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 387,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 393,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 399,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 422,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 423,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 424,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 427,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 433,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 439,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 445,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 451,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 490,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 491,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 493,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 498,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 504,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 510,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 516,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 522,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 545,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 546,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 547,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 549,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 555,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 561,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 567,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 573,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 595,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 596,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 597,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 599,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 605,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 611,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 617,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 623,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 645,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 646,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 647,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 649,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 655,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 661,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 667,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 673,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 696,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 697,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 698,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 701,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 707,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 713,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 719,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 725,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 748,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 749,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 750,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 752,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 758,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 764,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 770,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 776,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 798,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 799,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 800,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 802,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 808,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 814,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 820,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 826,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 848,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 849,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 850,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 852,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 858,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 864,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 870,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2876,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2915,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2916,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2918,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2923,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2929,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2935,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2941,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2947,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2970,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2971,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2972,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2974,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2980,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2986,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2992,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2998,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3020,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3021,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3022,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3024,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3030,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3036,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3042,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3048,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3070,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3071,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3072,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3074,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3080,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3086,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3092,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3098,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3121,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3122,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3123,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3126,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3132,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3138,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3144,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3150,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3173,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3174,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3175,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3177,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3183,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3189,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3195,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3201,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3223,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3224,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3225,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3227,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3233,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3239,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3245,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3251,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3273,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3274,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3275,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3277,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3283,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3289,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3295,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3301,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 9,
+        "tileX": 2,
+        "tileY": 12,
+        "item": 2,
+        "count": 158
+      }
+    },
+    {
+      "tick": 3334,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3368,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3371,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3376,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3382,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3387,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3394,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3400,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3406,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3429,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3430,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3431,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3433,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3439,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3445,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3451,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 5,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3457,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3479,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3480,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3481,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3483,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3489,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3495,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3501,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 6,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3507,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3530,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3531,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3532,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3535,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3541,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3547,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3553,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 7,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3559,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3582,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3583,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3584,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3586,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3592,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3598,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3604,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 8,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3610,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3632,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3633,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3634,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3636,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3642,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3648,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3654,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 9,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3660,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3682,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3683,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3684,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3686,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3692,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3698,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3704,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 10,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3710,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3733,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 5,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3734,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 6,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3735,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 7,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3738,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 8,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3744,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 9,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3750,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 10,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3756,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 11,
+        "tileY": 11,
+        "item": 1,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3762,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3801,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3802,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3804,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3809,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3815,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3821,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3827,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3833,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3856,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3857,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3858,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3860,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3866,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3872,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3878,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3884,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3906,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3907,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3908,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3910,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3916,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3922,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3928,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3934,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3956,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3957,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3958,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3960,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3966,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3972,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3978,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3984,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4007,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4008,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4009,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4012,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4018,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4024,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4030,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4036,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4059,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4060,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4061,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4063,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4069,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4075,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4081,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4087,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4109,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4110,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4111,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4113,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4119,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4125,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4131,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4137,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4159,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 5,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4160,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 6,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4161,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 7,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4163,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 8,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4169,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 9,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4175,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 10,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4181,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 11,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5787,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5826,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5827,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5829,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5834,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5840,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5846,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5852,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5858,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5881,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5882,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5883,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5885,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5891,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5897,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5903,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5909,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5931,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5932,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5933,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5935,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5941,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5947,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5953,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5959,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5981,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5982,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5983,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5985,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5991,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5997,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6003,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6009,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6032,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6033,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6034,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6037,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6043,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6049,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6055,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 8,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6061,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6084,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6085,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6086,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6088,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6094,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6100,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6106,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 9,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6112,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6134,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6135,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6136,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6138,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6144,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6150,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6156,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 10,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6162,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6184,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 5,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6185,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 6,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6186,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 7,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6188,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6194,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6200,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 10,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6206,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 11,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 6212,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 9,
+        "tileX": 2,
+        "tileY": 12,
+        "item": 2,
+        "count": 167
+      }
+    },
+    {
+      "tick": 6245,
+      "command": {
+        "type": "BuyDeed",
+        "parcel": 1
+      }
+    },
+    {
+      "tick": 6246,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 2,
+        "tileX": 18,
+        "tileY": 8
+      }
+    },
+    {
+      "tick": 6247,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 3,
+        "tileX": 21,
+        "tileY": 9
+      }
+    },
+    {
+      "tick": 6248,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 4,
+        "tileX": 18,
+        "tileY": 8,
+        "item": 2,
+        "count": 8
+      }
+    }
+  ]
+}

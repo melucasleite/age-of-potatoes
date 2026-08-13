@@ -28,6 +28,10 @@ import {
   MOISTURE_MAX,
   MachineRole,
   type MachineSpec,
+  PARCELS_HIGH,
+  PARCELS_WIDE,
+  PARCEL_COUNT,
+  PARCEL_TILES,
   PortFlow,
   SPRINKLER_POUR_ML,
   WORLD_TILES_HIGH,
@@ -44,7 +48,14 @@ import {
 } from './data';
 import { networkFlowPermille, tankTicksToEmpty } from './pipes';
 import { reservoirLevelPermille, reservoirThrottle } from './water';
-import { type CropTile, type Machine, type WorldState, tileAt } from './state';
+import {
+  type CropTile,
+  type Machine,
+  type WorldState,
+  isParcelBuyable,
+  nextDeedPriceCents,
+  tileAt,
+} from './state';
 import {
   bestTrailingGainCents,
   centiActiveHoursElapsed,
@@ -419,12 +430,47 @@ export interface PlayerView {
   intentIssuedTick: number;
 }
 
+/**
+ * The lot: how it is divided, what the player owns, and what the next deed costs.
+ *
+ * PARCEL INDICES RATHER THAN A TILE MASK, so the renderer does the same arithmetic the sim
+ * does instead of reading 4,096 flags twenty times a second. `parcelTiles` and `parcelsWide`
+ * are here so nothing on the far side has to import balance data to turn an index into a
+ * rectangle — the view is meant to be enough on its own, and one day it crosses a Worker.
+ */
+export interface LandView {
+  /** Tiles per parcel edge. */
+  parcelTiles: number;
+  parcelsWide: number;
+  parcelsHigh: number;
+  /** Parcels this world holds the deed to, sorted ascending. Never empty. */
+  owned: number[];
+  /**
+   * Parcels that could be bought right now: unowned, on the map, and touching owned land.
+   *
+   * Projected rather than re-derived on the far side because adjacency is a rule about the
+   * world (plan §5's "adjacent parcels") and the sim is where rules live — a renderer that
+   * decided for itself which parcels were for sale would eventually disagree with the reducer,
+   * and the disagreement would look like a price tag on land that refuses to be bought.
+   */
+  buyable: number[];
+  /**
+   * What the next deed costs, in cents, or **-1 when every parcel is owned**.
+   *
+   * One price rather than a price per parcel, because that is how deeds are priced: by how many
+   * you have bought, never by which one you are buying (`DEED_PRICE_CENTS_BY_PURCHASE`).
+   */
+  nextPriceCents: number;
+}
+
 export interface WorldView {
   tick: number;
   /** The Music Box beat this tick falls on. Audio schedules ahead against it. */
   beat: number;
   worldTilesWide: number;
   worldTilesHigh: number;
+  /** The lot's parcels and what the player owns of them. */
+  land: LandView;
   moneyCents: number;
   player: PlayerView;
   field: FieldView;
@@ -459,6 +505,14 @@ export function createWorldView(): WorldView {
     beat: 0,
     worldTilesWide: WORLD_TILES_WIDE,
     worldTilesHigh: WORLD_TILES_HIGH,
+    land: {
+      parcelTiles: PARCEL_TILES,
+      parcelsWide: PARCELS_WIDE,
+      parcelsHigh: PARCELS_HIGH,
+      owned: [],
+      buyable: [],
+      nextPriceCents: 0,
+    },
     moneyCents: 0,
     player: {
       xSub: 0,
@@ -541,6 +595,7 @@ export function view(state: WorldState, out: WorldView = createWorldView()): Wor
   out.player.intentTileY = intent === null ? 0 : intent.tileY;
   out.player.intentIssuedTick = intent === null ? 0 : intent.issuedTick;
 
+  projectLand(state, out);
   projectField(state, out);
   projectMachines(state, out);
   projectBelts(state, out);
@@ -1041,6 +1096,35 @@ function projectZones(state: WorldState, out: WorldView): void {
     else if (stage === WiltStage.Wilting) zv.wilting += 1;
     else zv.mature += 1;
   }
+}
+
+/**
+ * The lot. Sixteen parcels at most, so the buyable scan is cheaper than the array it fills.
+ *
+ * Written into the reused buffer with `length =` at the end, exactly as `unlocked` is: a deed
+ * bought is a parcel that must leave `buyable`, and a stale index left over from last frame is
+ * a price tag standing on land the player already owns.
+ */
+function projectLand(state: WorldState, out: WorldView): void {
+  const land = out.land;
+  land.parcelTiles = PARCEL_TILES;
+  land.parcelsWide = PARCELS_WIDE;
+  land.parcelsHigh = PARCELS_HIGH;
+
+  for (let i = 0; i < state.ownedParcels.length; i++) {
+    land.owned[i] = state.ownedParcels[i]!;
+  }
+  land.owned.length = state.ownedParcels.length;
+
+  let count = 0;
+  for (let parcel = 0; parcel < PARCEL_COUNT; parcel++) {
+    if (!isParcelBuyable(state, parcel)) continue;
+    land.buyable[count] = parcel;
+    count += 1;
+  }
+  land.buyable.length = count;
+
+  land.nextPriceCents = nextDeedPriceCents(state);
 }
 
 function projectUnlocked(state: WorldState, out: WorldView): void {

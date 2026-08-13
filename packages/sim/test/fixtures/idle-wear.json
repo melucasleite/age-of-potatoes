@@ -3,7 +3,7 @@
   "description": "Hand-farms two rows of potatoes to afford a Chip Kitchen, places it, and then never touches it again for ten thousand ticks. Guards plan §4’s absolute rule that wear is per operation and never per second: the kitchen completes no operations, so it must still be at full condition at the end. A machine that aged on the clock would show up here as a changed hash and as a failed assertion in factory.test.ts.",
   "seed": 606060,
   "ticks": 14465,
-  "expectedHash": "072792b9",
+  "expectedHash": "c0cbe13d",
   "commands": [
     {
       "tick": 0,

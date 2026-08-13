@@ -17,6 +17,7 @@ looked like, and the code that wrote it will be long gone.
 | `format-5.json` | 5      | 2026-08-12, `v0.6.0` | Seed 50505, tick 41837. The first save with maintenance and overcooking in it, caught deliberately **mid-brown**: a hand-built `Washer → Slicer → Fryer` line whose Fryer stands on a full basket of twenty chips, three of them already gone Rustic Style and the clock 250 ticks into a fourth, plus a Chip Kitchen run past the effect threshold and back to full by a single $8 repair kit, three inputs spoiled along the way. |
 | `format-6.json` | 6      | 2026-08-12, `v0.4.0` | Seed 60606, tick 42400. The first save with the soda line in it, caught deliberately **mid-pour**: five single-liquid networks all part-full, every machine part-way through an operation, a Syrup Mixer holding kola powder with liquid in both inlets, and the Bottler's soda-syrup inlet flagged amber while its carbonated-water inlet runs fine.                                                                               |
 | `format-7.json` | 7      | 2026-08-12, `v0.4.0` | Seed 24680, tick 48792. The first save with boxed machines in it, caught holding **two boxes of one item id at two different invoices**: a bare Chip Kitchen and a Speed-2/Capacity-1 one worn to 853 condition, in one slot, in canonical least-invested-first order. A Washer stands beside them part-way through an operation and a grabber faces west, three presses round from where it was placed.                            |
+| `format-8.json` | 8      | 2026-08-13, `v0.4.0` | Seed 480480, tick 6721. The first save with **bought land** in it: two parcels owned, and a Chip Kitchen mid-operation plus a Sprinkler standing east of tile 16 — ground that did not exist to build on in format 7. Caught with two potatoes in the kitchen's hopper and six bags in its buffer.                                                                                                                                  |
 
 `format-1.json` was produced by driving `step()` through a scripted play session — plant,
 water, harvest, walk, sell, buy the sprinkler, feed the kitchen — and calling `serialize()`
@@ -90,3 +91,13 @@ sequences hash the same. So this one holds two boxes that differ on all five num
 It also carries the condition a machine was boxed at — 853, not 1000 — because that is the field
 that keeps net worth from jumping when a worn machine goes in a box, and a fixture recorded at
 full condition would not notice if it were quietly dropped.
+
+`format-8.json` was recorded by replaying the `land-deeds` golden fixture to its last tick and
+calling `serialize()`. The fact it exists to pin is that **ownership is a property of the world
+rather than of the tiles it covers**: the payload carries `ownedParcels: [0, 1]` and nothing
+else in the file says which land is whose, so a save that dropped or reordered that list would
+restore a world with two machines standing on somebody else's grass — and every other
+assertion in `save.test.ts` would still pass. The format 7 → 8 migration does not touch this
+file at all — it was born on the 64-wide map — which is exactly why `format-3.json` is the one
+that proves the network-id widening: it has seventeen pipes on it, laid when a row was sixteen
+tiles long.

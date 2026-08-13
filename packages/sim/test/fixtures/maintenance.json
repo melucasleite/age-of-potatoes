@@ -3,7 +3,7 @@
   "description": "A Chip Kitchen run into the ground and then rescued. Hand-farms four rows of potatoes, buys the kitchen, and feeds it batch after batch until wear drops it below the effect threshold — at which point it runs at half speed, jams every tenth operation, and spoils an input on a fixed cadence. Every one of those is a consequence of work done, never a roll. Ends with one $8 repair kit bought at the bin and spent on the cell, restoring the machine to full in a single use.",
   "seed": 404040,
   "ticks": 40294,
-  "expectedHash": "0ed4aca0",
+  "expectedHash": "e78cd41c",
   "commands": [
     {
       "tick": 0,

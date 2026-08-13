@@ -23,8 +23,11 @@ export const TILE_PX = 16;
 
 /**
  * Tiles per chunk edge. 32×32 tiles = 512×512 source px per baked chunk texture.
- * v0.1's world is 16×16 tiles, so the whole lot is exactly one chunk — that is fine and
- * deliberate: the seam is what matters, not the count.
+ *
+ * v0.1's world was 16×16 tiles — the whole lot in one chunk, which was fine and deliberate
+ * because the seam was what mattered rather than the count. Land deeds took the map to 64×64,
+ * so it is now exactly four chunks, and the seam is carrying its own weight: a deed bought on
+ * the far side of the lot re-bakes four textures over the following frames rather than one.
  */
 export const CHUNK_TILES = 32;
 

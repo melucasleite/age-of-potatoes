@@ -34,6 +34,7 @@
 // equal.
 
 import {
+  type BuyDeedCommand,
   type BuyItemCommand,
   type Command,
   type CreateZoneCommand,
@@ -150,6 +151,8 @@ import {
   isCompassDirection,
   isFieldTile,
   isInsideWorld,
+  isOwnedTile,
+  isParcelBuyable,
   isTileReady,
   itemCount,
   machineAt,
@@ -157,6 +160,8 @@ import {
   machineCentreSubtiles,
   machineCoversTile,
   markCeremony,
+  nextDeedPriceCents,
+  ownParcel,
   peekBoxedMachine,
   plantCrop,
   removeItem,
@@ -301,6 +306,8 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applyUpgradeMachine(state, command);
     case 'ResearchTech':
       return applyResearchTech(state, command);
+    case 'BuyDeed':
+      return applyBuyDeed(state, command);
     case 'PlaceBelt':
       return applyPlaceBelt(state, command);
     case 'RemoveBelt':
@@ -538,7 +545,7 @@ function applyHarvestTile(state: WorldState, command: HarvestTileCommand): boole
   return true;
 }
 
-/** Every tile of a footprint is inside the world, off the field, and unoccupied. */
+/** Every tile of a footprint is inside the world, owned, off the field, and unoccupied. */
 function footprintFree(
   state: WorldState,
   tileX: number,
@@ -552,6 +559,9 @@ function footprintFree(
       const x = tileX + dx;
       const y = tileY + dy;
       if (!isInsideWorld(x, y)) return false;
+      // A machine may not straddle the fence, not even by one tile of a 3×2 Bottler. Ownership
+      // is asked per tile rather than per parcel for exactly that case.
+      if (!isOwnedTile(state, x, y)) return false;
       if (isFieldTile(x, y)) return false;
       const occupant = machineAt(state, x, y);
       if (occupant !== null && occupant.id !== ignoreMachineId) return false;
@@ -1039,6 +1049,44 @@ function applyResearchTech(state: WorldState, command: ResearchTechCommand): boo
   return insertUnlocked(state.unlocked, node.id);
 }
 
+// --- land -------------------------------------------------------------------------
+
+/**
+ * Buy the deed to one parcel (plan §5: *"adjacent parcels are purchasable land deeds at
+ * escalating prices"*).
+ *
+ * THREE REFUSALS AND THEY ARE ALL THE WORLD'S, not the client's: the parcel must be on the map
+ * and not already owned, it must touch land this world holds, and the money must be there. The
+ * price is never in the payload — `nextDeedPriceCents` reads the ladder and the count of deeds
+ * already bought, so a replay cannot depend on what some build thought land was worth.
+ *
+ * THE MONEY MOVES BEFORE THE LAND DOES, which matters here more than it does anywhere else in
+ * this file: `nextDeedPriceCents` is a function OF `ownedParcels`, so owning the parcel first
+ * would charge the player the *next* deed's price for the one they just took. Read the price,
+ * check it, spend it, then own it.
+ *
+ * SHAPED LIKE `ResearchTech` RATHER THAN LIKE A PLACEMENT: no reach check, no footprint, no
+ * walk-to errand. Buying land is signing for it — there is nothing on the parcel to stand next
+ * to, and a reach gate would mean walking onto land you do not own to buy the right to be
+ * there. See `BuyDeedCommand` for the same argument at the payload.
+ */
+function applyBuyDeed(state: WorldState, command: BuyDeedCommand): boolean {
+  if (!isParcelBuyable(state, command.parcel)) return false;
+
+  const price = nextDeedPriceCents(state);
+  // -1 means the ladder has run out, which cannot happen while a parcel is still buyable —
+  // but a sentinel that is silently treated as "free" is exactly how one eventually does.
+  if (price < 0) return false;
+  if (state.moneyCents < price) return false;
+
+  state.moneyCents -= price;
+  recordSpend(state.stats, price);
+  // The land goes on the books at what it cost, so buying a parcel is neutral on plan §6's
+  // net-worth boards rather than a self-inflicted loss. `computeNetWorthCents` reads
+  // `landValueCents` off this list; nothing else has to be told.
+  return ownParcel(state, command.parcel);
+}
+
 // --- belts and grabbers -----------------------------------------------------------
 
 function applyPlaceBelt(state: WorldState, command: PlaceBeltCommand): boolean {
@@ -1054,6 +1102,10 @@ function applyPlaceBelt(state: WorldState, command: PlaceBeltCommand): boolean {
     const x = command.tileX + dx * i;
     const y = command.tileY + dy * i;
     if (!isInsideWorld(x, y)) return false;
+    // The whole run or none of it, the same rule a pipe path follows: a belt dragged across
+    // the fence is refused rather than clipped at it, because a stub that stops where the
+    // player did not aim is a stub they now have to find and take up.
+    if (!isOwnedTile(state, x, y)) return false;
     if (isFieldTile(x, y)) return false;
     if (tileOccupied(state, x, y)) return false;
   }
@@ -1119,6 +1171,7 @@ function applyPlaceGrabber(state: WorldState, command: PlaceGrabberCommand): boo
   if (!isCompassDirection(command.dir)) return false;
   if (command.filter !== 0 && !spec.filterable) return false;
   if (!isInsideWorld(command.tileX, command.tileY)) return false;
+  if (!isOwnedTile(state, command.tileX, command.tileY)) return false;
   if (isFieldTile(command.tileX, command.tileY)) return false;
   if (tileOccupied(state, command.tileX, command.tileY)) return false;
   if (state.moneyCents < spec.priceCents) return false;

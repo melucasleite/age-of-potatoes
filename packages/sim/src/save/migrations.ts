@@ -14,7 +14,7 @@
 // 2029. See `test/fixtures/saves/`.
 // ────────────────────────────────────────────────────────────────────────────────────────
 //
-// The chain is five steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
+// The chain is seven steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
 // format 2 (the factory — belts, grabbers, zones, tech unlocks, upgrade dials, and the
 // per-tile withering clock) up to format 3 (the liquid layer — reservoirs, pipes, one-ledger
 // networks, and the per-machine plumbing fields) up to format 4 (the walk-to errand — one
@@ -22,7 +22,9 @@
 // — a machine's blocked clock and burnt count, and the waste and repair-kit tallies) up to
 // format 6 (the soda line — one input count per recipe LINE instead of a single `inputCount`,
 // and typed liquid ports on a converter) up to format 7 (deconstruct to inventory — an
-// inventory slot carries the boxed machines in it, dials and condition and invoice each).
+// inventory slot carries the boxed machines in it, dials and condition and invoice each) up to
+// format 8 (land deeds — the lot is a 4×4 grid of 16-tile parcels and a world records which of
+// them it owns; every older world owns parcel 0, which is the map it already had).
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -33,7 +35,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 7;
+export const CURRENT_FORMAT_VERSION = 8;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -394,6 +396,131 @@ const migrateFormat6To7: SaveMigration = (payload) => {
 };
 
 /**
+ * The parcel a world owned WHEN FORMAT 8 ARRIVED, frozen here as a literal.
+ *
+ * `STARTING_PARCEL` is 0 today and the migration would read the same number if it imported it —
+ * but it must not, for the reason the frozen tables above exist: the day somebody moves the
+ * starting parcel, every format-7 save must still migrate to the map it was actually saved on,
+ * not to whatever the current build calls the starting lot. Zero is where the 16×16 world was.
+ */
+const FORMAT_8_STARTING_PARCEL = 0;
+
+/**
+ * The lot's width in tiles BEFORE and AFTER land deeds, frozen as literals.
+ *
+ * These are here for the one thing in format 8 that is not a new field: **a pipe network's id
+ * is a row-major world tile index**, so it is arithmetic on the map's width, and the map's
+ * width changed. A format-7 network id was computed at 16 tiles a row; the same pipes on a
+ * 64-wide map compute a different number, and `rebuildNetworks()` — which runs on the next
+ * edit, whatever that edit is — would silently renumber every network on the lot.
+ *
+ * That renumbering is where the bug would have been. It is invisible: nothing breaks, the
+ * water keeps flowing, and the only symptom is that a world loaded from a file hashes
+ * differently from the identical world built fresh, until some unrelated edit quietly brings
+ * them back into agreement. So the translation happens HERE, once, where it is written down.
+ */
+const FORMAT_7_WORLD_TILES_WIDE = 16;
+const FORMAT_8_WORLD_TILES_WIDE = 64;
+
+/** A format-7 row-major tile index, re-expressed on the wider map. Zero stays zero. */
+function widenTileIndex(index: number): number {
+  if (!Number.isInteger(index) || index <= 0) return index;
+  const x = index % FORMAT_7_WORLD_TILES_WIDE;
+  const y = Math.floor(index / FORMAT_7_WORLD_TILES_WIDE);
+  return y * FORMAT_8_WORLD_TILES_WIDE + x;
+}
+
+/**
+ * Format 7 → 8.
+ *
+ * Land deeds. The lot became a 4×4 grid of 16-tile parcels and a world now records which of
+ * them it holds the deed to.
+ *
+ * **`[0]` IS NOT A DEFAULT, IT IS THE MAP THE SAVE WAS WRITTEN ON.** Every format-7 world was
+ * born on a 16×16 lot whose north-west corner is the origin, and the new grid grows east and
+ * south from that same origin — so the tiles a format-7 payload names are, one for one, the
+ * tiles of parcel 0. Nothing is translated: the field is still at (4,4), the pond is still at
+ * (12,13), and every machine, belt, pipe and pending errand comes back at the coordinates it
+ * was saved at. That is the whole compatibility argument, and it is why the grid grew outward
+ * instead of centring the old lot inside the new one — centring is prettier and would have
+ * required moving every coordinate in every save by (+16,+16), which is a migration that moves
+ * a player's factory to buy symmetry nobody can see from inside the world.
+ *
+ * The money is untouched too. Parcel 0 is the free starter lot (plan §5), so a returning player
+ * is not billed for the land they already had, and `landValueCents` counts purchases beyond the
+ * first — which for a migrated world is none.
+ *
+ * **The one thing that does move is the network ids**, and they are not coordinates — they are
+ * row-major tile indices, which are arithmetic on the map's width. Every reference to one is
+ * rewritten together (`networks[].id`, `pipes[].network`, `machines[].network`, and each typed
+ * port's `network`) so the loaded world names its plumbing exactly as a freshly built copy of
+ * it would. See `widenTileIndex`. Not a tile in the world moves; a pipe at (12,13) is still at
+ * (12,13), and the network it belongs to is now called 844 instead of 220.
+ */
+const migrateFormat7To8: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-7 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const networks: Record<string, unknown>[] = [];
+  const oldNetworks = rows(p, 'networks');
+  for (let i = 0; i < oldNetworks.length; i++) {
+    const network = oldNetworks[i]!;
+    const id = network['id'];
+    networks.push({ ...network, id: typeof id === 'number' ? widenTileIndex(id) : id });
+  }
+
+  const pipes: Record<string, unknown>[] = [];
+  const oldPipes = rows(p, 'pipes');
+  for (let i = 0; i < oldPipes.length; i++) {
+    const pipe = oldPipes[i]!;
+    const network = pipe['network'];
+    pipes.push({
+      ...pipe,
+      network: typeof network === 'number' ? widenTileIndex(network) : network,
+    });
+  }
+
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    const machine = oldMachines[i]!;
+    const network = machine['network'];
+    const oldPorts = machine['ports'];
+    const ports: unknown[] = [];
+    if (Array.isArray(oldPorts)) {
+      for (let j = 0; j < oldPorts.length; j++) {
+        const port = oldPorts[j] as Record<string, unknown>;
+        if (typeof port !== 'object' || port === null) {
+          ports.push(port);
+          continue;
+        }
+        const portNetwork = port['network'];
+        ports.push({
+          ...port,
+          network: typeof portNetwork === 'number' ? widenTileIndex(portNetwork) : portNetwork,
+        });
+      }
+    }
+    machines.push({
+      ...machine,
+      network: typeof network === 'number' ? widenTileIndex(network) : network,
+      ports: Array.isArray(oldPorts) ? ports : oldPorts,
+    });
+  }
+
+  return {
+    ...p,
+    machines,
+    networks,
+    ownedParcels: [FORMAT_8_STARTING_PARCEL],
+    pipes,
+    version: 8,
+  };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -405,6 +532,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   4: migrateFormat4To5,
   5: migrateFormat5To6,
   6: migrateFormat6To7,
+  7: migrateFormat7To8,
 };
 
 export interface MigrationOutcome {

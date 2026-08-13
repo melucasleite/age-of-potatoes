@@ -25,6 +25,7 @@ import { Ceremony } from './ceremony';
 import { FarmFx } from './farm-fx';
 import { GrabberLayer } from './grabbers';
 import { Hud } from './hud';
+import { LandOverlay } from './land';
 import { createLayers, destroyLayers, LAYER_ORDER } from './layers';
 import type { Layers } from './layers';
 import { DevOverlay } from './overlay';
@@ -131,6 +132,8 @@ export interface WorldScene {
   readonly beltItems: BeltItemLayer;
   readonly grabbers: GrabberLayer;
   readonly zoneOverlay: ZoneOverlay;
+  /** Unowned parcels: the wash and the fence line, baked with the ground (§5's land deeds). */
+  readonly landOverlay: LandOverlay;
   /** The fluid layer: single-line, auto-tiled, tinted by liquid, grey when empty (§5). */
   readonly pipes: PipeLayer;
 
@@ -211,10 +214,15 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   // The zone-paint pass, filled in at last: the seam existed for [[018]], and [[018]] is
   // now content rather than surgery, exactly as intended.
   const zoneOverlay = new ZoneOverlay(art);
+  const landOverlay = new LandOverlay(art);
 
   const source: TerrainSource = {
     ground: (tileX, tileY) => art.get(groundNameAt(tileX, tileY)),
-    overlay: (tileX, tileY) => zoneOverlay.paints(tileX, tileY),
+    // LAND OUTRANKS ZONES, and the two can never actually meet: zone paint exists only on
+    // field tiles and the field is inside the starting parcel, which every world owns. The
+    // order is written down anyway, because "these two cannot collide" is exactly the kind of
+    // claim that stops being true the day somebody moves the field.
+    overlay: (tileX, tileY) => landOverlay.paints(tileX, tileY) ?? zoneOverlay.paints(tileX, tileY),
   };
 
   const terrain = new TerrainBaker(app.renderer, source, WORLD_TILES_WIDE, WORLD_TILES_HIGH);
@@ -396,6 +404,7 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     beltItems,
     grabbers,
     zoneOverlay,
+    landOverlay,
     pipes,
     prevXSub: 0,
     prevYSub: 0,

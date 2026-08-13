@@ -38,15 +38,20 @@ import {
   POND_TILES_WIDE,
   RESERVOIR_CAPACITY_ML,
   STARTING_MONEY_CENTS,
+  STARTING_PARCEL,
   STARTING_SEEDS,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
   ZONE_NAME_MAX_LENGTH,
   ZONE_PRIORITY_DEFAULT,
   beltSpec,
+  deedPriceCents,
   grabberSpec,
+  isParcelIndex,
   listPriceCents,
   machineSpec,
+  parcelIndexAt,
+  parcelsAdjacent,
 } from './data';
 import type { Command } from './commands';
 import {
@@ -75,8 +80,11 @@ import { SUBTILE, divFloor, tileCentreSubtiles } from './units';
  * 7 — deconstruct to inventory: a machine comes off the lot as a BOXED ITEM, so an inventory
  *     slot carries a list of boxed machines beside its count — dials, condition, and invoice
  *     each — and two new errand verbs (Deconstruct, Buy) can be pending on the player.
+ * 8 — land deeds: the lot is a 4×4 grid of 16-tile parcels rather than one 16×16 map, and a
+ *     world carries the sorted list of the parcels it owns. Every existing world owns exactly
+ *     parcel 0, which is the map it already had, at the coordinates it already had.
  */
-export const WORLD_STATE_VERSION = 7;
+export const WORLD_STATE_VERSION = 8;
 
 /**
  * A held direction, not a delta. Input tells the sim *which way the player is holding*,
@@ -593,6 +601,23 @@ export interface WorldState {
   /** Sorted ascending by item id. Never contains a zero-count slot. */
   inventory: InventorySlot[];
 
+  /**
+   * The parcels this world has a deed to, as row-major parcel indices, **sorted ascending**.
+   *
+   * Sorted rather than purchase-ordered, for exactly the reason `unlocked` is: two players who
+   * bought the same two parcels in the opposite order own the same land and must hash the same.
+   * The order is not a record of what happened — the trace is — and a digest that read purchase
+   * order would call two identical lots different worlds.
+   *
+   * A LIST OF INDICES RATHER THAN A PER-TILE FLAG. Ownership is a fact about a parcel, and 4,096
+   * booleans would be 4,096 chances for a tile to disagree with the parcel it is in. Sixteen
+   * entries at most, so every lookup in here is a scan over a list that fits in a cache line.
+   *
+   * Never empty: `STARTING_PARCEL` is a gift, like the sell bin and the pond, and a world with
+   * no land is a world where nothing can be built or planted.
+   */
+  ownedParcels: number[];
+
   /** Row-major, `FIELD_TILES_WIDE * FIELD_TILES_HIGH` entries. Index is the tile's id. */
   field: CropTile[];
 
@@ -691,6 +716,9 @@ export function createWorld(seed: number): WorldState {
       intent: null,
     },
     inventory: [],
+    // The starter lot is free (plan §5). One parcel, at the origin, which is exactly the map
+    // every world before deeds was born on.
+    ownedParcels: [STARTING_PARCEL],
     field: [],
     machines: [],
     nextMachineId: 1,
@@ -993,6 +1021,104 @@ export function tileAt(state: WorldState, tileX: number, tileY: number): CropTil
 
 export function isInsideWorld(tileX: number, tileY: number): boolean {
   return tileX >= 0 && tileY >= 0 && tileX < WORLD_TILES_WIDE && tileY < WORLD_TILES_HIGH;
+}
+
+// --- land -------------------------------------------------------------------------
+//
+// INSIDE THE WORLD AND OWNED ARE TWO DIFFERENT QUESTIONS, and every build path has to ask both.
+// The map is the maximum extent of the lot; ownership is how much of it is yours. Keeping them
+// apart is what lets the renderer draw unowned ground — and the deed price standing on it —
+// rather than an edge the camera simply refuses to show.
+//
+// WALKING IS NOT GATED ON EITHER, deliberately. Plan §5 sells deeds as the answer to "is space
+// free?", which is a question about BUILDING; nothing in the plan fences the farmer in. Nothing
+// in this world is solid enough to walk into (see `WALK_ERRAND_TIMEOUT_TICKS`), so an invisible
+// wall around unowned land would be the first collision geometry in the game — and it would be
+// there to stop the player walking over to read the price of the thing they are meant to buy.
+
+export function isParcelOwned(state: WorldState, parcel: number): boolean {
+  for (let i = 0; i < state.ownedParcels.length; i++) {
+    if (state.ownedParcels[i] === parcel) return true;
+  }
+  return false;
+}
+
+/** True when a tile is inside the world AND on land this world holds the deed to. */
+export function isOwnedTile(state: WorldState, tileX: number, tileY: number): boolean {
+  const parcel = parcelIndexAt(tileX, tileY);
+  return parcel >= 0 && isParcelOwned(state, parcel);
+}
+
+/**
+ * What the next deed costs this world, in cents, or -1 when every parcel is already owned.
+ *
+ * Priced off HOW MANY have been bought, never off which one is being bought — see
+ * `DEED_PRICE_CENTS_BY_PURCHASE`. `ownedParcels` always contains the free starting parcel, so
+ * the count of purchases is one less than its length.
+ */
+export function nextDeedPriceCents(state: WorldState): number {
+  return deedPriceCents(state.ownedParcels.length - 1);
+}
+
+/**
+ * Whether a parcel is one this world could buy right now: on the map, not already owned, and
+ * orthogonally touching land it already holds.
+ *
+ * ADJACENCY IS PLAN §5'S WORD — *"adjacent parcels are purchasable land deeds"* — and it is
+ * load-bearing rather than decorative. Without it a player could buy the far corner and own two
+ * disconnected islands with a stranger's field between them, which is a different game (§8's
+ * campuses, and item 047's scope) reached by accident.
+ */
+export function isParcelBuyable(state: WorldState, parcel: number): boolean {
+  if (!isParcelIndex(parcel)) return false;
+  if (isParcelOwned(state, parcel)) return false;
+  for (let i = 0; i < state.ownedParcels.length; i++) {
+    if (parcelsAdjacent(state.ownedParcels[i]!, parcel)) return true;
+  }
+  return false;
+}
+
+/**
+ * Record a parcel as owned, keeping the list sorted. Returns false if it was already there.
+ *
+ * Money is the caller's business, exactly as `spawnMachine` leaves the invoice to the reducer.
+ */
+export function ownParcel(state: WorldState, parcel: number): boolean {
+  for (let i = 0; i < state.ownedParcels.length; i++) {
+    const current = state.ownedParcels[i]!;
+    if (current === parcel) return false;
+    if (current > parcel) {
+      state.ownedParcels.splice(i, 0, parcel);
+      return true;
+    }
+  }
+  state.ownedParcels.push(parcel);
+  return true;
+}
+
+/**
+ * What this world's land is worth on the books: the sum of the deeds it actually paid.
+ *
+ * LAND IS INVOICED, EXACTLY AS A MACHINE IS, and for plan §6's reason rather than for tidiness:
+ * every board is net-worth-accounted so that *"investing during a window is neutral"*. A deed
+ * that only ever subtracted cash would make buying land the one purchase in the game that costs
+ * you a rung on the leaderboard, and a player racing a Peak Flow window would learn to stop
+ * expanding — which is precisely backwards for the money sink land is supposed to be.
+ *
+ * Priced off the LADDER rather than off a per-parcel invoice stored in state, because the ladder
+ * is what was paid: prices go by purchase count, so the first n purchases cost the first n rungs
+ * whichever parcels they were. That is one fewer number in the save and one fewer chance for the
+ * books to disagree with the till. The free starting parcel is worth nothing here — it was a
+ * gift, and counting it would hand every fresh world a phantom $200.
+ */
+export function landValueCents(state: WorldState): number {
+  let total = 0;
+  const purchases = state.ownedParcels.length - 1;
+  for (let i = 0; i < purchases; i++) {
+    const price = deedPriceCents(i);
+    if (price > 0) total += price;
+  }
+  return total;
 }
 
 export function isTileReady(tile: CropTile): boolean {
@@ -1398,7 +1524,7 @@ export function boxedMachineValueCents(box: BoxedMachine): number {
 
 /**
  * Net worth: cash, plus inventory at list, plus machines at invoice scaled by condition,
- * plus everything sitting in a buffer or riding a belt.
+ * plus everything sitting in a buffer or riding a belt, plus the land at what its deeds cost.
  *
  * Every board is net-worth-accounted (plan §6) so that investing during a scoring window
  * is neutral while letting machines rust is a visible loss. Upgrade spend counts through
@@ -1464,6 +1590,10 @@ export function computeNetWorthCents(state: WorldState): number {
   // tank full of it is a machine doing its job, not inventory. Counting water would make
   // filling a tank read as profit and draining it as a loss, which is precisely backwards.
   total += PIPE_PRICE_CENTS_PER_TILE * state.pipes.length;
+
+  // And the deeds, at what they cost. See `landValueCents` — buying land is investing, and
+  // plan §6 says investing during a scoring window is neutral.
+  total += landValueCents(state);
 
   return total;
 }

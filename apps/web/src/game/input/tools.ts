@@ -59,6 +59,18 @@ export const ToolMode = {
   PlaceBagger: 18,
 
   /**
+   * Buy the deed to the parcel under the cursor (plan §5, [[053]]).
+   *
+   * IN THE BUILD PALETTE, WHERE THE THINGS YOU BUY LIVE, and it is the largest thing in it by
+   * some distance. It behaves like every other row: arm it, click, the lot changes. What makes
+   * it different is that the price is not on the tool — a deed costs what the ladder says the
+   * NEXT one costs, so `TOOL_INFO.costCents` is zero here and `buildRows()` reads the live
+   * number off the projection. A price baked into a constant would go stale the moment the
+   * first deed was bought.
+   */
+  BuyDeed: 20,
+
+  /**
    * Box a machine up and put it in the pouch ([[054]]).
    *
    * IN THE BUILD PALETTE THOUGH IT BUYS NOTHING, and that is a considered exception to the
@@ -240,6 +252,14 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     label: 'Bagger',
     hint: 'click 2x2 of clear ground',
     costCents: machinePrice(MachineKind.Bagger),
+    gesture: 'click',
+  },
+
+  [ToolMode.BuyDeed]: {
+    label: 'Land Deed',
+    hint: 'click a parcel next to yours to buy it',
+    // The live price comes from `WorldView.land.nextPriceCents`; see `ToolMode.BuyDeed`.
+    costCents: 0,
     gesture: 'click',
   },
 

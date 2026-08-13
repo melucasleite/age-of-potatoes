@@ -83,6 +83,11 @@ export class InputSystem {
   update(): void {
     const tool = this.host.getTool();
     this.chrome.setBand(this.pointer.band());
+    // The deed signs stand on the land rather than following the cursor, so they are driven by
+    // the frame loop like the band and unlike anything hover-driven — the camera moves while
+    // the player walks, and a sign that only updated on pointer moves would drift off its own
+    // parcel the moment somebody put the mouse down and used the keyboard.
+    this.chrome.setDeedSigns(this.host.latestView());
     this.chrome.setHint(tool, this.host.camera.transform.zoom, this.pointer.rotateAdvertised(tool));
     this.chrome.tick(tool);
   }

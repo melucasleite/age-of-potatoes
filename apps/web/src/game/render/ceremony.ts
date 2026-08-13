@@ -218,13 +218,14 @@ export class Ceremony {
    * Returns the player's own position untouched when nothing is playing, so the caller can
    * hand its result straight to `lookAt` with no branch.
    *
-   * NOTE, because it is easy to be surprised by: v0.1's lot is 16x16 tiles = 256 world px,
-   * and `clampToWorld` CENTRES the world on any axis where it fits. At the default 3x zoom
-   * on a viewport wider than 768 CSS px, that means the camera is already pinned to the
-   * middle of the lot and this bias is silently discarded. It becomes visible at 4x and 6x,
-   * where the lot no longer fits. That is correct behaviour rather than a bug — but it does
-   * mean the framing cannot be the ceremony's main event, which is why the in-world sweep
-   * and the plaque carry it.
+   * NOTE, AND IT USED TO CUT THE OTHER WAY: `clampToWorld` CENTRES the world on any axis
+   * where it fits, and v0.1's 16x16 lot (256 world px) fitted at 3x on any viewport wider
+   * than 768 CSS px — so the camera was pinned to the middle of the lot and this bias was
+   * silently discarded except at 4x and 6x. Land deeds took the world to 64x64 tiles = 1,024
+   * world px, which fits nothing at 3x, so the bias now lands at every zoom rung. The framing
+   * is still not the ceremony's main event — the in-world sweep and the plaque carry it — but
+   * it is no longer a no-op, and a ten-second lean toward the far corner of a big lot is a
+   * more noticeable thing than it was when it did nothing at all.
    */
   cameraTarget(playerX: number, playerY: number, out: { x: number; y: number }): void {
     out.x = playerX;

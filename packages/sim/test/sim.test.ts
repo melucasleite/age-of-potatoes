@@ -77,7 +77,7 @@ describe('determinism', () => {
   it('pins the scripted run to a known hash', () => {
     // If this changes, either the sim changed on purpose or determinism broke by accident.
     // There is no third option, which is the entire point of the fixture.
-    expect(hashState(runScript(1234, 1000))).toBe('6bbd3b96');
+    expect(hashState(runScript(1234, 1000))).toBe('67785e8e');
   });
 
   it('gives different seeds different worlds', () => {

@@ -204,6 +204,25 @@ export interface ResearchTechCommand {
   techId: string;
 }
 
+/**
+ * Buy the deed to one parcel of land (plan §5).
+ *
+ * NO PRICE IN THE PAYLOAD, on purpose and for the same reason `RotateGrabber` carries no target
+ * direction: what a deed costs is the sim's rule, off `DEED_PRICE_CENTS_BY_PURCHASE` and how
+ * many the world already owns. A client that sent a price would be a client that could send the
+ * wrong one, and a replay would then depend on what some build thought land was worth.
+ *
+ * NOT REACH-GATED, like `PlaceMachine` and `ResearchTech` and unlike every verb you do with your
+ * hands. Buying land is signing for it, not touching it — there is no object on the parcel to
+ * stand next to, and gating it would mean walking into land you do not own to buy the right to
+ * walk into it. That is also why it needs no `IntentAction`: nothing here can be walked to.
+ */
+export interface BuyDeedCommand {
+  type: 'BuyDeed';
+  /** Row-major parcel index. Refused unless it is unowned, on the map, and adjacent to owned. */
+  parcel: number;
+}
+
 // --- belts and grabbers -------------------------------------------------------------
 
 /** Lay one straight belt segment. Corners are two segments meeting, not a curve. */
@@ -405,6 +424,7 @@ export type Command =
   | SellBoxedMachineCommand
   | UpgradeMachineCommand
   | ResearchTechCommand
+  | BuyDeedCommand
   | PlaceBeltCommand
   | RemoveBeltCommand
   | PlaceGrabberCommand

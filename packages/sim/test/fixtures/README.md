@@ -55,15 +55,23 @@ its name to `FIXTURE_NAMES` in `test/goldens.ts`, and generate its hash once.
 | `walk-errands.json`   | 90210    |  3,923 | Four corner plots planted, watered and harvested entirely by clicking out of reach, then sold at the bin the same way. Guards all four endings an errand has: arrival fires the verb through the ordinary reducer, a second click replaces a pending errand rather than queueing, a held direction abandons one mid-stride, and moving the sell bin out from under a repair errand strands it.                                                                                                                                                                                                     |
 | `rotate-and-box.json` | 24680    | 48,792 | Rotation and boxing. A grabber placed facing north and turned three times round the compass; a Chip Kitchen given two Speed levels and a Capacity level, worn until it jams, whacked, repaired, then **boxed by errand** with forty bags and six potatoes still in it and put straight back down elsewhere for nothing — same dials, same invoice, money untouched. A second, plain kitchen is boxed **at the machine** and scrapped for exactly 40% of its $100 invoice. Ends holding two boxes of one kind at two different invoices, beside a Washer left mid-operation.                        |
 
+| `land-deeds.json` | 480480 | 6,721 | The lot growing. Two full hand-farmed cycles pay for the deed to parcel 1 at $200, and then a Chip Kitchen and a Sprinkler go down east of tile 16 — ground that did not exist to build on a release ago. Guards `BuyDeed`, the ownership gate every placement verb shares, the sorted parcel list in the hash, and land on the net-worth books. |
 `golden.test.ts` asserts that the set as a whole covers every `Command` variant, and
 `REQUIRED_COMMAND_COVERAGE` in `test/goldens.ts` is typed so that adding one more variant to
 the union fails `yarn typecheck` until a fixture exercises it. That is deliberately annoying:
 a verb no fixture applies is a verb the determinism gate does not guard.
 
-The two factory fixtures, `soda-line`, `walk-errands`, `idle-wear`, `maintenance`, and
-`rotate-and-box` were authored by scripting a bot against `step()` and dumping the world's own
-`state.trace` — so every command in them is one that actually applied, not one that was
-attempted and silently rejected.
+The two factory fixtures, `soda-line`, `walk-errands`, `idle-wear`, `maintenance`,
+`rotate-and-box`, and `land-deeds` were authored by scripting a bot against `step()` and
+dumping the world's own `state.trace` — so every command in them is one that actually applied,
+not one that was attempted and silently rejected.
+
+`land-deeds` is the shortest of the bot-authored fixtures because the thing it pins is cheap to
+reach: 391 commands and two farming cycles buy the first deed on plan §4's curve, which is the
+point — the first parcel is meant to be an hour of early income, not a milestone. What it
+cannot show is the refusals, because a refused command appends nothing to the trace; those live
+in `test/parcels.test.ts`, which is also where the fit arithmetic for item 053's acceptance
+criterion is.
 
 `soda-line` is the longest thing here that is not a waiting game, and most of its 43,838 ticks
 are the _economy_, not the soda: the tech chain up to `hydraulics-soda-mixing` costs $5,005 and
@@ -88,10 +96,10 @@ at two different invoices, which is the one thing a flat `{item, count}` slot ca
 `walk-errands` is deliberately short. Its job is branch coverage rather than endurance: the
 long fixtures already prove the sim survives sixty thousand ticks, and what this one proves is
 that an errand can end four different ways. **The timeout is not among them, and cannot be.**
-`WALK_ERRAND_TIMEOUT_TICKS` is 600 ticks, which buys about 120 tiles of walking in a 16×16
-world — it is a deadlock breaker for a future in which something can block a footstep, not a
-number any honest fixture can reach today. A fixture contorted into triggering it would be
-testing the contortion.
+`WALK_ERRAND_TIMEOUT_TICKS` is 1,200 ticks, which buys about 240 tiles of walking against a
+64×64 lot whose longest honest crossing is 88 — it is a deadlock breaker for a future in which
+something can block a footstep, not a number any honest fixture can reach today. A fixture
+contorted into triggering it would be testing the contortion.
 
 ## What is deliberately not here
 

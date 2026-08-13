@@ -57,6 +57,7 @@ export const FIXTURE_NAMES = [
   'maintenance',
   'soda-line',
   'rotate-and-box',
+  'land-deeds',
 ] as const;
 
 export type FixtureName = (typeof FIXTURE_NAMES)[number];
@@ -89,6 +90,7 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   SellBoxedMachine: true,
   UpgradeMachine: true,
   ResearchTech: true,
+  BuyDeed: true,
   PlaceBelt: true,
   RemoveBelt: true,
   PlaceGrabber: true,

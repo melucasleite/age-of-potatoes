@@ -71,6 +71,7 @@ import { requestPanel } from './panels';
 import {
   grabberAtView,
   machineWithinReach,
+  parcelOrigin,
   screenToTile,
   tileAtView,
   tileWithinReach,
@@ -340,6 +341,11 @@ export class PointerInput {
     // arm's tile from three tiles away, and hiding a 2×2 outline to draw a one-tile chevron
     // would be answering a question nobody asked.
     const tool = this.host.getTool();
+    // The deed band outlines a whole parcel, so it outranks the arm-under-the-cursor rule for
+    // the same reason a machine ghost does: the player is aiming at sixteen tiles a side, and
+    // a one-tile chevron under that is answering a question nobody asked.
+    if (tool === ToolMode.BuyDeed) return deedBand(view, hover);
+
     const grabber = this.grabberUnderCursor();
     if (grabber !== null && toolMachineKind(tool) === null) return grabberBand(hover, grabber);
 
@@ -377,6 +383,13 @@ export function primaryCommand(
 
   const query = tileAtView(view, tile.tileX, tile.tileY);
   if (!query.insideWorld) return null;
+
+  // The deed names the PARCEL under the cursor rather than the tile, because that is what is
+  // being bought. Every refusal — already owned, not adjacent, not affordable — is the sim's
+  // (§12); the command is built for any parcel on the map and the reducer decides.
+  if (tool === ToolMode.BuyDeed) {
+    return query.parcel < 0 ? null : { type: 'BuyDeed', parcel: query.parcel };
+  }
 
   switch (tool) {
     case ToolMode.Water:
@@ -766,6 +779,42 @@ function grabberBand(hover: HoverTile, grabber: { dir: number; withinReach: bool
   };
 }
 
+/**
+ * The parcel under the cursor, outlined whole, with its price on the tag.
+ *
+ * THE BAND IS THE PRICE TAG AT THE MOMENT OF BUYING, and the sign standing on the parcel is
+ * the one that is there before the player ever arms the tool (`chrome.ts`). Both read the same
+ * `land.nextPriceCents`, so they cannot disagree about what a deed costs.
+ */
+function deedBand(view: WorldView, hover: HoverTile): BandState | null {
+  const query = tileAtView(view, hover.tileX, hover.tileY);
+  if (query.parcel < 0) return null;
+
+  const origin = parcelOrigin(view, query.parcel);
+  const bounds = {
+    x: origin.tileX,
+    y: origin.tileY,
+    w: view.land.parcelTiles,
+    h: view.land.parcelTiles,
+  };
+  const price = view.land.nextPriceCents;
+  const buyable = view.land.buyable.includes(query.parcel);
+  const affordable = price >= 0 && view.moneyCents >= price;
+
+  return {
+    ...bounds,
+    tone: buyable && affordable ? 'zone' : 'blocked',
+    label: query.owned
+      ? 'already yours'
+      : !buyable
+        ? 'buy the parcel next to it first'
+        : affordable
+          ? `land deed · $${Math.round(price / 100).toLocaleString('en-US')}`
+          : `need $${Math.round(price / 100).toLocaleString('en-US')}`,
+    dir: Direction.None,
+  };
+}
+
 /** The footprint the armed placement tool would occupy under the cursor. */
 function ghostBand(
   view: WorldView,
@@ -825,7 +874,12 @@ function runIsClearOfField(view: WorldView, bounds: Bounds): boolean {
   for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
       const query = tileAtView(view, x, y);
-      if (!query.insideWorld || query.isField || query.machine !== null) return false;
+      // Ownership is checked here as well as in the sim, because a run dragged over the fence
+      // is refused WHOLE (`applyPlaceBelt`) — so the band has to go red for the whole run
+      // rather than for the two tiles that crossed it.
+      if (!query.insideWorld || !query.owned || query.isField || query.machine !== null) {
+        return false;
+      }
     }
   }
   return true;
@@ -835,7 +889,7 @@ function footprintClear(view: WorldView, bounds: Bounds): boolean {
   for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
       const query = tileAtView(view, x, y);
-      if (!query.insideWorld || query.machine !== null) return false;
+      if (!query.insideWorld || !query.owned || query.machine !== null) return false;
     }
   }
   return true;

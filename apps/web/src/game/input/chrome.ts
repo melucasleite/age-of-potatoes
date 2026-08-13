@@ -60,6 +60,18 @@ const CSS = `
   background:rgba(20,16,25,0.80); border:1px solid rgba(255,255,255,0.10); }
 .sm-ix-hint b { color:#f2e6cf; font-weight:600; }
 .sm-ix-hint span { color:#9c9182; }
+/* The deed sign: one per unowned parcel, standing in the middle of the land it prices.
+   ANCHORED IN WORLD SPACE AND DRAWN IN DOM, which is the same trade the band above makes and
+   for the same two reasons — text stays crisp at every zoom rung without a font atlas, and the
+   renderer is somebody else's file. It is positioned from the transform that actually reached
+   the display this frame, so it rides the camera exactly as the ground under it does. */
+.sm-ix-deed { position:absolute; display:none; transform:translate(-50%,-50%); white-space:nowrap;
+  padding:3px 8px; border-radius:3px; text-align:center; letter-spacing:0.04em;
+  background:rgba(20,16,12,0.78); border:1px solid rgba(216,201,164,0.45); color:#e8dcc0;
+  text-shadow:0 1px 2px rgba(0,0,0,0.9); }
+.sm-ix-deed b { display:block; font-size:13px; color:#f2e6cf; }
+.sm-ix-deed[data-state="far"] { opacity:0.55; border-color:rgba(216,201,164,0.20); }
+.sm-ix-deed[data-state="broke"] b { color:#e97c6e; }
 .sm-ix-menu { position:absolute; right:14px; top:14px; width:296px; display:none;
   pointer-events:auto; padding:8px; border-radius:6px; background:rgba(20,16,25,0.94);
   border:1px solid rgba(255,255,255,0.14); box-shadow:0 8px 28px rgba(0,0,0,0.5);
@@ -131,6 +143,10 @@ export class InputChrome {
   private open = false;
   private refreshCountdown = 0;
   private lastHintKey = '';
+  /** One sign per unowned parcel, grown on demand and reused. Fifteen at the very most. */
+  private readonly deedSigns: HTMLElement[] = [];
+  /** What each sign currently says, so a frame that changes nothing writes nothing. */
+  private readonly deedText: string[] = [];
 
   constructor(
     private readonly container: HTMLElement,
@@ -175,6 +191,10 @@ export class InputChrome {
     this.tag = null;
     this.hint = null;
     this.menu = null;
+    // The signs are children of `root` and go with it, but the arrays must not survive a
+    // StrictMode remount holding nodes that are no longer in the document.
+    this.deedSigns.length = 0;
+    this.deedText.length = 0;
     this.open = false;
   }
 
@@ -263,6 +283,104 @@ export class InputChrome {
     chev.style.left = `${left + width / 2}px`;
     chev.style.top = `${top + height / 2}px`;
     chev.style.transform = `translate(-50%,-50%) rotate(${degrees}deg)`;
+  }
+
+  // --- the deed signs --------------------------------------------------------------------
+
+  /**
+   * A price standing on every parcel the player has not bought.
+   *
+   * ITEM 053 ASKS FOR THE PRICE TO BE READABLE **IN-WORLD**, and this is that: no panel to
+   * open, no tool to arm, no hover required. A player who walks east until the grass goes dark
+   * finds out what the next field costs by looking at it.
+   *
+   * ONE SIGN PER PARCEL, ALL SHOWING THE SAME NUMBER, and that is honest rather than lazy: a
+   * deed is priced by how many you have bought, never by which one you are buying, so every
+   * parcel for sale genuinely costs the same today. The ones that are not adjacent say so
+   * instead of quoting a price they will not honour.
+   *
+   * Called once per frame from the host's loop, AFTER the camera has been applied — same rule
+   * as the band, and for the same reason: a sign positioned from last frame's transform slides
+   * against the ground it is standing on while the player walks.
+   */
+  setDeedSigns(view: WorldView | null): void {
+    const root = this.root;
+    if (root === null) return;
+
+    const land = view?.land ?? null;
+    if (land === null) {
+      for (const sign of this.deedSigns) sign.style.display = 'none';
+      return;
+    }
+
+    const t = this.camera.transform;
+    const half = (land.parcelTiles * TILE_PX) / 2;
+    const money = view?.moneyCents ?? 0;
+    const price = land.nextPriceCents;
+    let used = 0;
+
+    for (let parcel = 0; parcel < land.parcelsWide * land.parcelsHigh; parcel++) {
+      if (land.owned.includes(parcel)) continue;
+
+      const index = used;
+      used += 1;
+      const sign = this.deedSign(index, root);
+
+      const originX = (parcel % land.parcelsWide) * land.parcelTiles * TILE_PX;
+      const originY = Math.floor(parcel / land.parcelsWide) * land.parcelTiles * TILE_PX;
+      const centre = this.camera.worldToScreen(originX + half, originY + half);
+
+      // Off screen is hidden rather than clipped: an absolutely-positioned node parked far
+      // outside the viewport still costs layout, and there can be fifteen of them.
+      if (
+        centre.x < -half * t.zoom ||
+        centre.y < -half * t.zoom ||
+        centre.x > t.viewWidth + half * t.zoom ||
+        centre.y > t.viewHeight + half * t.zoom
+      ) {
+        sign.style.display = 'none';
+        continue;
+      }
+
+      const buyable = land.buyable.includes(parcel);
+      const affordable = price >= 0 && money >= price;
+      const state = !buyable ? 'far' : affordable ? 'open' : 'broke';
+      const html = !buyable
+        ? '<b>NOT FOR SALE</b>buy the parcel beside it first'
+        : price < 0
+          ? '<b>UNOWNED</b>'
+          : `<b>LAND DEED · $${Math.round(price / 100).toLocaleString('en-US')}</b>` +
+            (affordable ? 'B → Land Deed, then click' : 'you cannot afford this yet');
+
+      sign.style.display = 'block';
+      sign.style.left = `${centre.x}px`;
+      sign.style.top = `${centre.y}px`;
+      // The position moves every frame the camera does; the words change about twice a
+      // session. Writing `innerHTML` and the state attribute unconditionally would reparse two
+      // nodes and touch an attribute per sign per frame, for a sentence nobody saw change.
+      const key = `${state}|${html}`;
+      if (this.deedText[index] !== key) {
+        this.deedText[index] = key;
+        sign.dataset.state = state;
+        sign.innerHTML = html;
+      }
+    }
+
+    for (let i = used; i < this.deedSigns.length; i++) {
+      this.deedSigns[i]!.style.display = 'none';
+    }
+  }
+
+  private deedSign(index: number, root: HTMLElement): HTMLElement {
+    const existing = this.deedSigns[index];
+    if (existing !== undefined) return existing;
+
+    const sign = document.createElement('div');
+    sign.className = 'sm-ix-deed';
+    root.appendChild(sign);
+    this.deedSigns[index] = sign;
+    this.deedText[index] = '';
+    return sign;
   }
 
   // --- the hint strip ------------------------------------------------------------------

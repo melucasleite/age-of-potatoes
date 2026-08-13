@@ -2094,10 +2094,151 @@ export function grabberSpec(tier: GrabberTier): GrabberSpec | null {
 
 // --- world layout -----------------------------------------------------------------
 
-export const WORLD_TILES_WIDE = 16;
-export const WORLD_TILES_HIGH = 16;
+/**
+ * One parcel of land, in tiles. THE STARTING LOT IS EXACTLY ONE OF THESE.
+ *
+ * Plan §5 says only this about land: *"the starter lot is free; adjacent parcels are
+ * purchasable land deeds at escalating prices — a clean mid-game money sink that answers 'is
+ * space free?' (No — but it's never scarce enough to softlock.)"* It fixes neither the parcel
+ * size nor the price, so both are chosen here and the arithmetic is written down.
+ *
+ * SIXTEEN, because that is what the lot already was. Every world that exists was born on a
+ * 16×16 map, so making the parcel any other size would mean the starting lot is not a parcel —
+ * and then ownership has to describe a ragged shape rather than a set of squares, in the hash,
+ * in the save, and in the fence the renderer draws. One number, and the migration is `[0]`.
+ */
+export const PARCEL_TILES = 16;
 
-/** v0.1 is one fixed 8×8 field (plan §16). The 64×64 map is a renderer-side change. */
+/**
+ * The lot is a 4×4 grid of parcels — a 64×64 map: one parcel free, fifteen for sale.
+ *
+ * SIXTY-FOUR TILES A SIDE BECAUSE THE PLAN NAMES THAT NUMBER AND NO OTHER. Plan §5's Land
+ * paragraph fixes no size at all, but §8's roadmap does — v0.2 is *"Zone brush, 64×64 map,
+ * withering"* — and it is the only map dimension written down anywhere in the design. The
+ * roadmap slipped (the shipped game reached the soda line still on 16×16) but the number did
+ * not stop being the plan's answer, and `FIELD_TILES_WIDE` below has carried a comment
+ * pointing at it since v0.1.
+ *
+ * The alternative on the table was a 3×3 grid — 48×48, nine parcels — which is what an
+ * earlier pass at this feature chose on the grounds that a doubling ladder prices the last of
+ * sixteen deeds past plan §4's ten-hour curve. It does, and that is fine: the ten-hour curve
+ * is the *reference* for pricing shape, not the end of the game. Plan §6 designs for hour 50+
+ * (the Head Office, campuses, trophies), and a money sink whose last rung is reached around
+ * hour 30 is a sink with headroom rather than scenery. See `DEED_PRICE_CENTS_BY_PURCHASE`.
+ *
+ * 4,096 tiles against the 256 the game shipped with — sixteen times the lot, and the fit
+ * arithmetic for the two production lines is in `test/parcels.test.ts`.
+ */
+export const PARCELS_WIDE = 4;
+export const PARCELS_HIGH = 4;
+export const PARCEL_COUNT = PARCELS_WIDE * PARCELS_HIGH;
+
+/**
+ * The parcel every world starts owning, as a row-major parcel index.
+ *
+ * ZERO — the north-west corner — AND THAT IS THE WHOLE COMPATIBILITY ARGUMENT. The world grew
+ * east and south from an origin that did not move, so every tile, machine, belt, pipe and pond
+ * in an existing save is still at the coordinates it was saved at and the field is still at
+ * (4,4). Centring the old lot in the new one would have been prettier and would have required
+ * translating every coordinate in every save by (+16,+16) — a migration that moves a player's
+ * factory, to buy symmetry nobody can see from inside the world.
+ */
+export const STARTING_PARCEL = 0;
+
+/**
+ * What each successive deed costs, in cents. Index 0 is the FIRST parcel bought, not parcel 0.
+ *
+ * ESCALATING, AND THE RATE IS THE POINT. Plan §4's curve has income roughly doubling every two
+ * hours, so a ladder that doubles keeps every deed the same *reach*: about an hour of whatever
+ * you are earning when you want it. The first is $200 against the ~$200/hr of a player around
+ * hour four, which is when belts arrive and the yard first runs out; the fourth is $1,600
+ * against the $600–900/hr §4 puts at hours nine and ten; the last is $3,276,800, which is an
+ * hour of income at about hour thirty on the same doubling. Priced by HOW MANY YOU HAVE BOUGHT
+ * rather than by which parcel it is, so two players who expanded in opposite directions paid
+ * the same money and hash the same — the same argument that keeps a network's id geometric and
+ * an inventory slot's boxes sorted.
+ *
+ * DOUBLING RATHER THAN A GENTLER CURVE FITTED TO FIFTEEN RUNGS, deliberately. A posted price
+ * ladder is only stable if a player can hold it in their head (§4: "stable, posted on a board
+ * from minute one"), and "the next one costs twice the last one" is the only rule here anybody
+ * will remember. The far rungs being out of reach at hour ten is the money sink working: plan
+ * §5 asks land to answer "is space free?" with *no, but never scarce enough to softlock*, and
+ * one free parcel plus four affordable ones inside the reference curve is exactly that.
+ *
+ * Fifteen entries for fifteen buyable parcels. `deedPriceCents` returns -1 past the end rather
+ * than extrapolating, because a sixteenth price would be a number nothing can spend.
+ */
+export const DEED_PRICE_CENTS_BY_PURCHASE: readonly number[] = [
+  20_000, 40_000, 80_000, 160_000, 320_000, 640_000, 1_280_000, 2_560_000, 5_120_000, 10_240_000,
+  20_480_000, 40_960_000, 81_920_000, 163_840_000, 327_680_000,
+];
+
+/**
+ * The maximum extent of the lot, in tiles. NOT how much of it the player owns — that is
+ * `WorldState.ownedParcels`, and a fresh world owns one sixteenth of this.
+ */
+export const WORLD_TILES_WIDE = PARCEL_TILES * PARCELS_WIDE;
+export const WORLD_TILES_HIGH = PARCEL_TILES * PARCELS_HIGH;
+
+/**
+ * The parcel a world tile falls in, row-major, or -1 for a tile off the map.
+ *
+ * Pure geometry, so it lives here beside the numbers it divides rather than in `state.ts`
+ * beside the list of what is owned. Ownership is a question about a world; which parcel a tile
+ * is in is a question about arithmetic, and the two want different files.
+ */
+export function parcelIndexAt(tileX: number, tileY: number): number {
+  if (tileX < 0 || tileY < 0 || tileX >= WORLD_TILES_WIDE || tileY >= WORLD_TILES_HIGH) return -1;
+  const px = divFloor(tileX, PARCEL_TILES);
+  const py = divFloor(tileY, PARCEL_TILES);
+  return py * PARCELS_WIDE + px;
+}
+
+/** The north-west tile of a parcel. The inverse of `parcelIndexAt`, at parcel resolution. */
+export function parcelOriginX(parcel: number): number {
+  return (parcel % PARCELS_WIDE) * PARCEL_TILES;
+}
+
+export function parcelOriginY(parcel: number): number {
+  return divFloor(parcel, PARCELS_WIDE) * PARCEL_TILES;
+}
+
+export function isParcelIndex(parcel: number): boolean {
+  return Number.isInteger(parcel) && parcel >= 0 && parcel < PARCEL_COUNT;
+}
+
+/** Orthogonally touching. Corners do not count — a deed bought across a diagonal is a lie. */
+export function parcelsAdjacent(a: number, b: number): boolean {
+  if (!isParcelIndex(a) || !isParcelIndex(b)) return false;
+  const ax = a % PARCELS_WIDE;
+  const ay = divFloor(a, PARCELS_WIDE);
+  const bx = b % PARCELS_WIDE;
+  const by = divFloor(b, PARCELS_WIDE);
+  const dx = ax > bx ? ax - bx : bx - ax;
+  const dy = ay > by ? ay - by : by - ay;
+  return dx + dy === 1;
+}
+
+/**
+ * What the `n`th deed a world buys costs, in cents, or **-1 when there is no `n`th deed**.
+ *
+ * The sentinel rather than a clamp or a zero: a world that owns every parcel has no next price,
+ * which is a different fact from "the next one is free", and the HUD needs to be able to tell
+ * those apart to stop drawing a price on land nobody can buy.
+ */
+export function deedPriceCents(purchaseIndex: number): number {
+  if (!Number.isInteger(purchaseIndex) || purchaseIndex < 0) return -1;
+  return DEED_PRICE_CENTS_BY_PURCHASE[purchaseIndex] ?? -1;
+}
+
+/**
+ * One fixed 8×8 field (plan §16.4), inside the starting parcel and staying there.
+ *
+ * THE FIELD DID NOT MOVE WHEN THE MAP GREW, and nothing about it is derived from the world's
+ * size — which is what makes a pre-deed save load with every crop on the tile it was saved on.
+ * Zones are clipped to these bounds, so zone painting is inside owned land by construction and
+ * needs no ownership check of its own.
+ */
 export const FIELD_TILES_WIDE = 8;
 export const FIELD_TILES_HIGH = 8;
 export const FIELD_TILE_COUNT = FIELD_TILES_WIDE * FIELD_TILES_HIGH;
@@ -2118,14 +2259,22 @@ export const PLAYER_SPEED_SUBTILES_PER_100_TICKS = 5_120;
 /**
  * How long a walk-to errand may live before the sim gives up on it, in ticks.
  *
- * THIRTY SECONDS IS NOT A BALANCE NUMBER, IT IS A DEADLOCK BREAKER. The longest honest walk
- * in a 16×16 world is corner to corner — about 22.6 tiles, or 5.7 seconds at four tiles a
- * second — so anything still walking at thirty is not walking, it is stuck: clamped against
- * the world edge, or aimed at something it can never quite reach. An errand that cannot
- * expire is a farmer who can never move again, which is a far worse bug than a click that
- * quietly gave up, so the ceiling is generous and absolute rather than tuned.
+ * SIXTY SECONDS IS NOT A BALANCE NUMBER, IT IS A DEADLOCK BREAKER. The longest honest walk on
+ * the FULL 64×64 lot is corner to corner — 63 tiles each way, so 89.1 tiles diagonally, less
+ * the errand's own 1.5 tiles of reach: 87.6 tiles, or 21.9 seconds at four tiles a second. So
+ * anything still walking at sixty is not walking, it is stuck: clamped against the world edge,
+ * or aimed at something it can never quite reach. An errand that cannot expire is a farmer who
+ * can never move again, which is a far worse bug than a click that quietly gave up, so the
+ * ceiling is generous and absolute rather than tuned.
+ *
+ * IT MOVED FROM 600 TO 1200 WHEN LAND DEEDS QUADRUPLED THE LOT'S WIDTH, and the arithmetic is
+ * why rather than the round number. At 600 ticks the margin over the longest honest walk was
+ * 1.37×, which is not a deadlock breaker any more — it is a timer that starts cancelling
+ * errands that were merely long, on a map where crossing the whole lot is a thing a player
+ * will do. At 1200 the margin is 2.7×, near the 5.3× the 16×16 lot enjoyed. Anything that
+ * makes the world bigger again must redo this sum.
  */
-export const WALK_ERRAND_TIMEOUT_TICKS = 600;
+export const WALK_ERRAND_TIMEOUT_TICKS = 1_200;
 
 /** One net-worth sample per active minute; ten hours of history for the Peak Flow board. */
 export const NET_WORTH_SAMPLE_PERIOD_TICKS = 1_200;
@@ -2234,6 +2383,14 @@ function balanceDigest(): string {
     const row = BOXED_MACHINE_ROWS[i]!;
     h = fnv1aString(h, `${row.kind}>${row.item}`);
   }
+  // Land. THE MAP'S SHAPE IS BALANCE DATA, not layout trivia: a save records which parcels are
+  // owned as indices into this grid, so a world balanced on a 4×4 lot of 16-tile parcels cannot
+  // be read against a 3×3 one — parcel 5 would be somewhere else entirely. The deed ladder rides
+  // along for the ordinary reason every other price does.
+  h = fnv1aString(
+    h,
+    `${PARCEL_TILES}:${PARCELS_WIDE}x${PARCELS_HIGH}:${STARTING_PARCEL}:${DEED_PRICE_CENTS_BY_PURCHASE.join('|')}`,
+  );
   return fnv1aToHex(h);
 }
 

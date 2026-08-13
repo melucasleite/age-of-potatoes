@@ -104,6 +104,9 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
 
   machineEntry('Field', ToolMode.PlaceSprinkler),
 
+  // The one row whose price is not a constant. See `dynamicCostCents` below.
+  { tool: ToolMode.BuyDeed, group: 'Land', requiresTech: null, costCents: 0, perTile: false },
+
   // The one row in here that spends nothing, and the only one that takes something away.
   // Last, in a group of its own, because a teardown verb sitting between two machines you
   // are shopping for is a misclick waiting for a Fryer — and because "unbuild" is the
@@ -150,21 +153,39 @@ export function buildRows(view: WorldView | null): BuildRow[] {
     const open = techSatisfied(unlocked, entry.requiresTech);
     const techLabel =
       entry.requiresTech === null ? '' : (TECH_LABELS[entry.requiresTech] ?? entry.requiresTech);
+    const cost = dynamicCostCents(entry, view);
+    // A world that owns every parcel has no next deed. The row stays visible and says so, for
+    // the same reason a locked machine stays visible: a row that vanishes teaches nothing.
+    const soldOut = entry.tool === ToolMode.BuyDeed && cost < 0;
 
     rows.push({
       tool: entry.tool,
       group: entry.group,
       label: info.label,
       hint: info.hint,
-      price: entry.costCents === 0 ? '' : formatPrice(entry.costCents, entry.perTile),
-      locked: !open,
+      price: cost <= 0 ? '' : formatPrice(cost, entry.perTile),
+      locked: !open || soldOut,
       // "needs X", not "research X": the row is a statement about the world, and the verb
       // belongs on the button in the tech panel that actually performs it.
-      lockReason: open ? '' : `needs ${techLabel}`,
-      affordable: entry.costCents === 0 || money >= entry.costCents,
+      lockReason: soldOut ? 'the whole lot is yours' : open ? '' : `needs ${techLabel}`,
+      affordable: cost <= 0 || money >= cost,
     });
   }
   return rows;
+}
+
+/**
+ * What this row costs RIGHT NOW, in cents, or -1 for a deed with nothing left to sell.
+ *
+ * One row needs this and the rest are constants. A land deed is priced by how many the world
+ * has already bought (`DEED_PRICE_CENTS_BY_PURCHASE`), so the number lives in the projection
+ * and is read per repaint — the menu repaints a few times a second while it is open, never
+ * per frame. Copying the ladder over here to save the lookup is exactly the kind of second
+ * source of truth this file's header rules out.
+ */
+function dynamicCostCents(entry: BuildEntry, view: WorldView | null): number {
+  if (entry.tool !== ToolMode.BuyDeed) return entry.costCents;
+  return view?.land.nextPriceCents ?? 0;
 }
 
 function formatPrice(cents: number, perTile: boolean): string {

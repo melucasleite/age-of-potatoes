@@ -35,6 +35,16 @@ export interface TileQuery {
   tileX: number;
   tileY: number;
   insideWorld: boolean;
+  /** The parcel this tile belongs to, or -1 off the map. */
+  parcel: number;
+  /**
+   * True when the player holds the deed to the parcel this tile is on.
+   *
+   * SEPARATE FROM `insideWorld`, because they are different questions with different answers
+   * on screen: outside the world is nowhere, and unowned land is a real place with a price
+   * standing on it. Every build affordance reads this, and the sim re-checks all of it (§12).
+   */
+  owned: boolean;
   /** True when the tile belongs to the 8×8 field. */
   isField: boolean;
   /** Row-major index into the field arrays, or -1. */
@@ -126,10 +136,14 @@ export function tileAtView(v: WorldView, tileX: number, tileY: number): TileQuer
     }
   }
 
+  const parcel = parcelAtTile(v, tileX, tileY);
+
   return {
     tileX,
     tileY,
     insideWorld,
+    parcel,
+    owned: parcel >= 0 && v.land.owned.includes(parcel),
     isField,
     fieldIndex: index,
     crop: index >= 0 ? (field.crop[index] ?? 0) : 0,
@@ -140,6 +154,33 @@ export function tileAtView(v: WorldView, tileX: number, tileY: number): TileQuer
     fertility: index >= 0 ? (field.fertility[index] ?? 0) : 0,
     machine,
     withinReach: tileWithinReach(v, tileX, tileY),
+  };
+}
+
+/**
+ * The parcel a tile is on, or -1 off the map.
+ *
+ * READ OFF THE PROJECTION'S OWN GEOMETRY rather than by importing `parcelIndexAt` from the
+ * sim, deliberately. `WorldView` is supposed to be sufficient on its own — plan §12 has it
+ * crossing a Worker boundary one day as plain data — and a picker that reached back into
+ * balance constants for the map's shape would be reading two sources for one fact.
+ */
+export function parcelAtTile(v: WorldView, tileX: number, tileY: number): number {
+  const land = v.land;
+  const width = land.parcelsWide * land.parcelTiles;
+  const height = land.parcelsHigh * land.parcelTiles;
+  if (tileX < 0 || tileY < 0 || tileX >= width || tileY >= height) return -1;
+  return (
+    Math.floor(tileY / land.parcelTiles) * land.parcelsWide + Math.floor(tileX / land.parcelTiles)
+  );
+}
+
+/** The parcel's top-left tile, for a band that outlines the whole thing. */
+export function parcelOrigin(v: WorldView, parcel: number): { tileX: number; tileY: number } {
+  const land = v.land;
+  return {
+    tileX: (parcel % land.parcelsWide) * land.parcelTiles,
+    tileY: Math.floor(parcel / land.parcelsWide) * land.parcelTiles,
   };
 }
 

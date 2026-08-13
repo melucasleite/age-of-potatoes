@@ -299,6 +299,16 @@ export function hashStateUint32(state: WorldState): number {
     d.num(zone.replantCooldown);
   }
 
+  // The deeds. Sorted in `WorldState` for the same reason `unlocked` is: two players who
+  // bought the same two parcels in the opposite order own the same lot and must agree here.
+  // The land itself is not in the digest — a parcel's tiles are arithmetic off its index, and
+  // hashing 4,096 derived booleans would digest the same fact 256 times.
+  d.text('ownedParcels');
+  d.num(state.ownedParcels.length);
+  for (let i = 0; i < state.ownedParcels.length; i++) {
+    d.num(state.ownedParcels[i]!);
+  }
+
   // Already sorted in `WorldState`, for exactly this reason: two worlds that bought the
   // same nodes in a different order are the same world and must agree here.
   d.text('unlocked');
@@ -393,6 +403,10 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check('player.intent.item', intent.item);
     check('player.intent.count', intent.count);
     check('player.intent.issuedTick', intent.issuedTick);
+  }
+
+  for (let i = 0; i < state.ownedParcels.length; i++) {
+    check(`ownedParcels[${i}]`, state.ownedParcels[i]!);
   }
 
   for (let i = 0; i < state.inventory.length; i++) {

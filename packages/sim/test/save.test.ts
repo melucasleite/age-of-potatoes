@@ -16,11 +16,13 @@ import {
   CURRENT_FORMAT_VERSION,
   CeremonyId,
   CropId,
+  DEED_PRICE_CENTS_BY_PURCHASE,
   Direction,
   IntentAction,
   ItemId,
   MachineKind,
   OVERCOOK_BLOCKED_TICKS,
+  PARCEL_TILES,
   REPAIR_KIT_PRICE_CENTS,
   SIM_CODE_VERSION,
   SIM_VERSION,
@@ -29,9 +31,11 @@ import {
   SaveFormatTooNewError,
   BALANCE_HASH,
   checkSimVersion,
+  computeNetWorthCents,
   createWorld,
   deserialize,
   hashState,
+  landValueCents,
   migrate,
   parseEnvelope,
   restoreWorld,
@@ -47,6 +51,7 @@ import fixture4 from './fixtures/saves/format-4.json';
 import fixture5 from './fixtures/saves/format-5.json';
 import fixture6 from './fixtures/saves/format-6.json';
 import fixture7 from './fixtures/saves/format-7.json';
+import fixture8 from './fixtures/saves/format-8.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -333,11 +338,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture);
 
     expect(restored.migration.fromVersion).toBe(1);
-    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('d7a517ca');
+    expect(hashState(restored.state)).toBe('3efe8b92');
   });
 
   it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
@@ -406,10 +411,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture2);
 
     expect(restored.migration.fromVersion).toBe(2);
-    expect(restored.migration.steps).toEqual([2, 3, 4, 5, 6]);
+    expect(restored.migration.steps).toEqual([2, 3, 4, 5, 6, 7]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('9dae4de4');
+    expect(hashState(restored.state)).toBe('48a83f1c');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -451,10 +456,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture3);
 
     expect(restored.migration.fromVersion).toBe(3);
-    expect(restored.migration.steps).toEqual([3, 4, 5, 6]);
+    expect(restored.migration.steps).toEqual([3, 4, 5, 6, 7]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(21_306);
-    expect(hashState(restored.state)).toBe('4e04ef4e');
+    expect(hashState(restored.state)).toBe('cd2fcde5');
   });
 
   it('brings the plumbing back exactly as it was left', () => {
@@ -507,11 +512,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture4);
 
     expect(restored.migration.fromVersion).toBe(4);
-    expect(restored.migration.steps).toEqual([4, 5, 6]);
+    expect(restored.migration.steps).toEqual([4, 5, 6, 7]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(3300);
     expect(restored.state.worldSeed).toBe(90210);
-    expect(hashState(restored.state)).toBe('45e9d3ab');
+    expect(hashState(restored.state)).toBe('a541b961');
   });
 
   it('brings the errand back exactly as it was left', () => {
@@ -556,11 +561,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture5);
 
     expect(restored.migration.fromVersion).toBe(5);
-    expect(restored.migration.steps).toEqual([5, 6]);
+    expect(restored.migration.steps).toEqual([5, 6, 7]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(41_837);
     expect(restored.state.worldSeed).toBe(50505);
-    expect(hashState(restored.state)).toBe('54138811');
+    expect(hashState(restored.state)).toBe('0e3fdb0d');
   });
 
   it('brings the browning basket and the maintenance tallies back as they were', () => {
@@ -606,11 +611,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture6);
 
     expect(restored.migration.fromVersion).toBe(6);
-    expect(restored.migration.steps).toEqual([6]);
+    expect(restored.migration.steps).toEqual([6, 7]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(42_400);
     expect(restored.state.worldSeed).toBe(60606);
-    expect(hashState(restored.state)).toBe('28c319c2');
+    expect(hashState(restored.state)).toBe('c15ec2b4');
   });
 
   it('brings every typed port back with its own liquid, level, and amber flag', () => {
@@ -657,11 +662,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture7);
 
     expect(restored.migration.fromVersion).toBe(7);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([7]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(48_792);
     expect(restored.state.worldSeed).toBe(24_680);
-    expect(hashState(restored.state)).toBe('ac92abd9');
+    expect(hashState(restored.state)).toBe('67e26543');
   });
 
   it('brings both boxed machines back with their own dials, condition, and invoice', () => {
@@ -722,6 +727,79 @@ describe('the permanent fixture set', () => {
     // And it is still making soda after the reload rather than merely surviving it.
     const bottler = a.machines.find((machine) => machine.kind === MachineKind.Bottler)!;
     expect(bottler.opCount).toBeGreaterThan(2);
+  });
+
+  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
+  // format-8 is the first save with bought land in it, and the fact it exists to pin is that
+  // ownership is a property of the WORLD rather than of the tiles: two parcels owned, and a
+  // Chip Kitchen and a Sprinkler standing on the one that was bought. A save that came back
+  // owning only the starter lot would look perfect in every other assertion in this file
+  // while leaving the player's machines on somebody else's grass.
+  it('loads format-8.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture8);
+
+    expect(restored.migration.fromVersion).toBe(8);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(restored.state.tick).toBe(6_721);
+    expect(restored.state.worldSeed).toBe(480_480);
+    expect(hashState(restored.state)).toBe('c5ae23f8');
+  });
+
+  it('brings back the land, and the factory standing on the half that was bought', () => {
+    const state = restoreWorld(fixture8).state;
+
+    // Parcel 0 is the gift; parcel 1 is the $200 one, and the list is sorted rather than in
+    // purchase order — two players who bought the same land in either order are one world.
+    expect(state.ownedParcels).toEqual([0, 1]);
+
+    // Everything east of tile 16 is on ground that could not be built on before this feature.
+    const bought = state.machines.filter((machine) => machine.tileX >= PARCEL_TILES);
+    expect(bought).toHaveLength(2);
+    expect(bought.map((machine) => machine.kind).sort()).toEqual(
+      [MachineKind.ChipKitchen, MachineKind.Sprinkler].sort(),
+    );
+
+    // The kitchen is mid-operation with a hopper and an output buffer, because a fixture taken
+    // at a tidy moment tests nothing.
+    const kitchen = bought.find((machine) => machine.kind === MachineKind.ChipKitchen)!;
+    expect(kitchen.progress).toBeGreaterThan(0);
+    expect(kitchen.inputCounts[0]!).toBeGreaterThan(0);
+    expect(kitchen.outputCount).toBeGreaterThan(0);
+
+    // And the deed is on the books at what it cost, so buying land was neutral on net worth
+    // rather than a self-inflicted loss (plan §6).
+    expect(landValueCents(state)).toBe(DEED_PRICE_CENTS_BY_PURCHASE[0]);
+    expect(computeNetWorthCents(state)).toBeGreaterThan(state.moneyCents + landValueCents(state));
+  });
+
+  it('keeps building on bought land after the reload', () => {
+    const state = restoreWorld(fixture8).state;
+    const before = state.machines.length;
+
+    // The parcel is still owned on the other side of a save, which is the only thing that
+    // makes the machines already standing on it legal.
+    step(state, {
+      tick: state.tick,
+      commands: [
+        { type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: PARCEL_TILES + 8, tileY: 4 },
+      ],
+    });
+    expect(state.machines).toHaveLength(before + 1);
+
+    // And parcel 2 is still somebody else's until it is paid for.
+    step(state, {
+      tick: state.tick,
+      commands: [
+        {
+          type: 'PlaceMachine',
+          kind: MachineKind.ChipKitchen,
+          tileX: PARCEL_TILES * 2 + 4,
+          tileY: 4,
+        },
+      ],
+    });
+    expect(state.machines).toHaveLength(before + 1);
   });
 
   it('finishes the restored errand rather than dropping it', () => {
