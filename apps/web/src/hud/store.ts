@@ -42,6 +42,8 @@ import {
   deriveUnlock,
 } from './derive';
 import type { MachineCounts, UnlockFields } from './derive';
+import { createDockFields, deriveDock } from './derive-dock';
+import type { DockFields } from './derive-dock';
 import { createInventoryFields, deriveInventory } from './derive-inventory';
 import type { InventoryFields } from './derive-inventory';
 import { RiskWatch, createLotFields, deriveLot } from './derive-lot';
@@ -56,6 +58,8 @@ import type {
   BenchSlice,
   ClipboardNote,
   ClipboardSlice,
+  DockSlice,
+  DockZoneOption,
   EconomySlice,
   HudLive,
   HudSnapshot,
@@ -77,6 +81,7 @@ import type {
 import {
   ZERO_BENCH,
   ZERO_CLIPBOARD,
+  ZERO_DOCK,
   ZERO_ECONOMY,
   ZERO_INVENTORY,
   ZERO_LOT,
@@ -107,6 +112,7 @@ export class HudStore {
   private clipboard: ClipboardSlice = ZERO_CLIPBOARD;
   private tech: TechSlice = ZERO_TECH;
   private bench: BenchSlice = ZERO_BENCH;
+  private dock: DockSlice = ZERO_DOCK;
   private lot: LotSlice = ZERO_LOT;
   private shop: ShopSlice = ZERO_SHOP;
   private inventory: InventorySlice = ZERO_INVENTORY;
@@ -120,6 +126,7 @@ export class HudStore {
   private readonly counts: MachineCounts = createMachineCounts();
   private readonly techScratch: TechFields = createTechFields();
   private readonly benchScratch: BenchFields = createBenchFields();
+  private readonly dockScratch: DockFields = createDockFields();
   private readonly lotScratch: LotFields = createLotFields();
   private readonly shopScratch: ShopFields = createShopFields();
   private readonly inventoryScratch: InventoryFields = createInventoryFields();
@@ -170,6 +177,7 @@ export class HudStore {
     clipboard: () => this.snapshot.clipboard,
     tech: () => this.snapshot.tech,
     bench: () => this.snapshot.bench,
+    dock: () => this.snapshot.dock,
     lot: () => this.snapshot.lot,
     shop: () => this.snapshot.shop,
     inventory: () => this.snapshot.inventory,
@@ -188,6 +196,7 @@ export class HudStore {
     clipboard: () => ZERO_SNAPSHOT.clipboard,
     tech: () => ZERO_SNAPSHOT.tech,
     bench: () => ZERO_SNAPSHOT.bench,
+    dock: () => ZERO_SNAPSHOT.dock,
     lot: () => ZERO_SNAPSHOT.lot,
     shop: () => ZERO_SNAPSHOT.shop,
     inventory: () => ZERO_SNAPSHOT.inventory,
@@ -239,6 +248,7 @@ export class HudStore {
     this.clipboard = ZERO_CLIPBOARD;
     this.tech = ZERO_TECH;
     this.bench = ZERO_BENCH;
+    this.dock = ZERO_DOCK;
     this.lot = ZERO_LOT;
     this.shop = ZERO_SHOP;
     this.inventory = ZERO_INVENTORY;
@@ -282,6 +292,7 @@ export class HudStore {
     if (this.setTools(view.moneyCents, tool)) changed = true;
     if (this.setTech(deriveTech(view, this.techScratch))) changed = true;
     if (this.setBench(deriveBench(view, this.benchScratch))) changed = true;
+    if (this.setDock(deriveDock(view, this.dockScratch))) changed = true;
     if (this.setLot(deriveLot(view, this.riskWatch, this.lotScratch))) changed = true;
     if (this.setShop(deriveShop(view, this.shopScratch))) changed = true;
     if (this.setInventory(inventory)) changed = true;
@@ -354,6 +365,7 @@ export class HudStore {
       clipboard: this.clipboard,
       tech: this.tech,
       bench: this.bench,
+      dock: this.dock,
       lot: this.lot,
       shop: this.shop,
       inventory: this.inventory,
@@ -555,6 +567,61 @@ export class HudStore {
       dials: Object.freeze(next.dials.map((dial) => Object.freeze({ ...dial }))),
       boxable: next.boxable,
       boxBlocked: next.boxBlocked,
+    });
+    return true;
+  }
+
+  /**
+   * The dock slice: which Agri-Bot dock the player is standing at, and what it has been told.
+   *
+   * THE BOT'S POSITION IS NOT IN HERE AND MUST NOT BE. A bot moves every tick, so comparing
+   * anything that tracks it would rebuild this slice — and re-render the card — 6.7 times a
+   * second for the life of the world. What the card draws about the robot is its PHASE, which
+   * changes a handful of times per trip, and its condition in whole permille, which changes about
+   * once a completed operation. Both settle; a position never would.
+   *
+   * The zone counts ARE compared, and that is affordable only because `deriveDock` hands back an
+   * empty list the moment the player steps away from a dock. A zone a bot is working churns —
+   * `mature` falls with every pull — so this slice rebuilds while you stand there watching, which
+   * is exactly when you want the numbers to be live, and never once you have walked off.
+   */
+  private setDock(next: DockFields): boolean {
+    const current = this.dock;
+    if (
+      current.machineId === next.machineId &&
+      current.boundZone === next.boundZone &&
+      current.boundName === next.boundName &&
+      current.botPhase === next.botPhase &&
+      current.botConditionPermille === next.botConditionPermille &&
+      current.zones.length === next.zones.length
+    ) {
+      let same = true;
+      for (let i = 0; i < next.zones.length; i++) {
+        const a = current.zones[i] as DockZoneOption;
+        const b = next.zones[i]!;
+        if (a.id !== b.id || a.name !== b.name || a.cropName !== b.cropName) {
+          same = false;
+          break;
+        }
+        if (a.planted !== b.planted || a.mature !== b.mature || a.tiles !== b.tiles) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return false;
+    }
+
+    this.dock = Object.freeze({
+      version: current.version + 1,
+      machineId: next.machineId,
+      kind: next.kind,
+      label: next.label,
+      planter: next.planter,
+      boundZone: next.boundZone,
+      boundName: next.boundName,
+      botPhase: next.botPhase,
+      botConditionPermille: next.botConditionPermille,
+      zones: Object.freeze(next.zones.map((zone) => Object.freeze({ ...zone }))),
     });
     return true;
   }

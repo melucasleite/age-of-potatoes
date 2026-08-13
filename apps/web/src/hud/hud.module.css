@@ -305,6 +305,38 @@
   color: #8a6234;
 }
 
+/*
+ * The freshness warning on a chip ([[035]]).
+ *
+ * Amber is the field card's "wilting" and red is its "Day-Old" — the same two colours the player
+ * already learned mean "there is a clock on this" out in the rows. Reusing them is the point: a
+ * potato turning in the ground and a potato turning in your arms are the same fact in two places,
+ * and giving the second one a new colour would make it look like a different system.
+ *
+ * Tabular figures because it is a clock and clocks must not jiggle as the digits change.
+ */
+.stackFresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #f2a93b;
+  font-variant-numeric: tabular-nums;
+}
+
+.stackFreshGoing {
+  color: #d94f36;
+}
+
+/* Small, square, and the same 6px mark the one permitted alert wears. Present or absent, which
+   is the cue that survives a player who cannot separate the two colours above. */
+.stackFreshMark {
+  width: 5px;
+  height: 5px;
+  background: currentcolor;
+}
+
 .pouchDivider {
   width: 2px;
   align-self: stretch;
@@ -1646,6 +1678,43 @@
     inset 0 3px 0 -1px #8a6234;
 }
 
+/*
+ * A stack with a clock on it ([[035]]). Two marks, redundant on purpose, exactly like the crate
+ * corner and the warm tint above: a wedge in the one free corner, and a shift in the cell itself.
+ *
+ * THE WEDGE IS THE COLOURBLIND-SAFE HALF, because it is a shape question — it is there or it is
+ * not — and the tint is the one that makes a bag full of potatoes readable in a single sweep. The
+ * two bands are the field card's amber and red, so a stack turning in your arms wears the same
+ * colour as a crop turning in the ground.
+ *
+ * Top RIGHT, because top left is the crate corner, bottom left is the dial strip and bottom right
+ * is the count. Inset 5px to clear the slot's notched clip-path, which cuts the diagonal.
+ */
+.invSlotFresh {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 11px;
+  height: 11px;
+  background: #f2a93b;
+  box-shadow: inset 0 0 0 1px #14100e;
+  clip-path: polygon(100% 0, 0 0, 100% 100%);
+}
+
+.invSlotFreshGoing {
+  background: #d94f36;
+}
+
+/* Warmer than a good, cooler than a boxed machine — and neither can collide with it, since a
+   boxed machine has no clock and never will (§4: processed is shelf-stable forever). */
+.invSlotTurning {
+  background: linear-gradient(180deg, #33251a 0%, #261c13 100%);
+}
+
+.invSlotGoing {
+  background: linear-gradient(180deg, #3a2118 0%, #2a1812 100%);
+}
+
 .invSlotCount {
   position: absolute;
   /* Clear of the notched corner: the clip-path cuts 5px off the diagonal and a badge parked in
@@ -1724,6 +1793,28 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #9a8873;
+}
+
+/*
+ * The clock, in a sentence, above the price ([[035]]).
+ *
+ * Quiet by default and it has to be: this line is on EVERY good, including the ones that keep
+ * forever, so at rest it must read as a caption rather than as a notice. It earns colour only
+ * when the sim's countdown crosses one of `freshness.ts`'s two display thresholds.
+ */
+.invFresh {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #9a8873;
+}
+
+.invFreshTurning {
+  color: #f2a93b;
+}
+
+.invFreshGoing {
+  color: #d94f36;
+  font-weight: 700;
 }
 
 .invValue {
@@ -2038,6 +2129,153 @@
   margin: 10px 0 0;
   background: #14100e;
   box-shadow: 0 1px 0 #46392f;
+}
+
+/* --- the Agri-Bot dock card ------------------------------------------------------ */
+
+/*
+ * Borrows `.bench` wholesale — same width, same padding, same head, same divider — because it is
+ * the same control in the same corner answering a different question about the machine you are
+ * standing at, and two at-the-machine cards laid out differently read as two games. The pair can
+ * never be on screen together: the bench takes machines with a work cycle and this takes docks,
+ * which have none. Only what a zone list adds is new below.
+ *
+ * NOTHING HERE OPTS BACK INTO POINTER EVENTS except the controls, which is the bench's rule and
+ * the HUD root's: the card's padding must let a click through to the tile behind it, or standing
+ * next to a dock would make a corner of the farm unclickable.
+ */
+
+/* What the dock has been told, or that it has been told nothing. */
+.dockOrders {
+  margin-top: 7px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #9a8873;
+}
+
+/*
+ * A dock with no zone is an unfinished job, not an error — amber, the colour this HUD already
+ * uses for "there is a clock on this", never the alert's red. The player has not broken anything;
+ * they have bought a machine and not finished telling it what to do.
+ */
+.dockOrdersNone {
+  color: #f2a93b;
+}
+
+.dockZones {
+  /* The list opts in, not the card — the scrollbar belongs to this box and has to be draggable. */
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 9px;
+  /* Six zones is already a lot of rectangles; past that the card scrolls rather than growing
+     taller than the screen it is anchored to the middle of. */
+  max-height: 246px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #46392f #14100e;
+}
+
+.dockZone {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px 7px;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  background: #241c14;
+  box-shadow: inset 0 0 0 2px #14100e;
+}
+
+.dockZone:hover:not(:disabled) {
+  background: #2b2119;
+}
+
+.dockZone:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* Gold, like every other "this is the one" in the HUD. Only ever drawn on a build that can
+   actually read which zone is bound — see `dockZoneOf`. */
+.dockZoneOn {
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #f5d382;
+}
+
+.dockZoneHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The same colour the zone overlay paints on the ground. The one thing on the button that says
+   WHICH rectangle, since a zone is called "Zone 3" until somebody renames it. */
+.dockZoneSwatch {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  box-shadow: inset 0 0 0 1px #14100e;
+}
+
+.dockZoneName {
+  font-size: 12px;
+  font-weight: 700;
+  color: #efe2c6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dockZoneCrop {
+  margin-left: auto;
+  font-size: 10px;
+  color: #8a6234;
+  white-space: nowrap;
+}
+
+.dockZoneCounts {
+  font-size: 10.5px;
+  color: #9a8873;
+  font-variant-numeric: tabular-nums;
+}
+
+/* §5's pacing, stated on the button: a harvester alone empties a one-shot zone once. A fact
+   about the crop, in the quiet colour facts get — never a refusal, and never red. */
+.dockZoneNote {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #8a6234;
+}
+
+.dockStop {
+  pointer-events: auto;
+  cursor: pointer;
+  margin-top: 8px;
+  padding: 5px 8px 6px;
+  border: 0;
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9a8873;
+  background: #1c1610;
+  box-shadow: inset 0 0 0 2px #14100e;
+}
+
+.dockStop:hover:not(:disabled) {
+  color: #efe2c6;
+}
+
+.dockStop:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 /* --- the field card ------------------------------------------------------------- */

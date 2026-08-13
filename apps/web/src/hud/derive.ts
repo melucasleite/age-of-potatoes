@@ -23,6 +23,7 @@ import { TOOL_INFO, TOOL_ORDER, toolMachineKind } from '@/game/input/tools';
 import type { ToolMode } from '@/game/input/tools';
 
 import { countWord, formatCents, plural } from './format';
+import { freshnessBand } from './freshness';
 import { itemName } from './item-copy';
 import type { ClipboardNote, PouchItem, ToolSlot } from './types';
 
@@ -231,6 +232,10 @@ export function derivePouch(view: WorldView): PouchItem[] {
       count: slot.count,
       valueCents: spec === null ? 0 : spec.listPriceCents * slot.count,
       sellable: spec !== null && !spec.sellable ? 0 : 1,
+      // The clock, read off the projection and never recomputed here — same rule as `sellable`
+      // directly above, and for the same reason. See `freshness.ts`.
+      ticksToSpoil: slot.ticksToSpoil,
+      spoilingCount: slot.spoilingCount,
     });
   }
   return items;
@@ -337,6 +342,33 @@ export function deriveClipboard(view: WorldView, counts: MachineCounts): Clipboa
       'The kitchen has filled its own output tray. It stops until somebody takes the chips.',
     );
   }
+  // THE ONE THING IN THE BAG WITH A CLOCK ON IT.
+  //
+  // Why this belongs on the Clipboard at all, since [[035]] already put a wedge on the bag's
+  // grid and a time on the pouch chip: the grid is behind a keypress, and the wedge is only ever
+  // seen by a player who thought to look. The Clipboard is the surface that says a thing the
+  // player did NOT go looking for, and "your slices are about to become compost" is precisely
+  // that — it is the same shape as "three planted tiles read dry", one row further along the
+  // same pipeline. It stays an observation, not a chore: it says what is happening and one true
+  // thing about the world, and never "put them in a machine".
+  //
+  // It also cannot strobe. The Clipboard re-reads every two seconds and this note changes at two
+  // thresholds over minutes, so it is a line that arrives, sits, and is replaced by the louder
+  // one — not a countdown ticking in the corner of the eye.
+  const spoiling = soonestSpoiling(view);
+  if (spoiling !== null) {
+    const name = itemName(spoiling.item);
+    if (freshnessBand(spoiling.ticksToSpoil) === 'going') {
+      add(80, 'spoiling', 'warn', `A stack of ${name} goes to compost in under a minute.`);
+    } else if (freshnessBand(spoiling.ticksToSpoil) === 'turning') {
+      add(
+        64,
+        'spoiling',
+        'nudge',
+        `A stack of ${name} is starting to turn. Nothing ages inside a machine.`,
+      );
+    }
+  }
   if (chips > 0) {
     const worth = formatCents(chips * 2000);
     add(
@@ -425,4 +457,27 @@ function countOf(view: WorldView, item: ItemId): number {
     if (slot.item === item) return slot.count;
   }
   return 0;
+}
+
+/**
+ * The stack in the bag with the least time on it, or null when nothing is perishing.
+ *
+ * ONE NOTE, NOT ONE PER STACK. A player mid-harvest is carrying potatoes, slices and Day-Old
+ * produce at once, and three of the Clipboard's three slots spent on three flavours of the same
+ * warning would push everything else off the paper — the Clipboard's whole design is that it
+ * shows the top three of everything, not the top three of one thing.
+ *
+ * `-1` is "never" and must not sort as "soonest" (see `freshness.ts`), which is why the
+ * comparison is guarded rather than a plain `Math.min`.
+ */
+function soonestSpoiling(view: WorldView): { item: number; ticksToSpoil: number } | null {
+  let item = 0;
+  let soonest = -1;
+  for (const slot of view.inventory) {
+    if (slot.count <= 0 || slot.ticksToSpoil < 0) continue;
+    if (soonest >= 0 && slot.ticksToSpoil >= soonest) continue;
+    soonest = slot.ticksToSpoil;
+    item = slot.item;
+  }
+  return soonest < 0 ? null : { item, ticksToSpoil: soonest };
 }

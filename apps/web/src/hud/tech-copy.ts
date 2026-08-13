@@ -376,6 +376,14 @@ export const MACHINE_LABELS: Readonly<Record<number, string>> = {
   [MachineKind.DeliveryCart]: 'Delivery Cart',
   [MachineKind.TruckDepot]: 'Truck Depot',
   [MachineKind.BeltJunction]: 'Belt Junction',
+  // Spoilage ([[035]]) and the Agri-Bots ([[038]]). Four kinds that shipped without a row here,
+  // which is not cosmetic for exactly the reason stated twice above: a boxed machine in the bag is
+  // named by its machine, so a $250 Root Cellar was reading "Machine" on the row a player is about
+  // to scrap. The dock card names its subject from this table too.
+  [MachineKind.RootCellar]: 'Root Cellar',
+  [MachineKind.Composter]: 'Composter',
+  [MachineKind.HarvesterDock]: 'Harvester Dock',
+  [MachineKind.PlanterDock]: 'Planter Dock',
 };
 
 export function machineLabel(kind: number): string {

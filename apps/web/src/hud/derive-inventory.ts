@@ -111,6 +111,13 @@ export function deriveInventory(view: WorldView, out: InventoryFields): Inventor
       scrapCents: rowScrapCents,
       placeTool: boxed ? placeToolFor(slot.boxedMachineKind) : -1,
       boxes,
+      // COPIED, NOT DERIVED, and this is the freshness half of the header's one rule. The world
+      // stores an absolute `spoilAtTick`; the projection subtracts once so nothing on this side
+      // has to know what tick it is. A panel that kept its own countdown would be a second clock
+      // in a game that already has one, and the two would disagree the first time a publish was
+      // skipped. What this lane decides is only when a countdown turns amber — `freshness.ts`.
+      ticksToSpoil: slot.ticksToSpoil,
+      spoilingCount: slot.spoilingCount,
     });
   }
 

@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { onPanelRequest } from '@/game/input/panels';
 
 import { Clipboard } from './Clipboard';
+import { DockCard } from './DockCard';
 import { FieldCard } from './FieldCard';
 import { InventoryPanel, InventoryToggle } from './Inventory';
 import { s } from './styles';
@@ -72,13 +73,20 @@ export default function HudRoot() {
         </div>
 
         {/*
-        The upgrade bench, anchored to the last free edge. It has no open/closed flag of its
-        own: it draws when the player is standing at a machine that takes dials and vanishes
-        when they walk away, because "bought at the machine" (plan §3) is a fact about where
-        the avatar is rather than a menu the player manages.
+        The two at-the-machine cards, anchored to the last free edge. Neither has an open/closed
+        flag of its own: each draws when the player is standing at a machine it has something to
+        say about and vanishes when they walk away, because "bought at the machine" (plan §3) is
+        a fact about where the avatar is rather than a menu the player manages.
+
+        THEY CANNOT BOTH APPEAR. The bench takes machines with a work cycle (`acceptsUpgrades`
+        is `workPerOperation > 0`); the dock card takes Agri-Bot docks, whose work is done by a
+        robot and whose own `workPerOperation` is 0. Disjoint by construction, so the corner
+        shows whichever machine you are actually standing at — see `derive-dock.ts` for why that
+        is two cards rather than one panel with a branch in it.
       */}
         <div className={`${s.corner} ${s.midRight}`}>
           <UpgradeBench onOpenResearch={panels.openResearch} />
+          <DockCard />
         </div>
 
         {/*

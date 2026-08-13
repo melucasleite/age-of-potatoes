@@ -61,6 +61,16 @@ export interface PouchItem {
    * drops the figure rather than quietly showing what it would have been worth.
    */
   readonly sellable: number;
+  /**
+   * Ticks until part of this stack turns to Compost, or -1 when it never does.
+   *
+   * The pouch is the only surface that shows freshness WITHOUT the player opening anything
+   * ([[035]]), and goods age only in the player's hands — a stack inside a machine, a crate or
+   * the Root Cellar has no clock running — so the thing the player is carrying is the object
+   * §5 wants the state drawn on. The chip stays silent until the clock is worth reading.
+   */
+  readonly ticksToSpoil: number;
+  readonly spoilingCount: number;
 }
 
 export interface PouchSlice {
@@ -382,6 +392,14 @@ export interface InventoryRow {
    */
   readonly placeTool: number;
   readonly boxes: readonly InventoryBox[];
+  /**
+   * Ticks until the soonest-expiring heap in this stack turns to Compost, or **-1 when nothing
+   * in it ever will**. Copied from the projection; see `freshness.ts` for why there is no
+   * fraction beside it and why -1 is not a big number.
+   */
+  readonly ticksToSpoil: number;
+  /** How many units are in that heap. 0 on a row with no clock on it. */
+  readonly spoilingCount: number;
 }
 
 /** Everything the player is carrying. Goods, seeds, and boxed machines, in the sim's order. */
@@ -394,6 +412,58 @@ export interface InventorySlice {
   readonly scrapCents: number;
 }
 
+/**
+ * One Grow Zone, as a thing you could point an Agri-Bot dock at ([[038]]).
+ *
+ * Deliberately not `ZoneRow`: that one is the field card's readout — what is wilting and what it
+ * is worth — and this one is a target. They describe the same rectangles and answer different
+ * questions, and merging them would put an `atRiskCents` on a button.
+ */
+export interface DockZoneOption {
+  readonly id: number;
+  readonly name: string;
+  /** What the zone is set to grow, already named, or '' when nobody has assigned a crop. */
+  readonly cropName: string;
+  /**
+   * 1 when the crop comes back after a harvest.
+   *
+   * §5 paces the whole Agri-Bot arc on this: a harvester alone sustains a regrowing zone forever
+   * and empties a one-shot zone exactly once. Read off `CropSpec.regrowTicks`, never a list here.
+   */
+  readonly regrows: number;
+  readonly tiles: number;
+  readonly planted: number;
+  readonly mature: number;
+}
+
+/**
+ * The at-the-machine card for an Agri-Bot dock: what it has been told to do.
+ *
+ * `machineId` of 0 means the player is not standing at a dock and the card has no subject — the
+ * same "a consequence of position, not a menu" rule the bench runs on.
+ */
+export interface DockSlice {
+  readonly version: number;
+  readonly machineId: number;
+  readonly kind: number;
+  readonly label: string;
+  /** 1 for the planter, which is the dock with a seed hopper. */
+  readonly planter: number;
+  /**
+   * The zone id this dock works, 0 for none, or **-1 when the projection does not publish it**.
+   *
+   * See `dockZoneOf` in `derive-dock.ts` for the handoff. The three states are genuinely three:
+   * a dock with orders, a dock without them, and a build that cannot tell.
+   */
+  readonly boundZone: number;
+  /** The bound zone's name, when it is both known and still exists. */
+  readonly boundName: string;
+  /** `BotPhase` of this dock's bot, or -1 when it has none. */
+  readonly botPhase: number;
+  readonly botConditionPermille: number;
+  readonly zones: readonly DockZoneOption[];
+}
+
 export interface HudSnapshot {
   readonly economy: EconomySlice;
   readonly unlock: UnlockSlice;
@@ -402,6 +472,7 @@ export interface HudSnapshot {
   readonly clipboard: ClipboardSlice;
   readonly tech: TechSlice;
   readonly bench: BenchSlice;
+  readonly dock: DockSlice;
   readonly lot: LotSlice;
   readonly shop: ShopSlice;
   readonly inventory: InventorySlice;
@@ -481,6 +552,21 @@ export const ZERO_BENCH: BenchSlice = Object.freeze({
   boxBlocked: '',
 });
 
+export const ZERO_DOCK: DockSlice = Object.freeze({
+  version: 0,
+  machineId: 0,
+  kind: 0,
+  label: '',
+  planter: 0,
+  // Not standing at a dock, so there is nothing to be unsure about — but the zero value has to
+  // be a state the card renders as "no subject", and `machineId === 0` is the one that says so.
+  boundZone: -1,
+  boundName: '',
+  botPhase: -1,
+  botConditionPermille: 0,
+  zones: Object.freeze([]),
+});
+
 export const ZERO_LOT: LotSlice = Object.freeze({
   version: 0,
   zones: Object.freeze([]),
@@ -530,6 +616,7 @@ export const ZERO_SNAPSHOT: HudSnapshot = Object.freeze({
   clipboard: ZERO_CLIPBOARD,
   tech: ZERO_TECH,
   bench: ZERO_BENCH,
+  dock: ZERO_DOCK,
   lot: ZERO_LOT,
   shop: ZERO_SHOP,
   inventory: ZERO_INVENTORY,
