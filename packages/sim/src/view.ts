@@ -60,6 +60,7 @@ import { networkFlowPermille, tankTicksToEmpty } from './pipes';
 import { reservoirLevelPermille, reservoirThrottle } from './water';
 import {
   type CropTile,
+  type Grabber,
   type Machine,
   type WorldState,
   CeremonyId,
@@ -319,6 +320,11 @@ export interface GrabberView {
   /** How far through the current swing, for the arm animation. */
   swingPermille: number;
   opCount: number;
+  /**
+   * Plan §5's lamp grammar, on the arm — `Running`, `Starved`, or `Blocked`, and never anything
+   * else. See `grabberLamp`.
+   */
+  lamp: LampState;
 }
 
 /** A zone card's live readout, already reduced. Plan §5's "47/60 planted · 12 mature · 3 dry". */
@@ -408,6 +414,16 @@ export interface StatsView {
   itemsHarvestedByHand: number;
   totalManualTouches: number;
   longestHandsFreeTicks: number;
+  /**
+   * The best run of untouched work any one machine has managed, in ticks — the Corporate
+   * Charter's demonstrated half, published so the panel can show the counter climbing from the
+   * first time it is opened (plan §7 ruling 3 forbids a milestone you discover by accident).
+   *
+   * TICKS RATHER THAN DAYS, because the projection publishes facts and leaves units to the
+   * reader: the panel divides by `TICKS_PER_IN_GAME_DAY` to say "3 of 10 days", and a progress
+   * bar that wants the fraction between two days has the numerator it needs.
+   */
+  longestUntouchedMachineTicks: number;
 }
 
 export interface PlayerView {
@@ -667,6 +683,7 @@ export function createWorldView(): WorldView {
       itemsHarvestedByHand: 0,
       totalManualTouches: 0,
       longestHandsFreeTicks: 0,
+      longestUntouchedMachineTicks: 0,
     },
   };
 }
@@ -1083,6 +1100,26 @@ function projectBelts(state: WorldState, out: WorldView): void {
   out.belts.length = count;
 }
 
+/**
+ * An arm's lamp, read off the two fields that already say everything (plan §5's grammar).
+ *
+ * A GRABBER'S WHOLE STATE MACHINE IS `held` AND `cooldown`, so this needs no new field and no
+ * re-simulation: mid-swing means it moved something and is green; standing empty means it reached
+ * back and found nothing, which is amber, look upstream; standing full means it reached forward
+ * and was refused, which is red, look downstream. `advanceGrabber` leaves the cooldown at zero on
+ * exactly the ticks it failed, which is why the two failures are distinguishable at all.
+ *
+ * The stuck arm holding an item was always visible in the world — item 024 called that the
+ * readable version of "look downstream" — but "visible if you know what you are looking at" is
+ * not the same as a lamp, and a starved arm and a blocked one otherwise look identical from ten
+ * tiles up. **The renderer does not draw this yet**: `render/grabbers.ts` has no lamp sprite and
+ * that lane is not running this wave. The fact is published; drawing it is one handoff away.
+ */
+function grabberLamp(grabber: Grabber): LampState {
+  if (grabber.cooldown > 0) return LampState.Running;
+  return grabber.held === 0 ? LampState.Starved : LampState.Blocked;
+}
+
 function projectGrabbers(state: WorldState, out: WorldView): void {
   const count = state.grabbers.length;
 
@@ -1102,6 +1139,7 @@ function projectGrabbers(state: WorldState, out: WorldView): void {
         held: 0,
         swingPermille: 0,
         opCount: 0,
+        lamp: LampState.Off,
       };
       out.grabbers.push(gv);
     }
@@ -1118,6 +1156,7 @@ function projectGrabbers(state: WorldState, out: WorldView): void {
         ? 0
         : permille(spec.swingTicks - grabber.cooldown, spec.swingTicks);
     gv.opCount = grabber.opCount;
+    gv.lamp = grabberLamp(grabber);
   }
 
   out.grabbers.length = count;
@@ -1458,6 +1497,7 @@ function projectStats(state: WorldState, out: WorldView): void {
   s.itemsHarvestedByHand = stats.itemsHarvestedByHand;
   s.totalManualTouches = totalManualTouches(stats.touches);
   s.longestHandsFreeTicks = stats.longestHandsFreeTicks;
+  s.longestUntouchedMachineTicks = stats.longestUntouchedMachineTicks;
 }
 
 /**

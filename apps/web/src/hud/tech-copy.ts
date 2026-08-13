@@ -100,6 +100,13 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
       'The arm that reaches across a belt to the machine behind it. Layouts stop being a row and start being a floor plan.',
   },
 
+  [TechId.Splitters]: {
+    title: 'Belt Junction',
+    verb: 'Split a line, or join two',
+    detail:
+      'One fitting that does both: run two belts out of it and it deals to them in turn, run two in and it takes from each in turn. Which one it is depends on the belts you put around it.',
+  },
+
   [TechId.Pumps]: {
     title: 'Pumps & Pipes',
     verb: 'Run pipe from the reservoir',
@@ -125,11 +132,37 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
       'Moisture-sensing heads that skip a wet tile instead of drowning it. The field stops costing you water it did not need.',
   },
 
+  [TechId.SodaPress]: {
+    title: 'Press & Kettle',
+    verb: 'Press cane, boil it down, grind kola',
+    detail:
+      'The front half of the soda line. Cane goes in as a stalk and comes out as syrup, and none of it touches a belt — this half runs on pipe.',
+  },
+  [TechId.SodaMixing]: {
+    title: 'Mixing & Bottling',
+    verb: 'Mix syrup, carbonate, and bottle it',
+    detail:
+      'The half that finishes a bottle. It wants pipe for the liquids and belt for the bottles, which is why it asks for both before it will sell you either.',
+  },
+
   [TechId.UpgradeBench]: {
     title: 'Upgrade Bench',
     verb: 'Spend money at a machine',
     detail:
       'Walk up to any machine and buy its dials: Speed, Efficiency, Capacity. Three levels each, bought where the machine stands.',
+  },
+
+  [TechId.Trucking]: {
+    title: 'Truck Depot',
+    verb: 'Sign a route and stop carrying it',
+    detail:
+      'A depot takes goods off a belt and ships them under a standing contract while you are three screens away. The cart still needs your hands; this does not.',
+  },
+  [TechId.Bundles]: {
+    title: 'Bundles',
+    verb: 'Pack six-packs and Snack Combos',
+    detail:
+      'A bag and a bottle sold together fetch more than the two sold apart, so running both districts beats running either one twice. It needs a finished line on each side.',
   },
 
   [TechId.WorkshopCharter]: {
@@ -143,6 +176,12 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
     verb: 'Open the Assembly Line era',
     detail:
       'The paperwork that turns a workshop into a factory floor. Express belt and the long arm are behind it.',
+  },
+  [TechId.CorporateCharter]: {
+    title: 'Corporate Charter',
+    verb: 'Leave a line running and walk away',
+    detail:
+      'The only signature in the game you earn by not being there: ten in-game days of one machine working with nobody\u2019s hands on it. What is on the far side is the Corporation era, and it is still being built.',
   },
 };
 
@@ -182,10 +221,13 @@ export const BRANCH_COPY: Readonly<Record<number, BranchCopy>> = {
 };
 
 /**
- * The four columns, in reading order. Hydraulics is here and empty on purpose: the branch is
- * declared in the sim with nothing hanging off it because the machines it would unlock are not
- * built yet, and the panel says so out loud rather than hiding a quarter of the tree. A player
- * who can see the empty column knows the game is not finished with them.
+ * The four columns, in reading order.
+ *
+ * Hydraulics used to be here and empty — declared in the sim with nothing hanging off it,
+ * because a node that unlocks nothing is a node that lies. It is now the fullest column in the
+ * tree: the plumbing, the piped heads, the Hub, and the whole soda wing. The empty-branch
+ * message survives anyway, derived from the card list rather than hard-coded against a branch
+ * id, because the next branch to be born empty will not be this one.
  */
 export const BRANCH_ORDER: readonly number[] = [
   TechBranch.Agronomy,
@@ -205,6 +247,7 @@ export const ERA_COPY: readonly EraCopy[] = [
   { numeral: 'I', name: 'The Spud Shack', blurb: 'You, a can, and dirt' },
   { numeral: 'II', name: 'The Workshop', blurb: 'Machines, and things that move on their own' },
   { numeral: 'III', name: 'The Assembly Line', blurb: 'A floor that runs without you' },
+  { numeral: 'IV', name: 'The Corporation', blurb: 'Maintenance becomes a logistics problem' },
 ];
 
 export function eraCopy(era: number): EraCopy {
@@ -228,6 +271,8 @@ export function milestoneLabel(kind: number, amount: number): string {
       return `${amount} machines running a work cycle`;
     case MilestoneKind.MachineOutput:
       return `${amount} items made by machine`;
+    case MilestoneKind.UntouchedLine:
+      return `${amount} in-game days of a line running untouched`;
     default:
       return '';
   }
@@ -242,6 +287,8 @@ export function milestoneNoun(kind: number): string {
       return 'running';
     case MilestoneKind.MachineOutput:
       return 'made';
+    case MilestoneKind.UntouchedLine:
+      return 'days untouched';
     default:
       return '';
   }
@@ -281,6 +328,12 @@ export const MACHINE_LABELS: Readonly<Record<number, string>> = {
   [MachineKind.Bottler]: 'Bottler',
   [MachineKind.SixPacker]: 'Six-Packer',
   [MachineKind.ComboPacker]: 'Combo Packer',
+  // The two vehicles and the belt fitting. Missing rows are not cosmetic here: a boxed machine
+  // in the bag is named by its machine, so a kind absent from this table reads "Machine" on the
+  // row the player is about to scrap for 40%.
+  [MachineKind.DeliveryCart]: 'Delivery Cart',
+  [MachineKind.TruckDepot]: 'Truck Depot',
+  [MachineKind.BeltJunction]: 'Belt Junction',
 };
 
 export function machineLabel(kind: number): string {

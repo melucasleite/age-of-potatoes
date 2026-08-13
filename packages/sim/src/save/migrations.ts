@@ -26,7 +26,10 @@
 // format 8 (land deeds — the lot is a 4×4 grid of 16-tile parcels and a world records which of
 // them it owns; every older world owns parcel 0, which is the map it already had) up to
 // format 9 (selling above the roadside stand — standing contracts as a sorted list of their
-// own, three delivery-cart fields on every machine, and one more lifetime accumulator).
+// own, three delivery-cart fields on every machine, and one more lifetime accumulator) up to
+// format 10 (the third Charter and the belt junction — the untouched-work clock every machine
+// keeps, the two round-robin cursors a junction alternates on, and the high-water mark the
+// Corporate Charter's milestone is read off).
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -37,7 +40,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 9;
+export const CURRENT_FORMAT_VERSION = 10;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -567,6 +570,54 @@ const migrateFormat8To9: SaveMigration = (payload) => {
 };
 
 /**
+ * Format 9 → 10.
+ *
+ * The third Charter and the belt junction. Three fields on every machine and one on the stats
+ * block, all of them zero, and — like format 8 → 9 before it — **nothing is translated, because
+ * there is nothing in a format-9 file to translate.**
+ *
+ * That is a claim worth being precise about rather than a shrug, since "add a zero" is exactly
+ * how a migration quietly invents a world that never existed:
+ *
+ * - `junctionInCursor` / `junctionOutCursor` — `MachineKind.BeltJunction` did not exist, so no
+ *   format-9 save can name one. Zero is not a default here; it is the only value these could
+ *   have had, on machines that will never read them.
+ * - `untouchedTicks` — the clock was not kept, so no format-9 world knows how long any of its
+ *   machines had been running untouched. Zero is the honest answer and it is also the *correct*
+ *   one: the counter measures a run that is still going, and a save/load is not a hand on the
+ *   machine but the run it was in the middle of is no longer something this build can vouch for.
+ *   A returning player's line starts earning its ten days from the tick they load.
+ * - `longestUntouchedMachineTicks` — the high-water mark of a number that was never taken. The
+ *   returning player has demonstrated nothing yet, which is exactly what the Corporate Charter's
+ *   progress bar will say, and it is true.
+ */
+const migrateFormat9To10: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-9 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    machines.push({
+      ...oldMachines[i]!,
+      untouchedTicks: 0,
+      junctionInCursor: 0,
+      junctionOutCursor: 0,
+    });
+  }
+
+  const oldStats = p['stats'];
+  if (typeof oldStats !== 'object' || oldStats === null || Array.isArray(oldStats)) {
+    throw new SaveCorruptError('Cannot migrate: `payload.stats` is not an object.');
+  }
+  const stats = { ...(oldStats as Record<string, unknown>), longestUntouchedMachineTicks: 0 };
+
+  return { ...p, machines, stats, version: 10 };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -580,6 +631,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   6: migrateFormat6To7,
   7: migrateFormat7To8,
   8: migrateFormat8To9,
+  9: migrateFormat9To10,
 };
 
 export interface MigrationOutcome {

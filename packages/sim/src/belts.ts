@@ -28,7 +28,9 @@ import {
 import { depotAccept } from './commerce';
 import {
   type Belt,
+  Direction,
   type Grabber,
+  type Machine,
   type WorldState,
   beltAt,
   beltEndDist,
@@ -79,6 +81,27 @@ function advanceBelt(state: WorldState, belt: Belt): void {
 }
 
 /**
+ * The tile a belt delivers into: one step past its last tile, in the direction it runs.
+ *
+ * Where a belt *points* is a question two things now ask — the hand-off below, and a junction
+ * deciding which of its four neighbours are feeding it — so it is written once here rather than
+ * spelled out twice with the same arithmetic and one chance to drift.
+ */
+export function beltExitTileX(belt: Belt): number {
+  return belt.tileX + directionStepX(belt.dir) * belt.lengthTiles;
+}
+
+export function beltExitTileY(belt: Belt): number {
+  return belt.tileY + directionStepY(belt.dir) * belt.lengthTiles;
+}
+
+/** True when this belt's head item has arrived at the very end and is waiting to be handed on. */
+function headWaitingAtEnd(belt: Belt): boolean {
+  const head = belt.items[belt.items.length - 1];
+  return head !== undefined && head.dist >= beltEndDist(belt);
+}
+
+/**
  * Push the head item onto whatever belt starts where this one ends.
  *
  * When there is nothing there, or it is full, the item simply stays — and the belt behind
@@ -90,8 +113,8 @@ function handOffFromHead(state: WorldState, belt: Belt): void {
   if (head === undefined) return;
   if (head.dist < beltEndDist(belt)) return;
 
-  const nextX = belt.tileX + directionStepX(belt.dir) * belt.lengthTiles;
-  const nextY = belt.tileY + directionStepY(belt.dir) * belt.lengthTiles;
+  const nextX = beltExitTileX(belt);
+  const nextY = beltExitTileY(belt);
 
   const next = beltAt(state, nextX, nextY);
   if (next === null || next.id === belt.id) return;
@@ -127,6 +150,125 @@ export function beltTakeFromTile(
     return entry.item;
   }
   return 0;
+}
+
+// --- junctions --------------------------------------------------------------------
+//
+// THE SPLITTER AND THE MERGER ARE THE SAME TILE (see `MachineKind.BeltJunction`). A junction
+// takes one item per tick off a belt that ends on it and puts it onto a belt that leads away from
+// it, choosing round-robin on both sides. Two belts in and one out is a merger; one in and two
+// out is a splitter; the device does not know which it is and does not need to, because the
+// answer is the belts the player ran into it and those are on screen.
+//
+// THE ALTERNATION IS STATE ON THE MACHINE, NEVER A ROLL AND NEVER THE TICK COUNTER. Item 024's
+// criterion is that the same seed and the same command list produce the same hash across runs, so
+// the cursors live in `WorldState`, hash with everything else, and survive a save. A splitter that
+// alternated on `state.tick % 2` would produce a different pattern depending on when the player
+// happened to build it, which is a replay divergence wearing a very convincing disguise.
+//
+// IT HAS NO BUFFER. An item crosses inside one tick or it stays on the belt it is on, and the
+// belt behind it backs up nose to tail — which is the diagnostic plan §5 asks for ("jams mean
+// look downstream") rather than a hidden item inside a tile. It also means removing a junction
+// can never eat anything, and that net worth has nothing extra to count.
+//
+// A GRABBER CANNOT FEED ONE, deliberately: a junction has no recipe, so `grabberPlace` finds no
+// line that wants the item and the arm stalls holding it — the same stall a full hopper gives.
+// Feed junctions with belt; that is what they are for.
+
+/**
+ * The four faces, in compass order, and the order the cursors rotate through.
+ *
+ * A fixed array rather than arithmetic on the `Direction` values. They happen to be numbered
+ * clockwise today and `(d % 4) + 1` would work — right up until somebody renumbers one, at which
+ * point every junction in every saved world quietly starts serving its belts in a different
+ * order. The same argument `rotateDirectionClockwise` is written out longhand for.
+ */
+const JUNCTION_FACES: readonly Direction[] = [
+  Direction.North,
+  Direction.East,
+  Direction.South,
+  Direction.West,
+];
+
+/** Advance every junction, in ascending machine id order. */
+export function advanceJunctions(state: WorldState): void {
+  for (let i = 0; i < state.machines.length; i++) {
+    const machine = state.machines[i]!;
+    const spec = machineSpec(machine.kind);
+    if (spec === null || spec.role !== MachineRole.Junction) continue;
+    advanceJunction(state, machine);
+  }
+}
+
+/**
+ * One junction's tick: take one item from a feeding belt, put it on a leaving belt.
+ *
+ * Both scans start at their own cursor and wrap, and BOTH CURSORS ONLY MOVE ON A COMPLETED
+ * TRANSFER. That is what makes the round-robin fair rather than merely rotating: a face that had
+ * nothing to give, or a belt that had no room, does not consume the turn of the face behind it.
+ */
+function advanceJunction(state: WorldState, machine: Machine): void {
+  for (let i = 0; i < JUNCTION_FACES.length; i++) {
+    const inFace = (machine.junctionInCursor + i) % JUNCTION_FACES.length;
+    const source = feedingBelt(state, machine, inFace);
+    if (source === null) continue;
+
+    const head = source.items[source.items.length - 1];
+    if (head === undefined) continue;
+
+    for (let j = 0; j < JUNCTION_FACES.length; j++) {
+      const outFace = (machine.junctionOutCursor + j) % JUNCTION_FACES.length;
+      if (!placeOnFace(state, machine, outFace, head.item)) continue;
+
+      source.items.pop();
+      machine.junctionInCursor = (inFace + 1) % JUNCTION_FACES.length;
+      machine.junctionOutCursor = (outFace + 1) % JUNCTION_FACES.length;
+      return;
+    }
+
+    // Nowhere to put it. Every face was tried, so trying the next source would fail for the same
+    // reason — a belt is full or absent regardless of what is being offered to it. Stop, and let
+    // the queue build where the player can see it.
+    return;
+  }
+}
+
+/**
+ * The belt on one face that is DELIVERING INTO this junction with an item at its head.
+ *
+ * "Delivering into" is the belt's own hand-off test, reused: a belt feeds this tile when the tile
+ * it points at is this tile. That single rule is what stops a junction draining a belt that merely
+ * runs past it, and it is the same rule that decides a face is not an output — a belt pointed
+ * inwards can never be given an item, so an item can never be handed straight back where it came
+ * from and there is no ping-pong to special-case.
+ */
+function feedingBelt(state: WorldState, machine: Machine, face: number): Belt | null {
+  const dir = JUNCTION_FACES[face]!;
+  const belt = beltAt(
+    state,
+    machine.tileX + directionStepX(dir),
+    machine.tileY + directionStepY(dir),
+  );
+  if (belt === null) return null;
+  if (beltExitTileX(belt) !== machine.tileX || beltExitTileY(belt) !== machine.tileY) return null;
+  if (!headWaitingAtEnd(belt)) return null;
+  return belt;
+}
+
+/** Try to put one item on the belt at a face. False when there is no belt, or no room. */
+function placeOnFace(state: WorldState, machine: Machine, face: number, item: ItemId): boolean {
+  const dir = JUNCTION_FACES[face]!;
+  const tileX = machine.tileX + directionStepX(dir);
+  const tileY = machine.tileY + directionStepY(dir);
+
+  const belt = beltAt(state, tileX, tileY);
+  if (belt === null) return false;
+  // A belt that points back at us is an input, never an output. See `feedingBelt`.
+  if (beltExitTileX(belt) === machine.tileX && beltExitTileY(belt) === machine.tileY) return false;
+
+  const index = beltIndexOfTile(belt, tileX, tileY);
+  if (index < 0) return false;
+  return beltInsert(belt, index * SUBTILE, item);
 }
 
 // --- grabbers ---------------------------------------------------------------------

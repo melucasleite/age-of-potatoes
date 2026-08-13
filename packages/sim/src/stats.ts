@@ -101,6 +101,24 @@ export interface WorldStats {
   /** Longest run of ticks with no manual touch. */
   longestHandsFreeTicks: number;
 
+  /**
+   * The best `Machine.untouchedTicks` any machine on this lot has ever reached — the demonstrated
+   * half of the Corporate Charter's gate (plan §3: *"one line untouched for 10 in-game days"*).
+   *
+   * A HIGH-WATER MARK, LIKE `longestHandsFreeTicks` BESIDE IT, and for the reason set out on
+   * `MilestoneKind.UntouchedLine`: demonstrated is demonstrated. A live maximum would let the
+   * gate close again between the achievement and the money — refill one hopper on the walk to the
+   * tech panel and the ten days you just proved would be gone — which reads as a bug rather than
+   * as a rule.
+   *
+   * NOT THE SAME QUESTION AS HANDS-FREE, which is why it is a second number rather than a reading
+   * of the first. Hands-Free counts ticks since the player touched *anything*, and nothing in
+   * this game harvests a crop for you, so a farmer who is still farming can never post ten days
+   * of it. This one asks a narrower question the factory can actually answer: did one machine
+   * keep working, fed and emptied, while you were somewhere else.
+   */
+  longestUntouchedMachineTicks: number;
+
   touches: ManualTouchCounts;
 }
 
@@ -135,6 +153,7 @@ export function createStats(): WorldStats {
     nextNetWorthSampleTick: 0,
     ticksSinceManualTouch: 0,
     longestHandsFreeTicks: 0,
+    longestUntouchedMachineTicks: 0,
     touches: createManualTouchCounts(),
   };
 }

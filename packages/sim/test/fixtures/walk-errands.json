@@ -3,7 +3,7 @@
   "description": "The walk-to errand end to end on one seed: four corner plots planted, watered and harvested entirely by clicking out of reach, then the crop sold at the bin the same way. Exercises all four endings an errand has — arrival fires the verb through the ordinary reducer, a second click replaces a pending errand rather than queueing behind it, a held direction abandons one mid-stride, and moving the sell bin out from under a repair errand strands it. Pins the errand as world state: the intent is hashed, so a walk that lands one subtile off changes this number.",
   "seed": 90210,
   "ticks": 3923,
-  "expectedHash": "829510b1",
+  "expectedHash": "463b01ad",
   "commands": [
     {
       "tick": 5,

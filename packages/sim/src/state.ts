@@ -87,8 +87,13 @@ import { SUBTILE, divFloor, tileCentreSubtiles } from './units';
  * 9 — selling above the stand: standing contracts as a sorted list of their own, and three
  *     cart fields on every machine — what it is carrying, how much, and how long until it is
  *     back. Nothing existing changed shape; a format-8 world simply had no vehicles.
+ * 10 — the third Charter and the belt junction: every machine carries the untouched-work clock
+ *     the Corporate Charter's milestone is read off, and the two round-robin cursors a junction
+ *     alternates on. A format-9 world had no junctions and had never been asked how long a line
+ *     had run untouched, so all three start at zero — see the migration's note on why that is a
+ *     fact rather than an approximation.
  */
-export const WORLD_STATE_VERSION = 9;
+export const WORLD_STATE_VERSION = 10;
 
 /**
  * A held direction, not a delta. Input tells the sim *which way the player is holding*,
@@ -480,6 +485,55 @@ export interface Machine {
    * this reaches zero, so the two can never disagree about which state the cart is in.
    */
   runTicksRemaining: number;
+
+  /**
+   * Consecutive ticks this machine has ADVANCED WORK with nobody's hands on it.
+   *
+   * The demonstrated half of the Corporate Charter (plan §3: *"one line untouched for 10 in-game
+   * days"*), and `MilestoneKind.UntouchedLine` carries the full argument for the shape. Two rules
+   * and no others: it advances on a tick the machine actually moved an operation forward, and it
+   * drops to zero the moment a hand-verb lands on this machine — load, unload, refill, repair,
+   * whack, upgrade, move.
+   *
+   * IT COUNTS WORK RATHER THAN TIME, which is what makes it a *production* line. A machine
+   * standing idle in a corner is untouched in the sense that nobody visits it, and that is
+   * exactly the sense the plan does not mean; ten days of a Fryer with nothing to fry would be a
+   * charter earned by neglect. Because it only runs while the machine is producing, and a machine
+   * cannot produce for 96,000 straight ticks unless something is feeding it and something is
+   * taking the output away, the thing it certifies is a line.
+   *
+   * A closed tab advances it by nothing, like every other clock here: `step()` is the only thing
+   * that moves it.
+   */
+  untouchedTicks: number;
+
+  // --- the belt junction (plan §5's splitter and merger, one tile) ---
+  //
+  // Two cursors and no held item. On every machine that is not a junction they stay at zero, the
+  // same way the cart's three fields do — and for the same reason set out on `cargoItem`: a
+  // junction is placed, invoiced, ownership-gated, boxed and scrapped by exactly the code that
+  // does all of that for a Fryer, so a parallel entity list would be a second copy of every one
+  // of those rules.
+
+  /**
+   * Which face this junction looks at FIRST for an incoming item, 0..3 in compass order.
+   *
+   * **THIS IS THE MERGER'S FAIRNESS AND IT IS WORLD STATE, NEVER A ROLL.** Two belts feeding one
+   * junction alternate because the cursor moves past whichever face was served; without it the
+   * lower-numbered face would win every tick and the other line would starve. Item 024 states the
+   * criterion exactly — round-robin state in the machine, in the hash, so the same seed and the
+   * same command list produce the same hash across runs.
+   */
+  junctionInCursor: number;
+  /**
+   * Which face it offers an item to first, 0..3 in compass order. The splitter's alternation.
+   *
+   * SEPARATE FROM THE INTAKE CURSOR, and not for symmetry. One shared cursor was tried on paper
+   * and it degenerates: a merger that advances the same counter on take *and* on place lands back
+   * on the face it just served and feeds from one belt forever. Two cursors, two independent
+   * rotations, one obvious behaviour.
+   */
+  junctionOutCursor: number;
 }
 
 /**
@@ -946,6 +1000,9 @@ export function spawnMachine(
     cargoItem: 0,
     cargoCount: 0,
     runTicksRemaining: 0,
+    untouchedTicks: 0,
+    junctionInCursor: 0,
+    junctionOutCursor: 0,
   };
   state.nextMachineId += 1;
   // Ids only increase, so appending keeps the array sorted by id.

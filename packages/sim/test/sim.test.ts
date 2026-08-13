@@ -13,16 +13,21 @@ import {
   Direction,
   FIELD_ORIGIN_X,
   FIELD_ORIGIN_Y,
+  GrabberTier,
   IntentAction,
   ItemId,
+  LampState,
   MachineKind,
+  TICKS_PER_IN_GAME_DAY,
   createWorld,
   createWorldView,
   deriveStream,
   findNonIntegerFields,
   hashState,
+  inGameDays,
   itemCount,
   nextUint32,
+  spawnGrabber,
   step,
   stepMany,
   tileAt,
@@ -77,7 +82,7 @@ describe('determinism', () => {
   it('pins the scripted run to a known hash', () => {
     // If this changes, either the sim changed on purpose or determinism broke by accident.
     // There is no third option, which is the entire point of the fixture.
-    expect(hashState(runScript(1234, 1000))).toBe('a176e36e');
+    expect(hashState(runScript(1234, 1000))).toBe('fbae47e8');
   });
 
   it('gives different seeds different worlds', () => {
@@ -402,6 +407,39 @@ describe('the view seam', () => {
     expect(after.player.intentTileX).toBe(0);
     expect(after.player.intentTileY).toBe(0);
     expect(after.player.intentIssuedTick).toBe(0);
+  });
+
+  it('puts a lamp on every grabber arm: amber starved, red blocked, green working', () => {
+    // Plan §5's grammar, on the arm — "belt gaps mean look upstream, jams mean look
+    // downstream" is only a diagnostic if the two are distinguishable, and a starved arm and a
+    // blocked one look identical from ten tiles up without it.
+    const state = createWorld(77);
+
+    // Nothing behind it and nothing in front: it reaches back every tick and finds nothing.
+    const arm = spawnGrabber(state, GrabberTier.Mk1, 5, 5, Direction.East, 0)!;
+    stepMany(state, 5);
+    expect(view(state, createWorldView()).grabbers[0]!.lamp).toBe(LampState.Starved);
+
+    // Holding something with nowhere to put it. The arm stands there, visibly, which is the
+    // readable version of "look downstream" — now with a lamp on it.
+    arm.held = ItemId.PlainChips;
+    arm.cooldown = 0;
+    stepMany(state, 1);
+    expect(view(state, createWorldView()).grabbers[0]!.lamp).toBe(LampState.Blocked);
+
+    // Mid-swing is a working arm.
+    arm.cooldown = 5;
+    expect(view(state, createWorldView()).grabbers[0]!.lamp).toBe(LampState.Running);
+  });
+
+  it('projects the untouched-line counter the third Charter is read off', () => {
+    const state = createWorld(78);
+    state.stats.longestUntouchedMachineTicks = 3 * TICKS_PER_IN_GAME_DAY;
+
+    const projected = view(state, createWorldView());
+    expect(projected.stats.longestUntouchedMachineTicks).toBe(3 * TICKS_PER_IN_GAME_DAY);
+    // Published in ticks; the panel divides. Three whole days, and the sim never says "days".
+    expect(inGameDays(projected.stats.longestUntouchedMachineTicks)).toBe(3);
   });
 
   it('projects the gross and spend halves of the lifetime ledger', () => {

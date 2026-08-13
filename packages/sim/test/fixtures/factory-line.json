@@ -3,7 +3,7 @@
   "description": "A full era-1-to-era-2 run on one seed: hand-farms the field for cash, researches the fabrication branch and the Workshop Charter, builds Washer → belts → Slicer → Fryer → Seasoner → Bagger with five grabber arms between them, paints and renames a Grow Zone, buys a Speed dial on the Fryer, feeds the line by hand, sells the bags, then researches the seed hopper and arms auto-replant. Exercises every Command variant added with the factory. Every command here was applied, not attempted — the list is the world’s own input trace.",
   "seed": 70707,
   "ticks": 33389,
-  "expectedHash": "a6cd077a",
+  "expectedHash": "e2a55c4e",
   "commands": [
     {
       "tick": 0,

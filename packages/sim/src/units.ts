@@ -63,6 +63,27 @@ export const TICKS_PER_ACTIVE_HOUR = 72_000;
 export const TICKS_PER_MINUTE = 1_200;
 
 /**
+ * An in-game day, in ticks.
+ *
+ * **PLAN §2 FIXES THE NUMBER AND NOTHING ELSE DOES:** *"the in-game day runs 8 real minutes"*.
+ * Eight active minutes is 9,600 ticks, exactly, and the arithmetic is written here so that the
+ * one place the design names a day is the one place the sim reads it from.
+ *
+ * NOTHING ELSE IN THE SIM KEEPS A CALENDAR. There is no dawn, no night, and no day counter in
+ * `WorldState` — the Dawn Report is item 033's and it is not built. This constant exists because
+ * the Corporate Charter's milestone is quoted in days (plan §3: *"one line untouched for 10
+ * in-game days"*), and a milestone quoted in a unit the sim cannot express would have to be
+ * re-quoted in ticks by whoever read it next, which is how two numbers that were meant to be the
+ * same start to disagree.
+ */
+export const TICKS_PER_IN_GAME_DAY = 9_600;
+
+/** How many whole in-game days a span of ticks covers. Floors, like every other readout here. */
+export function inGameDays(ticks: number): number {
+  return divFloor(ticks, TICKS_PER_IN_GAME_DAY);
+}
+
+/**
  * The Music Box grid (plan §14). 100 BPM at 20 Hz is exactly 12 ticks per beat. The beat
  * is derived from the tick counter and is therefore part of the deterministic world;
  * `AudioContext.currentTime` must never flow the other way.

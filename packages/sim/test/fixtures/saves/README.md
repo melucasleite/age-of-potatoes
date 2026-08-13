@@ -21,6 +21,25 @@ looked like, and the code that wrote it will be long gone.
 
 | `format-9.json` | 9 | 2026-08-13, `v0.4.0` | Seed 320480, tick 17,949. The first save with **vehicles** in it, caught at a moment that exists for about two hundred ticks in the world's whole history: a delivery cart 212 ticks from home with eight bags aboard, a truck that left the depot moments ago with five more, one bag already on the depot floor for the next run — and **not a penny of it paid yet**. |
 
+| `format-10.json` | 10 | 2026-08-13, `v0.4.0` | Seed 320320, tick 22,929. The first save with a **belt junction** in it, caught mid-rotation: one bag already sent north and one sent east, four more riding the feed belt, and a Chip Kitchen 381 ticks into a run nobody has touched. |
+
+`format-10.json` was recorded by replaying the `depot-run` golden fixture, then driving `step()`
+through eight more commands — research the splitter node, move the depot out of the way, lay the
+feed belt, drop a junction on the end of it, give it a branch on each of two faces, and hand-load
+the kitchen with the seven potatoes the player happened to be carrying — and calling `serialize()`
+380 ticks later. The moment is the point, as always: **a junction's cursors and a machine's
+untouched clock are both mid-flight quantities.** A junction at rest has its cursors wherever they
+last stopped and a machine with an empty hopper has a frozen clock, so a save taken with the line
+idle would round-trip perfectly while proving nothing about the format it was written for. This one
+is caught with `junctionOutCursor` at 2 — part-way round, having dealt north and then east — and
+the kitchen still counting.
+
+The 9 → 10 migration adds three machine fields and one stats field and translates nothing, for the
+same reason 8 → 9 did: `MachineKind.BeltJunction` did not exist, so no format-9 save can name one,
+and the untouched clock was never kept, so no format-9 world knows the answer. Zero is the fact
+rather than the default, and `save.test.ts` asserts it on the real format-9 file rather than
+claiming it in a comment.
+
 `format-9.json` was recorded by replaying the `depot-run` golden fixture to tick 17,949 and
 calling `serialize()`. The moment is the entire point of the file: `cargoCount`,
 `runTicksRemaining`, `Contract.inTransit` and `Contract.phase` are all zero whenever nothing is

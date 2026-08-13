@@ -58,6 +58,7 @@ import fixture6 from './fixtures/saves/format-6.json';
 import fixture7 from './fixtures/saves/format-7.json';
 import fixture8 from './fixtures/saves/format-8.json';
 import fixture9 from './fixtures/saves/format-9.json';
+import fixture10 from './fixtures/saves/format-10.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -344,11 +345,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture);
 
     expect(restored.migration.fromVersion).toBe(1);
-    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('1c5a705a');
+    expect(hashState(restored.state)).toBe('2b4450a4');
   });
 
   it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
@@ -417,10 +418,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture2);
 
     expect(restored.migration.fromVersion).toBe(2);
-    expect(restored.migration.steps).toEqual([2, 3, 4, 5, 6, 7, 8]);
+    expect(restored.migration.steps).toEqual([2, 3, 4, 5, 6, 7, 8, 9]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('1b01c436');
+    expect(hashState(restored.state)).toBe('f97852a8');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -462,10 +463,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture3);
 
     expect(restored.migration.fromVersion).toBe(3);
-    expect(restored.migration.steps).toEqual([3, 4, 5, 6, 7, 8]);
+    expect(restored.migration.steps).toEqual([3, 4, 5, 6, 7, 8, 9]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(21_306);
-    expect(hashState(restored.state)).toBe('0d26e54f');
+    expect(hashState(restored.state)).toBe('5518dfcd');
   });
 
   it('brings the plumbing back exactly as it was left', () => {
@@ -518,11 +519,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture4);
 
     expect(restored.migration.fromVersion).toBe(4);
-    expect(restored.migration.steps).toEqual([4, 5, 6, 7, 8]);
+    expect(restored.migration.steps).toEqual([4, 5, 6, 7, 8, 9]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(3300);
     expect(restored.state.worldSeed).toBe(90210);
-    expect(hashState(restored.state)).toBe('40322a2f');
+    expect(hashState(restored.state)).toBe('1f70cedd');
   });
 
   it('brings the errand back exactly as it was left', () => {
@@ -567,11 +568,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture5);
 
     expect(restored.migration.fromVersion).toBe(5);
-    expect(restored.migration.steps).toEqual([5, 6, 7, 8]);
+    expect(restored.migration.steps).toEqual([5, 6, 7, 8, 9]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(41_837);
     expect(restored.state.worldSeed).toBe(50505);
-    expect(hashState(restored.state)).toBe('4bb48cef');
+    expect(hashState(restored.state)).toBe('58b91fb9');
   });
 
   it('brings the browning basket and the maintenance tallies back as they were', () => {
@@ -617,11 +618,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture6);
 
     expect(restored.migration.fromVersion).toBe(6);
-    expect(restored.migration.steps).toEqual([6, 7, 8]);
+    expect(restored.migration.steps).toEqual([6, 7, 8, 9]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(42_400);
     expect(restored.state.worldSeed).toBe(60606);
-    expect(hashState(restored.state)).toBe('79737163');
+    expect(hashState(restored.state)).toBe('db45df02');
   });
 
   it('brings every typed port back with its own liquid, level, and amber flag', () => {
@@ -668,11 +669,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture7);
 
     expect(restored.migration.fromVersion).toBe(7);
-    expect(restored.migration.steps).toEqual([7, 8]);
+    expect(restored.migration.steps).toEqual([7, 8, 9]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(48_792);
     expect(restored.state.worldSeed).toBe(24_680);
-    expect(hashState(restored.state)).toBe('2666d01e');
+    expect(hashState(restored.state)).toBe('34be7ec3');
   });
 
   it('brings both boxed machines back with their own dials, condition, and invoice', () => {
@@ -745,11 +746,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture8);
 
     expect(restored.migration.fromVersion).toBe(8);
-    expect(restored.migration.steps).toEqual([8]);
+    expect(restored.migration.steps).toEqual([8, 9]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(6_721);
     expect(restored.state.worldSeed).toBe(480_480);
-    expect(hashState(restored.state)).toBe('50380264');
+    expect(hashState(restored.state)).toBe('b6663604');
   });
 
   it('brings back the land, and the factory standing on the half that was bought', () => {
@@ -801,15 +802,29 @@ describe('the permanent fixture set', () => {
     }
   });
 
-  it('loads format-9.json at the current version with no migration', () => {
+  it('migrates format-9.json up to the current version', () => {
     const restored = restoreWorld(fixture9);
 
     expect(restored.migration.fromVersion).toBe(9);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([9]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(17_949);
     expect(restored.state.worldSeed).toBe(320_320);
-    expect(hashState(restored.state)).toBe('3de7e9a4');
+    expect(hashState(restored.state)).toBe('4b52d612');
+  });
+
+  // The 9 → 10 migration's whole claim is that a format-9 world had no junctions and had never
+  // been asked how long a line had run untouched, so every field it adds is zero *as a fact*
+  // rather than as a default. This is that claim, checked on a real save rather than in a comment.
+  it('brings a format-9 world up with the untouched-work clock at zero on every machine', () => {
+    const state = restoreWorld(fixture9).state;
+
+    expect(state.stats.longestUntouchedMachineTicks).toBe(0);
+    for (const machine of state.machines) {
+      expect(machine.untouchedTicks).toBe(0);
+      expect(machine.junctionInCursor).toBe(0);
+      expect(machine.junctionOutCursor).toBe(0);
+    }
   });
 
   it('brings the cart back on the road with its load still aboard, and the truck too', () => {
@@ -846,6 +861,62 @@ describe('the permanent fixture set', () => {
     // And the destination came back as written. It is the one stored string outside the hash,
     // which makes this the only assertion standing between it and a silent disappearance.
     expect(contract.destination).toBe('Ridgeline Grocers');
+  });
+
+  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
+  // format-10 is the first save with a **belt junction** in it, and it is caught at a moment
+  // chosen for the two fields the format exists for: the junction's out-cursor is at 2, part-way
+  // round its rotation with one bag already sent north and one sent east, and a Chip Kitchen is
+  // 381 ticks into a run nobody has touched. Both are mid-flight quantities — a junction at rest
+  // has cursors wherever it last stopped and a machine with an empty hopper has a frozen clock,
+  // so a save taken with the line idle would round-trip perfectly and prove nothing at all.
+  it('loads format-10.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture10);
+
+    expect(restored.migration.fromVersion).toBe(10);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(restored.state.tick).toBe(22_929);
+    expect(restored.state.worldSeed).toBe(320_320);
+    expect(hashState(restored.state)).toBe('7cabfb67');
+  });
+
+  it('brings the junction back mid-rotation, with a bag on each of its branches', () => {
+    const state = restoreWorld(fixture10).state;
+
+    // The cursor IS the alternation. A reload that dropped it would restore a splitter that
+    // starts its round-robin again from north, which is a different world producing a different
+    // hash from the next tick on — and one that looks perfectly healthy while doing it.
+    const junction = state.machines.find((m) => m.kind === MachineKind.BeltJunction)!;
+    expect(junction.junctionOutCursor).toBe(2);
+    expect(junction.junctionInCursor).toBe(0);
+
+    // One bag went north and one went east, which is what a splitter is for.
+    const north = state.belts.find((belt) => belt.tileX === 8 && belt.tileY === 13)!;
+    const east = state.belts.find((belt) => belt.tileX === 9 && belt.tileY === 14)!;
+    expect(north.items).toHaveLength(1);
+    expect(east.items).toHaveLength(1);
+
+    // And the kitchen feeding them is mid-run with the untouched clock still counting.
+    const kitchen = state.machines.find((m) => m.untouchedTicks > 0)!;
+    expect(kitchen.untouchedTicks).toBe(381);
+    expect(state.stats.longestUntouchedMachineTicks).toBe(1_200);
+  });
+
+  it('keeps splitting identically after the reload', () => {
+    // The point of storing the cursor rather than deriving it: two worlds restored from one file
+    // and stepped forward must agree, and they must agree with a world that never reloaded.
+    const a = restoreWorld(fixture10).state;
+    const b = restoreWorld(fixture10).state;
+    stepMany(a, 400);
+    stepMany(b, 400);
+    expect(hashState(a)).toBe(hashState(b));
+
+    // Still splitting after the reload rather than merely surviving it.
+    const north = a.belts.find((belt) => belt.tileX === 8 && belt.tileY === 13)!;
+    const east = a.belts.find((belt) => belt.tileX === 9 && belt.tileY === 14)!;
+    expect(north.items.length).toBeGreaterThan(1);
+    expect(east.items.length).toBeGreaterThan(1);
   });
 
   it('keeps building on bought land after the reload', () => {

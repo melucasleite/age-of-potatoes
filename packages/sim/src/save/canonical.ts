@@ -145,6 +145,9 @@ export interface SaveMachine {
   inputCounts: number[];
   investedCents: number;
   jammed: boolean;
+  /** A junction's round-robin cursors, 0..3. Zero on every machine that is not one. */
+  junctionInCursor: number;
+  junctionOutCursor: number;
   kind: number;
   network: number;
   opCount: number;
@@ -161,6 +164,8 @@ export interface SaveMachine {
   throttled: boolean;
   tileX: number;
   tileY: number;
+  /** Consecutive ticks of work with no hand on this machine. The Corporate Charter's counter. */
+  untouchedTicks: number;
   wateredCount: number;
 }
 
@@ -292,6 +297,8 @@ export interface SaveStats {
   lifetimeEarnedCents: number;
   lifetimeSpentCents: number;
   longestHandsFreeTicks: number;
+  /** The best run of untouched work any one machine has managed, in ticks. */
+  longestUntouchedMachineTicks: number;
   netWorthCents: number;
   netWorthSamples: number[];
   nextNetWorthSampleTick: number;
@@ -401,6 +408,8 @@ export function toPayload(state: WorldState): SavePayload {
       inputCounts: machine.inputCounts.slice(),
       investedCents: machine.investedCents,
       jammed: machine.jammed,
+      junctionInCursor: machine.junctionInCursor,
+      junctionOutCursor: machine.junctionOutCursor,
       kind: machine.kind,
       network: machine.network,
       opCount: machine.opCount,
@@ -421,6 +430,7 @@ export function toPayload(state: WorldState): SavePayload {
       throttled: machine.throttled,
       tileX: machine.tileX,
       tileY: machine.tileY,
+      untouchedTicks: machine.untouchedTicks,
       wateredCount: machine.wateredCount,
     });
   }
@@ -606,6 +616,7 @@ export function toPayload(state: WorldState): SavePayload {
       lifetimeEarnedCents: stats.lifetimeEarnedCents,
       lifetimeSpentCents: stats.lifetimeSpentCents,
       longestHandsFreeTicks: stats.longestHandsFreeTicks,
+      longestUntouchedMachineTicks: stats.longestUntouchedMachineTicks,
       netWorthCents: stats.netWorthCents,
       netWorthSamples: samples,
       nextNetWorthSampleTick: stats.nextNetWorthSampleTick,
@@ -819,6 +830,7 @@ const MACHINE_KINDS: readonly number[] = [
   MachineKind.ComboPacker,
   MachineKind.DeliveryCart,
   MachineKind.TruckDepot,
+  MachineKind.BeltJunction,
 ];
 /** `None` is not a legal liquid for a pipe: a pipe that carries nothing is not a pipe. */
 const LIQUIDS: readonly number[] = [
@@ -981,6 +993,9 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       scanCursor: int(machine, 'scanCursor', path),
       wateredCount: int(machine, 'wateredCount', path),
       skippedCount: int(machine, 'skippedCount', path),
+      untouchedTicks: int(machine, 'untouchedTicks', path),
+      junctionInCursor: int(machine, 'junctionInCursor', path),
+      junctionOutCursor: int(machine, 'junctionOutCursor', path),
     });
   }
 
@@ -1236,6 +1251,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     nextNetWorthSampleTick: int(statsRaw, 'nextNetWorthSampleTick', 'payload.stats'),
     ticksSinceManualTouch: int(statsRaw, 'ticksSinceManualTouch', 'payload.stats'),
     longestHandsFreeTicks: int(statsRaw, 'longestHandsFreeTicks', 'payload.stats'),
+    longestUntouchedMachineTicks: int(statsRaw, 'longestUntouchedMachineTicks', 'payload.stats'),
     touches,
   };
 

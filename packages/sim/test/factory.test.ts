@@ -56,7 +56,9 @@ import {
   effectiveWastePeriod,
   effectiveWear,
   effectiveWorkRate,
+  TICKS_PER_IN_GAME_DAY,
   hashState,
+  acceptsUpgrades,
   isBoxedMachineItem,
   isSellable,
   itemCount,
@@ -884,6 +886,129 @@ describe('grabbers', () => {
   });
 });
 
+describe('the belt junction', () => {
+  // ONE DEVICE, TWO NAMES. Plan §5 asks for splitters and mergers; built honestly they are the
+  // same tile, and which one it is doing is decided by the belts around it rather than by a menu.
+  // These tests are that claim, from both sides.
+
+  /** Feed belt west of the junction, and whichever output belts the caller asks for. */
+  function junctionRig(
+    seed: number,
+    outputs: readonly { tileX: number; tileY: number; dir: Direction }[],
+  ) {
+    const state = createWorld(seed);
+    const feed = spawnBelt(state, BeltTier.Basic, 0, 5, Direction.East, 3)!;
+    spawnMachine(state, MachineKind.BeltJunction, 3, 5);
+    const out = outputs.map((spec) =>
+      spawnBelt(state, BeltTier.Basic, spec.tileX, spec.tileY, spec.dir, 4)!,
+    );
+    return { state, feed, out };
+  }
+
+  it('alternates between two outputs, deterministically and without a roll', () => {
+    const { state, feed, out } = junctionRig(101, [
+      { tileX: 4, tileY: 5, dir: Direction.East },
+      { tileX: 3, tileY: 4, dir: Direction.North },
+    ]);
+    for (let i = 0; i < 6; i++) beltInsert(feed, i * 64, ItemId.PlainChips);
+
+    stepMany(state, 900);
+
+    // Three each. A splitter that favoured one side would show up here as 6 and 0, and a
+    // splitter that alternated on the tick counter would show up as an off-by-one that moves
+    // depending on when the rig was built.
+    expect(feed.items).toHaveLength(0);
+    expect(out[0]!.items).toHaveLength(3);
+    expect(out[1]!.items).toHaveLength(3);
+  });
+
+  it('produces the same hash from the same rig on two separate runs', () => {
+    // ITEM 024'S CRITERION, LITERALLY: same seed, same command list, same hash. The round-robin
+    // cursor is world state and lives in the digest, so this would fail the day somebody made
+    // the alternation depend on iteration order, wall time, or the tick counter.
+    const a = junctionRig(202, [
+      { tileX: 4, tileY: 5, dir: Direction.East },
+      { tileX: 3, tileY: 4, dir: Direction.North },
+    ]);
+    const b = junctionRig(202, [
+      { tileX: 4, tileY: 5, dir: Direction.East },
+      { tileX: 3, tileY: 4, dir: Direction.North },
+    ]);
+    for (let i = 0; i < 5; i++) {
+      beltInsert(a.feed, i * 64, ItemId.PlainChips);
+      beltInsert(b.feed, i * 64, ItemId.PlainChips);
+    }
+
+    stepMany(a.state, 700);
+    stepMany(b.state, 700);
+    expect(hashState(a.state)).toBe(hashState(b.state));
+    // And the cursor actually moved, so the assertion above is not comparing two idle worlds.
+    const junction = a.state.machines.find((m) => m.kind === MachineKind.BeltJunction)!;
+    expect(junction.junctionOutCursor + junction.junctionInCursor).toBeGreaterThan(0);
+  });
+
+  it('merges two lines into one, taking from each in turn', () => {
+    const state = createWorld(303);
+    // Two belts pointing at the junction from opposite sides, one belt leading away.
+    const west = spawnBelt(state, BeltTier.Basic, 0, 5, Direction.East, 3)!;
+    const north = spawnBelt(state, BeltTier.Basic, 3, 2, Direction.South, 3)!;
+    spawnMachine(state, MachineKind.BeltJunction, 3, 5);
+    const out = spawnBelt(state, BeltTier.Basic, 4, 5, Direction.East, 8)!;
+
+    for (let i = 0; i < 4; i++) {
+      beltInsert(west, i * 64, ItemId.RussetPotato);
+      beltInsert(north, i * 64, ItemId.PlainChips);
+    }
+
+    stepMany(state, 1200);
+
+    // Both queues emptied. A merger that scanned its faces in a fixed order without a cursor
+    // would drain the lower-numbered one first and starve the other until it was done, which is
+    // the failure this alternation exists to prevent.
+    expect(west.items).toHaveLength(0);
+    expect(north.items).toHaveLength(0);
+    expect(out.items).toHaveLength(8);
+
+    // And they arrived interleaved rather than in two blocks.
+    const kinds = out.items.map((entry) => entry.item);
+    const alternations = kinds.filter((item, i) => i > 0 && item !== kinds[i - 1]).length;
+    expect(alternations).toBeGreaterThan(4);
+  });
+
+  it('never hands an item back to the belt it arrived on', () => {
+    // The one-rule version of "no ping-pong": a belt pointed at the junction is an input, so it
+    // can never be chosen as an output. With nowhere else to go the item simply stays put, and
+    // the belt behind it backs up — which is the jam plan §5 wants the player to be able to see.
+    const { state, feed } = junctionRig(404, []);
+    beltInsert(feed, 0, ItemId.PlainChips);
+    beltInsert(feed, 64, ItemId.PlainChips);
+
+    stepMany(state, 400);
+    expect(feed.items).toHaveLength(2);
+    expect(feed.items[1]!.dist).toBe(3 * SUBTILE - 1);
+  });
+
+  it('holds nothing of its own, so it can never swallow an item', () => {
+    // A junction has no buffer at all: an item crosses inside one tick or it is still on a belt.
+    // Count the world's goods before and after a run that jams — none may be inside the tile.
+    const { state, feed, out } = junctionRig(505, [{ tileX: 4, tileY: 5, dir: Direction.East }]);
+    for (let i = 0; i < 4; i++) beltInsert(feed, i * 64, ItemId.PlainChips);
+
+    stepMany(state, 2000);
+    expect(feed.items.length + out[0]!.items.length).toBe(4);
+  });
+
+  it('takes no dial, wears nothing, and runs no work cycle', () => {
+    // It is a belt fitting that happens to be built and boxed like a machine. A junction that
+    // could wear out would put a maintenance chore in the middle of the run the belts exist to
+    // remove, and a junction with a Speed dial would be a number in the belt layer.
+    const spec = machineSpec(MachineKind.BeltJunction)!;
+    expect(spec.workPerOperation).toBe(0);
+    expect(spec.wearPerOperation).toBe(0);
+    expect(acceptsUpgrades(spec)).toBe(false);
+  });
+});
+
 // --- withering ----------------------------------------------------------------------
 
 describe('withering', () => {
@@ -1127,6 +1252,87 @@ describe('tech and upgrades', () => {
     state.stats.itemsSold = 200;
     run(state, [{ type: 'ResearchTech', techId: TechId.WorkshopCharter }]);
     expect(state.unlocked).toContain(TechId.WorkshopCharter);
+  });
+
+  it('holds the Corporate Charter behind a line that has run itself for ten days', () => {
+    // Plan §3's third Charter: money PLUS "one line untouched for 10 in-game days". The counter
+    // is `longestUntouchedMachineTicks`, an in-game day is 9,600 ticks (plan §2: the day runs
+    // eight real minutes), and ten of them is 96,000.
+    const state = createWorld(44);
+    state.moneyCents = 10_000_000;
+    state.unlocked = [
+      TechId.WashAndSlice,
+      TechId.Fryer,
+      TechId.Finishing,
+      TechId.WorkshopCharter,
+      TechId.Belts,
+      TechId.AssemblyCharter,
+    ];
+
+    // One day short. The money is fine and the node is still refused, which is the half of the
+    // gate that makes it a Charter rather than a purchase.
+    state.stats.longestUntouchedMachineTicks = 9 * TICKS_PER_IN_GAME_DAY;
+    run(state, [{ type: 'ResearchTech', techId: TechId.CorporateCharter }]);
+    expect(state.unlocked).not.toContain(TechId.CorporateCharter);
+    expect(state.moneyCents).toBe(10_000_000);
+
+    state.stats.longestUntouchedMachineTicks = 10 * TICKS_PER_IN_GAME_DAY;
+    run(state, [{ type: 'ResearchTech', techId: TechId.CorporateCharter }]);
+    expect(state.unlocked).toContain(TechId.CorporateCharter);
+  });
+
+  it('runs the untouched clock only while a machine is actually working', () => {
+    // The milestone is about a PRODUCTION line. A machine standing idle in a corner is untouched
+    // in the sense that nobody visits it, and that is exactly the sense plan §3 does not mean —
+    // ten days of a Fryer with nothing to fry would be a Charter earned by neglect.
+    const state = createWorld(45);
+    const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
+
+    stepMany(state, 200);
+    expect(washer.untouchedTicks).toBe(0);
+    expect(state.stats.longestUntouchedMachineTicks).toBe(0);
+
+    washer.inputCounts[0] = 4;
+    stepMany(state, 50);
+    expect(washer.untouchedTicks).toBeGreaterThan(0);
+    expect(state.stats.longestUntouchedMachineTicks).toBe(washer.untouchedTicks);
+  });
+
+  it('puts the untouched clock back to zero the moment a hand lands on the machine', () => {
+    const state = createWorld(46);
+    const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
+    standOn(state, 0, 0);
+    washer.inputCounts[0] = 20;
+    addItem(state, ItemId.RussetPotato, 1);
+
+    stepMany(state, 100);
+    const beforeTouch = washer.untouchedTicks;
+    expect(beforeTouch).toBeGreaterThan(0);
+
+    run(state, [{ type: 'LoadMachine', machineId: washer.id, count: 1 }]);
+    // Back to zero on the tick the hand landed — and then one tick of work, because `step()`
+    // applies the command and then advances the machine, in that order.
+    expect(washer.untouchedTicks).toBeLessThanOrEqual(1);
+    expect(washer.untouchedTicks).toBeLessThan(beforeTouch);
+
+    // The high-water mark survives the touch, which is the whole reason it is a mark: a player
+    // who demonstrated ten days and then refilled a hopper on the walk to the tech panel has
+    // still demonstrated ten days.
+    expect(state.stats.longestUntouchedMachineTicks).toBe(beforeTouch);
+  });
+
+  it('does not count a grabber feeding the hopper as a hand on the machine', () => {
+    // The line running itself is the thing being demonstrated, so the machinery doing its job
+    // must not reset the clock — only the player's hands do.
+    const state = createWorld(47);
+    const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
+    const slicer = spawnMachine(state, MachineKind.Slicer, 3, 0)!;
+    spawnGrabber(state, GrabberTier.Mk1, 2, 0, Direction.East, 0);
+    washer.inputCounts[0] = 30;
+
+    stepMany(state, 400);
+    expect(slicer.inputCounts[0]! + slicer.opCount).toBeGreaterThan(0);
+    expect(washer.untouchedTicks).toBeGreaterThan(300);
   });
 
   it('makes the Speed dial faster and hungrier, and Efficiency the antidote', () => {

@@ -14,6 +14,16 @@
 //
 // Node ids are strings and they are written into saves. They are permanent.
 //
+// **THE IDS ARE STRINGS AND THEY ARE STAYING STRINGS.** Item 036 asks for "integers in a sorted
+// array"; a previous agent shipped sorted strings instead, and re-reading that call: it is right,
+// and it is not a matter of taste. `WorldState.unlocked` is sorted and hashed, which is what the
+// criterion is actually protecting — two worlds that bought the same nodes in a different order
+// are the same world and must agree. What the string buys on top of that is that a raw save and a
+// raw trace say `charter-assembly` rather than `17`, and that a node's identity cannot be
+// silently changed by reordering a table, which is exactly the failure "node ids are permanent"
+// exists to prevent. Renumbering the tree to integers now would rewrite every shipped save's
+// unlock list to buy nothing. It is not being changed.
+//
 // This module is a leaf: it imports nothing. That is what lets `data.ts` fold the tree into
 // `BALANCE_HASH` without a cycle, and what keeps the tree testable without a world.
 
@@ -44,6 +54,16 @@ export const TechId = {
   BeltsFast: 'logistics-belts-fast',
   /** Belts tier 3 and the Long grabber. */
   BeltsExpress: 'logistics-belts-express',
+  /**
+   * The belt junction: plan §3's *"splitters"*, and plan §5's *"splitters, mergers"*, in one
+   * device. It divides a line and it joins one, and which of those it is doing is decided by the
+   * belts the player runs into it — see `MachineKind.BeltJunction`.
+   *
+   * Behind `Belts` rather than beside it. A junction with one belt is a floor tile; the node only
+   * means anything to a player who has already run a line and found out that one line is not
+   * enough, which is the same reason the Fryer sits behind the Washer rather than next to it.
+   */
+  Splitters: 'logistics-splitters',
 
   /** The upgrade bench: what makes `UpgradeMachine` legal at all. */
   UpgradeBench: 'commerce-upgrade-bench',
@@ -97,6 +117,15 @@ export const TechId = {
   WorkshopCharter: 'charter-workshop',
   /** Era gate 2 → 3. */
   AssemblyCharter: 'charter-assembly',
+  /**
+   * Era gate 3 → 4, and plan §3's third Charter: *"+ one line untouched for 10 in-game days"*.
+   *
+   * ITS MILESTONE IS THE ONLY ONE IN THE GAME THAT MEASURES ABSENCE, which is what makes it the
+   * right gate for the era after the assembly line: the first two Charters ask the player to
+   * build and to sell, and this one asks them to walk away and let the thing they built run.
+   * `MilestoneKind.UntouchedLine` is where the counter behind it is described.
+   */
+  CorporateCharter: 'charter-corporate',
 } as const;
 
 export type TechId = (typeof TechId)[keyof typeof TechId];
@@ -125,6 +154,34 @@ export const MilestoneKind = {
   WorkingMachines: 2,
   /** Items produced by machines, lifetime. */
   MachineOutput: 3,
+  /**
+   * **In-game days one production line has run with nobody's hands on it** — plan §3's Corporate
+   * Charter, *"one line untouched for 10 in-game days"*, and the one milestone here that counts
+   * something not happening.
+   *
+   * THE COUNTER IS PER MACHINE AND THE MILESTONE READS THE BEST OF THEM. `Machine.untouchedTicks`
+   * advances on every tick a converter actually advances work and resets the moment a hand lands
+   * on that machine; `WorldStats.longestUntouchedMachineTicks` is the high-water mark across the
+   * lot. A machine cannot advance work for 96,000 consecutive ticks unless something is feeding
+   * it and something is emptying it, so what the counter demonstrates *is* a line — that is the
+   * cheapest true statement of the plan's requirement, and it needs no definition of where a line
+   * starts and stops.
+   *
+   * WHY NOT `longestHandsFreeTicks`, WHICH ALREADY EXISTS. That clock counts ticks since the
+   * player touched *anything*, and nothing in this game harvests a crop for you (see the
+   * README's note on the depot fixture), so ten days of world-wide zero-touch is not reachable by
+   * a player who is still farming. A gate nobody can pass is worse than no gate.
+   *
+   * WHY IT IS A HIGH-WATER MARK RATHER THAN A LIVE READING. Demonstrated is demonstrated: a
+   * player who runs a line untouched for ten days and then refills a hopper on the walk to the
+   * tech panel has still done the thing. A live maximum would let the gate close again between
+   * the achievement and the money, which is the kind of cruelty that gets read as a bug.
+   *
+   * **The amount on the node is DAYS, not ticks** — `milestoneMet` is handed a day count that
+   * `tick.ts` converts with `TICKS_PER_IN_GAME_DAY`, so this module still knows nothing about how
+   * long a tick is and the panel shows the number plan §3 actually wrote down.
+   */
+  UntouchedLine: 4,
 } as const;
 
 export type MilestoneKind = (typeof MilestoneKind)[keyof typeof MilestoneKind];
@@ -142,9 +199,17 @@ export interface TechNode {
 }
 
 /**
- * The tree, in panel order. Chips lead soda by half an era (plan §3) — the soda branch is
- * not here yet because the machines it would unlock are not built, and a node that unlocks
- * nothing is a node that lies.
+ * The tree, in panel order. Four branches and three Charters, and every node here unlocks
+ * something that exists — chips lead soda by half an era (plan §3), and Hydraulics, which was
+ * once declared and empty, now carries the plumbing and the whole soda wing.
+ *
+ * **THE ONE JOINT PLAN §3 NAMES THAT IS NOT HERE: "drones need diagnostics *and* trucking".**
+ * Trucking exists and is standing ready; there is no drone and no diagnostics verb, and a
+ * capstone that unlocked a machine nobody has built would be exactly the lie the Hydraulics
+ * branch was left empty to avoid. Item 039 (*waiting*) builds the Maintenance Station and the
+ * drones; the joint gets made in the same commit they do, and `TechId.Trucking`'s comment already
+ * says so. Two of the three joints are real today: sprinklers need pipes, and bottling needs
+ * fluids and belts.
  */
 export const TECH_NODES: readonly TechNode[] = [
   {
@@ -209,6 +274,18 @@ export const TECH_NODES: readonly TechNode[] = [
     branch: TechBranch.Fabrication,
     priceCents: 25_000,
     requires: [TechId.WorkshopCharter],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    // $400: a *cheap* era-2 node by the 15-Minute Rule, which puts era-2 income at roughly
+    // $20–25 a minute (that is what the Assembly Charter's $6,000 means at plan §3's "charters ≈
+    // 4–5 h"). Priced level with Pumps rather than with Fast Belt, because it is the same rung —
+    // the second thing you buy once things are moving, not the thing you save up for.
+    id: TechId.Splitters,
+    branch: TechBranch.Fabrication,
+    priceCents: 40_000,
+    requires: [TechId.Belts],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },
@@ -296,10 +373,21 @@ export const TECH_NODES: readonly TechNode[] = [
     milestoneAmount: 0,
   },
   {
+    // **PLAN §3'S SECOND NAMED JOINT: "bottling needs fluids *and* belts".** The fluids half was
+    // always here (`SodaPress`, and the pumps under it); the belts half is this line, added the
+    // day belts and the bottling line both existed to be joined.
+    //
+    // It is fantasy-correct rather than administrative: a Bottler is the one machine in the game
+    // with two pipe inlets AND a solid inlet — it drinks syrup and carbonated water and it eats a
+    // bottle — so a player who has never run a belt has no way to feed the third one. Requiring
+    // the node they would have had to buy anyway costs a finished line nothing and stops the
+    // half-plumbed dead end where a Bottler stands full of syrup waiting for bottles by hand.
+    //
+    // Prerequisites are checked at PURCHASE, so a world that already owns this node keeps it.
     id: TechId.SodaMixing,
     branch: TechBranch.Hydraulics,
     priceCents: 220_000,
-    requires: [TechId.SodaPress],
+    requires: [TechId.SodaPress, TechId.Belts],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },
@@ -329,6 +417,36 @@ export const TECH_NODES: readonly TechNode[] = [
     requires: [TechId.BeltsFast, TechId.AssemblyCharter],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
+  },
+  {
+    // Era 3 → 4. Plan §3: "+ one line untouched for 10 in-game days".
+    //
+    // **$20,000, DERIVED RATHER THAN EXTRAPOLATED.** The ladder's own arithmetic: the Workshop
+    // Charter at $800 is about 4× the dearest node of era 1 ($200 Finishing) and the Assembly
+    // Charter at $6,000 is about 5× the dearest of era 2 ($1,200 Auto-Replant). Era 3's dearest
+    // is Express Belt at $2,500, so 4–5× lands between $10,000 and $12,500 — and this sits above
+    // that band on purpose, because it is the only Charter whose milestone takes 80 real minutes
+    // of *play* to demonstrate, and a fee the player clears long before the milestone would make
+    // the money half of the gate decorative. $20,000 is 4–5 hours of era-3 income at the ~$70–80
+    // a minute a running belt factory makes, which is plan §3's charter rule stated in its own
+    // units. Two-way door, like every price here.
+    //
+    // **WHAT IS BEHIND IT TODAY: NOTHING, AND THAT IS THE HONEST OPTION RATHER THAN THE TIDY
+    // ONE.** Era 4 in plan §3 is "multi-product lines, repair drones, maintenance-as-logistics",
+    // and its machines — the Maintenance Station, the drones, the Agri-Bots — are items 039 and
+    // 038, neither of which is built. The tidy-looking alternative was to move an existing
+    // mid-game node (Bundles, say) behind this signature so the band would have something under
+    // it, and that would delay the one feature the design needs *early* — plan §8's "does one
+    // line dominate into decoration?" gate is answered by the Snack Combo — behind a fee twenty
+    // times its price. A Charter is an era gate, and an era gate with nothing on the far side of
+    // it yet is a promise; a mid-game node dragged behind a late-game fee is a broken curve.
+    // When 038 and 039 land they hang off this id, and nothing renumbers.
+    id: TechId.CorporateCharter,
+    branch: TechBranch.Charter,
+    priceCents: 2_000_000,
+    requires: [TechId.AssemblyCharter],
+    milestone: MilestoneKind.UntouchedLine,
+    milestoneAmount: 10,
   },
 ];
 
@@ -393,6 +511,17 @@ export function milestoneMet(
   itemsSold: number,
   workingMachines: number,
   machineOutput: number,
+  /**
+   * In-game DAYS the best production line has run untouched — `tick.ts` does the tick-to-day
+   * division, so this module still owes nothing to `units.ts`.
+   *
+   * **OPTIONAL, AND IT DEFAULTS TO THE PESSIMISTIC ANSWER.** A caller written before this
+   * milestone existed — the HUD's `derive-tech.ts` is one — still compiles and still refuses the
+   * Corporate Charter. That is the safe direction for a panel to be wrong in: it under-reports
+   * progress on a node the sim would also refuse, rather than lighting up a button that gets
+   * eaten. The day the panel passes the real number, both agree.
+   */
+  untouchedLineDays = 0,
 ): boolean {
   switch (node.milestone) {
     case MilestoneKind.None:
@@ -403,6 +532,8 @@ export function milestoneMet(
       return workingMachines >= node.milestoneAmount;
     case MilestoneKind.MachineOutput:
       return machineOutput >= node.milestoneAmount;
+    case MilestoneKind.UntouchedLine:
+      return untouchedLineDays >= node.milestoneAmount;
     default:
       return false;
   }

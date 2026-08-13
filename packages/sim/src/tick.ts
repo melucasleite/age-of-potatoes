@@ -129,7 +129,7 @@ import {
   machineSpec,
   wiltStageForAge,
 } from './data';
-import { advanceBelts, advanceGrabbers } from './belts';
+import { advanceBelts, advanceGrabbers, advanceJunctions } from './belts';
 import {
   advanceCommerce,
   cartRoomFor,
@@ -227,6 +227,7 @@ import {
 } from './upgrades';
 import {
   SUBTILE,
+  TICKS_PER_IN_GAME_DAY,
   TICKS_PER_MINUTE,
   clampInt,
   distanceSquaredSubtiles,
@@ -260,6 +261,11 @@ export function step(state: WorldState, input: TickInput): void {
   advanceWater(state);
   advanceMachines(state);
   advanceBelts(state);
+  // Between the belts and the arms, and that is the only place it can go: a junction hands off
+  // from one belt to another, so the belts must already have moved this tick and the grabbers
+  // must not yet have reached in. Its own dispatch rather than a case in `advanceMachines` for
+  // the same reason — it is a belt fitting that happens to be built and boxed like a machine.
+  advanceJunctions(state);
   advanceGrabbers(state);
   advanceCommerce(state);
   advanceZones(state);
@@ -395,6 +401,22 @@ function withinReachOfMachine(state: WorldState, machine: Machine): boolean {
 
 function touch(state: WorldState, kind: ManualTouchKind): void {
   recordManualTouch(state.stats, kind);
+}
+
+/**
+ * A hand landed on this machine: its untouched-work clock starts again from zero.
+ *
+ * SEPARATE FROM `touch()`, WHICH IS WORLD-LEVEL. Hands-Free asks "did the player do anything";
+ * the Corporate Charter asks "was anybody's hand on *this machine*", and the two answers differ
+ * on every tick the player is out harvesting a field while the line runs itself. Called beside
+ * `touch()` at each of the eight verbs that reach a machine — load, unload, refill, repair, kit,
+ * whack, upgrade, move — because those are precisely the ones plan §3 means by *untouched*.
+ *
+ * Note what is deliberately NOT here: a grabber feeding the hopper, and a truck taking the output
+ * away. Those are the machinery doing its job, which is the thing being demonstrated.
+ */
+function handsOn(machine: Machine): void {
+  machine.untouchedTicks = 0;
 }
 
 /** Tech gates are money-only outside the Charters, but they are gates (plan §7 ruling 3). */
@@ -830,6 +852,7 @@ function applyMoveMachine(state: WorldState, command: MoveMachineCommand): boole
   // Moving is free and always will be (plan §4), but a moved pump has left its network and a
   // moved head may have joined one. Recompute rather than guess.
   if (spec.liquid !== 0) rebuildNetworks(state);
+  handsOn(machine);
   touch(state, 'handCarry');
   return true;
 }
@@ -863,6 +886,7 @@ function applyLoadMachine(state: WorldState, command: LoadMachineCommand): boole
 
     removeItem(state, line.item, moved);
     machine.inputCounts[i] = (machine.inputCounts[i] ?? 0) + moved;
+    handsOn(machine);
     touch(state, 'handCarry');
     return true;
   }
@@ -890,6 +914,7 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
     addItem(state, item, 1);
   }
 
+  handsOn(machine);
   touch(state, 'handCarry');
   return true;
 }
@@ -925,6 +950,7 @@ function applyRefillHopper(state: WorldState, command: RefillHopperCommand): boo
   if (poured <= 0) return false;
 
   machine.tankMl += poured;
+  handsOn(machine);
   touch(state, 'hopperRefill');
   return true;
 }
@@ -936,6 +962,7 @@ function applyRepairMachine(state: WorldState, command: RepairMachineCommand): b
 
   // Hold-to-repair is free and always available. Hand tools never rot (plan §1).
   machine.condition = Math.min(CONDITION_MAX, machine.condition + REPAIR_PER_TOUCH);
+  handsOn(machine);
   touch(state, 'handRepair');
   return true;
 }
@@ -966,6 +993,7 @@ function applyUseRepairKit(state: WorldState, command: UseRepairKitCommand): boo
 
     machine.condition = CONDITION_MAX;
     machine.jammed = false;
+    handsOn(machine);
     serviced += 1;
   }
 
@@ -993,6 +1021,7 @@ function applyWhackJam(state: WorldState, command: WhackJamCommand): boolean {
   if (!machine.jammed) return false;
 
   machine.jammed = false;
+  handsOn(machine);
   touch(state, 'jamWhack');
   return true;
 }
@@ -1076,6 +1105,7 @@ function applyUpgradeMachine(state: WorldState, command: UpgradeMachineCommand):
   recordSpend(state.stats, cost);
   machine.investedCents += cost;
   setUpgradeLevel(machine, command.dial, level + 1);
+  handsOn(machine);
   touch(state, 'handCarry');
   return true;
 }
@@ -1091,6 +1121,10 @@ function applyResearchTech(state: WorldState, command: ResearchTechCommand): boo
       state.stats.itemsSold,
       workingMachineCount(state),
       state.stats.itemsProducedByMachine,
+      // Ticks to whole in-game days, converted HERE so `tech.ts` stays a leaf that has never
+      // heard of a tick. Plan §3 quotes the Corporate Charter in days and this is the one place
+      // that unit is turned into the other.
+      divFloor(state.stats.longestUntouchedMachineTicks, TICKS_PER_IN_GAME_DAY),
     )
   ) {
     return false;
@@ -2059,6 +2093,17 @@ function advanceConverter(state: WorldState, machine: Machine): void {
   machine.blockedTicks = 0;
 
   if (!recipeSatisfied(spec, machine)) return;
+
+  // THE UNTOUCHED-WORK CLOCK, AND THIS LINE IS THE WHOLE DEFINITION OF "A LINE RUNNING ITSELF".
+  // It ticks here — past demand-pull, past the recipe check, on a tick this machine genuinely
+  // moved an operation forward — and nowhere else, so a machine standing idle with nothing to
+  // eat earns the Corporate Charter nothing. Every hand-verb that reaches a machine calls
+  // `handsOn` and puts it back to zero. The high-water mark is what the milestone reads; see
+  // `WorldStats.longestUntouchedMachineTicks` for why it is a mark rather than a live maximum.
+  machine.untouchedTicks += 1;
+  if (machine.untouchedTicks > state.stats.longestUntouchedMachineTicks) {
+    state.stats.longestUntouchedMachineTicks = machine.untouchedTicks;
+  }
 
   machine.progress += effectiveWorkRate(spec, machine);
   if (machine.progress < spec.workPerOperation) return;

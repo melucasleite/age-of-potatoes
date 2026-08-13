@@ -129,6 +129,7 @@ export const ItemId = {
   BoxedComboPacker: 46,
   BoxedDeliveryCart: 47,
   BoxedTruckDepot: 48,
+  BoxedBeltJunction: 49,
 } as const;
 
 export type ItemId = (typeof ItemId)[keyof typeof ItemId];
@@ -178,6 +179,25 @@ export const MachineKind = {
   DeliveryCart: 22,
   /** The automated rung: belt-fed, contract-driven, and it never needs you again. */
   TruckDepot: 23,
+
+  /**
+   * **THE SPLITTER AND THE MERGER ARE ONE OBJECT, AND THAT IS A RULING, NOT A SHORTCUT.**
+   *
+   * Plan §5 names *"splitters, mergers"* and item 024 asks for both. Built honestly, they turn
+   * out to be the same tile: a device that takes an item off a belt that ends on it and puts that
+   * item onto a belt that leads away from it, choosing round-robin whenever there is more than
+   * one candidate. Run two belts in and one out and it merges; run one in and two out and it
+   * splits. Shipping two machine kinds with identical code would be two names for one rule, two
+   * prices for one object, and a build menu that asks the player to decide something the belts
+   * around the tile have already decided.
+   *
+   * It has NO FACING, which is what makes that unification possible and what keeps the README's
+   * "nothing but a grabber rotates" true: the input face is wherever the item came from and the
+   * output faces are the others, so there is no orientation to get wrong and no `RotateJunction`
+   * to add. A player who wants it to behave differently moves a belt, which is the thing they can
+   * already see.
+   */
+  BeltJunction: 24,
 } as const;
 
 export type MachineKind = (typeof MachineKind)[keyof typeof MachineKind];
@@ -582,6 +602,7 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.BoxedComboPacker, slug: 'boxed-combo-packer', ...BOXED },
   { id: ItemId.BoxedDeliveryCart, slug: 'boxed-delivery-cart', ...BOXED },
   { id: ItemId.BoxedTruckDepot, slug: 'boxed-truck-depot', ...BOXED },
+  { id: ItemId.BoxedBeltJunction, slug: 'boxed-belt-junction', ...BOXED },
 ];
 
 /**
@@ -617,6 +638,7 @@ export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly
     { kind: MachineKind.ComboPacker, item: ItemId.BoxedComboPacker },
     { kind: MachineKind.DeliveryCart, item: ItemId.BoxedDeliveryCart },
     { kind: MachineKind.TruckDepot, item: ItemId.BoxedTruckDepot },
+    { kind: MachineKind.BeltJunction, item: ItemId.BoxedBeltJunction },
   ];
 
 /** The boxed item a machine kind goes into, or `null` for a kind that has no box. */
@@ -1004,6 +1026,16 @@ export const MachineRole = {
   DeliveryCart: 7,
   /** Takes goods off a belt and ships them under a standing contract. No hands at all. */
   TruckDepot: 8,
+
+  /**
+   * Moves one item from a belt that ends on it to a belt that leads off it, round-robin.
+   *
+   * It is dispatched out of `belts.ts` rather than out of `advanceMachines`, and the tick order
+   * is why: a junction hands off between belts, so it has to run in the same phase belts do —
+   * after they have advanced and before the grabbers reach into them. It is a machine for
+   * placement, ownership, invoicing and boxing, and a belt fitting for everything else.
+   */
+  Junction: 9,
 } as const;
 
 export type MachineRole = (typeof MachineRole)[keyof typeof MachineRole];
@@ -1967,6 +1999,45 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputItem: null,
     overcookOutputItem: null,
     requiresTech: TechId.Trucking,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // The belt junction: plan §5's splitter and merger, in one tile with no facing.
+    //
+    // $8 — hardware money, deliberately. What a junction costs the player is the $400 node, not
+    // the object; the same shape as a $5 grabber arm behind a $250 belt node, and for the same
+    // reason. A device you want four of on one line must not be a purchasing decision each time.
+    //
+    // NO WORK CYCLE, so it never wears, never jams, never overcooks and takes no dial —
+    // `workPerOperation` is 0, exactly as it is on the two vehicles, and every rule about
+    // machines that turn is silent on it. A junction that could wear out would put a maintenance
+    // chore in the middle of the belt run whose entire purpose is that you stop walking over.
+    // Its round-robin cursors live on the machine (`junctionInCursor` / `junctionOutCursor`) so
+    // the alternation is world state, in the hash and in the save, rather than a roll.
+    kind: MachineKind.BeltJunction,
+    slug: 'belt-junction',
+    role: MachineRole.Junction,
+    tilesWide: 1,
+    tilesHigh: 1,
+    priceCents: 800,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    // It has no buffer at all: an item crosses it inside one tick or does not leave the belt it
+    // is on. See `advanceJunction` — a junction that held one item would be a place goods can
+    // sit invisibly, and the backed-up belt in front of it is the diagnostic the player wants.
+    inputCapacity: 0,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.Splitters,
     liquid: LiquidId.None,
     ports: [],
     pumpRateMlPerMinute: 0,

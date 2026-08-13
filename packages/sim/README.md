@@ -217,6 +217,16 @@ a **repair kit** buys the walk rather than the repair, servicing every machine i
 `REPAIR_KIT_RADIUS_TILES` in one use, and is refused rather than consumed when nothing in
 range wants it.
 
+**A belt is drawn as a double line and routed as a single lane, and plan §5 says both.** Two
+adjacent paragraphs of the design call belts _"double-line"_ and _"single-lane"_, which is a real
+contradiction and not a typo — a future agent will hit it, so here is the reading that fits
+everything else. **Double-line is presentation**: items are drawn in two files side by side,
+because that is what makes a belt look busy and legible at a glance. **Single-lane is routing**:
+one input, one output, no per-side lane addressing, no lane-balancing puzzle, and one sorted item
+list per segment. Lane balancing is a genre convention, not a thing this design ever asks for, and
+the sim has no field in which to express a side. If a change starts wanting `BeltItem.lane`, this
+is the paragraph it has to argue with.
+
 **Belts.** A belt segment is a sorted list of `(distanceAlongBelt, itemTypeId)` — plan §13,
 and load-bearing. Items are not entities: they have no ids and no renderer counterparts, and
 the renderer derives particle positions from the list every frame. That is what makes
@@ -227,12 +237,36 @@ hands off to whatever belt starts where its own ends.
 
 **Grabbers** are the only bridge between belts and machine buffers: an arm takes from the tile
 behind it and puts into the tile ahead. A blocked arm stands there holding the item, which is
-the readable version of "look downstream". `RotateGrabber` turns a placed arm one step
+the readable version of "look downstream" — and it now also carries a **lamp** in the projection,
+in plan §5's grammar, derived from the only two fields an arm has: mid-swing is green, standing
+empty is amber (reached back, found nothing), standing full is red (reached forward, was refused).
+Visible-if-you-know-what-to-look-for is not the same as a lamp, and from ten tiles up a starved arm
+and a blocked one look identical. **The renderer does not draw it yet.** `RotateGrabber` turns a placed arm one step
 clockwise, reach-gated like every other verb you perform with your hands — one press, one trace
 entry, no target direction in the payload, because which way clockwise goes is the sim's rule
 and not the client's. **Nothing else in the world rotates.** A machine's ports are typed by
 LIQUID rather than by geometry, so no machine has a facing at all, and a belt's direction is the
 direction it was dragged.
+
+**The splitter and the merger are one object, and it has no facing.** Plan §5 names both;
+built honestly they are the same tile. A **belt junction** takes one item per tick off a belt that
+ends on it and puts it on a belt that leads away from it, choosing round-robin on each side from
+two cursors stored on the machine. Two belts in and one out is a merger; one in and two out is a
+splitter; the device does not know which it is, because the answer is the belts the player ran into
+it and those are on screen. Shipping two kinds with identical code would have been two names for
+one rule and a build menu asking the player to decide something already decided. A face that points
+_into_ the junction is an input and can therefore never be chosen as an output, which is the single
+rule that rules out ping-pong without a special case.
+
+**The alternation is world state, never a roll and never the tick counter** — that is item 024's
+criterion (_"the same seed and command list produce the same hash across runs"_) stated as bytes:
+the cursors are in the digest and in the save, so a reloaded splitter carries on dealing where it
+left off. A junction holds **nothing**: an item crosses inside one tick or it is still on the belt
+behind, which keeps a jam visible on the belt where the player can see it, keeps net worth with
+nothing extra to count, and makes picking the junction back up incapable of eating anything. It has
+no work cycle, so it never wears, never jams, and takes no dial. A grabber cannot feed one — a
+junction has no recipe, so the arm stalls holding its item, the same "look downstream" stall a full
+hopper gives. Feed junctions with belt.
 
 **Boxing is the rearranging verb; scrapping is the selling one.** `DeconstructMachine` takes a
 machine off the lot and puts it in the bag as one of twenty boxed-machine items — one per
@@ -391,6 +425,32 @@ exactly the friction the rule wants. `test/factory.test.ts` asserts the key set.
 Gates are money-only except the three Charters, which add a _visible_ milestone read off a
 counter the HUD already shows. There are no hidden behavioural gates.
 
+**The third Charter measures an absence, and that needed a counter that did not exist.** Plan §3's
+Corporate Charter is _"money + one line untouched for 10 in-game days"_, and an in-game day is 8
+real minutes (plan §2), so ten of them is 96,000 ticks. `stats.longestHandsFreeTicks` was the
+obvious candidate and is the wrong one: it counts ticks since the player touched **anything**, and
+nothing in this game harvests a crop for you, so a farmer who is still farming could never pass it.
+Instead every machine keeps `untouchedTicks` — **consecutive ticks on which it advanced work with
+nobody's hands on it** — and the milestone reads the lot's high-water mark. It counts work rather
+than time, which is what makes it a _production_ line: a machine idle in a corner earns nothing,
+and a machine that advanced work for 96,000 straight ticks must have had something feeding it and
+something emptying it, so what the counter certifies **is** a line. No definition of where a line
+starts and stops is needed, which is the whole reason this shape was chosen. It is a high-water
+mark rather than a live maximum because demonstrated is demonstrated — a gate that closed again
+because you refilled a hopper on the walk to the tech panel reads as a bug.
+
+**Two of plan §3's three named joints are real; the third is waiting on a machine.** Sprinklers
+need pipes, and bottling needs fluids **and** belts (`SodaMixing` requires `SodaPress` and `Belts`
+— a Bottler has two pipe inlets and a solid inlet, so a player who has never run a belt cannot feed
+the third). _Drones need diagnostics and trucking_ has no nodes to join: trucking exists and is
+standing ready, but there is no drone and no diagnostics verb, and a capstone unlocking a machine
+nobody built is exactly the lie the Hydraulics branch was once left empty to avoid. Item 039 builds
+both; the joint is made in that commit.
+
+**Node ids are strings and are staying strings.** Item 036 asks for integers; sorted-and-hashed is
+what that criterion actually protects, and the string buys a save you can read and an identity that
+reordering a table cannot silently change. See the ruling at the top of `tech.ts`.
+
 **The Efficiency dial cuts wear and waste, and it is the expensive track.** Plan §3 specifies it
 as reducing "both input waste and wear"; the wear half is `effectiveWear`, and the waste half is
 `effectiveWastePeriod`, which **stretches the cadence** rather than lowering a chance — there is
@@ -505,7 +565,12 @@ non-empty result is a bug in units, not in the hash.
 ## Saves
 
 `serialize(state)` produces a plain-JSON `SaveEnvelope`; `restoreWorld(value)` parses,
-migrates, and deserializes one. The chain is at **format 9** — selling above the stand, so a
+migrates, and deserializes one. The chain is at **format 10** — the third Charter and the belt
+junction, so every machine carries the untouched-work clock the Corporate Charter's milestone is
+read off and the two round-robin cursors a junction alternates on, and the stats block carries the
+lot's high-water mark. A format-9 world had no junctions and had never been asked how long a line
+had run untouched, so all three start at zero: that is the only value they could have had rather
+than a default. Format 9 was selling above the stand, so a
 world carries its standing contracts as a sorted list of their own and every machine carries the
 three delivery-cart fields. Format 8 was land deeds, so a world records the parcels it owns and
 its pipe network ids are re-expressed on the wider map. Format 7 was

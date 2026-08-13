@@ -30,6 +30,7 @@ import {
   SPEED_WEAR_PENALTY_PERCENT_PER_LEVEL,
   SUBTILE,
   TECH_NODES,
+  TICKS_PER_IN_GAME_DAY,
   TICKS_PER_SECOND,
   TechBranch,
   TechId,
@@ -170,9 +171,17 @@ function milestoneProgress(node: TechNode, view: WorldView, working: number): nu
       return working;
     case MilestoneKind.MachineOutput:
       return view.stats.itemsProducedByMachine;
+    case MilestoneKind.UntouchedLine:
+      // The node's amount is DAYS (plan §3's own number); the projection carries ticks.
+      return untouchedLineDays(view);
     default:
       return 0;
   }
+}
+
+/** In-game days the best production line has run untouched. The sim's own conversion. */
+function untouchedLineDays(view: WorldView): number {
+  return divFloor(view.stats.longestUntouchedMachineTicks, TICKS_PER_IN_GAME_DAY);
 }
 
 export function deriveTech(view: WorldView, out: TechFields): TechFields {
@@ -201,6 +210,7 @@ export function deriveTech(view: WorldView, out: TechFields): TechFields {
       view.stats.itemsSold,
       working,
       view.stats.itemsProducedByMachine,
+      untouchedLineDays(view),
     );
     const affordable = view.moneyCents >= node.priceCents;
 

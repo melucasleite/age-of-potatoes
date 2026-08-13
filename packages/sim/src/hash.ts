@@ -191,6 +191,13 @@ export function hashStateUint32(state: WorldState): number {
     d.num(machine.cargoItem);
     d.num(machine.cargoCount);
     d.num(machine.runTicksRemaining);
+    // The untouched-work clock, and the junction's two round-robin cursors. THE CURSORS ARE IN
+    // HERE BECAUSE THAT IS THE POINT OF THEM: a splitter's alternation is world state, so two
+    // worlds that differ only in which output is next genuinely differ, and item 024's criterion
+    // — same seed and command list, same hash across runs — is a statement about these bytes.
+    d.num(machine.untouchedTicks);
+    d.num(machine.junctionInCursor);
+    d.num(machine.junctionOutCursor);
     d.num(machine.ports.length);
     for (let j = 0; j < machine.ports.length; j++) {
       const port = machine.ports[j]!;
@@ -390,6 +397,7 @@ export function hashStateUint32(state: WorldState): number {
   d.num(stats.nextNetWorthSampleTick);
   d.num(stats.ticksSinceManualTouch);
   d.num(stats.longestHandsFreeTicks);
+  d.num(stats.longestUntouchedMachineTicks);
   d.num(stats.netWorthSamples.length);
   for (let i = 0; i < stats.netWorthSamples.length; i++) {
     d.num(stats.netWorthSamples[i]!);
@@ -491,6 +499,9 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].scanCursor`, machine.scanCursor);
     check(`machines[${i}].cargoCount`, machine.cargoCount);
     check(`machines[${i}].runTicksRemaining`, machine.runTicksRemaining);
+    check(`machines[${i}].untouchedTicks`, machine.untouchedTicks);
+    check(`machines[${i}].junctionInCursor`, machine.junctionInCursor);
+    check(`machines[${i}].junctionOutCursor`, machine.junctionOutCursor);
   }
 
   // Counts and a countdown, all of which are integers by construction — and cents, which are the
