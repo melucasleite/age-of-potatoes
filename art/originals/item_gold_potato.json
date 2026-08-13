@@ -1,0 +1,24 @@
+{
+  "id": "item_gold_potato",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 2021646577,
+  "prompt": "a single big potato tuber painted bright golden yellow all over, one fat lumpy oval shape with skin the same strong bright yellow as a ripe lemon, a warm amber shadow along its bottom edge and two dark eye spots, bright yellow all over and definitely not brown and not tan and not beige and not cream, the shape of a potato but the colour of gold, game inventory item icon, chunky readable silhouette, bold dark outline all the way round, very large solid areas of flat colour, no thin lines, no small details, no leaves, no stems, no sparkles, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:44:21.909Z"
+}

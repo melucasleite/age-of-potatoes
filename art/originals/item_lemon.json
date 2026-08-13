@@ -1,0 +1,24 @@
+{
+  "id": "item_lemon",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 113630571,
+  "prompt": "a single big bright yellow lemon, one fat oval fruit with a small pointed nub at each end, strong bright lemon yellow skin with a dark shadow along its bottom edge, one small flat green leaf on top, clearly a lemon and not a potato and not bread and not a bun, bright yellow not beige, game inventory item icon, chunky readable silhouette, bold dark outline all the way round, very large solid areas of flat colour, no thin lines, no small details, no segments, no slices, no peel texture, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:38:13.274Z"
+}

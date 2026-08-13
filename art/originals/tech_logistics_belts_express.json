@@ -1,0 +1,24 @@
+{
+  "id": "tech_logistics_belts_express",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 800102106,
+  "prompt": "a single bold flat game icon of one thick conveyor belt segment with three fat red chevron arrows in a row along the top of it all pointing right, one simple object centred and filling most of the frame, seen straight on, very large solid areas of flat colour, thick heavy chunky shapes, bold dark outline, no thin lines, no small details, no background, no frame, no border, no badge, no circle behind it, no round disc, no shadow, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "tech",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:38:15.548Z"
+}

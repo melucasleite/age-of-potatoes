@@ -1,0 +1,24 @@
+{
+  "id": "item_push_scythe",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1725152867,
+  "prompt": "a garden scythe lying diagonally across the frame, one very thick short wooden handle running from the bottom left up to the top right, one very wide fat curved silver blade filling the bottom half of the frame, the blade broad and solid and thick, game inventory item icon, chunky readable silhouette, bold dark outline all the way round, very large solid areas of flat colour, no thin lines, no small details, no wheel, no grass, no bolts, no rope, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:38:07.500Z"
+}

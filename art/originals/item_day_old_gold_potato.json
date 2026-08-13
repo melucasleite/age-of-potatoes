@@ -1,0 +1,24 @@
+{
+  "id": "item_day_old_gold_potato",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 108680892,
+  "prompt": "two dull shrivelled old potatoes side by side, wrinkled and going soft, faded greyish gold skin with big dark brown blotches on it, clearly past their best and no longer fresh, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no mould fuzz, no flies, no leaves, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:23:01.648Z"
+}

@@ -1,0 +1,24 @@
+{
+  "id": "machine_kola_tree",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 894353966,
+  "prompt": "a bold simple pixel art kola tree, one very thick tall brown trunk standing at the bottom centre, one big tall dense very dark green canopy filling the upper two thirds of the frame, four fat dark red seed pods hanging on the front of the canopy, taller and grander than an ordinary fruit tree, seen from the front, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no individual leaves, no twigs, no bare branches, no roots, no pot, no ground, no shadow, no birds, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:24:28.082Z"
+}

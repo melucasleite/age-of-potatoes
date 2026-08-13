@@ -1,0 +1,24 @@
+{
+  "id": "machine_root_cellar",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1119745467,
+  "prompt": "a bold simple pixel art root cellar, one low grassy earth mound filling the frame, one wide heavy timber double door set into the front of the mound at ground level, one thick pale stone lintel straight across the top of the doorway, low three-quarter view, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no steps, no path, no handles, no hinges, no bolts, no signs, no windows, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:23:50.633Z"
+}

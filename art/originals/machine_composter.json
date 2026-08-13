@@ -1,0 +1,24 @@
+{
+  "id": "machine_composter",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1328257501,
+  "prompt": "a bold simple pixel art compost heap in an open wooden box, one low square timber box across the bottom third of the frame with four thick corner posts, one very big rounded mound of dark brown crumbly compost heaped high above the open top of the box and spilling over its front edge, a few broad green leaves sticking out of the mound, low three-quarter view, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no roof, no walls above the box, no lid, no door, no hut, no shed, no barrel, no flies, no worms, no tools, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:39:08.321Z"
+}

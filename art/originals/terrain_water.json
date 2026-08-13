@@ -1,0 +1,24 @@
+{
+  "id": "terrain_water",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 2035921689,
+  "prompt": "seamless tiling top-down texture of still shallow water, completely uniform all over with no focal point and no single feature anywhere, fine even grain distributed edge to edge, no large shapes, no patches, no blotches, no clumps, no bare spots, no bands, no lines, no stripes, no streaks, built from only two very close shades of medium blue with extremely low contrast between them, calm and quiet and soft, no waves, no ripples, no foam, no highlights, no reflections, no plants, no objects, no shadows, perfectly flat even lighting, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": false,
+  "tileX": true,
+  "tileY": true,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "terrain",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:22:04.154Z"
+}

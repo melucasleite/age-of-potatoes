@@ -1,0 +1,24 @@
+{
+  "id": "item_orange",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1163597355,
+  "prompt": "two round ripe oranges side by side, fat solid orange spheres, one small flat green leaf on the top of the front one, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no segments, no slices, no peel texture, no speckles, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:22:55.592Z"
+}

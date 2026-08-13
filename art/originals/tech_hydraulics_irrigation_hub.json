@@ -1,0 +1,24 @@
+{
+  "id": "tech_hydraulics_irrigation_hub",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1818259821,
+  "prompt": "a single bold flat game icon of one fat blue water tank with three thick pipes coming out of its base and spreading apart, one simple object centred and filling most of the frame, seen straight on, very large solid areas of flat colour, thick heavy chunky shapes, bold dark outline, no thin lines, no small details, no valves, no wheels, no gauges, no background, no frame, no border, no badge, no circle behind it, no round disc, no shadow, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "tech",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T20:38:38.395Z"
+}

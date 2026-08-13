@@ -1,0 +1,24 @@
+{
+  "id": "bot_planter_walk_down",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1064180703,
+  "prompt": "two identical copies of the same small farm robot standing side by side, left to right, the exact same robot drawn twice with the same head and the same body and the same colours in both, the only difference between them is the legs — in the left copy the near leg is forward, in the right copy the far leg is forward. The robot has a chunky boxy body painted bright blue, a grey metal head with one big round pale glass eye, short stubby arms at its sides, two thick stumpy legs, and one small funnel shaped seed hopper on its back showing over its shoulders. Both copies facing the viewer straight on. Two equal cells side by side, one whole robot centred in each cell, feet on the bottom edge, thick heavy chunky shapes, very large solid areas of flat colour, no thin lines, no small details, no antenna, no wires, no wheels, no tracks, no shadow, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 16
+  },
+  "requested": {
+    "width": 128,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "bots",
+  "costUsd": 0.018,
+  "generatedAt": "2026-08-13T20:39:14.082Z"
+}
