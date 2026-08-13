@@ -16,9 +16,11 @@
 // the host passes to its draw call is the renderer's business alone.
 
 import {
+  CART_CAPACITY,
   CONDITION_EFFECT_THRESHOLD,
   CONDITION_MAX,
   CropId,
+  DEPOT_STOCK_CAPACITY,
   FIELD_ORIGIN_X,
   FIELD_ORIGIN_Y,
   FIELD_TILES_HIGH,
@@ -46,12 +48,21 @@ import {
   machineSpec,
   wiltStageForAge,
 } from './data';
+import {
+  cartRunTicks,
+  depotRunTicks,
+  depotStockedCount,
+  isCart,
+  isCartAway,
+  isDepot,
+} from './commerce';
 import { networkFlowPermille, tankTicksToEmpty } from './pipes';
 import { reservoirLevelPermille, reservoirThrottle } from './water';
 import {
   type CropTile,
   type Machine,
   type WorldState,
+  CeremonyId,
   isParcelBuyable,
   nextDeedPriceCents,
   tileAt,
@@ -463,6 +474,88 @@ export interface LandView {
   nextPriceCents: number;
 }
 
+/**
+ * One delivery cart, as the panel draws it.
+ *
+ * Everything is ticks and counts. `away` is 1 exactly while `ticksRemaining` is above zero —
+ * published as its own number because the far side reads it as a flag and re-deriving a flag on
+ * every row of every frame is the lookup this projection exists to avoid.
+ */
+export interface CartView {
+  id: number;
+  tileX: number;
+  tileY: number;
+  /** Goods aboard right now. Counted toward net worth whether the cart is here or not (§6). */
+  loaded: number;
+  capacity: number;
+  /** The `ItemId` aboard, or 0 when empty. A cart carries one product per run. */
+  item: number;
+  /** 1 while out on a run. */
+  away: number;
+  /** Ticks until it is back. Integer, counted down inside `step()` — there is no wall clock. */
+  ticksRemaining: number;
+  /**
+   * What a full round trip takes from where this cart stands, so the panel can draw a track.
+   *
+   * IT IS PER-CART RATHER THAN A CONSTANT because distance is a decision now: the run is
+   * `CART_RUN_BASE_TICKS` plus ten ticks for every tile between the cart and the road at the
+   * lot's west edge. Two identical carts at opposite ends of a 64-tile lot have honestly
+   * different journeys, and a shared constant would draw both progress bars wrong.
+   */
+  runTicks: number;
+}
+
+export interface DepotView {
+  id: number;
+  tileX: number;
+  tileY: number;
+  /** Goods on the floor across every route, awaiting a run. Excludes anything already rolling. */
+  stocked: number;
+  capacity: number;
+  /** Route ids this depot fulfils, sorted ascending. */
+  contractIds: number[];
+  /** A full round trip for this depot's trucks, before the loading beat. */
+  runTicks: number;
+}
+
+/**
+ * One standing contract. **Logistics only** — what to ship and how much, never what it is worth.
+ *
+ * There is no price here and there never will be: prices are stable and posted, so the run value
+ * the panel prints is arithmetic it does on `listPriceCents(item) × quantityPerRun`, displayed
+ * rather than chosen. Nothing in this shape could carry a negotiation.
+ */
+export interface ContractView {
+  id: number;
+  depotId: number;
+  item: number;
+  quantityPerRun: number;
+  /** Flavour label. Every destination pays exactly list; this is a name on a truck door. */
+  destination: string;
+  /** Stock counted toward the next run. */
+  stocked: number;
+  runsCompleted: number;
+  grossCents: number;
+  /** `ContractPhase`: 0 waiting on stock, 1 loading, 2 out on the road. */
+  phase: number;
+  ticksRemaining: number;
+}
+
+/** Selling above the roadside stand: plan §3's assisted and automated rungs. */
+export interface CommerceView {
+  carts: CartView[];
+  depots: DepotView[];
+  contracts: ContractView[];
+  /** Lifetime gross that went out by cart or truck rather than by hand, in cents. */
+  automatedGrossCents: number;
+  /**
+   * 1 once the first truck has left, so the two-honk ceremony plays exactly once and a reload
+   * does not replay it. The flag is `CeremonyId.FirstTruck` in `WorldState.ceremonies`; this is
+   * the same fact, projected as a number so the panel does not scan a string array per frame.
+   */
+  firstDepartureSeen: number;
+}
+
 export interface WorldView {
   tick: number;
   /** The Music Box beat this tick falls on. Audio schedules ahead against it. */
@@ -493,6 +586,8 @@ export interface WorldView {
    * time that happens again is not a first time.
    */
   ceremonies: string[];
+  /** Carts, depots, and standing routes. Empty on a lot that has bought neither. */
+  commerce: CommerceView;
   stats: StatsView;
 }
 
@@ -550,6 +645,13 @@ export function createWorldView(): WorldView {
     inventory: [],
     unlocked: [],
     ceremonies: [],
+    commerce: {
+      carts: [],
+      depots: [],
+      contracts: [],
+      automatedGrossCents: 0,
+      firstDepartureSeen: 0,
+    },
     stats: {
       centiActiveHours: 0,
       lifetimeNetEarningsCents: 0,
@@ -606,6 +708,7 @@ export function view(state: WorldState, out: WorldView = createWorldView()): Wor
   projectPipes(state, out);
   projectInventory(state, out);
   projectUnlocked(state, out);
+  projectCommerce(state, out);
   projectStats(state, out);
 
   return out;
@@ -1355,4 +1458,120 @@ function projectStats(state: WorldState, out: WorldView): void {
   s.itemsHarvestedByHand = stats.itemsHarvestedByHand;
   s.totalManualTouches = totalManualTouches(stats.touches);
   s.longestHandsFreeTicks = stats.longestHandsFreeTicks;
+}
+
+/**
+ * Carts, depots, and standing routes.
+ *
+ * Written into reused arrays like every other collection here, and truncated with `.length =`
+ * rather than reallocated — a lot that boxes its only cart must not leave last frame's cart on
+ * the panel, which is the exact bug a reused buffer invites and the reason every projector in
+ * this file ends with a truncation.
+ */
+function projectCommerce(state: WorldState, out: WorldView): void {
+  const commerce = out.commerce;
+  let cartCount = 0;
+  let depotCount = 0;
+
+  for (let i = 0; i < state.machines.length; i++) {
+    const machine = state.machines[i]!;
+    if (isCart(machine)) {
+      const cv = commerce.carts[cartCount] ?? blankCart();
+      commerce.carts[cartCount] = cv;
+      cartCount += 1;
+      cv.id = machine.id;
+      cv.tileX = machine.tileX;
+      cv.tileY = machine.tileY;
+      cv.loaded = machine.cargoCount;
+      cv.capacity = CART_CAPACITY;
+      cv.item = machine.cargoItem;
+      cv.away = isCartAway(machine) ? 1 : 0;
+      cv.ticksRemaining = machine.runTicksRemaining;
+      cv.runTicks = cartRunTicks(machine);
+      continue;
+    }
+    if (!isDepot(machine)) continue;
+
+    const dv = commerce.depots[depotCount] ?? blankDepot();
+    commerce.depots[depotCount] = dv;
+    depotCount += 1;
+    dv.id = machine.id;
+    dv.tileX = machine.tileX;
+    dv.tileY = machine.tileY;
+    dv.stocked = depotStockedCount(state, machine.id);
+    dv.capacity = DEPOT_STOCK_CAPACITY;
+    dv.runTicks = depotRunTicks(machine);
+    // Rewritten in place. `state.contracts` is sorted ascending by id and this walks it in
+    // order, so the result is sorted without a sort — which is what the contract promises.
+    let routes = 0;
+    for (let j = 0; j < state.contracts.length; j++) {
+      const contract = state.contracts[j]!;
+      if (contract.depotId !== machine.id) continue;
+      dv.contractIds[routes] = contract.id;
+      routes += 1;
+    }
+    dv.contractIds.length = routes;
+  }
+  commerce.carts.length = cartCount;
+  commerce.depots.length = depotCount;
+
+  for (let i = 0; i < state.contracts.length; i++) {
+    const contract = state.contracts[i]!;
+    const cv = commerce.contracts[i] ?? blankContract();
+    commerce.contracts[i] = cv;
+    cv.id = contract.id;
+    cv.depotId = contract.depotId;
+    cv.item = contract.item;
+    cv.quantityPerRun = contract.quantityPerRun;
+    cv.destination = contract.destination;
+    cv.stocked = contract.stocked;
+    cv.runsCompleted = contract.runsCompleted;
+    cv.grossCents = contract.grossCents;
+    cv.phase = contract.phase;
+    cv.ticksRemaining = contract.ticksRemaining;
+  }
+  commerce.contracts.length = state.contracts.length;
+
+  commerce.automatedGrossCents = state.stats.automatedGrossCents;
+  commerce.firstDepartureSeen = hasCeremony(state, CeremonyId.FirstTruck) ? 1 : 0;
+}
+
+function hasCeremony(state: WorldState, id: string): boolean {
+  for (let i = 0; i < state.ceremonies.length; i++) {
+    if (state.ceremonies[i] === id) return true;
+  }
+  return false;
+}
+
+function blankCart(): CartView {
+  return {
+    id: 0,
+    tileX: 0,
+    tileY: 0,
+    loaded: 0,
+    capacity: 0,
+    item: 0,
+    away: 0,
+    ticksRemaining: 0,
+    runTicks: 0,
+  };
+}
+
+function blankDepot(): DepotView {
+  return { id: 0, tileX: 0, tileY: 0, stocked: 0, capacity: 0, contractIds: [], runTicks: 0 };
+}
+
+function blankContract(): ContractView {
+  return {
+    id: 0,
+    depotId: 0,
+    item: 0,
+    quantityPerRun: 0,
+    destination: '',
+    stocked: 0,
+    runsCompleted: 0,
+    grossCents: 0,
+    phase: 0,
+    ticksRemaining: 0,
+  };
 }

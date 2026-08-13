@@ -56,6 +56,16 @@ its name to `FIXTURE_NAMES` in `test/goldens.ts`, and generate its hash once.
 | `rotate-and-box.json` | 24680    | 48,792 | Rotation and boxing. A grabber placed facing north and turned three times round the compass; a Chip Kitchen given two Speed levels and a Capacity level, worn until it jams, whacked, repaired, then **boxed by errand** with forty bags and six potatoes still in it and put straight back down elsewhere for nothing — same dials, same invoice, money untouched. A second, plain kitchen is boxed **at the machine** and scrapped for exactly 40% of its $100 invoice. Ends holding two boxes of one kind at two different invoices, beside a Washer left mid-operation.                        |
 
 | `land-deeds.json` | 480480 | 6,721 | The lot growing. Two full hand-farmed cycles pay for the deed to parcel 1 at $200, and then a Chip Kitchen and a Sprinkler go down east of tile 16 — ground that did not exist to build on a release ago. Guards `BuyDeed`, the ownership gate every placement verb shares, the sorted parcel list in the hash, and land on the net-worth books. |
+| `depot-run.json` | 320480 | 22,542 | Selling without you. Farms a potato economy up from $50 through the Workshop Charter, the Belts node and Trucking, then builds `Chip Kitchen → grabber → Truck Depot`, signs a standing route for bagged chips, tears a second one up, hand-loads a delivery cart and sends it. **Ends with 5,000 commandless ticks** — no player input of any kind — in which four truck runs and one cart arrive, the money goes up by $560, and every manual touch counter stays exactly where it was. That last window is the whole fixture; `test/commerce.test.ts` replays to its boundary and asserts the counters are frozen across it. |
+
+`depot-run` carries a field no other fixture has: **`handsOffFromTick`**, the tick after which it
+issues nothing. It is not derivable from `commands` — the last command's tick is where the player
+stopped _issuing_, not where the world went quiet — and it is what lets a test say "and then
+nobody touched anything for five thousand ticks" rather than merely comment it. What the fixture
+deliberately does **not** claim is seed-to-sold: nothing in this game harvests a crop for you, so
+the kitchen's hopper is filled by hand immediately before the window opens. The link it proves is
+production to money, which is the link work item 032 was asked for.
+
 `golden.test.ts` asserts that the set as a whole covers every `Command` variant, and
 `REQUIRED_COMMAND_COVERAGE` in `test/goldens.ts` is typed so that adding one more variant to
 the union fails `yarn typecheck` until a fixture exercises it. That is deliberately annoying:

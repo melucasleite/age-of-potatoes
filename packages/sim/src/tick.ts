@@ -14,13 +14,15 @@
 //   4. Machines, in ascending id order.
 //   5. Belts, in ascending id order — items move, then heads hand off.
 //   6. Grabbers, in ascending id order.
-//   7. Zones (the seed hopper), in descending priority then ascending id.
-//   8. Crops, in field index order — growth, withering, moisture.
-//   9. Stats and the clock.
+//   7. Commerce: carts on the road, then standing routes, both in ascending id order.
+//   8. Zones (the seed hopper), in descending priority then ascending id.
+//   9. Crops, in field index order — growth, withering, moisture.
+//  10. Stats and the clock.
 //
 // Machines run before belts so a finished item is available to the grabber that empties it
-// on the same tick it appeared, and belts run before grabbers so an arm sees where the
-// goods actually are. None of that is load-bearing for correctness — only for latency —
+// on the same tick it appeared, belts run before grabbers so an arm sees where the goods
+// actually are, and commerce runs after grabbers so a bag delivered into a depot this tick can
+// complete the run it completes rather than waiting a tick to be noticed. None of that is load-bearing for correctness — only for latency —
 // but the ORDER ITSELF is load-bearing for determinism, so it is written down.
 //
 // Water runs before machines for the same latency reason and one more: RECHARGE COMES FIRST,
@@ -36,10 +38,14 @@
 import {
   type BuyDeedCommand,
   type BuyItemCommand,
+  type CancelContractCommand,
   type Command,
+  type CreateContractCommand,
   type CreateZoneCommand,
   type DeconstructMachineCommand,
+  type DispatchCartCommand,
   type HarvestTileCommand,
+  type LoadCartCommand,
   type LoadMachineCommand,
   type MoveMachineCommand,
   type PaintZoneCommand,
@@ -125,6 +131,21 @@ import {
 } from './data';
 import { advanceBelts, advanceGrabbers } from './belts';
 import {
+  advanceCommerce,
+  cartRoomFor,
+  cartRunTicks,
+  contractItemLegal,
+  contractQuantityLegal,
+  depotHasContractRoom,
+  depotRouteFor,
+  isCart,
+  isCartAway,
+  isDepot,
+  refundContract,
+  releaseDepotContracts,
+  removeContractById,
+} from './commerce';
+import {
   BuildRefusal,
   advancePipes,
   liquidPlacementRefusal,
@@ -136,6 +157,7 @@ import { SystemId, nextBelow } from './rng';
 import {
   type Machine,
   CeremonyId,
+  ContractPhase,
   Direction,
   IntentAction,
   type PlayerIntent,
@@ -143,8 +165,10 @@ import {
   addBoxedMachine,
   addItem,
   beltById,
+  clipDestination,
   clipZoneName,
   computeNetWorthCents,
+  contractById,
   directionStepX,
   directionStepY,
   grabberById,
@@ -237,6 +261,7 @@ export function step(state: WorldState, input: TickInput): void {
   advanceMachines(state);
   advanceBelts(state);
   advanceGrabbers(state);
+  advanceCommerce(state);
   advanceZones(state);
   advanceCrops(state);
   advanceStats(state);
@@ -308,6 +333,14 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applyResearchTech(state, command);
     case 'BuyDeed':
       return applyBuyDeed(state, command);
+    case 'LoadCart':
+      return applyLoadCart(state, command);
+    case 'DispatchCart':
+      return applyDispatchCart(state, command);
+    case 'CreateContract':
+      return applyCreateContract(state, command);
+    case 'CancelContract':
+      return applyCancelContract(state, command);
     case 'PlaceBelt':
       return applyPlaceBelt(state, command);
     case 'RemoveBelt':
@@ -671,6 +704,12 @@ function applyDeconstructMachine(state: WorldState, command: DeconstructMachineC
 
   if (machine.jammed) return false;
   if (isMachineWorking(spec, machine)) return false;
+  // A CART ON THE ROAD IS NOT ON THE LOT, so there is nothing standing here to put in a box.
+  // This is the vehicles' version of the mid-batch refusal above and it is a separate check for
+  // a precise reason: `isMachineWorking` tests `workPerOperation`, and a cart has none, so it
+  // would cheerfully report a cart halfway to town as idle and boxable — which would delete a
+  // load of goods and a running clock in one keypress.
+  if (isCartAway(machine)) return false;
 
   for (;;) {
     const item = takeOneOutput(machine, spec);
@@ -682,6 +721,16 @@ function applyDeconstructMachine(state: WorldState, command: DeconstructMachineC
     if (held > 0) addItem(state, spec.inputs[i]!.item, held);
     machine.inputCounts[i] = 0;
   }
+  // Cargo in a parked cart comes back to the player's hands, exactly as the hoppers do. The box
+  // records the dials, the condition and the invoice — never the load.
+  if (machine.cargoItem !== 0 && machine.cargoCount > 0) {
+    addItem(state, machine.cargoItem, machine.cargoCount);
+  }
+  machine.cargoItem = 0;
+  machine.cargoCount = 0;
+  // A depot's routes go with the depot, handing back the floor and anything already rolling. A
+  // contract whose depot is in somebody's bag has nothing to load it — see `releaseDepotContracts`.
+  if (spec.role === MachineRole.TruckDepot) releaseDepotContracts(state, machine.id);
 
   addBoxedMachine(state, boxedItem, {
     speedLevel: machine.speedLevel,
@@ -758,6 +807,10 @@ function applyMoveMachine(state: WorldState, command: MoveMachineCommand): boole
   const machine = machineById(state, command.machineId);
   if (machine === null) return false;
   if (machine.tileX === command.tileX && machine.tileY === command.tileY) return false;
+  // You cannot push a cart that is not here. Refused rather than allowed-and-ignored, because
+  // the run's duration was measured from where it set off and a cart that teleported mid-journey
+  // would arrive somewhere it never left from.
+  if (isCartAway(machine)) return false;
 
   const spec = machineSpec(machine.kind);
   if (spec === null) return false;
@@ -1085,6 +1138,108 @@ function applyBuyDeed(state: WorldState, command: BuyDeedCommand): boolean {
   // net-worth boards rather than a self-inflicted loss. `computeNetWorthCents` reads
   // `landValueCents` off this list; nothing else has to be told.
   return ownParcel(state, command.parcel);
+}
+
+// --- selling above the roadside stand ----------------------------------------------
+
+/**
+ * Load a cart by hand.
+ *
+ * COUNTS A `handCarry` TOUCH, and that is not a formality — plan §6's taxonomy lists
+ * "hand-carry/load/unload" as one category, and the cart is the ASSISTED rung of the ladder,
+ * which means fewer hands rather than none. If this ever stopped counting, the Hands-Free board
+ * would be won by loading a cart, which is the one thing it is supposed to measure the absence
+ * of.
+ *
+ * The count is clamped to what fits rather than refused: the panel asks for `capacity - loaded`,
+ * and a belt that delivered one more bag between the render and the click must not turn a
+ * "fill it" button into a silent no-op.
+ */
+function applyLoadCart(state: WorldState, command: LoadCartCommand): boolean {
+  if (command.count <= 0 || !Number.isInteger(command.count)) return false;
+
+  const cart = machineById(state, command.cartId);
+  if (cart === null || !isCart(cart)) return false;
+  if (!withinReachOfMachine(state, cart)) return false;
+  // A cart on the road is not there to be loaded. The refusal is on `isCartAway` rather than on
+  // a flag, so it cannot disagree with the clock that is actually counting.
+  if (isCartAway(cart)) return false;
+  // The same rule the bin refuses on, for the same anti-softlock reason: a cart is a way to sell
+  // things, so a cart that would take seeds is a bin that would buy them with extra steps.
+  if (!contractItemLegal(command.item)) return false;
+
+  const room = cartRoomFor(cart, command.item);
+  if (room <= 0) return false;
+  const count = command.count < room ? command.count : room;
+  if (!removeItem(state, command.item, count)) return false;
+
+  cart.cargoItem = command.item;
+  cart.cargoCount += count;
+  touch(state, 'handCarry');
+  return true;
+}
+
+/** Send it. Counts a hand-carry touch; an empty or already-departed cart is refused. */
+function applyDispatchCart(state: WorldState, command: DispatchCartCommand): boolean {
+  const cart = machineById(state, command.cartId);
+  if (cart === null || !isCart(cart)) return false;
+  if (!withinReachOfMachine(state, cart)) return false;
+  if (isCartAway(cart)) return false;
+  if (cart.cargoCount <= 0 || cart.cargoItem === 0) return false;
+
+  // Measured now, from where the cart is standing, and stored as a countdown rather than as a
+  // return tick. A stored deadline would be a number that means nothing after a save is loaded
+  // into a world whose clock is at a different place — a countdown means the same thing forever.
+  cart.runTicksRemaining = cartRunTicks(cart);
+  touch(state, 'handCarry');
+  return true;
+}
+
+/**
+ * Sign a standing route.
+ *
+ * NO TOUCH, AND NO REACH CHECK. Both follow from the same fact: this is paperwork rather than a
+ * verb you do with your hands, so there is nothing to stand next to and nobody to charge. It is
+ * the same shape as `ResearchTech`, which also spends money from wherever the player happens to
+ * be, and it is what makes a depot genuinely hands-free rather than hands-free-after-a-walk.
+ *
+ * ONE ROUTE PER PRODUCT PER DEPOT. Two routes for bagged chips on one depot would compete for
+ * the same floor, and whichever had the lower id would take every bag while the other sat at
+ * zero forever — a rule nothing on screen could explain. Refused here, so it cannot happen.
+ */
+function applyCreateContract(state: WorldState, command: CreateContractCommand): boolean {
+  const depot = machineById(state, command.depotId);
+  if (depot === null || !isDepot(depot)) return false;
+  if (!contractItemLegal(command.item)) return false;
+  if (!contractQuantityLegal(command.quantityPerRun)) return false;
+  if (!depotHasContractRoom(state, command.depotId)) return false;
+  if (depotRouteFor(state, command.depotId, command.item) !== null) return false;
+
+  // Ids only increase, so appending keeps the list sorted — the same invariant every other
+  // id-keyed collection in `WorldState` holds by construction rather than by sorting.
+  state.contracts.push({
+    id: state.nextContractId,
+    depotId: command.depotId,
+    item: command.item,
+    quantityPerRun: command.quantityPerRun,
+    destination: clipDestination(command.destination),
+    stocked: 0,
+    inTransit: 0,
+    phase: ContractPhase.Waiting,
+    ticksRemaining: 0,
+    runsCompleted: 0,
+    grossCents: 0,
+  });
+  state.nextContractId += 1;
+  return true;
+}
+
+/** Tear a route up. Free, always, and everything comes back — see `refundContract`. */
+function applyCancelContract(state: WorldState, command: CancelContractCommand): boolean {
+  const contract = contractById(state, command.contractId);
+  if (contract === null) return false;
+  refundContract(state, contract);
+  return removeContractById(state, contract.id);
 }
 
 // --- belts and grabbers -----------------------------------------------------------

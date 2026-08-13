@@ -223,6 +223,76 @@ export interface BuyDeedCommand {
   parcel: number;
 }
 
+// --- selling above the roadside stand -------------------------------------------------
+//
+// The four verbs of plan §3's assisted and automated selling rungs. Two of them are hands and
+// count a `handCarry` touch; two of them are paperwork and count nothing. **THAT SPLIT IS THE
+// WHOLE ADJUDICABILITY OF THE HANDS-FREE BOARD** (plan §6), so it is stated on each one.
+//
+// NONE OF THEM CARRIES A PRICE, and none of them ever will. Prices are stable and posted (locked
+// decision 3) and §8 cuts fluctuating markets forever, so what a delivery is worth is the sim's
+// rule — the same rule the sell bin uses — exactly as what a deed costs is (`BuyDeed`) and which
+// way clockwise goes is (`RotateGrabber`). A client that could send a price is a client that
+// could send the wrong one, and then a replay depends on what some build thought chips were
+// worth.
+
+/**
+ * Put goods from the bag onto a cart. Counts a hand-carry touch.
+ *
+ * Reach-gated, because it is a thing you do with your hands: you are standing at the cart
+ * putting crates in it. The count is CLAMPED to what will fit rather than refused, so the
+ * panel's "fill it up" button — which asks for `capacity - loaded` — cannot be made wrong by a
+ * belt delivering a bag between the render and the click.
+ */
+export interface LoadCartCommand {
+  type: 'LoadCart';
+  cartId: number;
+  /** One product per run. Refused if the cart already holds a different one. */
+  item: ItemId;
+  count: number;
+}
+
+/**
+ * Send a loaded cart. Counts a hand-carry touch.
+ *
+ * **IT NEVER LEAVES WITHOUT THIS COMMAND, and that is what makes the cart the ASSISTED rung
+ * rather than a cheap depot.** A cart that departed on its own when full would be an automated
+ * seller with no research behind it, which would leave the depot buying nothing but capacity.
+ */
+export interface DispatchCartCommand {
+  type: 'DispatchCart';
+  cartId: number;
+}
+
+/**
+ * Sign a standing route at a depot. Counts NO manual touch.
+ *
+ * Not reach-gated either, and the two facts are the same fact: this is paperwork, like
+ * `ResearchTech` and `BuyDeed`, not a verb you perform with your hands. Configure it once from
+ * the panel and the depot fulfils it forever while it has stock.
+ */
+export interface CreateContractCommand {
+  type: 'CreateContract';
+  depotId: number;
+  item: ItemId;
+  quantityPerRun: number;
+  /**
+   * The name on the truck door. Flavour only — every destination pays list and every run takes
+   * the same time. Clipped rather than rejected, and deliberately kept out of the world hash;
+   * see `Contract.destination`.
+   */
+  destination: string;
+}
+
+/**
+ * Tear a route up. Counts NO manual touch, and is **free, always** — everything on the depot's
+ * floor and on its trucks comes back to the bag. A route you regret is not a fine.
+ */
+export interface CancelContractCommand {
+  type: 'CancelContract';
+  contractId: number;
+}
+
 // --- belts and grabbers -------------------------------------------------------------
 
 /** Lay one straight belt segment. Corners are two segments meeting, not a curve. */
@@ -425,6 +495,10 @@ export type Command =
   | UpgradeMachineCommand
   | ResearchTechCommand
   | BuyDeedCommand
+  | LoadCartCommand
+  | DispatchCartCommand
+  | CreateContractCommand
+  | CancelContractCommand
   | PlaceBeltCommand
   | RemoveBeltCommand
   | PlaceGrabberCommand

@@ -14,7 +14,7 @@
 // 2029. See `test/fixtures/saves/`.
 // ────────────────────────────────────────────────────────────────────────────────────────
 //
-// The chain is seven steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
+// The chain is eight steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
 // format 2 (the factory — belts, grabbers, zones, tech unlocks, upgrade dials, and the
 // per-tile withering clock) up to format 3 (the liquid layer — reservoirs, pipes, one-ledger
 // networks, and the per-machine plumbing fields) up to format 4 (the walk-to errand — one
@@ -24,7 +24,9 @@
 // and typed liquid ports on a converter) up to format 7 (deconstruct to inventory — an
 // inventory slot carries the boxed machines in it, dials and condition and invoice each) up to
 // format 8 (land deeds — the lot is a 4×4 grid of 16-tile parcels and a world records which of
-// them it owns; every older world owns parcel 0, which is the map it already had).
+// them it owns; every older world owns parcel 0, which is the map it already had) up to
+// format 9 (selling above the roadside stand — standing contracts as a sorted list of their
+// own, three delivery-cart fields on every machine, and one more lifetime accumulator).
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -35,7 +37,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 8;
+export const CURRENT_FORMAT_VERSION = 9;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -521,6 +523,50 @@ const migrateFormat7To8: SaveMigration = (payload) => {
 };
 
 /**
+ * Format 8 → 9.
+ *
+ * Selling above the roadside stand: the delivery cart, the truck depot, and standing contracts.
+ *
+ * **THE EASIEST MIGRATION IN THE CHAIN, AND FOR A REASON WORTH WRITING DOWN.** A format-8 world
+ * could not contain a cart, a depot, or a route — the machine kinds did not exist, so no save
+ * can name one, and there was no verb that made a contract. So this adds empty and zero
+ * everywhere and translates nothing. Contrast format 5 → 6, which had to *invent* the recipe a
+ * machine had been eating, from a frozen table, because the information genuinely was not in the
+ * file. Here it is: a world with no vehicles is exactly a world with no vehicles.
+ *
+ * The three cart fields land on every machine rather than only on carts. That is what
+ * `fromPayload` demands — it reads each field by name and fails on a missing one, which is the
+ * property that makes a corrupt save name its first bad field instead of loading as a world
+ * full of `undefined` — and it is the same shape format 5 → 6 used when it gave every machine a
+ * `ports: []` it mostly had no use for.
+ *
+ * `automatedGrossCents` starts at 0 and that is not an approximation. It counts money that left
+ * on a cart or a truck, and in a format-8 world none ever did: every cent of
+ * `lifetimeEarnedCents` was carried to the bin by hand. The returning player's Dispatch panel
+ * correctly reads "nothing shipped yet", because nothing has been.
+ */
+const migrateFormat8To9: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-8 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    machines.push({ ...oldMachines[i]!, cargoItem: 0, cargoCount: 0, runTicksRemaining: 0 });
+  }
+
+  const oldStats = p['stats'];
+  if (typeof oldStats !== 'object' || oldStats === null || Array.isArray(oldStats)) {
+    throw new SaveCorruptError('Cannot migrate: `payload.stats` is not an object.');
+  }
+  const stats = { ...(oldStats as Record<string, unknown>), automatedGrossCents: 0 };
+
+  return { ...p, contracts: [], machines, nextContractId: 1, stats, version: 9 };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -533,6 +579,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   5: migrateFormat5To6,
   6: migrateFormat6To7,
   7: migrateFormat7To8,
+  8: migrateFormat8To9,
 };
 
 export interface MigrationOutcome {

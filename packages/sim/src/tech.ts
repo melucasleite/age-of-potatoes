@@ -47,6 +47,20 @@ export const TechId = {
 
   /** The upgrade bench: what makes `UpgradeMachine` legal at all. */
   UpgradeBench: 'commerce-upgrade-bench',
+  /**
+   * Trucking: the Truck Depot, and with it standing contracts.
+   *
+   * THE AUTOMATED RUNG OF PLAN §3'S SELLING LADDER, and the node item 039's repair drones are
+   * waiting on — §3's joints rule says *"drones need diagnostics **and** trucking"*, so a
+   * capstone that dispatches vehicles cannot be reached by a player who has never dispatched
+   * one. The delivery cart is deliberately NOT behind this: the assisted rung needs no research,
+   * exactly as the $150 barrel sprinkler needs none on the watering ladder.
+   *
+   * It unlocks a verb and carries no number, like every node here. How far a truck drives is
+   * `RUN_TICKS_PER_TILE_FROM_ROAD` in `data.ts` and how much it carries is the route the player
+   * writes — neither is a thing research touches.
+   */
+  Trucking: 'commerce-trucking',
 
   // The soda wing (plan §8's v0.5). It hangs off HYDRAULICS rather than fabrication, and that
   // is the interlock plan §3 asks for: soda is a pipe organ, so a player who never laid a pipe
@@ -202,6 +216,19 @@ export const TECH_NODES: readonly TechNode[] = [
     id: TechId.UpgradeBench,
     branch: TechBranch.Commerce,
     priceCents: 35_000,
+    requires: [TechId.WorkshopCharter],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    // Priced between the upgrade bench and the auto-replant hopper, and gated on the Charter for
+    // one reason: the Charter's visible half is **200 items sold**, so a player cannot buy their
+    // way out of selling by hand until they have demonstrably done it two hundred times. That is
+    // plan §3's interlock rule pointed at the ladder it belongs to — you automate the chore you
+    // have actually done, and the milestone was already on screen.
+    id: TechId.Trucking,
+    branch: TechBranch.Commerce,
+    priceCents: 60_000,
     requires: [TechId.WorkshopCharter],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,

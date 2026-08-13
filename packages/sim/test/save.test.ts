@@ -19,7 +19,9 @@ import {
   DEED_PRICE_CENTS_BY_PURCHASE,
   Direction,
   IntentAction,
+  ContractPhase,
   ItemId,
+  MACHINE_SPECS,
   MachineKind,
   OVERCOOK_BLOCKED_TICKS,
   PARCEL_TILES,
@@ -35,7 +37,10 @@ import {
   createWorld,
   deserialize,
   hashState,
+  fromPayload,
   landValueCents,
+  listPriceCents,
+  toPayload,
   migrate,
   parseEnvelope,
   restoreWorld,
@@ -52,6 +57,7 @@ import fixture5 from './fixtures/saves/format-5.json';
 import fixture6 from './fixtures/saves/format-6.json';
 import fixture7 from './fixtures/saves/format-7.json';
 import fixture8 from './fixtures/saves/format-8.json';
+import fixture9 from './fixtures/saves/format-9.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -338,11 +344,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture);
 
     expect(restored.migration.fromVersion).toBe(1);
-    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('3efe8b92');
+    expect(hashState(restored.state)).toBe('1c5a705a');
   });
 
   it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
@@ -411,10 +417,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture2);
 
     expect(restored.migration.fromVersion).toBe(2);
-    expect(restored.migration.steps).toEqual([2, 3, 4, 5, 6, 7]);
+    expect(restored.migration.steps).toEqual([2, 3, 4, 5, 6, 7, 8]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('48a83f1c');
+    expect(hashState(restored.state)).toBe('1b01c436');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -456,10 +462,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture3);
 
     expect(restored.migration.fromVersion).toBe(3);
-    expect(restored.migration.steps).toEqual([3, 4, 5, 6, 7]);
+    expect(restored.migration.steps).toEqual([3, 4, 5, 6, 7, 8]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(21_306);
-    expect(hashState(restored.state)).toBe('cd2fcde5');
+    expect(hashState(restored.state)).toBe('0d26e54f');
   });
 
   it('brings the plumbing back exactly as it was left', () => {
@@ -512,11 +518,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture4);
 
     expect(restored.migration.fromVersion).toBe(4);
-    expect(restored.migration.steps).toEqual([4, 5, 6, 7]);
+    expect(restored.migration.steps).toEqual([4, 5, 6, 7, 8]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(3300);
     expect(restored.state.worldSeed).toBe(90210);
-    expect(hashState(restored.state)).toBe('a541b961');
+    expect(hashState(restored.state)).toBe('40322a2f');
   });
 
   it('brings the errand back exactly as it was left', () => {
@@ -561,11 +567,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture5);
 
     expect(restored.migration.fromVersion).toBe(5);
-    expect(restored.migration.steps).toEqual([5, 6, 7]);
+    expect(restored.migration.steps).toEqual([5, 6, 7, 8]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(41_837);
     expect(restored.state.worldSeed).toBe(50505);
-    expect(hashState(restored.state)).toBe('0e3fdb0d');
+    expect(hashState(restored.state)).toBe('4bb48cef');
   });
 
   it('brings the browning basket and the maintenance tallies back as they were', () => {
@@ -611,11 +617,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture6);
 
     expect(restored.migration.fromVersion).toBe(6);
-    expect(restored.migration.steps).toEqual([6, 7]);
+    expect(restored.migration.steps).toEqual([6, 7, 8]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(42_400);
     expect(restored.state.worldSeed).toBe(60606);
-    expect(hashState(restored.state)).toBe('c15ec2b4');
+    expect(hashState(restored.state)).toBe('79737163');
   });
 
   it('brings every typed port back with its own liquid, level, and amber flag', () => {
@@ -662,11 +668,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture7);
 
     expect(restored.migration.fromVersion).toBe(7);
-    expect(restored.migration.steps).toEqual([7]);
+    expect(restored.migration.steps).toEqual([7, 8]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(48_792);
     expect(restored.state.worldSeed).toBe(24_680);
-    expect(hashState(restored.state)).toBe('67e26543');
+    expect(hashState(restored.state)).toBe('2666d01e');
   });
 
   it('brings both boxed machines back with their own dials, condition, and invoice', () => {
@@ -735,15 +741,15 @@ describe('the permanent fixture set', () => {
   // Chip Kitchen and a Sprinkler standing on the one that was bought. A save that came back
   // owning only the starter lot would look perfect in every other assertion in this file
   // while leaving the player's machines on somebody else's grass.
-  it('loads format-8.json at the current version with no migration', () => {
+  it('migrates format-8.json up to the current version', () => {
     const restored = restoreWorld(fixture8);
 
     expect(restored.migration.fromVersion).toBe(8);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([8]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(6_721);
     expect(restored.state.worldSeed).toBe(480_480);
-    expect(hashState(restored.state)).toBe('c5ae23f8');
+    expect(hashState(restored.state)).toBe('50380264');
   });
 
   it('brings back the land, and the factory standing on the half that was bought', () => {
@@ -771,6 +777,75 @@ describe('the permanent fixture set', () => {
     // rather than a self-inflicted loss (plan §6).
     expect(landValueCents(state)).toBe(DEED_PRICE_CENTS_BY_PURCHASE[0]);
     expect(computeNetWorthCents(state)).toBeGreaterThan(state.moneyCents + landValueCents(state));
+  });
+
+  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
+  // format-9 is the first save with vehicles in it, and it is caught at a moment that exists
+  // for about two hundred ticks in the whole world's history: **a cart and a truck on the road
+  // at the same time**, and neither of them paid yet. That is the entire point of the file.
+  // `cargoCount`, `runTicksRemaining`, `Contract.inTransit` and `phase` are all fields that are
+  // zero whenever nothing is moving, so a save taken with the yard at rest would round-trip
+  // perfectly and prove nothing at all about the format it was written for.
+  it('accepts every machine kind this build can build', () => {
+    // THE ALLOWLIST IS HAND-WRITTEN AND THIS IS THE ONLY THING KEEPING IT HONEST. `MACHINE_KINDS`
+    // in `canonical.ts` is a written list rather than a map over `MACHINE_SPECS`, deliberately —
+    // an id space is permanent save surface and deriving the guard from today's table would mean
+    // a kind retired in 2029 silently stops being loadable. The cost of writing it down is that
+    // it can go out of date, and it did: the delivery cart shipped and the loader refused every
+    // save with one in it, which the format-9 fixture caught on its first run. This is that
+    // failure, made cheap.
+    for (const spec of MACHINE_SPECS) {
+      const payload = toPayload(createWorld(1));
+      payload.machines = [{ ...payload.machines[0]!, kind: spec.kind }];
+      expect(() => fromPayload(payload)).not.toThrow();
+    }
+  });
+
+  it('loads format-9.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture9);
+
+    expect(restored.migration.fromVersion).toBe(9);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(restored.state.tick).toBe(17_949);
+    expect(restored.state.worldSeed).toBe(320_320);
+    expect(hashState(restored.state)).toBe('3de7e9a4');
+  });
+
+  it('brings the cart back on the road with its load still aboard, and the truck too', () => {
+    const state = restoreWorld(fixture9).state;
+
+    // The cart: eight bags, 212 ticks from home. A reload that rounded either number would be
+    // a player handed a free delivery or charged for closing the tab.
+    const cart = state.machines.find((machine) => machine.runTicksRemaining > 0)!;
+    expect(cart.cargoItem).toBe(ItemId.BaggedChips);
+    expect(cart.cargoCount).toBe(8);
+    expect(cart.runTicksRemaining).toBe(212);
+
+    // The route: one truck rolling with five bags on it, one more bag already on the floor for
+    // the next run, and NOTHING PAID YET — `automatedGrossCents` is still zero at this instant.
+    // That is what makes the next assertion mean something.
+    expect(state.contracts).toHaveLength(1);
+    const contract = state.contracts[0]!;
+    expect(contract.phase).toBe(ContractPhase.Rolling);
+    expect(contract.inTransit).toBe(5);
+    expect(contract.stocked).toBe(1);
+    expect(contract.runsCompleted).toBe(0);
+    expect(state.stats.automatedGrossCents).toBe(0);
+
+    // GOODS IN TRANSIT ARE ON THE BOOKS (plan §6). Fourteen bags are somewhere between a shed
+    // and a town and not one of them is cash, so net worth has to be carrying them — a save
+    // that dropped them would restore a world several hundred dollars poorer than the one that
+    // was written, and the Peak Flow board would record the dip.
+    const inFlight = cart.cargoCount + contract.inTransit + contract.stocked;
+    expect(inFlight).toBe(14);
+    expect(computeNetWorthCents(state)).toBeGreaterThanOrEqual(
+      state.moneyCents + listPriceCents(ItemId.BaggedChips) * inFlight,
+    );
+
+    // And the destination came back as written. It is the one stored string outside the hash,
+    // which makes this the only assertion standing between it and a silent disappearance.
+    expect(contract.destination).toBe('Ridgeline Grocers');
   });
 
   it('keeps building on bought land after the reload', () => {

@@ -19,6 +19,7 @@ import {
   CONDITION_MAX,
   CropId,
   type CropSpec,
+  DESTINATION_MAX_LENGTH,
   FERTILITY_MAX,
   FERTILITY_MIN,
   FIELD_ORIGIN_X,
@@ -83,8 +84,11 @@ import { SUBTILE, divFloor, tileCentreSubtiles } from './units';
  * 8 — land deeds: the lot is a 4×4 grid of 16-tile parcels rather than one 16×16 map, and a
  *     world carries the sorted list of the parcels it owns. Every existing world owns exactly
  *     parcel 0, which is the map it already had, at the coordinates it already had.
+ * 9 — selling above the stand: standing contracts as a sorted list of their own, and three
+ *     cart fields on every machine — what it is carrying, how much, and how long until it is
+ *     back. Nothing existing changed shape; a format-8 world simply had no vehicles.
  */
-export const WORLD_STATE_VERSION = 8;
+export const WORLD_STATE_VERSION = 9;
 
 /**
  * A held direction, not a delta. Input tells the sim *which way the player is holding*,
@@ -447,6 +451,35 @@ export interface Machine {
   wateredCount: number;
   /** …this and that: tiles it looked at, found already wet, and deliberately skipped. */
   skippedCount: number;
+
+  // --- the delivery cart (plan §3's assisted rung of selling) ---
+  //
+  // Three fields, all zero on every machine that is not a cart. They are here rather than in a
+  // parallel `carts` array for the reason the plumbing fields are: a cart is placed, moved,
+  // boxed, invoiced, ownership-gated and reach-checked by exactly the code that does all of
+  // that for a Fryer, and a second entity type would be a second copy of every one of those
+  // rules — the copies to drift being the ones nobody remembers exist.
+
+  /**
+   * The `ItemId` aboard, or 0 when the cart is empty.
+   *
+   * ONE PRODUCT PER RUN, and the single field is the enforcement. A cart is a cart, not a
+   * warehouse: `LoadCart` refuses a second product rather than growing a per-item list, which
+   * keeps "what is this cart worth" one multiplication and keeps the panel's one-line summary
+   * honest. The depot is where mixed cargo lives, and it holds it per *route*.
+   */
+  cargoItem: ItemId | 0;
+  /** Goods aboard. Never above `CART_CAPACITY`. */
+  cargoCount: number;
+  /**
+   * Ticks until the cart is back, or 0 when it is standing in the yard.
+   *
+   * **`away` IS THIS BEING NON-ZERO — there is no second flag.** A boolean beside it would be a
+   * duplicate of the same fact, and the tick that cleared one and forgot the other would leave a
+   * cart that is permanently on the road or one that pays out twice. Arrival happens on the tick
+   * this reaches zero, so the two can never disagree about which state the cart is in.
+   */
+  runTicksRemaining: number;
 }
 
 /**
@@ -582,6 +615,79 @@ export interface Zone {
   replantCooldown: number;
 }
 
+/**
+ * Where a standing contract's current run is up to.
+ *
+ * STORED RATHER THAN DERIVED, and that is a deliberate exception to the rule that talked me out
+ * of a second `away` flag on a cart. A cart has one state worth naming — out, or not — so a
+ * timer says it all. A route is a **three-state machine** with one clock shared between two of
+ * its states, and the alternatives are both worse: two timers (which can both be non-zero, a
+ * world with no meaning) or a phase inferred from four other fields at every read (which is the
+ * same rule written in three files, one of which will eventually round differently). The phase
+ * IS the state; `ticksRemaining` is only its clock.
+ */
+export const ContractPhase = {
+  /** Accumulating. The belt is filling the depot and nothing is going anywhere yet. */
+  Waiting: 0,
+  /** A run's worth is committed and the truck is at the dock with its engine running. */
+  Loading: 1,
+  /** On the road. It pays when it gets back, not when it left. */
+  Rolling: 2,
+} as const;
+
+export type ContractPhase = (typeof ContractPhase)[keyof typeof ContractPhase];
+
+/**
+ * A standing contract: what to ship, how much per run, and where the truck says it is going.
+ *
+ * **LOGISTICS, NEVER PRICE.** Locked decision 3 and plan §8's cut-forever list mean there is no
+ * price field here and there never will be — a run is worth `listPriceCents(item) × quantity`,
+ * the same as the same goods carried to the bin by hand. Nothing in this shape can express a
+ * bonus, a discount, a negotiation, or a counterparty, and that is the shape doing the work: a
+ * future contributor who wants volume pricing has to add a field to this interface to get it,
+ * which is exactly the friction plan §3's anti-double-dip rule buys in `TechNode`.
+ *
+ * Contracts live in a flat `WorldState.contracts` sorted by id rather than inside the depot they
+ * belong to, for the reason belt items do not live on tiles: `CancelContract` names one by id,
+ * and a nested list means every lookup is two loops and every id is only unique within a parent.
+ */
+export interface Contract {
+  id: number;
+  /** The depot fulfilling this route. A contract with no depot is deleted, never orphaned. */
+  depotId: number;
+  item: ItemId;
+  /** Goods one run ships. 1..`CONTRACT_MAX_QUANTITY`, chosen once and never renegotiated. */
+  quantityPerRun: number;
+  /**
+   * The name on the truck door. **FLAVOUR, AND NOT HASHED** — see the note in `hash.ts`.
+   *
+   * It is stored because the projection publishes it and a label that vanished on reload would
+   * be worse than no label, but it has no mechanical effect of any kind: every destination pays
+   * exactly list and every run takes exactly as long. The day a destination gains a distance or
+   * a premium it stops being flavour, moves into `data.ts` as an id, and goes into the digest
+   * that same day.
+   */
+  destination: string;
+  /** Goods accumulated toward the next run. Counted at list by `computeNetWorthCents`. */
+  stocked: number;
+  /**
+   * Goods on the truck right now, or 0.
+   *
+   * **THIS FIELD IS WHY LOADING A TRUCK DOES NOT DIP NET WORTH** (plan §6). Stock leaves
+   * `stocked` and arrives here in the same tick, at the same list price, so the one number every
+   * board is read off does not move at dispatch — it moves when the money arrives, which is when
+   * something actually happened.
+   */
+  inTransit: number;
+  phase: ContractPhase;
+  /** Ticks left in the current phase. Zero while `Waiting`, which has no clock. */
+  ticksRemaining: number;
+  /** Completed runs, lifetime. A run completes when the truck is back, not when it left. */
+  runsCompleted: number;
+  /** Cents this route has grossed, lifetime. */
+  grossCents: number;
+}
+
 /** One entry of the append-only input trace. */
 export interface TraceEntry {
   tick: number;
@@ -651,6 +757,16 @@ export interface WorldState {
    * every edit by `rebuildNetworks()`, never per tick.
    */
   networks: PipeNetwork[];
+
+  /**
+   * Standing contracts, sorted ascending by id.
+   *
+   * Flat rather than nested inside their depots — see `Contract`. A depot's routes are
+   * `contractsForDepot()` in `commerce.ts`, which is a filtered scan over a list that will never
+   * be longer than `DEPOT_MAX_CONTRACTS` times the number of depots on the lot.
+   */
+  contracts: Contract[];
+  nextContractId: number;
 
   /**
    * One-shot celebrations this world has already played, sorted.
@@ -733,6 +849,8 @@ export function createWorld(seed: number): WorldState {
     pipes: [],
     nextPipeId: 1,
     networks: [],
+    contracts: [],
+    nextContractId: 1,
     ceremonies: [],
     unlocked: [],
     streams: {},
@@ -825,6 +943,9 @@ export function spawnMachine(
     scanCursor: 0,
     wateredCount: 0,
     skippedCount: 0,
+    cargoItem: 0,
+    cargoCount: 0,
+    runTicksRemaining: 0,
   };
   state.nextMachineId += 1;
   // Ids only increase, so appending keeps the array sorted by id.
@@ -895,6 +1016,17 @@ export const CeremonyId = {
    * THIS moment, and it was the only one of the three that could not be marked.
    */
   Sprinkler: 'sprinkler-first-run',
+  /**
+   * **THE FIRST TRUCK HONKS TWICE.** Plan §3's Hall of Hands names this one by example, beside
+   * the sprinklers popping on down the rows — it is one of the two ceremonies the design itself
+   * wrote down, and it is the fourth customer of a one-shot built in v0.1 for exactly this.
+   *
+   * Marked on the tick a truck leaves the dock, not on the tick a route is signed and not on the
+   * tick it comes back: the horn belongs to the departure. A **cart** deliberately does not mark
+   * it — a cart is not a truck, and giving the assisted rung the automated rung's moment would
+   * spend the ceremony before the thing it is celebrating exists.
+   */
+  FirstTruck: 'truck-first-departure',
 } as const;
 
 export type CeremonyId = (typeof CeremonyId)[keyof typeof CeremonyId];
@@ -971,6 +1103,21 @@ export function spawnZone(state: WorldState, crop: CropId): Zone {
 /** Clip rather than reject: a long name is a typo, not a reason to eat the command. */
 export function clipZoneName(name: string): string {
   return name.length <= ZONE_NAME_MAX_LENGTH ? name : name.slice(0, ZONE_NAME_MAX_LENGTH);
+}
+
+/** Same rule for the name on a truck door, for the same reason. */
+export function clipDestination(name: string): string {
+  return name.length <= DESTINATION_MAX_LENGTH ? name : name.slice(0, DESTINATION_MAX_LENGTH);
+}
+
+/** A contract by id, or `null`. Sorted ascending, so the scan stops early on a miss. */
+export function contractById(state: WorldState, id: number): Contract | null {
+  for (let i = 0; i < state.contracts.length; i++) {
+    const contract = state.contracts[i]!;
+    if (contract.id === id) return contract;
+    if (contract.id > id) return null;
+  }
+  return null;
 }
 
 // --- streams ----------------------------------------------------------------------
@@ -1568,6 +1715,22 @@ export function computeNetWorthCents(state: WorldState): number {
     for (let j = 0; j < spec.inputs.length; j++) {
       total += listPriceCents(spec.inputs[j]!.item) * (machine.inputCounts[j] ?? 0);
     }
+    // A cart's cargo, standing in the yard or halfway to town. Plan §6: goods in transit are
+    // still the player's inventory, and a board that dropped them for the length of a run would
+    // record a loss at dispatch and a windfall on arrival — neither of which happened.
+    if (machine.cargoItem !== 0) {
+      total += listPriceCents(machine.cargoItem) * machine.cargoCount;
+    }
+  }
+
+  // A depot's floor and its trucks. Both at list, and both for the same reason the cart's cargo
+  // is: stock that came off a belt has been counted at list since the moment the Bagger made it,
+  // and moving it into a shed and then onto a lorry must not be the two most expensive
+  // decisions in the game. THIS IS WHAT MAKES "loading a truck does not dip net worth" TRUE —
+  // `stocked` falls by exactly what `inTransit` rises by, at one price, inside one tick.
+  for (let i = 0; i < state.contracts.length; i++) {
+    const contract = state.contracts[i]!;
+    total += listPriceCents(contract.item) * (contract.stocked + contract.inTransit);
   }
 
   for (let i = 0; i < state.belts.length; i++) {

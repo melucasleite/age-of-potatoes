@@ -57,6 +57,17 @@ export interface WorldStats {
   itemsHarvestedByHand: number;
 
   /**
+   * Gross that left the lot on a cart or a truck rather than in the player's hands, in cents.
+   *
+   * A SUBSET OF `lifetimeEarnedCents`, NEVER A SECOND LEDGER. Every delivery adds to both, in
+   * one function (`payForDelivery` in `commerce.ts`), for the same reason `repairKitSpendCents`
+   * sits beside `lifetimeSpentCents` rather than replacing part of it: the total has to stay the
+   * total, and the question this answers — how much of my income do I no longer carry by hand —
+   * is not one you can ask a single number. The Dispatch panel's header is read off it.
+   */
+  automatedGrossCents: number;
+
+  /**
    * Inputs a worn machine swallowed and produced nothing from. The Shift Report's waste row
    * (plan §6) reads this, and it is the number that makes neglect cost margin rather than
    * progress — the potato is gone, the line is not.
@@ -114,6 +125,7 @@ export function createStats(): WorldStats {
     itemsSold: 0,
     itemsProducedByMachine: 0,
     itemsHarvestedByHand: 0,
+    automatedGrossCents: 0,
     inputsWastedByMachine: 0,
     repairKitsUsed: 0,
     repairKitSpendCents: 0,

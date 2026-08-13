@@ -186,6 +186,11 @@ export function hashStateUint32(state: WorldState): number {
     d.num(machine.scanCursor);
     d.num(machine.wateredCount);
     d.num(machine.skippedCount);
+    // The cart's three. Zero on every machine that is not one, and counted anyway — a field
+    // skipped when it is zero is a field whose absence and whose zero encode the same bytes.
+    d.num(machine.cargoItem);
+    d.num(machine.cargoCount);
+    d.num(machine.runTicksRemaining);
     d.num(machine.ports.length);
     for (let j = 0; j < machine.ports.length; j++) {
       const port = machine.ports[j]!;
@@ -238,6 +243,38 @@ export function hashStateUint32(state: WorldState): number {
     d.num(network.supplyMl);
     d.num(network.demandMl);
     d.num(network.deliveredMl);
+  }
+
+  // Standing contracts, already sorted ascending by id.
+  //
+  // **`destination` IS DELIBERATELY NOT IN HERE, AND IT IS THE ONLY STORED STRING IN THE WORLD
+  // THAT IS NOT.** A zone's name is hashed — the comment on `Zone.name` says "cosmetic, and
+  // hashed anyway" — so this is a real exception and it needs a real reason. A zone name is
+  // something the player typed and can change with a command of its own; a destination is picked
+  // by the client off a table the client owns, has no mechanical effect of any kind, and cannot
+  // be edited once signed. Two lots shipping the same chips on the same schedule to two
+  // differently-named towns are the same world, and the digest says so.
+  //
+  // **THE TRAP THIS SETS, stated so the next person does not fall in it:** the day a destination
+  // gains a distance, a premium, or anything else a rule reads, it stops being flavour — and it
+  // must move into `data.ts` as an id and into this block on that same day. A cosmetic field
+  // that quietly grew a mechanic is a desync nothing would catch, because the fixtures would all
+  // still pass.
+  d.text('contracts');
+  d.num(state.contracts.length);
+  d.num(state.nextContractId);
+  for (let i = 0; i < state.contracts.length; i++) {
+    const contract = state.contracts[i]!;
+    d.num(contract.id);
+    d.num(contract.depotId);
+    d.num(contract.item);
+    d.num(contract.quantityPerRun);
+    d.num(contract.stocked);
+    d.num(contract.inTransit);
+    d.num(contract.phase);
+    d.num(contract.ticksRemaining);
+    d.num(contract.runsCompleted);
+    d.num(contract.grossCents);
   }
 
   // Already sorted in `WorldState`. A ceremony that has played is a fact about the world, and
@@ -344,6 +381,7 @@ export function hashStateUint32(state: WorldState): number {
   d.num(stats.itemsSold);
   d.num(stats.itemsProducedByMachine);
   d.num(stats.itemsHarvestedByHand);
+  d.num(stats.automatedGrossCents);
   d.num(stats.inputsWastedByMachine);
   d.num(stats.repairKitsUsed);
   d.num(stats.repairKitSpendCents);
@@ -451,6 +489,19 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].investedCents`, machine.investedCents);
     check(`machines[${i}].flowMlPerMinute`, machine.flowMlPerMinute);
     check(`machines[${i}].scanCursor`, machine.scanCursor);
+    check(`machines[${i}].cargoCount`, machine.cargoCount);
+    check(`machines[${i}].runTicksRemaining`, machine.runTicksRemaining);
+  }
+
+  // Counts and a countdown, all of which are integers by construction — and cents, which are the
+  // kind of number that goes fractional the moment somebody divides one without flooring.
+  for (let i = 0; i < state.contracts.length; i++) {
+    const contract = state.contracts[i]!;
+    check(`contracts[${i}].quantityPerRun`, contract.quantityPerRun);
+    check(`contracts[${i}].stocked`, contract.stocked);
+    check(`contracts[${i}].inTransit`, contract.inTransit);
+    check(`contracts[${i}].ticksRemaining`, contract.ticksRemaining);
+    check(`contracts[${i}].grossCents`, contract.grossCents);
   }
 
   // Millilitres are integers. If one of these ever goes fractional, the bug is a rate that
@@ -501,6 +552,7 @@ export function findNonIntegerFields(state: WorldState): string[] {
   check('stats.ticksElapsed', stats.ticksElapsed);
   check('stats.lifetimeEarnedCents', stats.lifetimeEarnedCents);
   check('stats.lifetimeSpentCents', stats.lifetimeSpentCents);
+  check('stats.automatedGrossCents', stats.automatedGrossCents);
   check('stats.waterDrawnMl', stats.waterDrawnMl);
   check('stats.repairKitSpendCents', stats.repairKitSpendCents);
   check('stats.netWorthCents', stats.netWorthCents);

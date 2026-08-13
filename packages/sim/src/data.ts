@@ -127,6 +127,8 @@ export const ItemId = {
   BoxedBottler: 44,
   BoxedSixPacker: 45,
   BoxedComboPacker: 46,
+  BoxedDeliveryCart: 47,
+  BoxedTruckDepot: 48,
 } as const;
 
 export type ItemId = (typeof ItemId)[keyof typeof ItemId];
@@ -169,6 +171,13 @@ export const MachineKind = {
   Bottler: 19,
   SixPacker: 20,
   ComboPacker: 21,
+
+  // Selling, above the roadside stand. Plan §3's ladder runs manual → assisted → automated for
+  // every system in the game, and selling was the one column that stopped at the first rung.
+  /** The assisted rung: you fill it, you send it, it comes back with the money. */
+  DeliveryCart: 22,
+  /** The automated rung: belt-fed, contract-driven, and it never needs you again. */
+  TruckDepot: 23,
 } as const;
 
 export type MachineKind = (typeof MachineKind)[keyof typeof MachineKind];
@@ -571,6 +580,8 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.BoxedBottler, slug: 'boxed-bottler', ...BOXED },
   { id: ItemId.BoxedSixPacker, slug: 'boxed-six-packer', ...BOXED },
   { id: ItemId.BoxedComboPacker, slug: 'boxed-combo-packer', ...BOXED },
+  { id: ItemId.BoxedDeliveryCart, slug: 'boxed-delivery-cart', ...BOXED },
+  { id: ItemId.BoxedTruckDepot, slug: 'boxed-truck-depot', ...BOXED },
 ];
 
 /**
@@ -604,6 +615,8 @@ export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly
     { kind: MachineKind.Bottler, item: ItemId.BoxedBottler },
     { kind: MachineKind.SixPacker, item: ItemId.BoxedSixPacker },
     { kind: MachineKind.ComboPacker, item: ItemId.BoxedComboPacker },
+    { kind: MachineKind.DeliveryCart, item: ItemId.BoxedDeliveryCart },
+    { kind: MachineKind.TruckDepot, item: ItemId.BoxedTruckDepot },
   ];
 
 /** The boxed item a machine kind goes into, or `null` for a kind that has no box. */
@@ -983,6 +996,14 @@ export const MachineRole = {
   PipedSprinkler: 5,
   /** Reclaims Washer graywater into a TANK, never into a network (plan §5, and see below). */
   Recirculator: 6,
+
+  // Selling. Both roles hold goods and run a round-trip timer, and NEITHER has a work cycle:
+  // `workPerOperation` is 0, so nothing here wears, jams, overcooks, or takes a dial. A vehicle
+  // is a container with a clock, and every rule about machines that turn is silent on it.
+  /** Loaded by hand, dispatched by hand, pays on return. Assisted, never automatic. */
+  DeliveryCart: 7,
+  /** Takes goods off a belt and ships them under a standing contract. No hands at all. */
+  TruckDepot: 8,
 } as const;
 
 export type MachineRole = (typeof MachineRole)[keyof typeof MachineRole];
@@ -1884,6 +1905,75 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     coverageRadiusTiles: 0,
     moistureSensing: false,
   },
+  {
+    // The assisted rung of plan §3's selling ladder, and priced exactly where the barrel
+    // sprinkler sits on the watering one: **$100, and no research at all**. That parallel is the
+    // argument. The can is free forever and the $150 sprinkler is the first thing that does a
+    // chore for you without a tech tree in the way; the bin is free forever and this is the same
+    // step for selling. A cart behind a research gate would leave the middle rung of the ladder
+    // empty for the whole of era 1, which is precisely the stretch it exists to soften.
+    //
+    // It has no work cycle, so it never wears and never takes a dial: `wearPerOperation` is 0
+    // rather than 1 because a cart completes no operations — `advanceCommerce` counts ticks, not
+    // work-points — and a 1 there would be a number nothing could ever read.
+    kind: MachineKind.DeliveryCart,
+    slug: 'delivery-cart',
+    role: MachineRole.DeliveryCart,
+    tilesWide: 1,
+    tilesHigh: 1,
+    priceCents: 10_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    // Its cargo hold is `CART_CAPACITY`, not `inputCapacity`: a cart holds ONE product per run
+    // in `machine.cargoItem`/`cargoCount`, which is a different shape from a recipe's parallel
+    // per-line buffers. Leaving these at zero keeps `effectiveInputCapacity` from ever being
+    // asked a question about a vehicle.
+    inputCapacity: 0,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: null,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // The automated rung. $400 and the Trucking node — dearer than any single machine on the
+    // chip line, because what it buys is not throughput but the end of a chore, and plan §3
+    // prices the automated rung of every ladder above the assisted one it replaces.
+    //
+    // 2×2 rather than 1×1: it is the only thing on the lot that a truck reverses into, and it
+    // has to be worth walking around. The footprint is also what makes belt-feeding legible —
+    // a grabber needs a tile of it to aim at.
+    kind: MachineKind.TruckDepot,
+    slug: 'truck-depot',
+    role: MachineRole.TruckDepot,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 40_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    inputCapacity: 0,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.Trucking,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
 ];
 
 export function machineSpec(kind: MachineKind): MachineSpec | null {
@@ -2231,6 +2321,114 @@ export function deedPriceCents(purchaseIndex: number): number {
   return DEED_PRICE_CENTS_BY_PURCHASE[purchaseIndex] ?? -1;
 }
 
+// --- selling above the roadside stand ---------------------------------------------
+//
+// Plan §3's ladder for selling: carry to the stand → load a cart and send it → a belt-fed depot
+// on standing contracts. The manual rung is a gift the world starts with and never rots (§1);
+// these are the two above it.
+//
+// A CONTRACT CHOOSES LOGISTICS AND NEVER PRICE. Locked decision 3 fixes prices as stable and
+// posted and §8 cuts fluctuating markets forever, so there is no price, bonus, premium, or
+// volume discount anywhere in this section. A route says *what* to ship and *how much per run*.
+// Every payout below is `listPriceCents(item) × count`, which is the same arithmetic the sell
+// bin does — the money is identical at the bin, on a cart, and on a truck, and that is the
+// point rather than a simplification.
+
+/**
+ * The road, as a tile column: **x = 0, the lot's west edge.**
+ *
+ * THE ROAD IS WHERE THE DESIGN ALREADY PUT IT. Plan §1 opens on "a weedy roadside lot" and
+ * `createWorld` stands the roadside stand at `FIELD_ORIGIN_X - 2` — x = 2, two tiles west of the
+ * field and hard against this edge. Nothing else in the world is a road, and this is the column
+ * the one existing piece of commerce furniture was placed against.
+ *
+ * IT IS THE WEST EDGE RATHER THAN THE SELL BIN, and the reason is that a rule must not be
+ * gameable. `MachineKind.SellBin` costs nothing and is refused no tech, so "distance to the
+ * nearest bin" would be zero for the price of dropping a second bin beside the depot — a
+ * one-click way to delete the haul. An edge of the map cannot be moved, bought, or duplicated.
+ */
+export const ROAD_EDGE_TILE_X = 0;
+
+/**
+ * How much longer a run takes per tile of distance from the road, in ticks.
+ *
+ * THIS IS THE ANSWER TO "WHAT DOES DISTANCE MEAN ON A 64×64 MAP". Before land deeds the lot was
+ * sixteen tiles wide and haulage distance was not a decision anybody could make; now the far
+ * parcels are 48 tiles further out, and a depot's placement is worth thinking about. Ten ticks
+ * a tile is half an active second: a depot hard against the road adds nothing, one on the east
+ * edge adds 630 ticks — about doubling a truck's round trip — so "put the depot near the road"
+ * is a real layout consideration that a player can see on the progress track without being told.
+ *
+ * Measured on the vehicle's own `tileX` and nothing else. There is deliberately no path, no
+ * route, and no pathfinding: see `runTicksFor` in `commerce.ts` for why the journey happens off
+ * the map entirely and therefore crosses nobody's land.
+ */
+export const RUN_TICKS_PER_TILE_FROM_ROAD = 10;
+
+/**
+ * A cart's round trip at the roadside, in ticks — thirty active seconds before distance.
+ *
+ * Long enough that dispatching is a decision and not a click you spam, short enough that a
+ * player who loads twenty bags sees the money inside the same visit to the yard.
+ */
+export const CART_RUN_BASE_TICKS = 30 * TICKS_PER_SECOND;
+
+/** How many goods one cart holds. One product per run — see `Machine.cargoItem`. */
+export const CART_CAPACITY = 20;
+
+/**
+ * A truck's round trip at the roadside, in ticks — forty-five active seconds before distance.
+ *
+ * SLOWER PER TRIP AND FASTER PER GOOD, which is what makes it the rung above the cart rather
+ * than a reskin of it. A cart moves 20 goods in ~620 ticks; a truck moves up to 100 in ~1,000,
+ * so the depot wins on throughput as well as on hands — and it should, because it costs four
+ * times as much and sits behind a research node.
+ */
+export const DEPOT_RUN_BASE_TICKS = 45 * TICKS_PER_SECOND;
+
+/**
+ * How long a truck stands at the depot with its engine running before it leaves, in ticks.
+ *
+ * FIVE SECONDS EXISTS SO THE DEPARTURE IS A MOMENT. Plan §3's Hall of Hands promises the first
+ * truck honks twice, and a ceremony needs the truck to still be at the dock when the horn
+ * sounds — a run that went from "stock full" to "gone" inside one tick would leave the renderer
+ * theatre nothing to play over. It is also the phase the panel labels "loading", which is the
+ * only visible difference between a route that is about to go and one that is waiting on stock.
+ */
+export const DEPOT_LOAD_TICKS = 5 * TICKS_PER_SECOND;
+
+/**
+ * How many goods one depot holds across all of its routes, awaiting a run.
+ *
+ * ONE NUMBER FOR THE WHOLE DEPOT rather than a per-contract allowance, because that is the
+ * building: a shed with a floor. Two routes competing for the same floor is a legible
+ * consequence a player can watch happen, whereas a per-route allowance would make the depot's
+ * total capacity a function of how many routes had been signed, which is a number nothing on
+ * screen could explain.
+ *
+ * Deliberately larger than the biggest run so a belt keeps filling while a truck is out — a
+ * depot that stalled its own inputs for the length of every journey would make the automated
+ * rung *slower* than the assisted one.
+ */
+export const DEPOT_STOCK_CAPACITY = 200;
+
+/** Routes one depot may hold at once. Bounds the state; four products is a full yard. */
+export const DEPOT_MAX_CONTRACTS = 4;
+
+/**
+ * The most a single run may be written for. The panel offers 10/25/50/100.
+ *
+ * A ceiling rather than a fixed set, so the reducer refuses on a rule the client cannot argue
+ * with while the client stays free to offer whatever round numbers read well.
+ */
+export const CONTRACT_MAX_QUANTITY = 100;
+
+/**
+ * Longest destination label the sim will store. Longer names are clipped, never rejected —
+ * exactly as `ZONE_NAME_MAX_LENGTH` handles a zone's name.
+ */
+export const DESTINATION_MAX_LENGTH = 24;
+
 /**
  * One fixed 8×8 field (plan §16.4), inside the starting parcel and staying there.
  *
@@ -2390,6 +2588,14 @@ function balanceDigest(): string {
   h = fnv1aString(
     h,
     `${PARCEL_TILES}:${PARCELS_WIDE}x${PARCELS_HIGH}:${STARTING_PARCEL}:${DEED_PRICE_CENTS_BY_PURCHASE.join('|')}`,
+  );
+  // Selling above the stand. Run durations are the load-bearing half: a saved world can hold a
+  // cart or a truck mid-journey, and a build that shortened the trip would describe that world's
+  // in-flight timer as a different fraction of a run than the build that wrote it. The road's
+  // column rides along because it is the origin every one of those durations is measured from.
+  h = fnv1aString(
+    h,
+    `${ROAD_EDGE_TILE_X}:${RUN_TICKS_PER_TILE_FROM_ROAD}:${CART_RUN_BASE_TICKS}:${CART_CAPACITY}:${DEPOT_RUN_BASE_TICKS}:${DEPOT_LOAD_TICKS}:${DEPOT_STOCK_CAPACITY}:${DEPOT_MAX_CONTRACTS}:${CONTRACT_MAX_QUANTITY}:${DESTINATION_MAX_LENGTH}`,
   );
   return fnv1aToHex(h);
 }

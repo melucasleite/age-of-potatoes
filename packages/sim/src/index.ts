@@ -286,9 +286,44 @@ export {
 } from './zones';
 export type { TileRect, ZoneCounts } from './zones';
 
+// --- selling above the roadside stand ----------------------------------------------
+export {
+  CART_CAPACITY,
+  CART_RUN_BASE_TICKS,
+  CONTRACT_MAX_QUANTITY,
+  DEPOT_LOAD_TICKS,
+  DEPOT_MAX_CONTRACTS,
+  DEPOT_RUN_BASE_TICKS,
+  DEPOT_STOCK_CAPACITY,
+  DESTINATION_MAX_LENGTH,
+  ROAD_EDGE_TILE_X,
+  RUN_TICKS_PER_TILE_FROM_ROAD,
+} from './data';
+export {
+  advanceCommerce,
+  cartRoomFor,
+  cartRunTicks,
+  contractItemLegal,
+  contractQuantityLegal,
+  depotAccept,
+  depotContractCount,
+  depotHasContractRoom,
+  depotRouteFor,
+  depotRunTicks,
+  depotStockedCount,
+  isCart,
+  isCartAway,
+  isDepot,
+  refundContract,
+  releaseDepotContracts,
+  removeContractById,
+  runTicksFor,
+} from './commerce';
+
 // --- world state ------------------------------------------------------------------
 export {
   CeremonyId,
+  ContractPhase,
   Direction,
   INTENT_ACTIONS,
   IntentAction,
@@ -337,6 +372,8 @@ export {
   removeItem,
   removeZone,
   rotateDirectionClockwise,
+  clipDestination,
+  contractById,
   spawnBelt,
   spawnGrabber,
   spawnMachine,
@@ -355,6 +392,7 @@ export type {
   Belt,
   BeltItem,
   BoxedMachine,
+  Contract,
   CropTile,
   Grabber,
   InventorySlot,
@@ -375,11 +413,15 @@ export { appendTrace } from './commands';
 export type {
   BuyDeedCommand,
   BuyItemCommand,
+  CancelContractCommand,
   Command,
   CommandType,
+  CreateContractCommand,
   CreateZoneCommand,
   DeconstructMachineCommand,
+  DispatchCartCommand,
   HarvestTileCommand,
+  LoadCartCommand,
   LoadMachineCommand,
   MoveMachineCommand,
   PaintZoneCommand,
@@ -495,6 +537,10 @@ export { LampState, createWorldView, growthStage, inspectTile, view } from './vi
 export type {
   BeltView,
   BoxedMachineView,
+  CartView,
+  CommerceView,
+  ContractView,
+  DepotView,
   FieldView,
   GrabberView,
   InventoryView,

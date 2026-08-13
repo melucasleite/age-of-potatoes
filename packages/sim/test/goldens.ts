@@ -34,6 +34,18 @@ export interface GoldenFixture {
   ticks: number;
   /** The hash `replayHash()` must produce. Rewritten only by `yarn goldens:regen`. */
   expectedHash: string;
+  /**
+   * The tick after which this fixture applies no further commands, for the one fixture whose
+   * point is what happens when nobody touches anything.
+   *
+   * Present only on `depot-run`. It is not derivable from `commands` — the last command's tick
+   * is where the player stopped *issuing*, not where the world went quiet, and `depot-run`
+   * deliberately waits for a cart to come home after its final command so that the hands-off
+   * window contains only automated money. `factory.test.ts` replays to here and then steps the
+   * rest with an empty command list, which is what makes "zero manual touches across a depot
+   * run" a thing a test can assert rather than a thing a comment can claim.
+   */
+  handsOffFromTick?: number;
   /** Ascending by tick. Ties keep array order, which is application order. */
   commands: FixtureCommand[];
 }
@@ -58,6 +70,7 @@ export const FIXTURE_NAMES = [
   'soda-line',
   'rotate-and-box',
   'land-deeds',
+  'depot-run',
 ] as const;
 
 export type FixtureName = (typeof FIXTURE_NAMES)[number];
@@ -91,6 +104,10 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   UpgradeMachine: true,
   ResearchTech: true,
   BuyDeed: true,
+  LoadCart: true,
+  DispatchCart: true,
+  CreateContract: true,
+  CancelContract: true,
   PlaceBelt: true,
   RemoveBelt: true,
   PlaceGrabber: true,

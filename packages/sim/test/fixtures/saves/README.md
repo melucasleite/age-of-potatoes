@@ -19,6 +19,22 @@ looked like, and the code that wrote it will be long gone.
 | `format-7.json` | 7      | 2026-08-12, `v0.4.0` | Seed 24680, tick 48792. The first save with boxed machines in it, caught holding **two boxes of one item id at two different invoices**: a bare Chip Kitchen and a Speed-2/Capacity-1 one worn to 853 condition, in one slot, in canonical least-invested-first order. A Washer stands beside them part-way through an operation and a grabber faces west, three presses round from where it was placed.                            |
 | `format-8.json` | 8      | 2026-08-13, `v0.4.0` | Seed 480480, tick 6721. The first save with **bought land** in it: two parcels owned, and a Chip Kitchen mid-operation plus a Sprinkler standing east of tile 16 — ground that did not exist to build on in format 7. Caught with two potatoes in the kitchen's hopper and six bags in its buffer.                                                                                                                                  |
 
+| `format-9.json` | 9 | 2026-08-13, `v0.4.0` | Seed 320480, tick 17,949. The first save with **vehicles** in it, caught at a moment that exists for about two hundred ticks in the world's whole history: a delivery cart 212 ticks from home with eight bags aboard, a truck that left the depot moments ago with five more, one bag already on the depot floor for the next run — and **not a penny of it paid yet**. |
+
+`format-9.json` was recorded by replaying the `depot-run` golden fixture to tick 17,949 and
+calling `serialize()`. The moment is the entire point of the file: `cargoCount`,
+`runTicksRemaining`, `Contract.inTransit` and `Contract.phase` are all zero whenever nothing is
+moving, so a save taken with the yard at rest would round-trip perfectly and prove nothing at all
+about the format it was written for. `automatedGrossCents` is still 0 at this instant, which is
+what makes the net-worth assertion beside it mean something: fourteen bags are somewhere between
+a shed and a town, none of them are cash, and the books have to be carrying all fourteen.
+
+It also caught a real bug on its first run. `MACHINE_KINDS` in `canonical.ts` is a hand-written
+allowlist rather than a map over `MACHINE_SPECS` — deliberately, because an id space is permanent
+save surface and deriving the guard from today's table would mean a kind retired in 2029 silently
+stops loading. The cost of writing it down is that it can go out of date, and it had: the loader
+refused every save with a delivery cart in it. There is now a test for exactly that.
+
 `format-1.json` was produced by driving `step()` through a scripted play session — plant,
 water, harvest, walk, sell, buy the sprinkler, feed the kitchen — and calling `serialize()`
 on the result. It is a save the real code path wrote, not a payload someone typed. It stops

@@ -272,6 +272,66 @@ into **Compost** on the tile, which the player can still pick up. There is no pa
 crop tile that pays zero, and there is no roll anywhere in it — a crop that wilted on a die
 roll would teach nothing.
 
+## Selling above the roadside stand
+
+Plan §3's ladder runs manual → assisted → automated for every system in the game, and selling
+was the one column that stopped at the first rung. The bin is still a gift the world starts
+with and it never rots (§1); what arrives above it is a **delivery cart** you load and dispatch
+by hand, and a **truck depot** that takes goods off a belt and ships them under **standing
+contracts** while you are three screens away.
+
+**A contract is a logistics object and never a price.** Locked decision 3 fixes prices as stable
+and posted and §8 cuts fluctuating markets forever, so a route chooses _what_ to ship and _how
+much per run_ — and there is nowhere in `Contract` to put a value. Every payout, on every route,
+is `listPriceCents(item) × count`: the same arithmetic the bin does, and identical money at the
+bin, on a cart, and on a truck. `commerce.test.ts` asserts the shape rather than the convention.
+
+**A cart load counts a `handCarry` touch and a depot sale counts nothing, and the Hands-Free
+board is unadjudicable if that ever leaks.** Plan §6's taxonomy lists "hand-carry/load/unload",
+and the cart is _fewer_ hands rather than none. Signing a route is paperwork — no touch, no
+reach check, the same shape as `ResearchTech` — because the whole point of the automated rung is
+that you never go and stand next to it again. `test/fixtures/depot-run.json` ends with **5,000
+commandless ticks** in which the money goes up and every touch counter stays exactly where it
+was; that fixture is what makes the board a thing a test can decide.
+
+**What is still not possible, said plainly:** nothing in this game harvests a crop for you, so
+"seed-to-sold with zero manual touches" is not reachable today and the fixture does not claim
+it. The kitchen's hopper is filled by hand immediately before the window opens. What is proven
+is the last link — production to money — which is the link this feature was asked for.
+
+**Goods in transit are on the books** (plan §6). A cart's cargo and a route's `stocked` and
+`inTransit` are all counted at list by `computeNetWorthCents`, and a dispatch moves goods from
+one of those columns to another at one price inside one tick — so net worth does not move when a
+truck leaves, and Peak Flow records no trough that never happened. Payment is on **arrival**,
+which is what makes that accounting load-bearing rather than decorative.
+
+**A run is an integer number of ticks and the journey happens off the map.** There is no path,
+no route, and no pathfinding: a truck leaves the lot for a town that is not simulated, so
+nothing about the drive crosses anybody's land. What ownership gates is the tile the vehicle
+_stands_ on, which `PlaceMachine` already refuses. Distance is one subtraction against
+`ROAD_EDGE_TILE_X` — the lot's west edge, where the design put the road and where `createWorld`
+stood the stand — at ten ticks a tile. On a 16-wide lot that was not a decision anybody could
+make; at 64 wide, a depot on the far parcel nearly doubles its own round trip, so _build near
+the road_ is a real layout question the progress bar answers without a tutorial.
+
+**Cancelling is free and hands everything back** — the floor and the lorry both, into the bag.
+Paying out the in-flight truck instead was the obvious alternative and it is an exploit: it
+deletes the run time, so sign-load-cancel-resign is the same money with the journey removed, and
+the rung whose entire selling point is never touching it again becomes the most click-intensive
+verb in the game.
+
+**The first truck honks twice** (§3's Hall of Hands, by name). `CeremonyId.FirstTruck` is marked
+on the tick a truck leaves the dock — not when the route is signed and not when it returns —
+which is why the depot has a five-second loading beat at all: a ceremony needs the truck to
+still be there when the horn sounds. A cart deliberately does not mark it. **The renderer's COPY
+table for that id is the render lane's to add.**
+
+**A depot has no recipe, so a grabber reaches it through one door.** `depotAccept` is the only
+way goods enter, and it refuses anything no route on that depot names — the arm then stalls
+holding the item, which is the same "look downstream" stall a full hopper gives. One route per
+product per depot, refused at `CreateContract`, so there is never a question of which route an
+item lands in.
+
 ## The liquid layer
 
 The physical grammar is exactly `RESERVOIR → (Pump) → pipes → [Tank] → machines`, and the
@@ -445,8 +505,10 @@ non-empty result is a bug in units, not in the hash.
 ## Saves
 
 `serialize(state)` produces a plain-JSON `SaveEnvelope`; `restoreWorld(value)` parses,
-migrates, and deserializes one. The chain is at **format 8** — land deeds, so a world records
-the parcels it owns and its pipe network ids are re-expressed on the wider map. Format 7 was
+migrates, and deserializes one. The chain is at **format 9** — selling above the stand, so a
+world carries its standing contracts as a sorted list of their own and every machine carries the
+three delivery-cart fields. Format 8 was land deeds, so a world records the parcels it owns and
+its pipe network ids are re-expressed on the wider map. Format 7 was
 deconstruct-to-inventory: a machine can come off the lot as a boxed item, so an inventory slot
 carries the boxed machines in it beside its count. Format 6 was the soda line, which made a
 recipe a list, so a machine holds one count per recipe line instead of a single `inputCount`

@@ -20,10 +20,12 @@
 import {
   BELT_ITEM_SPACING_SUBTILES,
   type ItemId,
+  MachineRole,
   beltSpec,
   grabberSpec,
   machineSpec,
 } from './data';
+import { depotAccept } from './commerce';
 import {
   type Belt,
   type Grabber,
@@ -227,6 +229,15 @@ function grabberPlace(state: WorldState, grabber: Grabber): boolean {
   if (machine !== null) {
     const machineSpecFor = machineSpec(machine.kind);
     if (machineSpecFor === null) return false;
+    // A DEPOT HAS NO RECIPE, SO IT NEEDS ITS OWN DOOR. Every other destination in this function
+    // is a recipe line, and a depot's contents are decided by the routes the player signed
+    // rather than by a spec — so the one branch here hands off to `commerce.ts` rather than
+    // teaching this file what a contract is. It refuses when no route on that depot names the
+    // item, or when the floor is full, and the arm then stands there holding it: the same
+    // "look downstream" stall as a full hopper, saying the same thing about the same mistake.
+    if (machineSpecFor.role === MachineRole.TruckDepot) {
+      return depotAccept(state, machine, grabber.held as ItemId);
+    }
     // An arm puts what it is holding into the line of the recipe that wants it, and stands there
     // holding it if no line does. That is the same "look downstream" stall a blocked arm has
     // always had — a Combo Packer with a full chip hopper and an empty soda hopper takes the

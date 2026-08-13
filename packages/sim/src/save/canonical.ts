@@ -44,6 +44,7 @@ import type { RngState } from '../rng';
 import {
   type Belt,
   type BoxedMachine,
+  type Contract,
   type CropTile,
   type Grabber,
   type Machine,
@@ -56,8 +57,10 @@ import {
   type TraceEntry,
   type WorldState,
   type Zone,
+  ContractPhase,
   Direction,
   IntentAction,
+  clipDestination,
 } from '../state';
 import type { ManualTouchCounts, WorldStats } from '../stats';
 import { SaveCorruptError } from './errors';
@@ -129,6 +132,10 @@ export interface SaveMachinePort {
 export interface SaveMachine {
   blockedTicks: number;
   capacityLevel: number;
+  /** Goods on a delivery cart. 0 on every machine that is not one. */
+  cargoCount: number;
+  /** The `ItemId` on a delivery cart, or 0. One product per run. */
+  cargoItem: number;
   condition: number;
   cooldown: number;
   efficiencyLevel: number;
@@ -145,6 +152,8 @@ export interface SaveMachine {
   overcookedCount: number;
   ports: SaveMachinePort[];
   progress: number;
+  /** Ticks until a dispatched cart is back. A COUNTDOWN, never a return tick — see below. */
+  runTicksRemaining: number;
   scanCursor: number;
   skippedCount: number;
   speedLevel: number;
@@ -233,6 +242,28 @@ export interface SaveZone {
   replantCooldown: number;
 }
 
+/**
+ * One standing contract.
+ *
+ * `ticksRemaining` is a COUNTDOWN rather than the tick the truck is due back, and that is what
+ * makes closing the tab mid-run safe (plan §6: no offline progress, ever). A stored deadline
+ * would be a number measured against a clock that only advances while the world is being
+ * stepped — correct on reload by accident, and wrong the moment anything else touched `tick`.
+ */
+export interface SaveContract {
+  depotId: number;
+  destination: string;
+  grossCents: number;
+  id: number;
+  inTransit: number;
+  item: number;
+  phase: number;
+  quantityPerRun: number;
+  runsCompleted: number;
+  stocked: number;
+  ticksRemaining: number;
+}
+
 /** One RNG stream, with its system id folded in — an array entry, not a map key. */
 export interface SaveStream {
   id: string;
@@ -253,6 +284,7 @@ export interface SaveTouchCounts {
 }
 
 export interface SaveStats {
+  automatedGrossCents: number;
   inputsWastedByMachine: number;
   itemsHarvestedByHand: number;
   itemsProducedByMachine: number;
@@ -277,6 +309,8 @@ export interface SavePayload {
   belts: SaveBelt[];
   /** One-shot celebrations already played, sorted. A first time must not happen twice. */
   ceremonies: string[];
+  /** Standing contracts, sorted ascending by id. */
+  contracts: SaveContract[];
   field: SaveCropTile[];
   grabbers: SaveGrabber[];
   inventory: SaveInventorySlot[];
@@ -284,6 +318,7 @@ export interface SavePayload {
   moneyCents: number;
   networks: SavePipeNetwork[];
   nextBeltId: number;
+  nextContractId: number;
   nextGrabberId: number;
   nextMachineId: number;
   nextPipeId: number;
@@ -356,6 +391,8 @@ export function toPayload(state: WorldState): SavePayload {
     machines.push({
       blockedTicks: machine.blockedTicks,
       capacityLevel: machine.capacityLevel,
+      cargoCount: machine.cargoCount,
+      cargoItem: machine.cargoItem,
       condition: machine.condition,
       cooldown: machine.cooldown,
       efficiencyLevel: machine.efficiencyLevel,
@@ -376,6 +413,7 @@ export function toPayload(state: WorldState): SavePayload {
         throttled: port.throttled,
       })),
       progress: machine.progress,
+      runTicksRemaining: machine.runTicksRemaining,
       scanCursor: machine.scanCursor,
       skippedCount: machine.skippedCount,
       speedLevel: machine.speedLevel,
@@ -477,6 +515,24 @@ export function toPayload(state: WorldState): SavePayload {
     });
   }
 
+  const contracts: SaveContract[] = [];
+  for (let i = 0; i < state.contracts.length; i++) {
+    const contract = state.contracts[i]!;
+    contracts.push({
+      depotId: contract.depotId,
+      destination: contract.destination,
+      grossCents: contract.grossCents,
+      id: contract.id,
+      inTransit: contract.inTransit,
+      item: contract.item,
+      phase: contract.phase,
+      quantityPerRun: contract.quantityPerRun,
+      runsCompleted: contract.runsCompleted,
+      stocked: contract.stocked,
+      ticksRemaining: contract.ticksRemaining,
+    });
+  }
+
   const ceremonies: string[] = [];
   for (let i = 0; i < state.ceremonies.length; i++) ceremonies.push(state.ceremonies[i]!);
 
@@ -503,6 +559,7 @@ export function toPayload(state: WorldState): SavePayload {
   return {
     belts,
     ceremonies,
+    contracts,
     field,
     grabbers,
     inventory,
@@ -510,6 +567,7 @@ export function toPayload(state: WorldState): SavePayload {
     moneyCents: state.moneyCents,
     networks,
     nextBeltId: state.nextBeltId,
+    nextContractId: state.nextContractId,
     nextGrabberId: state.nextGrabberId,
     nextMachineId: state.nextMachineId,
     nextPipeId: state.nextPipeId,
@@ -540,6 +598,7 @@ export function toPayload(state: WorldState): SavePayload {
       ySub: state.player.ySub,
     },
     stats: {
+      automatedGrossCents: stats.automatedGrossCents,
       inputsWastedByMachine: stats.inputsWastedByMachine,
       itemsHarvestedByHand: stats.itemsHarvestedByHand,
       itemsProducedByMachine: stats.itemsProducedByMachine,
@@ -758,6 +817,8 @@ const MACHINE_KINDS: readonly number[] = [
   MachineKind.Bottler,
   MachineKind.SixPacker,
   MachineKind.ComboPacker,
+  MachineKind.DeliveryCart,
+  MachineKind.TruckDepot,
 ];
 /** `None` is not a legal liquid for a pipe: a pipe that carries nothing is not a pipe. */
 const LIQUIDS: readonly number[] = [
@@ -767,6 +828,12 @@ const LIQUIDS: readonly number[] = [
   LiquidId.CarbonatedWater,
   LiquidId.SodaSyrup,
 ];
+const CONTRACT_PHASES: readonly number[] = [
+  ContractPhase.Waiting,
+  ContractPhase.Loading,
+  ContractPhase.Rolling,
+];
+
 const BELT_TIERS: readonly number[] = [BeltTier.Basic, BeltTier.Fast, BeltTier.Express];
 const GRABBER_TIERS: readonly number[] = [GrabberTier.Mk1, GrabberTier.Mk2, GrabberTier.Long];
 /** Belts and grabbers face a compass direction. `None` is not a legal facing for either. */
@@ -891,6 +958,9 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       tileX: int(machine, 'tileX', path),
       tileY: int(machine, 'tileY', path),
       progress: int(machine, 'progress', path),
+      cargoItem: idInt(machine, 'cargoItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
+      cargoCount: int(machine, 'cargoCount', path),
+      runTicksRemaining: int(machine, 'runTicksRemaining', path),
       inputCounts: readInputCounts(machine, path, kind),
       ports: readPorts(machine, path, kind),
       outputCount: int(machine, 'outputCount', path),
@@ -960,6 +1030,37 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       deliveredMl: int(network, 'deliveredMl', path),
     });
   }
+
+  // Contracts. Validated against this build the way `ownedParcels` is rather than kept as
+  // written: a contract names an item and a phase, and both are ids this build has to be able
+  // to look up — a route for item 99 in phase 7 is not a thing that can be advanced, drawn, or
+  // paid out, so it stops here, loudly, rather than at the first tick that touches it.
+  const contractsRaw = list(p, 'contracts', 'payload');
+  const contracts: Contract[] = [];
+  for (let i = 0; i < contractsRaw.length; i++) {
+    const path = `payload.contracts[${String(i)}]`;
+    const contract = record(contractsRaw[i], path);
+    contracts.push({
+      id: int(contract, 'id', path),
+      depotId: int(contract, 'depotId', path),
+      item: idInt(contract, 'item', path, ITEM_IDS) as ItemId,
+      quantityPerRun: int(contract, 'quantityPerRun', path),
+      // Clipped rather than rejected, exactly as a zone name is: a destination is flavour, and
+      // an over-long one is a client bug that must not cost the player a route. It is also the
+      // one stored string that is not hashed — see `hash.ts`.
+      destination: clipDestination(str(contract, 'destination', path)),
+      stocked: int(contract, 'stocked', path),
+      inTransit: int(contract, 'inTransit', path),
+      phase: idInt(contract, 'phase', path, CONTRACT_PHASES) as ContractPhase,
+      ticksRemaining: int(contract, 'ticksRemaining', path),
+      runsCompleted: int(contract, 'runsCompleted', path),
+      grossCents: int(contract, 'grossCents', path),
+    });
+  }
+  // Sorted rather than trusted, like every other id-keyed list here: the order is a hashed
+  // invariant, and a file that lost it would restore a world that hashes differently from the
+  // one that was saved while being the same lot.
+  contracts.sort((a, b) => a.id - b.id);
 
   const ceremoniesRaw = list(p, 'ceremonies', 'payload');
   const ceremonies: string[] = [];
@@ -1125,6 +1226,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     itemsSold: int(statsRaw, 'itemsSold', 'payload.stats'),
     itemsProducedByMachine: int(statsRaw, 'itemsProducedByMachine', 'payload.stats'),
     itemsHarvestedByHand: int(statsRaw, 'itemsHarvestedByHand', 'payload.stats'),
+    automatedGrossCents: int(statsRaw, 'automatedGrossCents', 'payload.stats'),
     inputsWastedByMachine: int(statsRaw, 'inputsWastedByMachine', 'payload.stats'),
     repairKitsUsed: int(statsRaw, 'repairKitsUsed', 'payload.stats'),
     repairKitSpendCents: int(statsRaw, 'repairKitSpendCents', 'payload.stats'),
@@ -1162,6 +1264,8 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     pipes,
     nextPipeId: int(p, 'nextPipeId', 'payload'),
     networks,
+    contracts,
+    nextContractId: int(p, 'nextContractId', 'payload'),
     ceremonies,
     unlocked,
     streams,
