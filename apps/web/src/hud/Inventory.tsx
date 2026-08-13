@@ -83,7 +83,7 @@ export function InventoryToggle({ onOpen }: { onOpen: () => void }) {
           ? `${boxed} boxed`
           : inventory.rows.length === 0
             ? 'empty'
-            : `${inventory.rows.length} kinds`}
+            : `${inventory.rows.length} ${inventory.rows.length === 1 ? 'kind' : 'kinds'}`}
       </span>
       <span className={s.techToggleKey}>I</span>
     </button>
