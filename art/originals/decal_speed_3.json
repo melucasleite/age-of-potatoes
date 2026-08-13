@@ -1,0 +1,24 @@
+{
+  "id": "decal_speed_3",
+  "provider": "local",
+  "model": "local:local/decal_speed_3.png",
+  "seed": null,
+  "prompt": "One 32x32 speed upgrade decal, level 3 of 3 — a chrome exhaust stack on the roof, taller at level 2 and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan §3 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last — a dial the player cannot see is a dial that only half works.",
+  "promptStyle": null,
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 32,
+    "height": 32
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "decals",
+  "costUsd": 0,
+  "generatedAt": "2026-08-13T00:26:07.879Z"
+}

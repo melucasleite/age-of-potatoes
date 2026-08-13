@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.6e608d3c.png';
-export const ATLAS_JSON_URL = '/art/atlas.6e608d3c.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.a04d9b24.png';
+export const ATLAS_JSON_URL = '/art/atlas.a04d9b24.json';
 
 export const ATLAS_SIZE = { width: 512, height: 256 } as const;
 
@@ -70,6 +70,78 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'crops',
   },
+  decal_capacity_1: {
+    x: 0,
+    y: 34,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'decals',
+  },
+  decal_capacity_2: {
+    x: 33,
+    y: 34,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'decals',
+  },
+  decal_capacity_3: {
+    x: 66,
+    y: 34,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'decals',
+  },
+  decal_efficiency_1: {
+    x: 99,
+    y: 34,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'decals',
+  },
+  decal_efficiency_2: {
+    x: 132,
+    y: 34,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'decals',
+  },
+  decal_efficiency_3: {
+    x: 165,
+    y: 34,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'decals',
+  },
+  decal_speed_1: {
+    x: 198,
+    y: 34,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'decals',
+  },
+  decal_speed_2: {
+    x: 231,
+    y: 34,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'decals',
+  },
+  decal_speed_3: {
+    x: 264,
+    y: 34,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'decals',
+  },
   grabber_arm: {
     x: 34,
     y: 0,
@@ -80,7 +152,7 @@ export const ATLAS_FRAMES = {
   },
   item_chip_bag: {
     x: 0,
-    y: 34,
+    y: 67,
     width: 16,
     height: 16,
     anchor: 'center',
@@ -88,7 +160,7 @@ export const ATLAS_FRAMES = {
   },
   item_plain_chips: {
     x: 17,
-    y: 34,
+    y: 67,
     width: 16,
     height: 16,
     anchor: 'center',
@@ -96,7 +168,7 @@ export const ATLAS_FRAMES = {
   },
   item_potato: {
     x: 34,
-    y: 34,
+    y: 67,
     width: 16,
     height: 16,
     anchor: 'center',
@@ -104,7 +176,7 @@ export const ATLAS_FRAMES = {
   },
   item_potato_slices: {
     x: 51,
-    y: 34,
+    y: 67,
     width: 16,
     height: 16,
     anchor: 'center',
@@ -112,7 +184,7 @@ export const ATLAS_FRAMES = {
   },
   item_seasoned_chips: {
     x: 68,
-    y: 34,
+    y: 67,
     width: 16,
     height: 16,
     anchor: 'center',
@@ -120,7 +192,7 @@ export const ATLAS_FRAMES = {
   },
   item_washed_potato: {
     x: 85,
-    y: 34,
+    y: 67,
     width: 16,
     height: 16,
     anchor: 'center',
@@ -128,7 +200,7 @@ export const ATLAS_FRAMES = {
   },
   machine_bagger: {
     x: 0,
-    y: 51,
+    y: 84,
     width: 32,
     height: 32,
     anchor: 'bottom-center',
@@ -136,7 +208,7 @@ export const ATLAS_FRAMES = {
   },
   machine_chip_kitchen: {
     x: 33,
-    y: 51,
+    y: 84,
     width: 32,
     height: 32,
     anchor: 'bottom-center',
@@ -144,7 +216,7 @@ export const ATLAS_FRAMES = {
   },
   machine_fryer: {
     x: 66,
-    y: 51,
+    y: 84,
     width: 32,
     height: 32,
     anchor: 'bottom-center',
@@ -152,7 +224,7 @@ export const ATLAS_FRAMES = {
   },
   machine_seasoner: {
     x: 99,
-    y: 51,
+    y: 84,
     width: 32,
     height: 32,
     anchor: 'bottom-center',
@@ -160,7 +232,7 @@ export const ATLAS_FRAMES = {
   },
   machine_slicer: {
     x: 132,
-    y: 51,
+    y: 84,
     width: 32,
     height: 32,
     anchor: 'bottom-center',
@@ -168,7 +240,7 @@ export const ATLAS_FRAMES = {
   },
   machine_sprinkler: {
     x: 198,
-    y: 51,
+    y: 84,
     width: 16,
     height: 16,
     anchor: 'bottom-center',
@@ -176,7 +248,7 @@ export const ATLAS_FRAMES = {
   },
   machine_washer: {
     x: 165,
-    y: 51,
+    y: 84,
     width: 32,
     height: 32,
     anchor: 'bottom-center',
@@ -184,7 +256,7 @@ export const ATLAS_FRAMES = {
   },
   player_walk_down: {
     x: 0,
-    y: 101,
+    y: 134,
     width: 32,
     height: 16,
     anchor: 'top-left',
@@ -192,7 +264,7 @@ export const ATLAS_FRAMES = {
   },
   player_walk_side: {
     x: 33,
-    y: 101,
+    y: 134,
     width: 32,
     height: 16,
     anchor: 'top-left',
@@ -200,7 +272,7 @@ export const ATLAS_FRAMES = {
   },
   status_lamp: {
     x: 0,
-    y: 118,
+    y: 151,
     width: 4,
     height: 4,
     anchor: 'center',
@@ -208,7 +280,7 @@ export const ATLAS_FRAMES = {
   },
   tech_agronomy_cane: {
     x: 0,
-    y: 123,
+    y: 156,
     width: 32,
     height: 32,
     anchor: 'center',
@@ -216,7 +288,7 @@ export const ATLAS_FRAMES = {
   },
   tech_agronomy_chili: {
     x: 33,
-    y: 123,
+    y: 156,
     width: 32,
     height: 32,
     anchor: 'center',
@@ -224,7 +296,7 @@ export const ATLAS_FRAMES = {
   },
   tech_agronomy_corn: {
     x: 66,
-    y: 123,
+    y: 156,
     width: 32,
     height: 32,
     anchor: 'center',
@@ -232,7 +304,7 @@ export const ATLAS_FRAMES = {
   },
   tech_agronomy_seed_hopper: {
     x: 99,
-    y: 123,
+    y: 156,
     width: 32,
     height: 32,
     anchor: 'center',
@@ -240,7 +312,7 @@ export const ATLAS_FRAMES = {
   },
   tech_fabrication_fryer: {
     x: 132,
-    y: 123,
+    y: 156,
     width: 32,
     height: 32,
     anchor: 'center',
@@ -248,7 +320,7 @@ export const ATLAS_FRAMES = {
   },
   tech_fabrication_wash_and_slice: {
     x: 165,
-    y: 123,
+    y: 156,
     width: 32,
     height: 32,
     anchor: 'center',
@@ -256,7 +328,7 @@ export const ATLAS_FRAMES = {
   },
   terrain_grass: {
     x: 0,
-    y: 156,
+    y: 189,
     width: 16,
     height: 16,
     anchor: 'top-left',
@@ -264,7 +336,7 @@ export const ATLAS_FRAMES = {
   },
   terrain_soil: {
     x: 17,
-    y: 156,
+    y: 189,
     width: 16,
     height: 16,
     anchor: 'top-left',
@@ -272,7 +344,7 @@ export const ATLAS_FRAMES = {
   },
   terrain_soil_tilled: {
     x: 34,
-    y: 156,
+    y: 189,
     width: 16,
     height: 16,
     anchor: 'top-left',
@@ -280,7 +352,7 @@ export const ATLAS_FRAMES = {
   },
   zone_overlay: {
     x: 0,
-    y: 84,
+    y: 117,
     width: 16,
     height: 16,
     anchor: 'top-left',

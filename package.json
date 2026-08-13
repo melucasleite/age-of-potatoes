@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "yarn workspace @snack/web dev",
     "build": "yarn workspace @snack/web build",
-    "typecheck": "tsc --build --verbose && tsc -p packages/sim/tsconfig.test.json",
+    "typecheck": "tsc --build --verbose && tsc -p packages/sim/tsconfig.test.json && yarn workspace @snack/web typecheck",
     "lint": "yarn workspace @snack/sim lint",
     "test": "vitest run",
     "test:watch": "vitest",

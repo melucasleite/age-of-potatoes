@@ -132,6 +132,204 @@
       "anchorMode": "top-left",
       "group": "crops"
     },
+    "decal_capacity_1": {
+      "frame": {
+        "x": 0,
+        "y": 34,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "decals"
+    },
+    "decal_capacity_2": {
+      "frame": {
+        "x": 33,
+        "y": 34,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "decals"
+    },
+    "decal_capacity_3": {
+      "frame": {
+        "x": 66,
+        "y": 34,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "decals"
+    },
+    "decal_efficiency_1": {
+      "frame": {
+        "x": 99,
+        "y": 34,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "decals"
+    },
+    "decal_efficiency_2": {
+      "frame": {
+        "x": 132,
+        "y": 34,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "decals"
+    },
+    "decal_efficiency_3": {
+      "frame": {
+        "x": 165,
+        "y": 34,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "decals"
+    },
+    "decal_speed_1": {
+      "frame": {
+        "x": 198,
+        "y": 34,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "decals"
+    },
+    "decal_speed_2": {
+      "frame": {
+        "x": 231,
+        "y": 34,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "decals"
+    },
+    "decal_speed_3": {
+      "frame": {
+        "x": 264,
+        "y": 34,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "decals"
+    },
     "grabber_arm": {
       "frame": {
         "x": 34,
@@ -157,7 +355,7 @@
     "item_chip_bag": {
       "frame": {
         "x": 0,
-        "y": 34,
+        "y": 67,
         "w": 16,
         "h": 16
       },
@@ -179,7 +377,7 @@
     "item_plain_chips": {
       "frame": {
         "x": 17,
-        "y": 34,
+        "y": 67,
         "w": 16,
         "h": 16
       },
@@ -201,7 +399,7 @@
     "item_potato": {
       "frame": {
         "x": 34,
-        "y": 34,
+        "y": 67,
         "w": 16,
         "h": 16
       },
@@ -223,7 +421,7 @@
     "item_potato_slices": {
       "frame": {
         "x": 51,
-        "y": 34,
+        "y": 67,
         "w": 16,
         "h": 16
       },
@@ -245,7 +443,7 @@
     "item_seasoned_chips": {
       "frame": {
         "x": 68,
-        "y": 34,
+        "y": 67,
         "w": 16,
         "h": 16
       },
@@ -267,7 +465,7 @@
     "item_washed_potato": {
       "frame": {
         "x": 85,
-        "y": 34,
+        "y": 67,
         "w": 16,
         "h": 16
       },
@@ -289,7 +487,7 @@
     "machine_bagger": {
       "frame": {
         "x": 0,
-        "y": 51,
+        "y": 84,
         "w": 32,
         "h": 32
       },
@@ -311,7 +509,7 @@
     "machine_chip_kitchen": {
       "frame": {
         "x": 33,
-        "y": 51,
+        "y": 84,
         "w": 32,
         "h": 32
       },
@@ -333,7 +531,7 @@
     "machine_fryer": {
       "frame": {
         "x": 66,
-        "y": 51,
+        "y": 84,
         "w": 32,
         "h": 32
       },
@@ -355,7 +553,7 @@
     "machine_seasoner": {
       "frame": {
         "x": 99,
-        "y": 51,
+        "y": 84,
         "w": 32,
         "h": 32
       },
@@ -377,7 +575,7 @@
     "machine_slicer": {
       "frame": {
         "x": 132,
-        "y": 51,
+        "y": 84,
         "w": 32,
         "h": 32
       },
@@ -399,7 +597,7 @@
     "machine_sprinkler": {
       "frame": {
         "x": 198,
-        "y": 51,
+        "y": 84,
         "w": 16,
         "h": 16
       },
@@ -421,7 +619,7 @@
     "machine_washer": {
       "frame": {
         "x": 165,
-        "y": 51,
+        "y": 84,
         "w": 32,
         "h": 32
       },
@@ -443,7 +641,7 @@
     "player_walk_down": {
       "frame": {
         "x": 0,
-        "y": 101,
+        "y": 134,
         "w": 32,
         "h": 16
       },
@@ -465,7 +663,7 @@
     "player_walk_side": {
       "frame": {
         "x": 33,
-        "y": 101,
+        "y": 134,
         "w": 32,
         "h": 16
       },
@@ -487,7 +685,7 @@
     "status_lamp": {
       "frame": {
         "x": 0,
-        "y": 118,
+        "y": 151,
         "w": 4,
         "h": 4
       },
@@ -509,7 +707,7 @@
     "tech_agronomy_cane": {
       "frame": {
         "x": 0,
-        "y": 123,
+        "y": 156,
         "w": 32,
         "h": 32
       },
@@ -531,7 +729,7 @@
     "tech_agronomy_chili": {
       "frame": {
         "x": 33,
-        "y": 123,
+        "y": 156,
         "w": 32,
         "h": 32
       },
@@ -553,7 +751,7 @@
     "tech_agronomy_corn": {
       "frame": {
         "x": 66,
-        "y": 123,
+        "y": 156,
         "w": 32,
         "h": 32
       },
@@ -575,7 +773,7 @@
     "tech_agronomy_seed_hopper": {
       "frame": {
         "x": 99,
-        "y": 123,
+        "y": 156,
         "w": 32,
         "h": 32
       },
@@ -597,7 +795,7 @@
     "tech_fabrication_fryer": {
       "frame": {
         "x": 132,
-        "y": 123,
+        "y": 156,
         "w": 32,
         "h": 32
       },
@@ -619,7 +817,7 @@
     "tech_fabrication_wash_and_slice": {
       "frame": {
         "x": 165,
-        "y": 123,
+        "y": 156,
         "w": 32,
         "h": 32
       },
@@ -641,7 +839,7 @@
     "terrain_grass": {
       "frame": {
         "x": 0,
-        "y": 156,
+        "y": 189,
         "w": 16,
         "h": 16
       },
@@ -663,7 +861,7 @@
     "terrain_soil": {
       "frame": {
         "x": 17,
-        "y": 156,
+        "y": 189,
         "w": 16,
         "h": 16
       },
@@ -685,7 +883,7 @@
     "terrain_soil_tilled": {
       "frame": {
         "x": 34,
-        "y": 156,
+        "y": 189,
         "w": 16,
         "h": 16
       },
@@ -707,7 +905,7 @@
     "zone_overlay": {
       "frame": {
         "x": 0,
-        "y": 84,
+        "y": 117,
         "w": 16,
         "h": 16
       },
@@ -729,7 +927,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.6e608d3c.png",
+    "image": "atlas.a04d9b24.png",
     "format": "RGBA8888",
     "size": {
       "w": 512,
@@ -754,9 +952,17 @@
         "count": 4
       },
       {
-        "group": "items",
+        "group": "decals",
         "x": 0,
         "y": 34,
+        "width": 296,
+        "height": 32,
+        "count": 9
+      },
+      {
+        "group": "items",
+        "x": 0,
+        "y": 67,
         "width": 101,
         "height": 16,
         "count": 6
@@ -764,7 +970,7 @@
       {
         "group": "machines",
         "x": 0,
-        "y": 51,
+        "y": 84,
         "width": 214,
         "height": 32,
         "count": 7
@@ -772,7 +978,7 @@
       {
         "group": "overlay",
         "x": 0,
-        "y": 84,
+        "y": 117,
         "width": 16,
         "height": 16,
         "count": 1
@@ -780,7 +986,7 @@
       {
         "group": "player",
         "x": 0,
-        "y": 101,
+        "y": 134,
         "width": 65,
         "height": 16,
         "count": 2
@@ -788,7 +994,7 @@
       {
         "group": "status",
         "x": 0,
-        "y": 118,
+        "y": 151,
         "width": 4,
         "height": 4,
         "count": 1
@@ -796,7 +1002,7 @@
       {
         "group": "tech",
         "x": 0,
-        "y": 123,
+        "y": 156,
         "width": 197,
         "height": 32,
         "count": 6
@@ -804,7 +1010,7 @@
       {
         "group": "terrain",
         "x": 0,
-        "y": 156,
+        "y": 189,
         "width": 50,
         "height": 16,
         "count": 3
