@@ -150,6 +150,43 @@ const RECIPES: Readonly<Record<SoundId, Recipe>> = {
       { kind: 'noise', gain: 0.38, attack: 0.001, decay: 0.075, lp0: 520, lp1: 120 },
     ],
   },
+  /**
+   * The air horn on the first truck out ([[032]], [[057]]).
+   *
+   * ── WHY IT IS NOT THE JAM WITH A NEW NAME ─────────────────────────────────────────────
+   * A real air horn is two reeds sounding at once, which is also exactly what `MachineJam`
+   * below is — and that is the whole problem this recipe had to solve, because the factory's
+   * one alarm must not be its proudest moment. THREE THINGS SEPARATE THEM, and each is doing
+   * a job:
+   *
+   *   · A MAJOR THIRD, NOT A BEAT FREQUENCY. The jam's pair is 5 Hz apart, which is not an
+   *     interval at all — it is one note wobbling, and a wobble is what "wrong" sounds like.
+   *     These two are 233 and 293 Hz, a real chord, and a chord cannot be mistaken for a fault.
+   *     It is also how dual truck horns are actually tuned, so the reference costs nothing.
+   *   · IT PULLS UP TO PITCH INSTEAD OF SAGGING. The jam glides DOWN (162→138): a thing
+   *     losing power. This glides up a few Hz as the pressure arrives and then holds.
+   *   · IT OPENS WITH AIR. A short filtered hiss before the reeds speak — the valve, not the
+   *     horn — which is the detail that makes it read as pneumatic rather than as a synth.
+   *
+   * The attack is 18–26 ms rather than the ~2 ms every other sound here uses. A horn SWELLS;
+   * an instant onset is a hit, and a hit is what `MachinePlace` was standing in as.
+   */
+  [SoundId.TruckHorn]: {
+    // ~4.7 decay constants long, per `envelope`'s note: enough that the tail is gone before
+    // the buffer ends. The pair lands 400 ms apart, so consecutive blasts overlap slightly,
+    // which is what two horns on one truck do.
+    duration: 0.7,
+    layers: [
+      { kind: 'noise', gain: 0.18, attack: 0.004, decay: 0.035, hp: 1200, lp0: 6000, lp1: 3000 },
+      { kind: 'tone', wave: 'saw', f0: 226, f1: 233, gain: 0.36, attack: 0.018, decay: 0.15 },
+      { kind: 'tone', wave: 'saw', f0: 284, f1: 293, gain: 0.29, attack: 0.026, decay: 0.15 },
+      // An octave over the lower reed, quiet: what carries the horn across a lot when the
+      // camera is nowhere near the dock.
+      { kind: 'tone', wave: 'square', f0: 466, gain: 0.1, attack: 0.02, decay: 0.12 },
+      // And the chest of it, under everything. A truck is heavy.
+      { kind: 'tone', wave: 'sine', f0: 116.5, gain: 0.24, attack: 0.02, decay: 0.16 },
+    ],
+  },
   // Two detuned saws a couple of Hz apart. The beating is the unpleasantness, and it is
   // meant to be unpleasant — a jam is a thing you should want to walk over and hit.
   [SoundId.MachineJam]: {

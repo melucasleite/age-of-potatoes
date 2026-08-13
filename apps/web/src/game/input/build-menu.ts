@@ -40,12 +40,20 @@ const TECH_LABELS: Readonly<Record<string, string>> = {
   'agronomy-corn': 'Corn',
   'agronomy-chili': 'Chili',
   'agronomy-seed-hopper': 'Seed Hopper',
+  'agronomy-gold-potato': 'Gold Potato',
+  'agronomy-composting': 'Composting',
+  'agronomy-root-cellar': 'Root Cellar',
+  'agronomy-orchard': 'The Orchard',
+  'agronomy-kola-tree': 'The Kola Tree',
+  'agronomy-agri-bots': 'Agri-Bots',
+  'agronomy-planter-bot': 'The Planter Bot',
   'fabrication-wash-and-slice': 'Wash & Slice',
   'fabrication-fryer': 'The Fryer',
   'fabrication-finishing': 'Finishing',
   'logistics-belts': 'Belts',
   'logistics-belts-fast': 'Fast Belts',
   'logistics-belts-express': 'Express Belts',
+  'logistics-splitters': 'Splitters',
   'commerce-upgrade-bench': 'Upgrade Bench',
 };
 
@@ -96,6 +104,10 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   grabberEntry(ToolMode.PlaceGrabberMk1),
   grabberEntry(ToolMode.PlaceGrabberMk2),
   grabberEntry(ToolMode.PlaceGrabberLong),
+  // Last in Logistics rather than beside the belts, because it is the row that only means
+  // anything to a player who has already run a line and found out that one line is not enough —
+  // which is the same argument `TechId.Splitters` makes about sitting behind `Belts`.
+  machineEntry('Logistics', ToolMode.PlaceBeltJunction),
 
   machineEntry('Chip line', ToolMode.PlaceWasher),
   machineEntry('Chip line', ToolMode.PlaceSlicer),
@@ -105,6 +117,20 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   machineEntry('Chip line', ToolMode.PlaceChipKitchen),
 
   machineEntry('Field', ToolMode.PlaceSprinkler),
+  machineEntry('Field', ToolMode.PlaceComposter),
+  // The two docks are Field rows rather than Logistics ones, and that is a claim about what the
+  // player is shopping for: a bot is not a way of moving goods across the lot, it is a way of
+  // not walking the rows. It belongs next to the sprinkler, which is the other machine on this
+  // menu that does a chore instead of a job.
+  machineEntry('Field', ToolMode.PlaceHarvesterDock),
+  machineEntry('Field', ToolMode.PlacePlanterDock),
+
+  machineEntry('Orchard', ToolMode.PlaceOrangeTree),
+  machineEntry('Orchard', ToolMode.PlaceLemonTree),
+  machineEntry('Orchard', ToolMode.PlaceKolaTree),
+
+  machineEntry('Storage', ToolMode.PlaceHandCart),
+  machineEntry('Storage', ToolMode.PlaceRootCellar),
 
   // The one row whose price is not a constant. See `dynamicCostCents` below.
   { tool: ToolMode.BuyDeed, group: 'Land', requiresTech: null, costCents: 0, perTile: false },

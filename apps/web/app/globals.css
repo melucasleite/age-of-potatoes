@@ -8,6 +8,28 @@
   box-sizing: border-box;
 }
 
+/*
+ * THE DOM CHROME KEEPS THE SYSTEM MONOSPACE STACK. A RULING, NOT AN OVERSIGHT ([[042]], [[057]]).
+ *
+ * `snack` — the game's own font — is a 192x40 PNG of 104 monospaced cells sitting on the shared
+ * sprite atlas, built by `art/tools/make-ui-font.mjs` and turned into a Pixi `BitmapFont` by
+ * `render/font.ts`. CSS cannot address that. An `@font-face` needs a woff2/otf, and getting one
+ * out of a grid of pixels means adding a font compiler to the art pipeline and then shipping a
+ * SECOND copy of every glyph — a copy that can go stale against the atlas, in a repo whose
+ * standing complaint is second copies of one rule going stale.
+ *
+ * The disagreement it leaves behind is real and is priced: the canvas draws its text in `snack`
+ * and the DOM draws its text in whatever monospace the machine has. That seam runs between two
+ * surfaces that never sit inside each other — the canvas HUD is the game, and the DOM is the
+ * band label, the build menu, the deed signs, and the React panels around the edge. Chrome that
+ * looks like the operating system is a defensible thing for chrome to look like; a pixel font
+ * antialiased by the browser at a non-integer size, which is what a vectorised `snack` would be,
+ * is the exact shimmer `render/font.ts` exists to have removed.
+ *
+ * To overturn: emit a real font file from `make-ui-font.mjs`, then this stack becomes the
+ * fallback rather than the answer. `hud/hud.module.css` and `game/input/chrome.ts` carry the
+ * same stack and move with this one.
+ */
 html,
 body {
   margin: 0;

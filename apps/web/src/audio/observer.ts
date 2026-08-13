@@ -328,19 +328,20 @@ export class WorldObserver {
    * The first truck leaving, and the second honk it owes.
    *
    * ────────────────────────────────────────────────────────────────────────────────────
-   *  THERE IS NO HORN IN THE CATALOGUE, AND THIS DOES NOT PRETEND OTHERWISE.
+   *  IT IS A HORN NOW ([[057]]). It used to be `MachinePlace` played twice — "something heavy
+   *  meeting dirt", picked because it was the one thing in the catalogue that was not a lie
+   *  about a truck, and recorded here as a debt rather than left to look deliberate.
    *
-   *  `synth.ts` holds thirteen recipes and none of them is a truck. The nearest neighbour
-   *  timbrally is `MachineJam` — two detuned reeds beating against each other genuinely is
-   *  how an air horn works — and it is disqualified outright, because it is the sound this
-   *  game uses for SOMETHING IS BROKEN. Spending the factory's one alarm on its proudest
-   *  moment would teach the player the wrong thing on the exact frame they are paying most
-   *  attention.
+   *  `SoundId.TruckHorn` is that debt paid, and the constraint it was written against is
+   *  unchanged and still the interesting part: the nearest timbre in the game is `MachineJam`,
+   *  because two reeds beating against each other genuinely is how an air horn works — and
+   *  that is the sound this game uses for SOMETHING IS BROKEN. Spending the factory's one
+   *  alarm on its proudest moment would teach the player the wrong thing on the exact frame
+   *  they are paying most attention. See the recipe in `synth.ts` for the three things that
+   *  keep the two apart.
    *
-   *  So it is `MachinePlace`: "something heavy meeting dirt", which is not a horn but is
-   *  never a lie — a heavy vehicle moving, twice, at a loading dock. The handoff stands: a
-   *  `truck-horn` recipe belongs in `sounds.ts` and `synth.ts`, and this line changes to
-   *  name it and nothing else moves.
+   *  Nothing else about this moved: still two blasts, still `HONK_GAP_TICKS` apart, still the
+   *  second one a shade lower.
    * ────────────────────────────────────────────────────────────────────────────────────
    */
   private diffCommerce(view: WorldView, rect: WorldRect): void {
@@ -363,10 +364,10 @@ export class WorldObserver {
   private honkAt(view: WorldView, machineId: number, rect: WorldRect, rate: number): void {
     const depot = view.machines.find((m) => m.id === machineId);
     if (depot === undefined) {
-      this.emitAtPlayer(SoundId.MachinePlace, view, rect);
+      this.emitAtPlayer(SoundId.TruckHorn, view, rect);
       return;
     }
-    this.emitAtMachine(SoundId.MachinePlace, view.tick, depot, 1, rate, rect);
+    this.emitAtMachine(SoundId.TruckHorn, view.tick, depot, 1, rate, rect);
   }
 
   // --- the ensemble ---------------------------------------------------------------------

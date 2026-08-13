@@ -59,6 +59,32 @@ export const ToolMode = {
   PlaceBagger: 18,
 
   /**
+   * The splitter and the merger, which are one tile ([[056]], closing [[024]]).
+   *
+   * SIMPLER THAN THE GRABBERS AND THAT IS THE FEATURE. A junction has no facing, so there is no
+   * `placeDir` to carry, no chevron on the ghost, and nothing for R to turn: which of the two
+   * devices it is gets decided by the belts the player runs into it, on the far side of the seam.
+   * The tool is therefore an ordinary 1×1 click placement with nothing bolted on — see
+   * `MachineKind.BeltJunction` for why the sim made it that way.
+   */
+  PlaceBeltJunction: 21,
+
+  // --- the storage, orchard and bot machines ([[023]], [[030]], [[035]], [[038]]) ------
+  //
+  // EIGHT ROWS THAT ARE PURE DATA. Every one of them is an ordinary `PlaceMachine` on a
+  // footprint the sim already publishes, so nothing below this line needed a new gesture, a new
+  // command, or a branch anywhere in `pointer.ts` — which is exactly the claim `machineEntry`
+  // and `toolFootprint` were written to make, finally being cashed.
+  PlaceHandCart: 22,
+  PlaceRootCellar: 23,
+  PlaceComposter: 24,
+  PlaceOrangeTree: 25,
+  PlaceLemonTree: 26,
+  PlaceKolaTree: 27,
+  PlaceHarvesterDock: 28,
+  PlacePlanterDock: 29,
+
+  /**
    * Buy the deed to the parcel under the cursor (plan §5, [[053]]).
    *
    * IN THE BUILD PALETTE, WHERE THE THINGS YOU BUY LIVE, and it is the largest thing in it by
@@ -255,6 +281,66 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     gesture: 'click',
   },
 
+  [ToolMode.PlaceBeltJunction]: {
+    // "splits or merges" rather than "splitter", because the row cannot know which one the
+    // player is about to build — and neither can the tile until the belts arrive.
+    label: 'Belt Junction',
+    hint: 'click a tile where belts meet: it splits or merges',
+    costCents: machinePrice(MachineKind.BeltJunction),
+    gesture: 'click',
+  },
+
+  [ToolMode.PlaceHandCart]: {
+    label: 'Hand Cart',
+    hint: 'one product, parked wherever you leave it',
+    costCents: machinePrice(MachineKind.HandCart),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceRootCellar]: {
+    label: 'Root Cellar',
+    hint: 'a hundred slots, and nothing in it ever wilts',
+    costCents: machinePrice(MachineKind.RootCellar),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceComposter]: {
+    label: 'Composter',
+    hint: 'spoiled goods in, fertilizer out',
+    costCents: machinePrice(MachineKind.Composter),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceOrangeTree]: {
+    label: 'Orange Tree',
+    hint: 'plant it once — it fruits on its own forever',
+    costCents: machinePrice(MachineKind.OrangeTree),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceLemonTree]: {
+    label: 'Lemon Tree',
+    hint: 'plant it once — it fruits on its own forever',
+    costCents: machinePrice(MachineKind.LemonTree),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceKolaTree]: {
+    label: 'Kola Tree',
+    hint: 'the nut the Grinder wants, grown instead of bought',
+    costCents: machinePrice(MachineKind.KolaTree),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceHarvesterDock]: {
+    // Both docks say "point it at a zone", because a dock with no zone bound has no orders and
+    // its bot parks — which is the one thing a player who has just spent $600 must be told.
+    label: 'Harvester Dock',
+    hint: 'clear 2x2 — then point it at a zone',
+    costCents: machinePrice(MachineKind.HarvesterDock),
+    gesture: 'click',
+  },
+  [ToolMode.PlacePlanterDock]: {
+    label: 'Planter Dock',
+    hint: 'clear 2x2 — fill the hopper and point it at a zone',
+    costCents: machinePrice(MachineKind.PlanterDock),
+    gesture: 'click',
+  },
+
   [ToolMode.BuyDeed]: {
     label: 'Land Deed',
     hint: 'click a parcel next to yours to buy it',
@@ -297,6 +383,24 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       return MachineKind.Seasoner;
     case ToolMode.PlaceBagger:
       return MachineKind.Bagger;
+    case ToolMode.PlaceBeltJunction:
+      return MachineKind.BeltJunction;
+    case ToolMode.PlaceHandCart:
+      return MachineKind.HandCart;
+    case ToolMode.PlaceRootCellar:
+      return MachineKind.RootCellar;
+    case ToolMode.PlaceComposter:
+      return MachineKind.Composter;
+    case ToolMode.PlaceOrangeTree:
+      return MachineKind.OrangeTree;
+    case ToolMode.PlaceLemonTree:
+      return MachineKind.LemonTree;
+    case ToolMode.PlaceKolaTree:
+      return MachineKind.KolaTree;
+    case ToolMode.PlaceHarvesterDock:
+      return MachineKind.HarvesterDock;
+    case ToolMode.PlacePlanterDock:
+      return MachineKind.PlanterDock;
     default:
       return null;
   }
@@ -308,7 +412,7 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
  * DERIVED FROM `toolMachineKind` RATHER THAN WRITTEN OUT AGAIN, because a second switch is a
  * second switch that can disagree — and the way it would disagree is a boxed Fryer whose
  * "place" button arms the Seasoner, which is a silent, expensive, entirely plausible bug. The
- * scan is over seven entries and runs when a player clicks a row in the inventory panel, not
+ * scan is over sixteen entries and runs when a player clicks a row in the inventory panel, not
  * per frame.
  *
  * Exists for [[054]]'s inventory panel: a boxed row's place affordance arms the build tool for
@@ -330,6 +434,15 @@ const PLACEMENT_TOOLS: readonly ToolMode[] = [
   ToolMode.PlaceFryer,
   ToolMode.PlaceSeasoner,
   ToolMode.PlaceBagger,
+  ToolMode.PlaceBeltJunction,
+  ToolMode.PlaceHandCart,
+  ToolMode.PlaceRootCellar,
+  ToolMode.PlaceComposter,
+  ToolMode.PlaceOrangeTree,
+  ToolMode.PlaceLemonTree,
+  ToolMode.PlaceKolaTree,
+  ToolMode.PlaceHarvesterDock,
+  ToolMode.PlacePlanterDock,
 ];
 
 export function toolBeltTier(tool: ToolMode): BeltTier | null {

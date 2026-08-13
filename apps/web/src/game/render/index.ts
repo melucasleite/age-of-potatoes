@@ -57,6 +57,11 @@ const cameraTarget = { x: 0, y: 0 };
  * the last frame, which would make `alpha` overshoot backwards during catch-up.
  */
 export function recordTick(scene: WorldScene, view: WorldView): void {
+  // The bots fold theirs in on every tick INCLUDING the priming one, because each of them
+  // primes itself when its sprite is first built rather than sharing the scene's one flag —
+  // a bot bought on tick 40,000 has no "first tick" of its own to be primed on.
+  scene.bots.recordTick(view);
+
   if (!scene.primed) {
     scene.prevXSub = view.player.xSub;
     scene.prevYSub = view.player.ySub;
@@ -153,6 +158,9 @@ export function render(
   if (beltItemsVisible) scene.beltItems.update(view, alpha, rect);
   else scene.beltItems.clear();
   scene.grabbers.update(view, rect, nowMs);
+  // The bots go with the arms rather than with the player above, because they are factory
+  // objects that happen to walk: same `alpha`, same cull rect, same pooled-visual shape.
+  scene.bots.update(view, alpha, rect);
 
   // 7. Machines, and then the vehicles among them: a cart's own readouts are in the commerce
   //    projection rather than on its `MachineView`, so they are applied as a second pass over

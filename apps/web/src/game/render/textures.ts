@@ -93,6 +93,20 @@ export const ART = {
   playerSouth: 'player_south',
   playerWest: 'player_west',
   /**
+   * An Agri-Bot, by kind, by facing, and by which foot is forward ([[038]]).
+   *
+   * THE NAME IS BUILT TO MEET THE ART THAT ALREADY EXISTS. The pipeline generated
+   * `bot_harvester_walk_down` and `bot_harvester_walk_side` (and the planter's pair) as 32×16
+   * two-cell strips, the same shape and the same two poses as `player_walk_down` — so these
+   * names are strip cells, registered in `STRIPS` below, and the suffix is the step.
+   *
+   * THREE FACINGS, NOT FOUR. `east` is `west` mirrored at draw time (`bots.ts`), which is what
+   * a side pose is for. And there is no `up` pose anywhere in this pipeline — not for the bots
+   * and not for the player — so a bot walking away is mapped to its side view: uninformative,
+   * but never a robot marching backwards while looking at you. See the note on `STRIPS`.
+   */
+  bot: (kind: string, facing: string, step: number) => `bot_${kind}_${facing}_${step}`,
+  /**
    * ONE SHAPE PER LAMP STATE, still tinted in code.
    *
    * §13's "one sprite, tinted" bought thirty machines' worth of state animation for the cost
@@ -172,12 +186,27 @@ const ALIASES: Record<string, string> = {
  * Slicing happens HERE rather than in the packer, because the sub-frames must stay on the
  * atlas's own `TextureSource` — carving them out at pack time would put each one somewhere
  * else on the page and buy nothing.
+ *
+ * ── CANDIDATES, NOT ONE NAME, AND THE GOLD POTATO IS WHY ────────────────────────────────
+ *
+ * Each entry is a LIST, tried in order, first one the atlas actually has wins. That is not
+ * generality for its own sake: the short-name rule below ("potato's strip is `crop_potato_strip`,
+ * not `crop_russet_potato_strip`") takes the last word of the slug, and the moment a second
+ * potato existed — `gold-potato`, §5's premium crop — it produced the same short name as the
+ * first. Every Gold Potato in the game would have grown Russet art, on a crop whose entire
+ * design job is to look more valuable than the one beside it, and nothing would have thrown.
+ *
+ * So the full slug is asked for FIRST and the short name is the fallback. `crop_gold_potato_strip`
+ * exists and wins; `crop_russet_potato_strip` does not exist and falls through to
+ * `crop_potato_strip`, which is the name the pipeline has always used. Both crops get their own
+ * plant and neither needed the art renamed.
  */
-const STRIPS: Record<string, string> = {};
+const STRIPS: Record<string, readonly string[]> = {};
 for (const spec of CROP_SPECS) {
   // The pipeline names potato's strip `crop_potato_strip`, not `crop_russet_potato_strip`:
   // the last word of the slug is the one the art vocabulary uses.
-  const parts = frameSlug(spec.slug).split('_');
+  const full = frameSlug(spec.slug);
+  const parts = full.split('_');
   const short = parts[parts.length - 1]!;
   // `<=` rather than `<`: ONE SPARE NAME past the sim's last growth stage. `view()` publishes
   // at most `stageCount - 1`, so nothing asks for the spare today — it is registered so that
@@ -185,7 +214,32 @@ for (const spec of CROP_SPECS) {
   // edit here. On today's four-cell strips the spare clamps to the last growth cell, which is
   // exactly what a wilted crop already draws.
   for (let stage = 1; stage <= spec.stageCount; stage++) {
-    STRIPS[ART.cropStage(spec.id as number, stage)] = `crop_${short}_strip`;
+    STRIPS[ART.cropStage(spec.id as number, stage)] = [`crop_${full}_strip`, `crop_${short}_strip`];
+  }
+}
+
+/**
+ * The bots' walk strips, and the one gap in them, written down rather than left to be noticed.
+ *
+ * `bot_<kind>_walk_down` and `bot_<kind>_walk_side` are 32×16 — two 16×16 cells, the two feet.
+ * THERE IS NO `walk_up` IN THIS PIPELINE, for the bots or for the player, so `north` is pointed
+ * at the SIDE strip. That is the least-wrong of the three available answers: the front pose
+ * would have a robot walking away from the camera while looking straight at it, and no mapping
+ * at all would drop back to a grey placeholder for one facing out of four while the other three
+ * were real art.
+ *
+ * HANDOFF (art lane): generate `bot_harvester_walk_up`, `bot_planter_walk_up` and
+ * `player_walk_up`, and the `north` line below becomes its own strip. The procedural fallback
+ * in `PLACEHOLDERS` already draws a real back, so a grey-box build is currently the MORE
+ * informative of the two — which is a state of affairs worth ending.
+ */
+const BOT_KINDS = ['harvester', 'planter'] as const;
+const BOT_STEPS = 2;
+for (const kind of BOT_KINDS) {
+  for (let step = 1; step <= BOT_STEPS; step++) {
+    STRIPS[ART.bot(kind, 'south', step)] = [`bot_${kind}_walk_down`];
+    STRIPS[ART.bot(kind, 'west', step)] = [`bot_${kind}_walk_side`];
+    STRIPS[ART.bot(kind, 'north', step)] = [`bot_${kind}_walk_side`];
   }
 }
 
@@ -274,9 +328,16 @@ export async function loadArt(renderer: Renderer): Promise<ArtSet> {
     const cached = sliced.get(name);
     if (cached !== undefined) return cached;
 
-    const source = STRIPS[name];
-    if (source === undefined || sheet === null || !atlasNames.has(source)) return null;
-    const base = sheet.textures[source];
+    const candidates = STRIPS[name];
+    if (candidates === undefined || sheet === null) return null;
+    // First candidate the atlas actually carries. See the note on `STRIPS`: the specific name
+    // is asked for before the generic one, so a Gold Potato cannot silently grow Russet art.
+    let base: Texture | undefined;
+    for (const source of candidates) {
+      if (!atlasNames.has(source)) continue;
+      base = sheet.textures[source];
+      if (base !== undefined) break;
+    }
     if (base === undefined) return null;
 
     // `crop_corn_3` → cell 2. The stage number is the frame name's own suffix, so a crop
@@ -500,6 +561,9 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   [ART.playerNorth]: { paint: pawn('north') },
   [ART.playerEast]: { paint: pawn('east') },
   [ART.playerWest]: { paint: pawn('west') },
+
+  // The bots are registered below with the machines and the crops — two kinds × three facings
+  // × two steps is a loop, not twelve hand-written entries. See `registerBotPlaceholders`.
 
   // The seven lamp shapes are registered below, next to the masks they are drawn from.
 
@@ -963,7 +1027,123 @@ const MACHINE_LOOKS: Record<string, MachinePaint> = {
     g.rect(4, 6, 3, h - 12).fill(BRASS.mid);
     g.rect(w - 7, 6, 3, h - 12).fill(BRASS.mid);
   },
+
+  // --- the field's own machines: WOOD AND LEAF, NEVER STEEL --------------------------
+  //
+  // Everything above this line is a factory: cold metal or warm brass, boxy, with a topper.
+  // Everything below it stands in a field, and the placeholders say so in the one language a
+  // 32px sprite can — material. A player scanning the lot should be able to tell the district
+  // apart before they can tell the machine apart, which is the same argument the chip line's
+  // "one loud unshared cue each" makes one level up.
+
+  'orange-tree': orchardTree(0xe08a2c, 0xf2a748),
+  'lemon-tree': orchardTree(0xdcc63c, 0xf2e06a),
+  // Darker canopy and a dark nut, because the kola is the expensive one and the tree the
+  // player has to work for — and because a third yellow-orange ball would be a third of the
+  // same tree.
+  'kola-tree': orchardTree(0x6b4326, 0x8a5c33, 0x3f7a34, 0x2f5c24),
+
+  'root-cellar': (g, w, h) => {
+    // A turf mound with a timber door in it, sunk into the ground. Nothing here is a box on
+    // legs: the whole promise of the Cellar is that it is UNDER something.
+    g.rect(0, 6, w, h - 6).fill(PALETTE.grassDark);
+    g.rect(0, 6, w, 3).fill(PALETTE.grass);
+    g.rect(2, 9, w - 4, 2).fill(PALETTE.grassLight);
+    const doorW = Math.round(w / 2);
+    const doorX = Math.round((w - doorW) / 2);
+    g.rect(doorX, h - 15, doorW, 14).fill(PALETTE.woodDark);
+    g.rect(doorX + 1, h - 14, doorW - 2, 12).fill(PALETTE.wood);
+    g.rect(doorX + 1, h - 9, doorW - 2, 1).fill(PALETTE.woodDark);
+    g.rect(doorX + doorW - 4, h - 9, 2, 2).fill(PALETTE.metalDark);
+  },
+
+  'hand-cart': (g, w, h) => {
+    // A barrow: one wheel, two handles, a tray. It is the only machine in the game with a
+    // wheel bigger than its body, which is what keeps it from reading as a small crate.
+    g.rect(2, h - 12, w - 6, 6).fill(PALETTE.wood);
+    g.rect(2, h - 12, w - 6, 2).fill(PALETTE.woodDark);
+    g.rect(w - 5, h - 13, 4, 2).fill(PALETTE.woodDark);
+    g.circle(6, h - 4, 4).fill(PALETTE.metalDark);
+    g.circle(6, h - 4, 2).fill(PALETTE.metal);
+    g.rect(4, h - 16, w - 8, 4).fill(PALETTE.potato);
+  },
+
+  composter: (g, w, h) => {
+    // Open slatted bin with the heap standing proud of the top, steaming. Deliberately the
+    // only machine on the lot with something SPILLING out of it.
+    g.rect(2, 8, w - 4, h - 10).fill(PALETTE.woodDark);
+    for (let y = 11; y < h - 4; y += 4) {
+      g.rect(3, y, w - 6, 2).fill(PALETTE.wood);
+    }
+    g.rect(5, 6, w - 10, 5).fill(0x4a3a24);
+    g.rect(8, 4, w - 16, 3).fill(0x5c4a2e);
+    g.rect(10, 3, 3, 2).fill(0x6f7a3a);
+    g.rect(w - 14, 5, 3, 2).fill(0x6f7a3a);
+  },
+
+  // The two docks are one sprite with two doors, because they are one shed with two jobs —
+  // and the thing that tells them apart is what is stacked outside: crates on the harvester,
+  // seed sacks on the planter. The bot itself is drawn by `bots.ts` and is usually elsewhere.
+  'harvester-dock': botDock(PALETTE.potato, 0xe8b53d),
+  'planter-dock': botDock(0x6f7a3a, 0x7ed68e),
 };
+
+/**
+ * A 2×2 fruiting tree: trunk, canopy, and three pieces of fruit.
+ *
+ * ROUND AND TALLER THAN IT IS WIDE, against a district of squat rectangles — a tree has to
+ * read as a plant from the zoom level where a machine reads as a box, and at 32px the only
+ * reliable way to say "plant" is silhouette rather than detail. The three trees share this and
+ * differ only in fruit colour and canopy tone, which is the same trade the lamps make: one
+ * shape, several tints, and the one that is genuinely a different tree (the kola) gets a
+ * darker canopy as well so it is not a third citrus.
+ */
+function orchardTree(
+  fruit: number,
+  fruitLight: number,
+  leaf: number = PALETTE.leaf,
+  leafDark: number = PALETTE.leafDark,
+): MachinePaint {
+  return (g, w, h) => {
+    const cx = Math.round(w / 2);
+    g.rect(cx - 2, h - 12, 4, 11).fill(PALETTE.woodDark);
+    g.rect(cx - 2, h - 12, 2, 11).fill(PALETTE.wood);
+    g.circle(cx, h - 19, 11).fill(leafDark);
+    g.circle(cx - 3, h - 22, 7).fill(leaf);
+    g.circle(cx + 5, h - 17, 6).fill(leaf);
+    g.circle(cx - 6, h - 15, 3).fill(fruit);
+    g.circle(cx + 4, h - 24, 3).fill(fruit);
+    g.circle(cx + 7, h - 13, 3).fill(fruit);
+    g.rect(cx - 7, h - 16, 2, 1).fill(fruitLight);
+    g.rect(cx + 3, h - 25, 2, 1).fill(fruitLight);
+  };
+}
+
+/**
+ * A bot dock: a shed with a roller door, a charging light, and the day's work stacked outside.
+ *
+ * The door is drawn OPEN and empty on purpose. A dock whose bot is out is the normal state of
+ * a working dock, and an empty doorway is the one cue that says the machine has something that
+ * leaves — which is the whole difference between this and the Root Cellar next to it.
+ */
+function botDock(cargo: number, lamp: number): MachinePaint {
+  return (g, w, h) => {
+    g.rect(1, 6, w - 2, h - 7).fill(PALETTE.metal);
+    g.rect(1, 6, w - 2, 3).fill(PALETTE.metalDark);
+    // The roof overhang, so it is a shed rather than a cabinet.
+    g.rect(0, 4, w, 3).fill(PALETTE.metalDark);
+    g.rect(0, 4, w, 1).fill(PALETTE.metalLight);
+    // The open bay.
+    g.rect(4, 13, w - 14, h - 15).fill(PALETTE.black);
+    g.rect(5, 14, w - 16, 2).fill(0x2a2f38);
+    // Charge light, top right, in the kind's own colour.
+    g.rect(w - 6, 8, 3, 3).fill(lamp);
+    // What the dock is for, stacked beside the door.
+    g.rect(w - 9, h - 9, 7, 7).fill(cargo);
+    g.rect(w - 9, h - 9, 7, 2).fill(PALETTE.woodDark);
+    g.rect(w - 8, h - 5, 5, 1).fill(PALETTE.woodDark);
+  };
+}
 
 /**
  * The cane press / juicer: paired rollers under a full-width hopper, juice running out.
@@ -1121,6 +1301,11 @@ function registerCropPlaceholders(): void {
     2: { leaf: 0x7bbf5a, leafDark: 0x4f8a38, fruit: 0xc6e07a },
     3: { leaf: 0x8ac24a, leafDark: 0x5d8f2c, fruit: 0xf2cf4a },
     4: { leaf: 0x63a83f, leafDark: 0x417a28, fruit: 0xd8402f },
+    // The Gold Potato: the same plant as the Russet with a different thing under it, so the
+    // leaves are a shade deeper and the produce is unmistakably gold. Without this row it fell
+    // through to the Russet's colours and the premium crop looked exactly like the starter one
+    // — which, in a field where both are planted, is the one comparison the sprite has to make.
+    5: { leaf: 0x4f9a3a, leafDark: 0x357a26, fruit: 0xe8c04a },
   };
 
   for (const spec of CROP_SPECS) {
@@ -1192,6 +1377,23 @@ const ITEM_LOOKS: Record<string, ItemLook> = {
   'chili-seed': { body: 0x9c4a3a, accent: 0x6b2f22, shape: 'seed' },
   'chili-pepper': { body: 0xd8402f, accent: 0x8f2418, shape: 'stick' },
   'day-old-chili': { body: 0x93685f, accent: 0x64443c, shape: 'stick' },
+
+  // --- the second farming era's goods ([[023]], [[030]], [[035]]) ----------------------
+  //
+  // The premium potato needs to be TELLABLE FROM THE RUSSET on a moving belt, which is eight
+  // pixels of one colour — so it gets the brightest body in the item set and a pale highlight
+  // rather than the Russet's darker outline. `guessItemLook` would have made both of them the
+  // same brown circle, and a belt carrying two grades of potato would carry one.
+  'gold-potato': { body: 0xe8c04a, accent: 0xfae7a2, shape: 'round' },
+  'day-old-gold-potato': { body: 0xa89660, accent: 0x776a42, shape: 'round' },
+  orange: { body: 0xe08a2c, accent: 0xf2a748, shape: 'round' },
+  lemon: { body: 0xdcc63c, accent: 0xf2e06a, shape: 'round' },
+  // Earth, not produce: a low dark mound, deliberately the drabbest chip on any belt.
+  fertilizer: { body: 0x53412a, accent: 0x6f7a3a, shape: 'powder' },
+  // Tools and containers are the two things here that are not food, and they say so by being
+  // the only chips with a straight metal edge and a lid line respectively.
+  'push-scythe': { body: 0xb9c0cc, accent: 0x8a5c28, shape: 'stick' },
+  crate: { body: 0xb07a3c, accent: 0x8a5c28, shape: 'crate' },
 
   // --- the soda line's solids ---------------------------------------------------------
   //
@@ -1340,7 +1542,92 @@ function registerLampPlaceholders(): void {
 registerCropPlaceholders();
 registerItemPlaceholders();
 registerMachinePlaceholders();
+registerBotPlaceholders();
 registerLampPlaceholders();
+
+/**
+ * "Spudnik": a squat two-legged robot, bottom-anchored like the farmer beside it.
+ *
+ * DRAWN TO THE SAME BRIEF THE REAL ART WAS GENERATED FROM, so the fallback and the shipped
+ * frame are the same robot rather than two: a chunky grey box, one round glass eye on the
+ * front, stubby arms, two thick legs that swap between the frames, a glowing eye in the
+ * KIND'S colour (green harvester, blue planter), and the tool of its trade on its back — a
+ * basket for the one that takes crops away, a funnel hopper for the one that brings seed.
+ * That last detail is the only thing distinguishing the two at 16px, in the art and here.
+ *
+ * It is deliberately NOT a small farmer. The player is a bottom-heavy pawn with a head; this
+ * is a wide box with no neck, so at full zoom-out the two silhouettes cannot be confused —
+ * which matters most in the exact situation the feature is for, where the interesting question
+ * is whether the thing moving in row four is you or not.
+ *
+ * `step` is 1 or 2 and swaps which leg is forward. One pixel of difference, which is all a
+ * 16px walk cycle has ever been.
+ */
+function botChassis(
+  facing: 'north' | 'south' | 'west',
+  step: number,
+  eye: number,
+  pack: number,
+): Paint {
+  const lead = step === 1 ? 0 : 1;
+  return (g) => {
+    // Legs, feet at y = 15. The two frames differ only in which one is planted forward.
+    g.rect(4, 12, 3, 4 - lead).fill(PALETTE.metalDark);
+    g.rect(9, 12 + lead, 3, 4 - lead).fill(PALETTE.metalDark);
+
+    // What it carries on its back, drawn FIRST so the body overlaps it — a pack is behind the
+    // robot from the front, and peeks over the shoulders.
+    if (facing === 'south') {
+      g.rect(2, 4, 12, 3).fill(pack);
+    } else {
+      // From the side and from behind, the pack is the whole rear silhouette.
+      g.rect(1, 5, 4, 6).fill(pack);
+    }
+
+    // Body.
+    g.rect(3, 5, 10, 7).fill(PALETTE.metal);
+    g.rect(3, 5, 10, 2).fill(PALETTE.metalLight);
+    g.rect(3, 11, 10, 1).fill(PALETTE.metalDark);
+    // Stubby arms.
+    g.rect(2, 7, 1, 4).fill(PALETTE.metalDark);
+    g.rect(13, 7, 1, 4).fill(PALETTE.metalDark);
+
+    // Head, and the eye that says which robot this is.
+    g.rect(5, 1, 6, 4).fill(PALETTE.metalDark);
+    g.rect(5, 1, 6, 1).fill(PALETTE.metal);
+    if (facing === 'south') {
+      g.circle(8, 3, 2).fill(PALETTE.black);
+      g.circle(8, 3, 1).fill(eye);
+    } else if (facing === 'west') {
+      g.circle(6, 3, 2).fill(PALETTE.black);
+      g.circle(6, 3, 1).fill(eye);
+    } else {
+      // The back of the head: a vented plate and no eye at all, so a bot walking away is
+      // unmistakably walking away. (The atlas has no `up` pose and substitutes the side view
+      // — see `STRIPS`. This is the more informative of the two, which is the wrong way round.)
+      g.rect(6, 2, 4, 2).fill(PALETTE.metalDark);
+      g.rect(6, 3, 4, 1).fill(PALETTE.black);
+    }
+  };
+}
+
+/** The two chassis, in the two colours their docks and their eyes wear. */
+function registerBotPlaceholders(): void {
+  const looks: Readonly<Record<string, { eye: number; pack: number }>> = {
+    harvester: { eye: 0x7ed68e, pack: 0xb07a3c },
+    planter: { eye: 0x6fc0e8, pack: 0x6f7a3a },
+  };
+  for (const kind of BOT_KINDS) {
+    const look = looks[kind]!;
+    for (let step = 1; step <= BOT_STEPS; step++) {
+      for (const facing of ['north', 'south', 'west'] as const) {
+        PLACEHOLDERS[ART.bot(kind, facing, step)] = {
+          paint: botChassis(facing, step, look.eye, look.pack),
+        };
+      }
+    }
+  }
+}
 
 function pawn(facing: 'north' | 'east' | 'south' | 'west'): Paint {
   return (g) => {

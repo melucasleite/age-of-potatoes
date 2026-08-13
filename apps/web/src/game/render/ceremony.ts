@@ -38,7 +38,7 @@ import { TILE_PX } from './pixel';
 import { BitmapText, Container, Graphics, Sprite } from 'pixi.js';
 import type { Texture } from 'pixi.js';
 
-import { CeremonyId, ContractPhase, MachineKind } from '@snack/sim';
+import { BotKind, CeremonyId, ContractPhase, MachineKind } from '@snack/sim';
 import type { MachineView, WorldView } from '@snack/sim';
 
 // NOTE: this module deliberately does NOT import `./textures`. It takes its one frame as a
@@ -117,6 +117,23 @@ const COPY: Record<string, CeremonyCopy> = {
     title: 'THE FIRST TRUCK',
     subtitle: 'it sells while you are elsewhere',
     tint: 0xe0674a,
+  },
+  /**
+   * The first crop pulled by something that is not your hand ([[038]]).
+   *
+   * THE SUBTITLE IS THE ONLY ONE HERE WRITTEN IN THE SECOND PERSON PAST TENSE, and that is the
+   * point of it: the other four are promises about what a machine will do from now on, because
+   * that is what those machines are. This one is about a chore ENDING. §8's gate for the feature
+   * is whether the player watches with pride or alt-tabs, and "it farms for you now" is a claim
+   * about the future that the player has just this second watched come true.
+   *
+   * Harvest amber, the colour of the ready-mark and of the harvester's own chassis, so the
+   * plaque names the ladder before anybody reads it — the same job the truck's timber red does.
+   */
+  [CeremonyId.FirstBot]: {
+    title: 'IT PULLED ONE',
+    subtitle: 'nobody has to walk the rows now',
+    tint: 0xe8b53d,
   },
 };
 
@@ -551,6 +568,9 @@ function locate(id: string, view: WorldView): MachineView | null {
   // depot on the lot. Reached through that filter the truck ceremony would have haloed a
   // sprinkler on the far side of the map and called it the first departure.
   if (id === CeremonyId.FirstTruck) return locateDepartingDepot(view);
+  // And the bot, for exactly the same reason: a dock waters nothing, so reached through the
+  // coverage filter below the first harvest would have haloed a sprinkler and called it a robot.
+  if (id === CeremonyId.FirstBot) return locateHarvesterDock(view);
 
   let fallback: MachineView | null = null;
 
@@ -594,6 +614,37 @@ function locateDepartingDepot(view: WorldView): MachineView | null {
   for (const machine of view.machines) {
     if (machine.kind !== MachineKind.TruckDepot) continue;
     if (machine.id === depotId) return machine;
+    if (fallback === null) fallback = machine;
+  }
+  return fallback;
+}
+
+/**
+ * The shed the bot that just harvested came out of, or the first harvester dock on the lot.
+ *
+ * THE DOCK RATHER THAN THE BOT, and the bot is the thing that did it — so this is a choice. The
+ * ceremony frames a MACHINE: it haloes a footprint, leans the camera at it, and holds for ten
+ * seconds. A bot is a moving 16px sprite that spends most of those ten seconds walking somewhere
+ * else, so a halo pinned to it would either chase it around the field or sit on the dirt it left.
+ * The dock is where the bot came from and where it is heading back to with the crop, which means
+ * the shot contains both the machine and, before long, the robot walking into it.
+ *
+ * Found THROUGH the bot rather than by taking the first dock, so a lot with two docks haloes the
+ * one that actually did the work. `view.bots` is in id order and the first harvester is the
+ * oldest one, which on the frame this fires is the only one that can have harvested anything.
+ */
+function locateHarvesterDock(view: WorldView): MachineView | null {
+  let dockId = 0;
+  for (const bot of view.bots) {
+    if (bot.kind !== BotKind.Harvester) continue;
+    dockId = bot.dockId;
+    break;
+  }
+
+  let fallback: MachineView | null = null;
+  for (const machine of view.machines) {
+    if (machine.kind !== MachineKind.HarvesterDock) continue;
+    if (machine.id === dockId) return machine;
     if (fallback === null) fallback = machine;
   }
   return fallback;

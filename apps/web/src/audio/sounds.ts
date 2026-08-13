@@ -30,6 +30,14 @@ export const SoundId = {
   /** Plan §3's ~10 seconds of in-world ceremony, first time a sprinkler runs. */
   SprinklerFirstRun: 'sprinkler-first-run',
   MachinePlace: 'machine-place',
+  /**
+   * The first truck pulling out. Plan §3's Hall of Hands, and the ONLY thing that plays it.
+   *
+   * A PLAYER SOUND RATHER THAN A MACHINE ONE, which is why it sits in this half of the table
+   * even though nobody pressed anything: it is a ceremony, it happens exactly once per world,
+   * and quantizing it would slide the horn off the departure it is supposed to be the sound of.
+   */
+  TruckHorn: 'truck-horn',
   MachineJam: 'machine-jam',
   MachineRepair: 'machine-repair',
   UiClick: 'ui-click',
@@ -121,6 +129,16 @@ const SPECS: readonly SoundSpec[] = [
     maxConcurrent: 1,
     minIntervalMs: 4000,
     gain: 0.6,
+  },
+  // TWO CONCURRENT VOICES AND A SHORT FLOOR, because the ceremony honks TWICE, 8 ticks apart
+  // (`HONK_GAP_TICKS` — 400 ms). A `maxConcurrent` of 1 or a `minIntervalMs` above 400 would
+  // silently eat the second blast, and one honk is a different sound from two.
+  {
+    id: SoundId.TruckHorn,
+    quantize: Quantize.Immediate,
+    maxConcurrent: 2,
+    minIntervalMs: 120,
+    gain: 0.62,
   },
   {
     id: SoundId.UiClick,

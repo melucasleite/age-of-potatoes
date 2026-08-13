@@ -24,6 +24,8 @@
 import type { WorldView } from '@snack/sim';
 import { Direction } from '@snack/sim';
 
+import { formatCentsWhole } from '../../format/money';
+
 import type { Camera } from '../render/camera';
 import { TILE_PX } from '../render/pixel';
 import { buildRows } from './build-menu';
@@ -349,7 +351,7 @@ export class InputChrome {
         ? '<b>NOT FOR SALE</b>buy the parcel beside it first'
         : price < 0
           ? '<b>UNOWNED</b>'
-          : `<b>LAND DEED · $${Math.round(price / 100).toLocaleString('en-US')}</b>` +
+          : `<b>LAND DEED · ${formatCentsWhole(price)}</b>` +
             (affordable ? 'B → Land Deed, then click' : 'you cannot afford this yet');
 
       sign.style.display = 'block';
@@ -524,6 +526,14 @@ export class InputChrome {
         this.armCursor();
       });
     }
+
+    // KEEP THE CURSOR ON SCREEN. The catalogue outgrew the panel the moment the storage,
+    // orchard and bot rows landed — `max-height` plus `overflow:auto` means the list scrolls,
+    // and this function replaces `innerHTML` wholesale a few times a second, which resets
+    // `scrollTop` to zero every time. Without this the menu yanks itself back to the top while
+    // the player is arrow-keying down it, and the highlighted row is somewhere below the fold.
+    // `nearest` so a row already in view is left exactly where it is.
+    nodes[this.cursor]?.scrollIntoView({ block: 'nearest' });
   }
 }
 
