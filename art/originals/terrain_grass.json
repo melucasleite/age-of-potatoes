@@ -2,8 +2,8 @@
   "id": "terrain_grass",
   "provider": "retro-diffusion",
   "model": "rd_fast",
-  "seed": 630297555,
-  "prompt": "seamless top-down ground tile of short warm green grass, small tufts and clumps, flat even lighting, no objects, no shadows, no text",
+  "seed": 1763756604,
+  "prompt": "seamless tiling top-down texture of dense short grass, completely uniform all over with no focal point and no single feature anywhere, fine even grain distributed edge to edge, no large shapes, no patches, no blotches, no clumps, no bare spots, no bands, no lines, no stripes, no streaks, built from only two very close shades of medium green with extremely low contrast between them, calm and quiet and soft, no individual blades, no flowers, no weeds, no objects, no shadows, perfectly flat even lighting, no text",
   "promptStyle": "rd_fast__default",
   "native": {
     "width": 16,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "terrain",
   "costUsd": 0.017,
-  "generatedAt": "2026-08-12T18:43:45.080Z"
+  "generatedAt": "2026-08-12T23:27:12.822Z"
 }

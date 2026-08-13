@@ -1,0 +1,24 @@
+{
+  "id": "tech_fabrication_wash_and_slice",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 972323176,
+  "prompt": "a single bold flat game icon of a wide chefs knife blade over a water droplet, one simple object centred and filling most of the frame, seen straight on, very large solid areas of flat colour, thick heavy chunky shapes, bold dark outline, no thin lines, no small details, no background, no frame, no border, no badge, no circle behind it, no shadow, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "tech",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-12T23:36:57.586Z"
+}

@@ -9,6 +9,7 @@
 import dynamic from 'next/dynamic';
 
 import { HudRoot } from '@/hud';
+import { ReportsLayer } from '@/reports';
 
 const GameCanvas = dynamic(() => import('@/game/GameCanvas'), {
   ssr: false,
@@ -29,10 +30,16 @@ export default function PlayClient() {
   // not inside the Pixi scene, and it must not be inside the `ssr: false` boundary either:
   // it renders a frozen zero snapshot on the server (see `getServerSnapshot`) and hydrates
   // without a mismatch, which is the cheap proof that the store's server path works.
+  // Three siblings, not a tree. The reports are their own layer over the HUD rather than a
+  // panel inside it: the HUD's corners are glanceable chrome and a ledger is a thing you
+  // open on purpose ([[033]]). Like the HUD it renders on the server from a frozen zero
+  // snapshot and hydrates without a mismatch, which is the cheap proof its store's server
+  // path works too.
   return (
     <>
       <GameCanvas />
       <HudRoot />
+      <ReportsLayer />
     </>
   );
 }

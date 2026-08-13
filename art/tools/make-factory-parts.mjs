@@ -126,6 +126,42 @@ function beltCorner() {
   return grid;
 }
 
+// --- the junction ---------------------------------------------------------------------
+//
+// A tee: the run passes straight through west to east, and a branch leaves through the
+// south. One sprite covers both halves of a belt network's branching vocabulary — a
+// merger is a splitter with the arrows read the other way, and the renderer already
+// rotates, so four rotations of this tile reach every tee a grid can contain.
+//
+// It shares the corner's plate and the straight's band arithmetic on purpose. The through
+// run is the straight tile untouched, which is what guarantees a junction dropped into the
+// middle of a run does not show a seam at either end of itself.
+
+function beltJunction() {
+  const grid = blankGrid();
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const through = y >= ARM_LOW && y <= ARM_HIGH;
+      const branch = x >= ARM_LOW && x <= ARM_HIGH && y >= ARM_LOW;
+      grid[y][x] = through || branch ? 'D' : 'L';
+    }
+  }
+  // The through run keeps the straight tile's chevrons exactly, phase and all.
+  for (let x0 = 2; x0 < SIZE; x0 += CHEVRON_PERIOD) {
+    for (const [x, y] of chevronCells(x0)) {
+      if (x < SIZE) grid[y][x] = 'P';
+    }
+  }
+  // One departing arrow on the branch, pointing down, so a tee is never ambiguous about
+  // which of its three arms is the odd one out.
+  for (let dy = 0; dy < CHEVRON_WIDTH; dy++) {
+    for (let x = BAND_MID - 3 + dy; x <= BAND_MID + 3 - dy; x++) {
+      grid[SIZE - CHEVRON_WIDTH - 1 + dy][x] = 'P';
+    }
+  }
+  return grid;
+}
+
 // --- the grabber ---------------------------------------------------------------------
 //
 // Drawn pointing EAST and centred on the sprite, so the renderer gets the other three
@@ -193,6 +229,16 @@ for (let y = 0; y < SIZE; y++) {
   }
 }
 
+// A junction is dropped into the middle of an existing run, so its through-run edges must
+// match the straight tile's edges exactly or every tee shows two seams instead of none.
+const junction = beltJunction();
+for (let y = 0; y < SIZE; y++) {
+  if (junction[y][0] !== straight[y][0] || junction[y][SIZE - 1] !== straight[y][SIZE - 1]) {
+    throw new Error(`belt_junction does not meet a straight belt at row ${y}.`);
+  }
+}
+
 await write('belt_straight', straight);
 await write('belt_corner', beltCorner());
+await write('belt_junction', junction);
 await write('grabber_arm', GRABBER);
