@@ -17,6 +17,8 @@
 import type { WorldState } from '@snack/sim';
 
 import { logError, logInfo } from './log';
+import { NoticeId, publishNotice } from './notices';
+import { isQuotaError } from './quota';
 import { type SaveResult, saveWorld } from './saves';
 
 /** 1,200 ticks at 20 Hz — 60 seconds of *active* play. */
@@ -97,6 +99,23 @@ export function startAutosave(
         // A failed save is not a reason to stop the game. Log it, keep the mark where it was
         // so the next cadence tick retries, and let the player carry on.
         logError(`Autosave failed (${reason}).`, error);
+
+        // ...but it IS a reason to say something out loud. A quota failure has already spoken
+        // for itself in `saveWorld` with wording specific to being out of room; anything else
+        // gets the general version rather than a second, contradictory card.
+        if (!isQuotaError(error)) {
+          publishNotice({
+            id: NoticeId.WriteFailed,
+            tone: 'warning',
+            title: 'Your world has stopped saving.',
+            body:
+              'Something went wrong writing your world to this browser, so the last few ' +
+              'minutes of play are not saved yet. Your previous save is safe and untouched. ' +
+              'The game will try again in about a minute — if this card is still here after ' +
+              'that, reloading the page is the next thing to try.',
+          });
+        }
+
         options.onError?.(error, reason);
         return false;
       }

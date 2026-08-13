@@ -15,12 +15,13 @@ export {
   DB_NAME,
   DB_VERSION,
   PREVIOUS_KEY,
+  QUARANTINE_STORE,
   SAVES_STORE,
   TRACES_STORE,
   closeDb,
   isStorageAvailable,
 } from './db';
-export type { TraceBatch } from './db';
+export type { QuarantinedSave, TraceBatch } from './db';
 export { requestPersistentStorage } from './persist';
 export type { PersistenceResult } from './persist';
 export { CONFLICT_KEY, adoptCloudEnvelope, readConflictEnvelope } from './cloudHandoff';
@@ -28,6 +29,22 @@ export type { AdoptOutcome } from './cloudHandoff';
 export { clearSavedWorld, loadWorld, readRawSaves, saveWorld } from './saves';
 export type { LoadOutcome, LoadedWorld, NoSavedWorld, RefusedWorld, SaveResult } from './saves';
 export { clearTrace, drainTrace, exportTrace, readTrace, tracePersistedCount } from './trace';
+export { quarantineRecord, readQuarantine } from './quarantine';
+export type { QuarantineOutcome } from './quarantine';
+export { StorageFullError, isQuotaError } from './quota';
+// The player-facing channel. The HUD subscribes to these three; storage publishes. Anything
+// that renders a notice needs `dismissNotice` too — a card with no way to close it is a card
+// the player resents by the third look.
+export {
+  NoticeId,
+  dismissNotice,
+  noticeSnapshot,
+  publishNotice,
+  resetNotices,
+  serverNoticeSnapshot,
+  subscribeNotices,
+} from './notices';
+export type { NoticeTone, SaveNotice } from './notices';
 
 import { type WorldState, createWorld } from '@snack/sim';
 
@@ -42,6 +59,7 @@ import { type PersistenceResult, requestPersistentStorage } from './persist';
 import { type LoadOutcome, loadWorld } from './saves';
 import { clearTrace } from './trace';
 import { logWarn } from './log';
+import { NoticeId, publishNoticeOnce } from './notices';
 
 export interface BootOptions {
   /** Seed for a brand-new world. Defaults to a fresh one from `crypto`. */
@@ -79,6 +97,7 @@ export async function bootWorld(options: BootOptions = {}): Promise<BootResult> 
   const outcome = await loadWorld();
 
   if (outcome.status === 'loaded') {
+    warnIfNotPersisted(persistence);
     void startCloudSyncIfConfigured({ localTickAtBoot: outcome.state.tick });
     return { state: outcome.state, fresh: false, outcome, persistence };
   }
@@ -107,6 +126,36 @@ export async function bootWorld(options: BootOptions = {}): Promise<BootResult> 
   void startCloudSyncIfConfigured({ localTickAtBoot: null });
 
   return { state, fresh: true, outcome, persistence };
+}
+
+/**
+ * Tell a returning player, once, that this browser has not promised to keep their world.
+ *
+ * ONLY WHEN A SAVED WORLD CAME BACK, and that restriction is the whole design. Chrome commonly
+ * declines `persist()` until a site has earned some engagement, so a brand-new player would
+ * otherwise be handed a warning about losing a factory they have not built yet — during the
+ * exact first minute AGENTS.md says the entire project is in service of. A player with a world
+ * on disk has something to lose and is owed the heads-up; a player on their first lot is not.
+ *
+ * ONCE PER SESSION rather than once ever. Persistence is re-requested on every boot and may
+ * flip to granted on its own, so the honest scope for "we already mentioned this" is the page
+ * load — remembering it for longer would mean writing a flag to the very storage the notice is
+ * about, which is a poor place to keep it.
+ */
+function warnIfNotPersisted(persistence: PersistenceResult): void {
+  if (persistence.persisted) return;
+
+  publishNoticeOnce({
+    id: NoticeId.NotPersistent,
+    tone: 'info',
+    title: 'This browser has not promised to keep your world.',
+    body:
+      'Your factory is saved here as normal and nothing is wrong right now. But this browser ' +
+      'has not marked the game as permanent, which means that if you leave it alone for a ' +
+      'long stretch it may clear the save out to reclaim space. Playing every so often — or ' +
+      'bookmarking or installing the game — is usually enough to convince it to keep your ' +
+      'world for good.',
+  });
 }
 
 /**

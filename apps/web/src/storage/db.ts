@@ -12,10 +12,23 @@ import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 import type { SaveEnvelope } from '@snack/sim';
 
 export const DB_NAME = 'snack-mogul';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export const SAVES_STORE = 'saves';
 export const TRACES_STORE = 'traces';
+
+/**
+ * Where a record that would not load goes to be kept.
+ *
+ * A SEPARATE STORE, not a flag on the save. Work item 041 is explicit that a corrupt record is
+ * quarantined rather than overwritten, and the reason is that the instinct — write a fresh
+ * world over the bad one — destroys the only copy of the evidence, and destroys a perfectly
+ * good world outright if the corruption was a read-side bug rather than a write-side one.
+ *
+ * Records here are never deleted automatically. They are small, they are rare, and the whole
+ * point of them is to still be there when somebody finally goes looking.
+ */
+export const QUARANTINE_STORE = 'quarantine';
 
 /**
  * §6 locks one persistent world per player, so `saves` holds exactly two records under fixed
@@ -41,9 +54,39 @@ export interface TraceBatch {
   entries: { tick: number; command: unknown }[];
 }
 
+/**
+ * A save record that failed to load, kept exactly as it was found.
+ *
+ * `record` is `unknown` on purpose: it did not parse as an envelope, so typing it as one would
+ * be a lie told to the compiler about the single value in this codebase most likely to be
+ * shaped wrong. Everything else here is the triage context — what it was, what went wrong,
+ * and when — because a quarantined record with no story attached is just a mystery blob.
+ */
+export interface QuarantinedSave {
+  /** Which key it was read from: `current`, `previous`, or a cloud `conflict`. */
+  slot: string;
+  /** The stored value, unmodified. */
+  record: unknown;
+  /** The error's message, as the sim wrote it. Names the first bad field for a parse failure. */
+  error: string;
+  /** The error's class name — `SaveCorruptError` and friends — so triage can group them. */
+  errorName: string;
+  /**
+   * Wall-clock milliseconds when the load failed.
+   *
+   * Wall clock is legal HERE and nowhere near the sim: work item 041's constraint is "no
+   * `Date` or wall-clock values inside `WorldState` or `SavePayload` — timestamps live in the
+   * storage layer, outside the hash". This is the storage layer.
+   */
+  failedAt: number;
+  /** Cheap identity, so five reloads of the same broken save do not make five copies. */
+  fingerprint: string;
+}
+
 interface SnackMogulDB extends DBSchema {
   [SAVES_STORE]: { key: string; value: SaveEnvelope };
   [TRACES_STORE]: { key: number; value: TraceBatch };
+  [QUARANTINE_STORE]: { key: number; value: QuarantinedSave };
 }
 
 let connection: Promise<IDBPDatabase<SnackMogulDB>> | null = null;
@@ -76,6 +119,13 @@ export function getDb(): Promise<IDBPDatabase<SnackMogulDB>> {
           // than a redesign.
           db.createObjectStore(SAVES_STORE);
           db.createObjectStore(TRACES_STORE, { autoIncrement: true });
+        }
+        if (oldVersion < 2) {
+          // Append-only, per the note above: version 1 databases in the wild gain the
+          // quarantine store and keep their saves exactly where they were. Auto-incrementing
+          // because these are an accumulating log, not a keyed lookup — every failure is its
+          // own record and none of them replaces another.
+          db.createObjectStore(QUARANTINE_STORE, { autoIncrement: true });
         }
       },
       terminated() {
