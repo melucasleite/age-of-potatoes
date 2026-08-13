@@ -162,6 +162,24 @@ export type StyleName =
   | 'shopBuyReady'
   | 'shopBuyCount'
   | 'shopBuyCost'
+  // --- the bag ---
+  // Panel, head, list, rows and buttons are the stand's, class for class — it is the same
+  // modal showing a different list, and two lists laid out differently read as two games.
+  // Only what a boxed machine adds is new below.
+  | 'invEmpty'
+  | 'invCount'
+  | 'invNotForSale'
+  | 'invBoxedRow'
+  | 'invBoxedTag'
+  | 'invBoxes'
+  | 'invBox'
+  | 'invNextOut'
+  | 'invDial'
+  | 'invDialKey'
+  | 'invCondition'
+  | 'invConditionLow'
+  | 'invInvested'
+  | 'invScrap'
   // --- the upgrade bench ---
   | 'midRight'
   | 'bench'

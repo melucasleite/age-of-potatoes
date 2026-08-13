@@ -23,6 +23,7 @@ import {
   CONDITION_MAX,
   EFFICIENCY_WEAR_CUT_PERCENT_PER_LEVEL,
   HAND_REACH_SUBTILES,
+  LampState,
   MachineKind,
   MilestoneKind,
   SPEED_RATE_BONUS_PERCENT_PER_LEVEL,
@@ -58,6 +59,8 @@ export interface BenchFields {
   listPriceCents: number;
   researched: number;
   dials: BenchDial[];
+  boxable: number;
+  boxBlocked: string;
 }
 
 export function createBenchFields(): BenchFields {
@@ -69,6 +72,8 @@ export function createBenchFields(): BenchFields {
     listPriceCents: 0,
     researched: 0,
     dials: [],
+    boxable: 0,
+    boxBlocked: '',
   };
 }
 
@@ -416,6 +421,8 @@ export function deriveBench(view: WorldView, out: BenchFields): BenchFields {
     out.conditionPermille = 0;
     out.listPriceCents = 0;
     out.dials = [];
+    out.boxable = 0;
+    out.boxBlocked = '';
     return out;
   }
 
@@ -429,5 +436,29 @@ export function deriveBench(view: WorldView, out: BenchFields): BenchFields {
     buildDial(UpgradeDial.Efficiency, bestSpec, best, view.moneyCents),
     buildDial(UpgradeDial.Capacity, bestSpec, best, view.moneyCents),
   ];
+
+  // --- can it go in a box right now ---
+  //
+  // `applyDeconstructMachine` refuses two states and no others: jammed, and mid-batch. The
+  // lamp is the mirror, and it is an exact one HERE and only here — the bench's subject is
+  // always a machine with a work cycle (`acceptsUpgrades` is `workPerOperation > 0`), which in
+  // the current data means always a Converter, and for a Converter the green lamp means
+  // precisely "recipe satisfied, output has room, condition above zero", which is the sim's
+  // `isMachineWorking` word for word.
+  //
+  // ⚠️ AND THE ONE PLACE IT IS NOT EXACT, so nobody has to rediscover it: a machine whose
+  // liquid inlet is full but THROTTLED shows amber, while the sim would still call it working.
+  // The bench then offers a button the reducer declines, which costs a click and nothing else
+  // (a refused command is a no-op and leaves no trace entry). Making it exact would mean
+  // restating `recipeSatisfied` against `MachineView`, i.e. keeping a copy of the rule the
+  // tombstone in this file exists to warn about, which is a worse trade than one dead click.
+  const jammed = best.lamp === LampState.Jammed;
+  const working = best.lamp === LampState.Running;
+  out.boxable = jammed || working ? 0 : 1;
+  out.boxBlocked = jammed
+    ? 'Whack the jam out of it first.'
+    : working
+      ? 'It is mid-batch. Take its output or cut its supply and it will stop.'
+      : '';
   return out;
 }

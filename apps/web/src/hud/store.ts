@@ -42,6 +42,8 @@ import {
   deriveUnlock,
 } from './derive';
 import type { MachineCounts, UnlockFields } from './derive';
+import { createInventoryFields, deriveInventory } from './derive-inventory';
+import type { InventoryFields } from './derive-inventory';
 import { RiskWatch, createLotFields, deriveLot } from './derive-lot';
 import type { LotFields } from './derive-lot';
 import { createShopFields, deriveShop } from './derive-shop';
@@ -57,6 +59,8 @@ import type {
   EconomySlice,
   HudLive,
   HudSnapshot,
+  InventoryRow,
+  InventorySlice,
   LotSlice,
   PouchItem,
   PouchSlice,
@@ -74,6 +78,7 @@ import {
   ZERO_BENCH,
   ZERO_CLIPBOARD,
   ZERO_ECONOMY,
+  ZERO_INVENTORY,
   ZERO_LOT,
   ZERO_POUCH,
   ZERO_SHOP,
@@ -104,6 +109,7 @@ export class HudStore {
   private bench: BenchSlice = ZERO_BENCH;
   private lot: LotSlice = ZERO_LOT;
   private shop: ShopSlice = ZERO_SHOP;
+  private inventory: InventorySlice = ZERO_INVENTORY;
   private snapshot: HudSnapshot = ZERO_SNAPSHOT;
 
   private owner: object | null = null;
@@ -116,6 +122,7 @@ export class HudStore {
   private readonly benchScratch: BenchFields = createBenchFields();
   private readonly lotScratch: LotFields = createLotFields();
   private readonly shopScratch: ShopFields = createShopFields();
+  private readonly inventoryScratch: InventoryFields = createInventoryFields();
   private readonly riskWatch = new RiskWatch();
   private readonly unlockScratch: UnlockFields = {
     id: null,
@@ -127,6 +134,17 @@ export class HudStore {
     etaSeconds: -1,
   };
   private clipboardDueTick = -(2 ** 30);
+
+  /**
+   * Machine kinds the player has a box of, remembered from the last publish.
+   *
+   * REMEMBERED RATHER THAN LOOKED UP because `publishTool` has no world: tool selection publishes
+   * immediately, off a key press, with nothing but the money (see below), and a toolbelt that
+   * forgot about the box for one frame would flash a price at the player at the exact moment they
+   * pressed the key. Up to 150 ms stale, which is the same staleness every other number on the
+   * toolbelt already has.
+   */
+  private boxedKinds: number[] = [];
 
   /**
    * The non-reactive channel (§13). Mutated in place, read by rAF writers that put text
@@ -154,6 +172,7 @@ export class HudStore {
     bench: () => this.snapshot.bench,
     lot: () => this.snapshot.lot,
     shop: () => this.snapshot.shop,
+    inventory: () => this.snapshot.inventory,
   };
 
   /**
@@ -171,6 +190,7 @@ export class HudStore {
     bench: () => ZERO_SNAPSHOT.bench,
     lot: () => ZERO_SNAPSHOT.lot,
     shop: () => ZERO_SNAPSHOT.shop,
+    inventory: () => ZERO_SNAPSHOT.inventory,
   };
 
   getSnapshot(): HudSnapshot {
@@ -198,6 +218,7 @@ export class HudStore {
     this.live.moneyCents = 0;
     this.live.clock = '';
     this.live.status = '';
+    this.boxedKinds.length = 0;
     this.resetSlices();
   }
 
@@ -220,6 +241,7 @@ export class HudStore {
     this.bench = ZERO_BENCH;
     this.lot = ZERO_LOT;
     this.shop = ZERO_SHOP;
+    this.inventory = ZERO_INVENTORY;
     this.snapshot = ZERO_SNAPSHOT;
     this.notify();
   }
@@ -250,11 +272,19 @@ export class HudStore {
     );
     if (this.setUnlock(unlock)) changed = true;
     if (this.setPouch(derivePouch(view))) changed = true;
+
+    // The bag is read BEFORE the toolbelt, and the order is load-bearing rather than tidy: a
+    // placement tool for a machine the player has boxed costs nothing, so `setTools` needs this
+    // frame's boxes rather than last frame's.
+    const inventory = deriveInventory(view, this.inventoryScratch);
+    this.rememberBoxedKinds(inventory);
+
     if (this.setTools(view.moneyCents, tool)) changed = true;
     if (this.setTech(deriveTech(view, this.techScratch))) changed = true;
     if (this.setBench(deriveBench(view, this.benchScratch))) changed = true;
     if (this.setLot(deriveLot(view, this.riskWatch, this.lotScratch))) changed = true;
     if (this.setShop(deriveShop(view, this.shopScratch))) changed = true;
+    if (this.setInventory(inventory)) changed = true;
 
     if (view.tick >= this.clipboardDueTick) {
       this.clipboardDueTick = view.tick + CLIPBOARD_PERIOD_TICKS;
@@ -326,6 +356,7 @@ export class HudStore {
       bench: this.bench,
       lot: this.lot,
       shop: this.shop,
+      inventory: this.inventory,
     };
   }
 
@@ -405,15 +436,23 @@ export class HudStore {
     return true;
   }
 
+  /** The kinds with a box in the bag, rewritten in place — no allocation on the publish path. */
+  private rememberBoxedKinds(inventory: InventoryFields): void {
+    this.boxedKinds.length = 0;
+    for (const row of inventory.rows) {
+      if (row.boxedKind !== 0) this.boxedKinds.push(row.boxedKind);
+    }
+  }
+
   private setTools(moneyCents: number, tool: ToolMode): boolean {
-    const slots = deriveTools(moneyCents, tool);
+    const slots = deriveTools(moneyCents, tool, this.boxedKinds);
     const current = this.tools.slots;
     if (current.length === slots.length) {
       let same = true;
       for (let i = 0; i < slots.length; i++) {
         const a = current[i] as ToolSlot;
         const b = slots[i]!;
-        if (a.active !== b.active || a.affordable !== b.affordable) {
+        if (a.active !== b.active || a.affordable !== b.affordable || a.fromBox !== b.fromBox) {
           same = false;
           break;
         }
@@ -486,6 +525,11 @@ export class HudStore {
       current.machineId === next.machineId &&
       current.researched === next.researched &&
       current.conditionPermille === next.conditionPermille &&
+      current.boxable === next.boxable &&
+      // The reason is compared as well as the verdict: a jam that gets whacked and immediately
+      // starts working again never passes through `boxable === 1`, and without this the panel
+      // would keep telling the player to whack a machine that is already turning.
+      current.boxBlocked === next.boxBlocked &&
       current.dials.length === next.dials.length
     ) {
       let same = true;
@@ -509,6 +553,8 @@ export class HudStore {
       listPriceCents: next.listPriceCents,
       researched: next.researched,
       dials: Object.freeze(next.dials.map((dial) => Object.freeze({ ...dial }))),
+      boxable: next.boxable,
+      boxBlocked: next.boxBlocked,
     });
     return true;
   }
@@ -599,6 +645,8 @@ export class HudStore {
       current.atStand === next.atStand &&
       current.standExists === next.standExists &&
       current.heading === next.heading &&
+      current.standTileX === next.standTileX &&
+      current.standTileY === next.standTileY &&
       current.rows.length === next.rows.length
     ) {
       let same = true;
@@ -624,6 +672,59 @@ export class HudStore {
       atStand: next.atStand,
       standExists: next.standExists,
       heading: next.heading,
+      standTileX: next.standTileX,
+      standTileY: next.standTileY,
+    });
+    return true;
+  }
+
+  /**
+   * The bag.
+   *
+   * WHAT CAN ACTUALLY MOVE IN A BOX IS NOTHING. Dials, condition and invoice are frozen the
+   * moment a machine goes in one — a boxed Fryer does not wear, does not run, and cannot be
+   * upgraded — so the comparison walks counts and totals rather than six fields per box. The
+   * one case that would slip through a length check alone is a box leaving and a different box
+   * arriving inside the same 150 ms window, which `scrapCents` catches: two boxes that scrap for
+   * the same money and carry the same dial levels draw the same row anyway.
+   *
+   * The goods half is the opposite: counts move constantly, which is a real change and must
+   * publish, because it is the number the panel exists to show.
+   */
+  private setInventory(next: InventoryFields): boolean {
+    const current = this.inventory;
+    if (
+      current.boxCount === next.boxCount &&
+      current.scrapCents === next.scrapCents &&
+      current.rows.length === next.rows.length
+    ) {
+      let same = true;
+      for (let i = 0; i < next.rows.length; i++) {
+        const a = current.rows[i] as InventoryRow;
+        const b = next.rows[i]!;
+        if (
+          a.id !== b.id ||
+          a.count !== b.count ||
+          a.boxes.length !== b.boxes.length ||
+          a.scrapCents !== b.scrapCents ||
+          a.placeTool !== b.placeTool
+        ) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return false;
+    }
+
+    this.inventory = Object.freeze({
+      version: current.version + 1,
+      rows: Object.freeze(
+        next.rows.map((row) =>
+          Object.freeze({ ...row, boxes: Object.freeze(row.boxes.map((box) => ({ ...box }))) }),
+        ),
+      ),
+      boxCount: next.boxCount,
+      scrapCents: next.scrapCents,
     });
     return true;
   }

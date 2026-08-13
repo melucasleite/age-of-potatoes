@@ -131,6 +131,23 @@ describe('the counter', () => {
     expect(shop.standExists).toBe(0);
     expect(shop.atStand).toBe(0);
   });
+
+  /*
+   * The tile is what the walk-and-buy errand aims at ([[054]]). If it were wrong the button
+   * would send the farmer somewhere else on the lot and the purchase would never fire — a
+   * failure with no error, no refusal, and nothing on screen except a farmer walking away.
+   */
+  it('publishes the tile a purchase from across the lot walks to', () => {
+    const shop = deriveShop(viewWith({ playerXSub: 0 }), createShopFields());
+    expect(shop.standTileX).toBe(BIN_TILE);
+    expect(shop.standTileY).toBe(BIN_TILE);
+  });
+
+  it('has no tile to walk to when there is no stand, and says so with -1', () => {
+    const shop = deriveShop(viewWith({ bin: false }), createShopFields());
+    expect(shop.standTileX).toBe(-1);
+    expect(shop.standTileY).toBe(-1);
+  });
 });
 
 describe('seeds whose crop is still locked', () => {

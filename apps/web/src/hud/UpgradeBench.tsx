@@ -27,6 +27,18 @@
 // THE ANTI-DOUBLE-DIP RULE, from this side. Nothing in this file unlocks a capability, teaches
 // a recipe, or changes what a machine is for. It scales numbers, and that is the only place in
 // the game where numbers are scaled (§1, §3). The mirror of the rule lives in `TechTree.tsx`.
+//
+// AND ONE VERB THAT IS NOT A DIAL: "Box it up" ([[054]]). It is here because this is already
+// the at-the-machine card — it exists BECAUSE the player walked over, which is exactly the reach
+// the sim checks when `DeconstructMachine` arrives — and because taking a machine off the lot
+// belongs beside the panel that says what has been spent on it. The dials and the box are the
+// two ends of one thought: this machine, and what you want to do about it.
+//
+// IT IS NOT THE ONLY DOOR THIS VERB SHOULD HAVE. Item 054's instruction 6 wants a click on a
+// DISTANT machine to walk there first (`IntentAction.Deconstruct` exists in the sim and is
+// exercised by its fixture), and that lives in the input layer's pointer wiring, not here. Until
+// it lands, this button is the whole of it — which also means a machine with no work cycle and
+// therefore no bench (a sprinkler, a tank, a pump) cannot be boxed from the HUD yet.
 
 import { useCallback } from 'react';
 
@@ -37,7 +49,7 @@ import { cx, s } from './styles';
 import { hudStore } from './store';
 import { useHudSlice } from './use-hud';
 import { usePending } from './use-pending';
-import type { BenchDial } from './types';
+import type { BenchDial, BenchSlice } from './types';
 
 /**
  * Where the bar turns red: the sim's own degradation threshold, converted to the permille the
@@ -65,6 +77,14 @@ export function UpgradeBench({ onOpenResearch }: { onOpenResearch: () => void })
         // widens to `number` on the way out and narrows here, exactly as `Toolbelt` does.
         dial: dial as UpgradeDial,
       });
+    },
+    [pending],
+  );
+
+  const box = useCallback(
+    (machineId: number) => {
+      pending.hold(`${machineId}:box`);
+      hudStore.dispatch({ type: 'DeconstructMachine', machineId });
     },
     [pending],
   );
@@ -119,7 +139,54 @@ export function UpgradeBench({ onOpenResearch }: { onOpenResearch: () => void })
           />
         ))
       )}
+
+      <div className={s.benchDivider} />
+      <BoxButton
+        bench={bench}
+        pending={pending.isPending(`${bench.machineId}:box`)}
+        onBox={() => box(bench.machineId)}
+      />
     </div>
+  );
+}
+
+/**
+ * Take the whole machine off the lot.
+ *
+ * NO PRICE AND NO CONFIRM DIALOG, and both absences are the design. Boxing is not selling — the
+ * money stays exactly where it is, the dials and the wear travel inside the box, and putting it
+ * back down is free ([[054]]) — so there is nothing to confirm and nothing to quote. The verb
+ * that DOES cost you something is scrapping the box, and that happens in the bag, one panel and
+ * one deliberate press later.
+ *
+ * The two refusals are shown as a sentence rather than as a dead button, because "why can I not
+ * box this" has an answer the player can act on in both cases: whack it, or take its output.
+ */
+function BoxButton({
+  bench,
+  pending,
+  onBox,
+}: {
+  bench: BenchSlice;
+  pending: boolean;
+  onBox: () => void;
+}) {
+  const ready = bench.boxable === 1 && !pending;
+
+  return (
+    <>
+      <button
+        type="button"
+        className={cx(s.dialBuy, ready && s.dialBuyReady)}
+        disabled={!ready}
+        onMouseDown={keepFocus}
+        onClick={onBox}
+      >
+        <span>{pending ? 'packing…' : 'Box it up'}</span>
+        <span className={s.dialCost}>to the bag</span>
+      </button>
+      {bench.boxBlocked === '' ? null : <div className={s.dialCompete}>{bench.boxBlocked}</div>}
+    </>
   );
 }
 

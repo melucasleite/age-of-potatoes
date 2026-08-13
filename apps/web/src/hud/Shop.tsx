@@ -16,10 +16,14 @@
 //   `purchasable` in `data.ts` appears here with no edit, which is the acceptance criterion
 //   stated as a property rather than as a list of seeds.
 //
-//   THE COUNTER HAS TO BE MANNED. `applyBuyItem` refuses unless the farmer is within hand
-//   reach of the bin, so the buttons are inert away from it and the panel says which way to
-//   walk instead of failing silently. That is the papercut [[050]] was filed for; a disabled
-//   button that explains itself is the cheapest fix for it.
+//   THE COUNTER HAS TO BE MANNED — AND THE BUTTON NOW WALKS YOU THERE. `applyBuyItem` still
+//   refuses unless the farmer is within hand reach of the bin. What changed is that the sim
+//   grew `IntentAction.Buy` ([[054]]), so a purchase made from across the lot is issued as a
+//   `WalkAndAct` errand: the farmer walks over and the till fires on arrival. The disabled
+//   button that explained itself was the cheapest fix for [[050]]; an errand is the real one,
+//   and it is the same grammar a click on a distant tile has always used. The panel still says
+//   which way the stand is, because a player who presses buy and starts moving is entitled to
+//   know why.
 //
 //   NOTHING IS OPTIMISTIC. The button goes inert on click and the world answers at the next
 //   publish (`use-pending.ts`). A refused purchase changes nothing, publishes nothing, and
@@ -28,6 +32,7 @@
 
 import { useCallback, useEffect } from 'react';
 
+import { IntentAction } from '@snack/sim';
 import type { ItemId } from '@snack/sim';
 
 // `formatCents` everywhere and never `formatCentsWhole`: a potato seed lists at fifty cents,
@@ -88,9 +93,25 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
       pending.hold(`${item}x${count}`);
       // The view carries plain numbers by rule — no enums across the boundary (§12) — so the
       // id widens on the way out and narrows here, exactly as the bench does with a machine kind.
-      hudStore.dispatch({ type: 'BuyItem', item: item as ItemId, count });
+      if (shop.atStand === 1) {
+        hudStore.dispatch({ type: 'BuyItem', item: item as ItemId, count });
+        return;
+      }
+      // Out of reach: one errand, not a direct command the till would refuse. The sim walks the
+      // farmer over the next hundred-odd ticks and fires `BuyItem` on arrival — and it costs one
+      // trace entry, which is the whole argument for `WalkAndAct` existing (see `commands.ts`).
+      // The target is the stand's tile; `intentTargetSubtiles` re-resolves the machine from it
+      // every tick, so a stand that gets moved mid-walk ends the errand instead of misdirecting.
+      hudStore.dispatch({
+        type: 'WalkAndAct',
+        action: IntentAction.Buy,
+        tileX: shop.standTileX,
+        tileY: shop.standTileY,
+        item,
+        count,
+      });
     },
-    [pending],
+    [pending, shop.atStand, shop.standTileX, shop.standTileY],
   );
 
   useEffect(() => {
@@ -130,7 +151,8 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
               key={row.id}
               row={row}
               moneyCents={economy.moneyCents}
-              atStand={shop.atStand === 1}
+              open={shop.standExists === 1}
+              walks={shop.atStand === 0}
               pending={pending.isPending}
               onBuy={buy}
             />
@@ -167,8 +189,8 @@ function Counter({ shop }: { shop: ShopSlice }) {
   }
   return (
     <div className={cx(s.shopStatus, s.shopStatusShut)}>
-      Nobody buys anything from across the lot — walk to the stand
-      {shop.heading === '' ? '' : `, ${shop.heading} of you`}.
+      The counter is {shop.heading === '' ? 'across the lot' : `${shop.heading} of you`} — buying
+      from here sends you walking, and the money changes hands when you arrive.
     </div>
   );
 }
@@ -178,13 +200,17 @@ function Counter({ shop }: { shop: ShopSlice }) {
 function Row({
   row,
   moneyCents,
-  atStand,
+  open,
+  walks,
   pending,
   onBuy,
 }: {
   row: ShopRow;
   moneyCents: number;
-  atStand: boolean;
+  /** There is a stand on the lot. Without one there is nothing to buy from and nowhere to walk. */
+  open: boolean;
+  /** Pressing buy will send the farmer walking rather than take the money now. */
+  walks: boolean;
   pending: (key: string) => boolean;
   onBuy: (item: number, count: number) => void;
 }) {
@@ -220,14 +246,16 @@ function Row({
         <BuyButton
           row={row}
           count={1}
-          enabled={atStand && !locked && moneyCents >= row.unitPriceCents}
+          enabled={open && !locked && moneyCents >= row.unitPriceCents}
+          walks={walks}
           pending={pending(`${row.id}x1`)}
           onBuy={onBuy}
         />
         <BuyButton
           row={row}
           count={STACK}
-          enabled={atStand && !locked && moneyCents >= row.unitPriceCents * STACK}
+          enabled={open && !locked && moneyCents >= row.unitPriceCents * STACK}
+          walks={walks}
           pending={pending(`${row.id}x${STACK}`)}
           onBuy={onBuy}
         />
@@ -240,12 +268,14 @@ function BuyButton({
   row,
   count,
   enabled,
+  walks,
   pending,
   onBuy,
 }: {
   row: ShopRow;
   count: number;
   enabled: boolean;
+  walks: boolean;
   pending: boolean;
   onBuy: (item: number, count: number) => void;
 }) {
@@ -259,7 +289,16 @@ function BuyButton({
       onClick={() => onBuy(row.id, count)}
     >
       <span className={s.shopBuyCount}>×{count}</span>
-      <span className={s.shopBuyCost}>{pending ? 'wait…' : formatCents(total)}</span>
+      {/*
+        "walk" rather than the price when the purchase is an errand — the price has not changed
+        and is on the row above, but what the button DOES has, and a button that reads $5.00
+        while the farmer sets off across the lot is describing a transaction that has not
+        happened yet. The pending hold is short by design: the errand outlives it, and a button
+        held inert for a fifteen-second walk would look broken.
+      */}
+      <span className={s.shopBuyCost}>
+        {pending ? 'wait…' : walks ? 'walk' : formatCents(total)}
+      </span>
     </button>
   );
 }

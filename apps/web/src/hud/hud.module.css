@@ -1477,6 +1477,115 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- the bag -------------------------------------------------------------------- */
+
+/*
+ * The bag borrows the stand's panel, head, list, row and buttons wholesale — same modal, same
+ * width, same everything — because it IS the same surface showing a different list. What is
+ * below is only the part a boxed machine adds: a strip of dials, a condition, and two figures
+ * that a row of goods has no use for.
+ */
+
+.invEmpty {
+  padding: 18px 4px;
+  text-align: center;
+  font-size: 12px;
+  color: #6d5c4d;
+}
+
+.invCount {
+  font-size: 12px;
+  color: #cbb99b;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Quiet, and never red. A seed the bin refuses is not a problem, it is simply not merchandise. */
+.invNotForSale {
+  margin-left: auto;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6d5c4d;
+}
+
+/* Machines sit a shade warmer than goods so the eye finds them in a bag full of potatoes. */
+.invBoxedRow {
+  align-items: flex-start;
+  background: linear-gradient(180deg, #31251a 0%, #241c14 100%);
+}
+
+.invBoxedTag {
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #d9b475;
+  padding: 1px 5px 2px;
+  background: #14100e;
+  box-shadow: inset 0 0 0 1px #46392f;
+}
+
+.invBoxes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+/* One line per box. Baseline-aligned so the pips, the percentage and the two prices read as a
+   row of facts rather than as a small table. */
+.invBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 5px;
+  background: #1c1610;
+  box-shadow: inset 0 0 0 1px #46392f;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The box both verbs will take. Gold, because it is the one true thing on the row — the same
+   colour every other panel uses for "this is what happens if you press the button". */
+.invNextOut {
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #f5d382;
+}
+
+.invDial {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.invDialKey {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #9a8873;
+}
+
+.invCondition {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: #9a8873;
+}
+.invConditionLow {
+  color: #ef8f68;
+}
+
+/* What it cost, then what it fetches. In that order, because the second number only means
+   anything beside the first one. */
+.invInvested {
+  font-size: 10.5px;
+  color: #6d5c4d;
+}
+
+.invScrap {
+  font-size: 10.5px;
+  color: #f5d382;
+}
+
 /* --- the upgrade bench ---------------------------------------------------------- */
 
 /*

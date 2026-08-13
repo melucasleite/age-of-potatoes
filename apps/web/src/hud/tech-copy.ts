@@ -270,6 +270,17 @@ export const MACHINE_LABELS: Readonly<Record<number, string>> = {
   [MachineKind.PipedSprinkler]: 'Piped Sprinkler',
   [MachineKind.IrrigationHub]: 'Irrigation Hub',
   [MachineKind.Recirculator]: 'Recirculator',
+  // The soda line. Named here for the same reason as the rest, and needed by more than the
+  // bench now: a boxed machine in the bag is named by its machine ([[054]], `item-copy.ts`), so
+  // a kind missing from this table would read "Machine" on a row the player is about to scrap.
+  [MachineKind.Juicer]: 'Juicer',
+  [MachineKind.Kettle]: 'Kettle',
+  [MachineKind.Grinder]: 'Grinder',
+  [MachineKind.SyrupMixer]: 'Syrup Mixer',
+  [MachineKind.Carbonator]: 'Carbonator',
+  [MachineKind.Bottler]: 'Bottler',
+  [MachineKind.SixPacker]: 'Six-Packer',
+  [MachineKind.ComboPacker]: 'Combo Packer',
 };
 
 export function machineLabel(kind: number): string {

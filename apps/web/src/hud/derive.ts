@@ -19,10 +19,11 @@ import {
 } from '@snack/sim';
 import type { ItemSpec, WorldView } from '@snack/sim';
 
-import { TOOL_INFO, TOOL_ORDER } from '@/game/input/tools';
+import { TOOL_INFO, TOOL_ORDER, toolMachineKind } from '@/game/input/tools';
 import type { ToolMode } from '@/game/input/tools';
 
 import { countWord, formatCents, plural } from './format';
+import { itemName } from './item-copy';
 import type { ClipboardNote, PouchItem, ToolSlot } from './types';
 
 // --- the unlock ladder -------------------------------------------------------------
@@ -222,7 +223,11 @@ export function derivePouch(view: WorldView): PouchItem[] {
     const spec: ItemSpec | null = itemSpec(slot.item as ItemId);
     items.push({
       id: slot.item,
-      label: ITEM_LABELS[slot.item] ?? 'stuff',
+      // The short plural forms above are the pouch's own register — "12 russets" is what a
+      // person says. The FALLBACK is no longer "stuff": twenty boxed-machine rows landed in
+      // `ITEM_SPECS` at once ([[054]]), and a pouch reading "2 stuff" beside the panel that
+      // calls the same thing a Fryer is the HUD disagreeing with itself in one glance.
+      label: ITEM_LABELS[slot.item] ?? itemName(slot.item),
       count: slot.count,
       valueCents: spec === null ? 0 : spec.listPriceCents * slot.count,
       sellable: spec !== null && !spec.sellable ? 0 : 1,
@@ -233,17 +238,29 @@ export function derivePouch(view: WorldView): PouchItem[] {
 
 // --- the toolbelt ------------------------------------------------------------------
 
-export function deriveTools(moneyCents: number, active: ToolMode): ToolSlot[] {
+/**
+ * @param boxedKinds `MachineKind`s the player is carrying at least one box of. A placement tool
+ * for one of these costs nothing, because `PlaceMachine` opens the box before it reaches for
+ * money ([[054]]) — so the slot must not quote a price, and must not grey itself out at $0.
+ */
+export function deriveTools(
+  moneyCents: number,
+  active: ToolMode,
+  boxedKinds: readonly number[],
+): ToolSlot[] {
   return TOOL_ORDER.map((tool, index) => {
     const info = TOOL_INFO[tool];
+    const kind = toolMachineKind(tool);
+    const fromBox = kind !== null && boxedKinds.includes(kind) ? 1 : 0;
     return {
       tool,
       digit: index + 1,
       label: info.label,
       hint: info.hint,
       costCents: info.costCents,
-      affordable: info.costCents === 0 || moneyCents >= info.costCents ? 1 : 0,
+      affordable: fromBox === 1 || info.costCents === 0 || moneyCents >= info.costCents ? 1 : 0,
       active: tool === active ? 1 : 0,
+      fromBox,
     };
   });
 }

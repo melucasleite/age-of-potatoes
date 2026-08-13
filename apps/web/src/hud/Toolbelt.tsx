@@ -64,8 +64,17 @@ function SlotButton({ slot }: { slot: ToolSlot }) {
     >
       <span className={s.slotKey}>{slot.digit}</span>
       <span className={s.slotName}>{slot.label}</span>
+      {/*
+        "from the bag" outranks the price, because it IS the price: `PlaceMachine` opens a boxed
+        machine before it charges anybody ([[054]]). A slot that kept quoting $100 over a box the
+        player is about to spend would be contradicting the panel they just pressed Place in.
+      */}
       <span className={s.slotCost}>
-        {slot.costCents === 0 ? 'free' : formatCentsWhole(slot.costCents)}
+        {slot.fromBox === 1
+          ? 'from the bag'
+          : slot.costCents === 0
+            ? 'free'
+            : formatCentsWhole(slot.costCents)}
       </span>
     </button>
   );

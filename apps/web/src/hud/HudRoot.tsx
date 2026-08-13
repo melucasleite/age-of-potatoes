@@ -15,8 +15,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { onPanelRequest } from '@/game/input/panels';
+
 import { Clipboard } from './Clipboard';
 import { FieldCard } from './FieldCard';
+import { InventoryPanel, InventoryToggle } from './Inventory';
 import { s } from './styles';
 import { PerfOverlay } from './PerfOverlay';
 import { Pouch } from './Pouch';
@@ -54,14 +57,18 @@ export default function HudRoot() {
       <SaveNotices />
       <div className={s.root}>
         {/*
-        Ticker, Research, the Stand — one column, in that order. The two buttons are the only
-        places money leaves the player's hands without them walking somewhere, so they read as
-        a pair hanging off the counter that says how much money there is ([[051]]).
+        Ticker, Research, the Stand, the Bag — one column, in that order. The first two buttons
+        are the only places money leaves the player's hands without them walking somewhere, so
+        they read as a pair hanging off the counter that says how much money there is ([[051]]).
+        The Bag joins them because it is where money comes BACK — scrapping a boxed machine is
+        the other side of the same counter ([[054]]) — and because it is the panel a player
+        opens while wondering what they are carrying, which is a question about the same column.
       */}
         <div className={`${s.corner} ${s.topLeft}`}>
           <Ticker />
           <TechToggle onOpen={panels.openResearch} />
           <ShopToggle onOpen={panels.openShop} />
+          <InventoryToggle onOpen={panels.openInventory} />
         </div>
 
         {/*
@@ -114,12 +121,13 @@ export default function HudRoot() {
 
         {panels.open === 'research' ? <TechPanel onClose={panels.close} /> : null}
         {panels.open === 'shop' ? <ShopPanel onClose={panels.close} /> : null}
+        {panels.open === 'inventory' ? <InventoryPanel onClose={panels.close} /> : null}
       </div>
     </>
   );
 }
 
-type PanelName = 'research' | 'shop';
+type PanelName = 'research' | 'shop' | 'inventory';
 
 /**
  * Which full-screen panel is showing, if any. UI STATE, and it stays that way.
@@ -136,18 +144,21 @@ type PanelName = 'research' | 'shop';
  * The keys are bound here rather than in `input/keyboard.ts` because they toggle DOM panels
  * that the input system has no business knowing exist. They are chosen from what that layer
  * leaves free: digits 1–6, B, R, C, +, −, Escape, F3, backtick, space and WASD are all spoken
- * for, and an unhandled code falls through its switch untouched. T for the tree, G for goods.
+ * for, and an unhandled code falls through its switch untouched. T for the tree, G for goods,
+ * I for the bag — the one letter a player will try without being told.
  */
 function usePanels(): {
   open: PanelName | null;
   openResearch: () => void;
   openShop: () => void;
+  openInventory: () => void;
   close: () => void;
 } {
   const [open, setOpen] = useState<PanelName | null>(null);
 
   const openResearch = useCallback(() => setOpen('research'), []);
   const openShop = useCallback(() => setOpen('shop'), []);
+  const openInventory = useCallback(() => setOpen('inventory'), []);
   const close = useCallback(() => setOpen(null), []);
 
   useEffect(() => {
@@ -156,7 +167,13 @@ function usePanels(): {
       if (event.repeat) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const name: PanelName | null =
-        event.code === 'KeyT' ? 'research' : event.code === 'KeyG' ? 'shop' : null;
+        event.code === 'KeyT'
+          ? 'research'
+          : event.code === 'KeyG'
+            ? 'shop'
+            : event.code === 'KeyI'
+              ? 'inventory'
+              : null;
       if (name === null) return;
       setOpen((was) => (was === name ? null : name));
     };
@@ -166,5 +183,12 @@ function usePanels(): {
     };
   }, []);
 
-  return { open, openResearch, openShop, close };
+  // The input layer's one line to the HUD ([[054]], `input/panels.ts`): a Hand click on the sell
+  // bin with nothing to sell asks for the stand rather than doing nothing at all. It ASKS — this
+  // side still decides, which is why it goes through the same `setOpen` as the key and inherits
+  // the one-at-a-time rule for free. Not a toggle: a click on the bin means "open it", and
+  // toggling would shut the board in the face of a player who clicked the bin twice.
+  useEffect(() => onPanelRequest((panel) => setOpen(panel)), []);
+
+  return { open, openResearch, openShop, openInventory, close };
 }

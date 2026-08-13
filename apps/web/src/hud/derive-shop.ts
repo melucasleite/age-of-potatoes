@@ -80,10 +80,12 @@ export interface ShopFields {
   atStand: number;
   standExists: number;
   heading: string;
+  standTileX: number;
+  standTileY: number;
 }
 
 export function createShopFields(): ShopFields {
-  return { rows: [], atStand: 0, standExists: 0, heading: '' };
+  return { rows: [], atStand: 0, standExists: 0, heading: '', standTileX: -1, standTileY: -1 };
 }
 
 export function deriveShop(view: WorldView, out: ShopFields): ShopFields {
@@ -91,6 +93,11 @@ export function deriveShop(view: WorldView, out: ShopFields): ShopFields {
   out.standExists = stand === null ? 0 : 1;
   out.atStand = stand !== null && withinReach(view, stand) ? 1 : 0;
   out.heading = stand === null || out.atStand === 1 ? '' : headingTo(view, stand);
+  // The tile the errand walks to. `intentTargetSubtiles` resolves the machine from this tile on
+  // every tick and aims at its footprint centre, so the origin tile of the stand is enough and
+  // a stand that gets picked up and moved simply ends the errand rather than misdirecting it.
+  out.standTileX = stand === null ? -1 : stand.tileX;
+  out.standTileY = stand === null ? -1 : stand.tileY;
 
   const rows: ShopRow[] = [];
   for (let i = 0; i < ITEM_SPECS.length; i++) {

@@ -77,6 +77,16 @@ export interface ToolSlot {
   readonly costCents: number;
   readonly affordable: number;
   readonly active: number;
+  /**
+   * 1 when this placement will open a BOX the player already owns instead of charging them.
+   *
+   * `PlaceMachine` consumes a boxed machine before it reaches for money ([[054]]), so a slot
+   * quoting a price the till is not going to charge would be the HUD contradicting itself in
+   * the same second: the bag says "Place · free", the player presses it, and the toolbelt
+   * answers "$100". Worse, `affordable` would read 0 for a placement that cannot fail on money,
+   * which greys a slot that works.
+   */
+  readonly fromBox: number;
 }
 
 export interface ToolSlice {
@@ -186,6 +196,18 @@ export interface BenchSlice {
   /** 1 once the Upgrade Bench node is researched. The dials are inert until then. */
   readonly researched: number;
   readonly dials: readonly BenchDial[];
+  /**
+   * 1 when `DeconstructMachine` would be accepted on this machine right now.
+   *
+   * A MIRROR OF THE SIM'S REFUSALS, not a second opinion: the reducer refuses a jammed machine
+   * and one that is mid-batch, and the bench greys the button on exactly those two. It is a
+   * courtesy rather than a gate — the sim decides, and a refused command is a no-op (see
+   * `hudStore.dispatch`) — but a button that looks alive and does nothing is the papercut this
+   * HUD keeps being filed against.
+   */
+  readonly boxable: number;
+  /** Why not, in the panel's own words. Empty when `boxable` is 1. */
+  readonly boxBlocked: string;
 }
 
 /**
@@ -292,6 +314,84 @@ export interface ShopSlice {
   readonly standExists: number;
   /** Which way to walk — "north-east" — quantised to eight points. Empty when at the stand. */
   readonly heading: string;
+  /**
+   * The stand's own tile, so a purchase made from across the lot can be sent as an ERRAND
+   * rather than refused.
+   *
+   * Published as a tile rather than as subtiles because that is what `WalkAndAct` carries, and
+   * it is stable while the player moves — a subtile pair would be a second thing changing on
+   * every publish for a panel that redraws one sentence. Both are -1 when there is no stand.
+   */
+  readonly standTileX: number;
+  readonly standTileY: number;
+}
+
+/**
+ * ONE boxed machine on an inventory row — not a summary of the row.
+ *
+ * Per box because that is the fact: three boxed Fryers are three different machines at three
+ * different invoices, and a row that showed "×3" over one set of dials would be lying about two
+ * of them. The sim publishes them least-invested-first and both verbs consume from the front, so
+ * `index === 0` is the box that will actually go down or actually be scrapped.
+ */
+export interface InventoryBox {
+  /** Position in the row's list. 0 is the box `PlaceMachine` and `SellBoxedMachine` take next. */
+  readonly index: number;
+  readonly speedLevel: number;
+  readonly efficiencyLevel: number;
+  readonly capacityLevel: number;
+  /** Condition it was boxed at, restored when it goes back down. */
+  readonly conditionPermille: number;
+  /** Price plus every dial ever bought for it. */
+  readonly investedCents: number;
+  /**
+   * What the sim will pay to scrap THIS box, read off the view.
+   *
+   * NEVER COMPUTED HERE, and the rule is worth the sentence: the payout ratio lives in the sim,
+   * `applySellBoxedMachine` pays exactly this number, and the last time this HUD kept its own
+   * copy of one of the sim's prices it was wrong by a third for weeks (see the tombstone at the
+   * end of `derive-tech.ts`).
+   */
+  readonly scrapCents: number;
+}
+
+/**
+ * One line in the bag: a stack of goods, or a stack of boxed machines.
+ *
+ * `boxedKind` IS THE TYPE TAG, exactly as the sim's `InventoryView.boxedMachineKind` is. Non-zero
+ * means this row is machines in boxes, which means the bin refuses it, the scrap verb is
+ * `SellBoxedMachine` rather than `SellItem`, and there is a cursor that puts one back down.
+ */
+export interface InventoryRow {
+  /** `ItemId`. */
+  readonly id: number;
+  readonly name: string;
+  readonly count: number;
+  /** 1 when the sell bin will take it. Read from the sim, never decided here ([[051]]). */
+  readonly sellable: number;
+  /** `MachineKind` in the box, or 0 for an ordinary good. */
+  readonly boxedKind: number;
+  readonly unitPriceCents: number;
+  /** List value of the whole stack. Zero on a boxed row — a box is priced off its invoice. */
+  readonly stackValueCents: number;
+  /** What every box on this row would fetch, summed from the sim's own per-box figures. */
+  readonly scrapCents: number;
+  /**
+   * The `ToolMode` that puts this box down, or -1 when the UI has no build cursor for that
+   * machine kind yet. -1 is a real state and the panel says so rather than arming the wrong tool.
+   */
+  readonly placeTool: number;
+  readonly boxes: readonly InventoryBox[];
+}
+
+/** Everything the player is carrying. Goods, seeds, and boxed machines, in the sim's order. */
+export interface InventorySlice {
+  readonly version: number;
+  readonly rows: readonly InventoryRow[];
+  /** Boxed machines in the bag, across every row. */
+  readonly boxCount: number;
+  /** What all of them together would scrap for. */
+  readonly scrapCents: number;
 }
 
 export interface HudSnapshot {
@@ -304,6 +404,7 @@ export interface HudSnapshot {
   readonly bench: BenchSlice;
   readonly lot: LotSlice;
   readonly shop: ShopSlice;
+  readonly inventory: InventorySlice;
 }
 
 export type SliceName = keyof HudSnapshot;
@@ -376,6 +477,8 @@ export const ZERO_BENCH: BenchSlice = Object.freeze({
   listPriceCents: 0,
   researched: 0,
   dials: Object.freeze([]),
+  boxable: 0,
+  boxBlocked: '',
 });
 
 export const ZERO_LOT: LotSlice = Object.freeze({
@@ -401,6 +504,8 @@ export const ZERO_SHOP: ShopSlice = Object.freeze({
   atStand: 0,
   standExists: 0,
   heading: '',
+  standTileX: -1,
+  standTileY: -1,
 });
 
 /**
@@ -410,6 +515,13 @@ export const ZERO_SHOP: ShopSlice = Object.freeze({
  * the server must return the SAME reference every call or React throws a
  * "getServerSnapshot should be cached" error rather than a hydration warning.
  */
+export const ZERO_INVENTORY: InventorySlice = Object.freeze({
+  version: 0,
+  rows: Object.freeze([]),
+  boxCount: 0,
+  scrapCents: 0,
+});
+
 export const ZERO_SNAPSHOT: HudSnapshot = Object.freeze({
   economy: ZERO_ECONOMY,
   unlock: ZERO_UNLOCK,
@@ -420,4 +532,5 @@ export const ZERO_SNAPSHOT: HudSnapshot = Object.freeze({
   bench: ZERO_BENCH,
   lot: ZERO_LOT,
   shop: ZERO_SHOP,
+  inventory: ZERO_INVENTORY,
 });
