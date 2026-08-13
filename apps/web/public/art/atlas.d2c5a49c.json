@@ -352,7 +352,7 @@
       "anchorMode": "center",
       "group": "belts"
     },
-    "item_chip_bag": {
+    "item_bottle": {
       "frame": {
         "x": 0,
         "y": 67,
@@ -374,7 +374,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_plain_chips": {
+    "item_chip_bag": {
       "frame": {
         "x": 17,
         "y": 67,
@@ -396,7 +396,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_potato": {
+    "item_kola_nut": {
       "frame": {
         "x": 34,
         "y": 67,
@@ -418,7 +418,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_potato_slices": {
+    "item_kola_powder": {
       "frame": {
         "x": 51,
         "y": 67,
@@ -440,7 +440,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_seasoned_chips": {
+    "item_plain_chips": {
       "frame": {
         "x": 68,
         "y": 67,
@@ -462,9 +462,185 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_washed_potato": {
+    "item_potato": {
       "frame": {
         "x": 85,
+        "y": 67,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_potato_slices": {
+      "frame": {
+        "x": 102,
+        "y": 67,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_repair_kit": {
+      "frame": {
+        "x": 119,
+        "y": 67,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_rustic_style_chips": {
+      "frame": {
+        "x": 136,
+        "y": 67,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_seasoned_chips": {
+      "frame": {
+        "x": 153,
+        "y": 67,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_six_pack": {
+      "frame": {
+        "x": 170,
+        "y": 67,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_snack_combo": {
+      "frame": {
+        "x": 187,
+        "y": 67,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_soda": {
+      "frame": {
+        "x": 204,
+        "y": 67,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_washed_potato": {
+      "frame": {
+        "x": 221,
         "y": 67,
         "w": 16,
         "h": 16
@@ -927,7 +1103,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.a04d9b24.png",
+    "image": "atlas.d2c5a49c.png",
     "format": "RGBA8888",
     "size": {
       "w": 512,
@@ -963,9 +1139,9 @@
         "group": "items",
         "x": 0,
         "y": 67,
-        "width": 101,
+        "width": 237,
         "height": 16,
-        "count": 6
+        "count": 14
       },
       {
         "group": "machines",

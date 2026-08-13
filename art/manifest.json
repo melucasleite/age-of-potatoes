@@ -238,6 +238,16 @@
       "atlasGroup": "items"
     },
     {
+      "id": "item_rustic_style_chips",
+      "provider": "retro-diffusion",
+      "width": 16,
+      "height": 16,
+      "prompt": "a small heap of three burnt potato chips lying loose on nothing, each crisp a fat curved wedge of very dark chocolate brown with near black charred edges, scorched and overcooked, absolutely no golden colour and no orange and no yellow, game inventory item icon, chunky readable silhouette, very large solid areas of flat dark brown colour, thick heavy chunky shapes, no thin lines, no small details, no bowl, no basket, no bag, no container, no crumbs, centred, transparent background, no text",
+      "promptStyle": "rd_fast__default",
+      "anchor": "center",
+      "atlasGroup": "items"
+    },
+    {
       "id": "crop_cane_strip",
       "provider": "retro-diffusion",
       "width": 64,
@@ -363,6 +373,16 @@
       "atlasGroup": "items"
     },
     {
+      "id": "item_kola_nut",
+      "provider": "retro-diffusion",
+      "width": 16,
+      "height": 16,
+      "prompt": "two raw kola nuts side by side, fat rounded glossy seeds in deep reddish brown, one slightly behind the other, clearly hard nuts and not berries and not beans, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no leaves, no stems, centred, transparent background, no text",
+      "promptStyle": "rd_fast__default",
+      "anchor": "center",
+      "atlasGroup": "items"
+    },
+    {
       "id": "item_bottle",
       "provider": "retro-diffusion",
       "width": 16,
@@ -398,6 +418,16 @@
       "width": 16,
       "height": 16,
       "prompt": "a combo bundle of one bag of chips and one soda bottle together, a bright red chip bag with one dark red bottle beside it, tied with a gold band, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, no thin lines, no small details, centred, transparent background, no text",
+      "promptStyle": "rd_fast__default",
+      "anchor": "center",
+      "atlasGroup": "items"
+    },
+    {
+      "id": "item_repair_kit",
+      "provider": "retro-diffusion",
+      "width": 16,
+      "height": 16,
+      "prompt": "a small closed red metal toolbox seen from the front, one thick dark handle across the top, one fat silver grey spanner lying diagonally across the front of the box, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no screws, no logos, centred, transparent background, no text",
       "promptStyle": "rd_fast__default",
       "anchor": "center",
       "atlasGroup": "items"

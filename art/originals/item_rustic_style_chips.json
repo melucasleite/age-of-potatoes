@@ -1,0 +1,24 @@
+{
+  "id": "item_rustic_style_chips",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1883413105,
+  "prompt": "a small heap of three burnt potato chips lying loose on nothing, each crisp a fat curved wedge of very dark chocolate brown with near black charred edges, scorched and overcooked, absolutely no golden colour and no orange and no yellow, game inventory item icon, chunky readable silhouette, very large solid areas of flat dark brown colour, thick heavy chunky shapes, no thin lines, no small details, no bowl, no basket, no bag, no container, no crumbs, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T02:40:39.071Z"
+}

@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.a04d9b24.png';
-export const ATLAS_JSON_URL = '/art/atlas.a04d9b24.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.d2c5a49c.png';
+export const ATLAS_JSON_URL = '/art/atlas.d2c5a49c.json';
 
 export const ATLAS_SIZE = { width: 512, height: 256 } as const;
 
@@ -150,7 +150,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'belts',
   },
-  item_chip_bag: {
+  item_bottle: {
     x: 0,
     y: 67,
     width: 16,
@@ -158,7 +158,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_plain_chips: {
+  item_chip_bag: {
     x: 17,
     y: 67,
     width: 16,
@@ -166,7 +166,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_potato: {
+  item_kola_nut: {
     x: 34,
     y: 67,
     width: 16,
@@ -174,7 +174,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_potato_slices: {
+  item_kola_powder: {
     x: 51,
     y: 67,
     width: 16,
@@ -182,7 +182,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_seasoned_chips: {
+  item_plain_chips: {
     x: 68,
     y: 67,
     width: 16,
@@ -190,8 +190,72 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_washed_potato: {
+  item_potato: {
     x: 85,
+    y: 67,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  item_potato_slices: {
+    x: 102,
+    y: 67,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  item_repair_kit: {
+    x: 119,
+    y: 67,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  item_rustic_style_chips: {
+    x: 136,
+    y: 67,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  item_seasoned_chips: {
+    x: 153,
+    y: 67,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  item_six_pack: {
+    x: 170,
+    y: 67,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  item_snack_combo: {
+    x: 187,
+    y: 67,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  item_soda: {
+    x: 204,
+    y: 67,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  item_washed_potato: {
+    x: 221,
     y: 67,
     width: 16,
     height: 16,

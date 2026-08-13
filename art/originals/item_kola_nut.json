@@ -1,0 +1,24 @@
+{
+  "id": "item_kola_nut",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 48465937,
+  "prompt": "two raw kola nuts side by side, fat rounded glossy seeds in deep reddish brown, one slightly behind the other, clearly hard nuts and not berries and not beans, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no leaves, no stems, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T02:33:11.125Z"
+}

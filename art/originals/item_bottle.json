@@ -1,0 +1,24 @@
+{
+  "id": "item_bottle",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 2123809026,
+  "prompt": "a single empty clear glass soda bottle standing upright, pale icy blue glass, narrow neck and fat body, clearly empty, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, no thin lines, no small details, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T02:33:09.443Z"
+}

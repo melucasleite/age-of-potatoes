@@ -1,0 +1,24 @@
+{
+  "id": "item_snack_combo",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1346926011,
+  "prompt": "a combo bundle of one bag of chips and one soda bottle together, a bright red chip bag with one dark red bottle beside it, tied with a gold band, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, no thin lines, no small details, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T02:35:42.224Z"
+}
