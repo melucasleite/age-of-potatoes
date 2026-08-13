@@ -279,6 +279,32 @@ export class BeltItemLayer {
     if (staticDirty) this.container.update();
   }
 
+  /**
+   * Draw no items at all. The zoomed-out half of the flow LOD.
+   *
+   * ────────────────────────────────────────────────────────────────────────────────────
+   *  THIS IS THE LOD ACTUALLY COSTING LESS, and it is worth being precise about why.
+   *
+   *  An empty `ParticleContainer` submits NO draw call — there is no batch to flush — so
+   *  below the threshold the entire item path costs one comparison per frame instead of a
+   *  buffer upload and a draw. The derivation is skipped too: `update()` is never entered,
+   *  so no belt is walked and no binary search is run.
+   *
+   *  Nothing is freed. The pool keeps its particles and `slotItem` keeps its frames, so
+   *  zooming back in repopulates from the pool with no allocation — which is what makes the
+   *  switch survivable in both directions. A LOD that reallocated on every zoom change would
+   *  hitch at exactly the moment the player is moving the camera.
+   * ────────────────────────────────────────────────────────────────────────────────────
+   */
+  clear(): void {
+    const children = this.container.particleChildren;
+    if (children.length === 0) return;
+    children.length = 0;
+    // Count is a STATIC property. Without this the batch keeps drawing the particles it
+    // uploaded last frame — items still on screen at a zoom that is supposed to have none.
+    this.container.update();
+  }
+
   /** Does NOT destroy the item page — the scene owns it and the grabbers still want it. */
   destroy(): void {
     this.container.particleChildren.length = 0;

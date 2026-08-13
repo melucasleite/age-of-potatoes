@@ -58,8 +58,21 @@ export interface MachineVisual {
   hopper: Sprite;
   /** What is waiting in the output buffer, so a blocked machine says WHAT is blocked. */
   outputPip: Sprite;
-  /** Total upgrade level, as a short chrome strip. Bolt-on shine for a tuned machine. */
-  dials: Sprite;
+  /**
+   * The upgrade decals: at most one per dial, grown on demand and hidden when a dial is at 0.
+   *
+   * Composited exactly as the status lamp is (§13's "one sprite tinted in code" argument,
+   * applied to paint instead of colour): nine 32×32 frames cover three dials × three levels
+   * on every machine in the game, because each one is a full overlay in the MACHINE'S OWN
+   * coordinate space and stretches onto its footprint the same way the body does. There is
+   * no offset table and no per-machine anchor, and there must never be one — the moment a
+   * decal needs to know which machine it is on, this has become §15's per-machine sprite
+   * variants wearing a different hat.
+   *
+   * An array rather than three fields because most machines have no upgrades: a fresh
+   * factory allocates nothing here, and a maxed Fryer allocates three.
+   */
+  decals: Sprite[];
   /**
    * Pipe collars, one per typed fluid port, grown on demand and never past `MAX_PORTS`.
    *

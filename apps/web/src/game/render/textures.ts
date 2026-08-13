@@ -33,6 +33,9 @@ const BELT_SLUG: Record<number, string> = {
   [BeltTier.Express]: 'express',
 };
 
+/** The three per-machine dials, spelled the way the atlas spells them. */
+export type DecalDial = 'speed' | 'efficiency' | 'capacity';
+
 /**
  * The frame names the renderer asks for. Art slots in by NAME: when the pipeline emits a
  * frame with one of these ids, it replaces the placeholder with no code change here.
@@ -84,6 +87,17 @@ export const ART = {
    * means, and it would put the lamps on their own atlas page for no gain.
    */
   lamp: 'status_lamp',
+  /**
+   * The upgrade decals: nine frames, `decal_<dial>_<level>` with level 1–3.
+   *
+   * THE SAME TRICK AS THE LAMP, one step further. Each is a full 32×32 overlay drawn in the
+   * machine's own coordinate space, so it composites at the machine's position with no offset
+   * table and no per-machine anchor — which is what keeps three dials × three levels × every
+   * machine in the game down to nine frames instead of §15's per-machine sprite variants.
+   *
+   * Level 0 has no frame by design. A machine with a dial at zero draws nothing for it.
+   */
+  decal: (dial: DecalDial, level: number) => `decal_${dial}_${level}`,
   uiHover: 'ui_hover',
   /** Where a walk-to errand is headed. Corner brackets, so it never reads as the hover box. */
   uiTarget: 'ui_target',
@@ -136,18 +150,37 @@ const ALIASES: Record<string, string> = {
  * atlas's own `TextureSource` — carving them out at pack time would put each one somewhere
  * else on the page and buy nothing.
  */
-const STRIPS: Record<string, { source: string; cells: number }> = {};
+const STRIPS: Record<string, string> = {};
 for (const spec of CROP_SPECS) {
   // The pipeline names potato's strip `crop_potato_strip`, not `crop_russet_potato_strip`:
   // the last word of the slug is the one the art vocabulary uses.
   const parts = frameSlug(spec.slug).split('_');
   const short = parts[parts.length - 1]!;
-  for (let stage = 1; stage < spec.stageCount; stage++) {
-    STRIPS[ART.cropStage(spec.id as number, stage)] = {
-      source: `crop_${short}_strip`,
-      cells: spec.stageCount - 1,
-    };
+  // `<=` rather than `<`: ONE SPARE NAME past the sim's last growth stage. `view()` publishes
+  // at most `stageCount - 1`, so nothing asks for the spare today — it is registered so that
+  // when a strip arrives carrying a wilted frame, the cell is addressable without a second
+  // edit here. On today's four-cell strips the spare clamps to the last growth cell, which is
+  // exactly what a wilted crop already draws.
+  for (let stage = 1; stage <= spec.stageCount; stage++) {
+    STRIPS[ART.cropStage(spec.id as number, stage)] = `crop_${short}_strip`;
   }
+}
+
+/**
+ * How many square cells a strip holds — READ OFF THE PICTURE, not off the crop's stage count.
+ *
+ * The two agreed by arithmetic while every strip was 64×16 and every crop had four growth
+ * stages, and that coincidence is exactly the kind that breaks silently: a five-frame 80×16
+ * strip sliced into four would stretch each cell 25% wider and shift every stage but the
+ * first, which reads as "the art came back wrong" rather than as a slicing bug.
+ *
+ * Cells are square by construction — a strip is N frames of the same tile size in a row — so
+ * width ÷ height IS the count. `Math.round` rather than a floor, so a packer that ever shaves
+ * a pixel off the page cannot silently drop the last frame.
+ */
+function stripCells(width: number, height: number): number {
+  if (width <= 0 || height <= 0) return 0;
+  return Math.max(1, Math.round(width / height));
 }
 
 export interface ArtSet {
@@ -218,18 +251,23 @@ export async function loadArt(renderer: Renderer): Promise<ArtSet> {
     const cached = sliced.get(name);
     if (cached !== undefined) return cached;
 
-    const strip = STRIPS[name];
-    if (strip === undefined || sheet === null || !atlasNames.has(strip.source)) return null;
-    const base = sheet.textures[strip.source];
+    const source = STRIPS[name];
+    if (source === undefined || sheet === null || !atlasNames.has(source)) return null;
+    const base = sheet.textures[source];
     if (base === undefined) return null;
 
     // `crop_corn_3` → cell 2. The stage number is the frame name's own suffix, so a crop
     // that grows a fifth stage needs no table anywhere.
     const suffix = Number(name.slice(name.lastIndexOf('_') + 1));
     if (!Number.isFinite(suffix) || suffix < 1) return null;
-    const index = Math.min(strip.cells - 1, suffix - 1);
 
-    const cellWidth = Math.floor(base.frame.width / strip.cells);
+    // The clamp is what makes a longer strip free: ask for a stage the art does not have and
+    // you get its last cell, ask for one it does and you get that cell.
+    const cells = stripCells(base.frame.width, base.frame.height);
+    if (cells <= 0) return null;
+    const index = Math.min(cells - 1, suffix - 1);
+
+    const cellWidth = Math.floor(base.frame.width / cells);
     if (cellWidth <= 0) return null;
     const cell = new Texture({
       source: base.source,

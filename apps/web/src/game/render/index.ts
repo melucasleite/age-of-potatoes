@@ -11,7 +11,7 @@
 
 import { TILE_PX } from './pixel';
 
-import { Sprite } from 'pixi.js';
+import { Sprite, Texture } from 'pixi.js';
 import {
   Direction,
   LampState,
@@ -24,6 +24,7 @@ import {
 import type { MachineView, WorldView } from '@snack/sim';
 
 import { TOOL_INFO, ToolMode, toolMachineKind } from '../input/tools';
+import { beltItemsVisibleAt } from '../input/lod';
 import type { HoverTile } from '../input/context';
 import { tileAtView } from '../input/picking';
 import { beltItemAtTile } from './belt-items';
@@ -33,6 +34,7 @@ import { lampAlpha, lampTint } from './lamps';
 import { liquidName, liquidTint, portHintTint } from './liquids';
 import { pipeAtTile } from './pipes';
 import { ART } from './textures';
+import type { DecalDial } from './textures';
 import { applyDayNight, WORLD_HEIGHT_PX, WORLD_WIDTH_PX } from './world';
 import type { MachineVisual, WorldScene } from './world';
 
@@ -121,9 +123,18 @@ export function render(
   //    Pipes go first, under the belts: the fluid layer is ground plumbing, and it is also
   //    the layer a player reads at full zoom-out — four coloured runs and one grey one is
   //    §5's entire diagnostic for a base whose soda line has stopped.
+  //
+  //    THE FLOW LOD SWITCHES HERE, and this is the only place it switches. Above the
+  //    threshold the goods are drawn one by one and the belt surface is plain; below it the
+  //    items are not drawn at all and the surface carries the throughput instead. Read off
+  //    `camera.zoom` — the scale that was actually applied to the world root a few lines
+  //    above — rather than off input's published `viewLod`, so the picture can never disagree
+  //    with the transform it was drawn under, which is the same rule `picking.ts` follows.
+  const beltItemsVisible = beltItemsVisibleAt(scene.camera.zoom);
   scene.pipes.update(view, rect, performance.now());
-  scene.beltStructures.update(view, alpha, rect);
-  scene.beltItems.update(view, alpha, rect);
+  scene.beltStructures.update(view, alpha, rect, !beltItemsVisible);
+  if (beltItemsVisible) scene.beltItems.update(view, alpha, rect);
+  else scene.beltItems.clear();
   scene.grabbers.update(view, rect);
 
   // 7. Machines.
@@ -360,14 +371,7 @@ function updateMachines(scene: WorldScene, view: WorldView): void {
       );
     }
 
-    // Upgrade chrome: one pixel of shine per dial level, capped by the strip's own length.
-    const dialTotal = m.speedLevel + m.efficiencyLevel + m.capacityLevel;
-    visual.dials.visible = dialTotal > 0;
-    if (dialTotal > 0) {
-      visual.dials.position.set(left + 1, top);
-      visual.dials.scale.set(Math.min(width - 2, dialTotal * 2), 1);
-    }
-
+    updateDecals(scene, m, visual, left, top, width, height);
     updateTankFill(scene, m, visual, left, top, width, height);
     updatePorts(scene, m, visual, left, top, width, height);
   }
@@ -381,6 +385,98 @@ function updateMachines(scene: WorldScene, view: WorldView): void {
 
 /** Never more collars than a machine could plausibly have plumbed. */
 const MAX_PORTS = 6;
+
+/**
+ * The highest level the ART has a frame for. NOT the sim's cap.
+ *
+ * `UPGRADE_MAX_LEVEL` is balance and could move; the atlas holds nine frames and cannot
+ * follow it by itself. Clamping here means a machine that somehow reaches level 4 wears the
+ * level-3 paint — visibly upgraded, one rung understated — rather than losing its decal
+ * entirely, which is the failure a player would report as "my upgrade disappeared".
+ */
+const DECAL_MAX_LEVEL = 3;
+
+/**
+ * Composite the upgrade decals over a machine.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  THE WHOLE DESIGN IS "NO TABLE". (§13's lamp trick, applied to paint.)
+ *
+ *  Each decal is a full overlay drawn in the MACHINE'S OWN coordinate space, so it lands at
+ *  the machine's position and stretches onto its footprint exactly as `body` does — the same
+ *  two lines, deliberately. No offset table, no per-machine anchor, no per-machine variant.
+ *  §15 names the hard problem of this game's art as "making 30 machines distinguishable at a
+ *  glance"; three dials × three levels × thirty machines is 270 sprites of that problem, and
+ *  this is nine.
+ *
+ *  Levels map STRAIGHT off the projection with no lookup: level 0 draws nothing, and a
+ *  machine at Speed 2 + Capacity 1 draws two overlays, stacked in dial order.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ */
+function updateDecals(
+  scene: WorldScene,
+  m: MachineView,
+  visual: MachineVisual,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): void {
+  let used = 0;
+  used = placeDecal(scene, visual, used, 'speed', m.speedLevel, left, top, width, height);
+  used = placeDecal(scene, visual, used, 'efficiency', m.efficiencyLevel, left, top, width, height);
+  used = placeDecal(scene, visual, used, 'capacity', m.capacityLevel, left, top, width, height);
+  for (let i = used; i < visual.decals.length; i++) visual.decals[i]!.visible = false;
+}
+
+function placeDecal(
+  scene: WorldScene,
+  visual: MachineVisual,
+  used: number,
+  dial: DecalDial,
+  level: number,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): number {
+  if (level <= 0) return used;
+  const name = ART.decal(dial, Math.min(DECAL_MAX_LEVEL, level));
+
+  // A MISSING FRAME DRAWS NOTHING. `art.get()` answers an unknown name with a magenta
+  // tile-sized square, which here would be pasted over the machine it was meant to decorate —
+  // an art build that skipped the decals would look like a rendering bug rather than like
+  // missing art. Asking `isReal` first also keeps the placeholder counter honest.
+  if (!scene.art.isReal(name)) return used;
+
+  const sprite = decalSprite(scene, visual, used);
+  sprite.texture = scene.art.get(name);
+  sprite.position.set(left, top);
+  // Pinned to the FOOTPRINT, exactly as the body is. The decals are drawn at 32×32 over a 2×2
+  // machine, so this is 1:1 for the whole chip line and correct rather than merely lucky for
+  // the 1×1 sprinkler and the 3×2 Bottler.
+  sprite.setSize(width, height);
+  sprite.visible = true;
+  return used + 1;
+}
+
+/**
+ * Grow the decal pool. Attached to the MACHINES layer, not `worldUi`.
+ *
+ * A decal is paint on the machine, so it belongs under every readout: the lamp, the wrench,
+ * the progress bar and the hopper column all have to stay on top of it. Machine footprints
+ * never overlap, so attach order within the layer settles nothing that is visible.
+ */
+function decalSprite(scene: WorldScene, visual: MachineVisual, index: number): Sprite {
+  const existing = visual.decals[index];
+  if (existing !== undefined) return existing;
+  const sprite = new Sprite(Texture.EMPTY);
+  sprite.visible = false;
+  visual.decals.push(sprite);
+  scene.contentRoot.addChild(sprite);
+  scene.layers.machines.attach(sprite);
+  return sprite;
+}
 
 /**
  * The liquid a machine's typed port accepts, or 0 for a machine with no plumbing.
@@ -540,10 +636,6 @@ function createMachineVisual(scene: WorldScene, m: MachineView): MachineVisual {
   hopper.alpha = 0.9;
   hopper.visible = false;
 
-  const dials = new Sprite(pixel);
-  dials.tint = 0x8fe6ff;
-  dials.visible = false;
-
   const lamp = new Sprite(scene.art.get(ART.lamp));
   lamp.visible = false;
 
@@ -557,12 +649,12 @@ function createMachineVisual(scene: WorldScene, m: MachineView): MachineVisual {
   const tankFill = new Sprite(pixel);
   tankFill.visible = false;
 
-  for (const sprite of [progress, hopper, dials, lamp, wrench, outputPip, tankFill]) {
+  for (const sprite of [progress, hopper, lamp, wrench, outputPip, tankFill]) {
     scene.contentRoot.addChild(sprite);
     scene.layers.worldUi.attach(sprite);
   }
 
-  return { body, lamp, wrench, progress, hopper, outputPip, dials, tankFill, ports: [] };
+  return { body, lamp, wrench, progress, hopper, outputPip, tankFill, ports: [], decals: [] };
 }
 
 function destroyMachineVisual(visual: MachineVisual): void {
@@ -572,10 +664,13 @@ function destroyMachineVisual(visual: MachineVisual): void {
   visual.progress.destroy();
   visual.hopper.destroy();
   visual.outputPip.destroy();
-  visual.dials.destroy();
   visual.tankFill.destroy();
   for (const port of visual.ports) port.destroy();
   visual.ports.length = 0;
+  // `destroy()` with no argument leaves the TEXTURE alone, which is the atlas's and not
+  // this sprite's to free. Same reason the ports above take no argument either.
+  for (const decal of visual.decals) decal.destroy();
+  visual.decals.length = 0;
 }
 
 function facingTexture(facing: number): string {

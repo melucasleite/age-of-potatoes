@@ -114,14 +114,39 @@ export function beltFlowScrollPxPerSecond(
   tilePx: number,
   itemSpacingSubtiles: number,
 ): number {
-  if (itemCount <= 0 || lengthTiles <= 0) return 0;
-
-  const capacity = Math.max(1, Math.floor((lengthTiles * subtilesPerTile) / itemSpacingSubtiles));
-  const loadPermille = Math.min(1000, Math.round((itemCount * 1000) / capacity));
+  const loadPermille = beltLoadPermille(
+    itemCount,
+    lengthTiles,
+    subtilesPerTile,
+    itemSpacingSubtiles,
+  );
+  if (loadPermille === 0) return 0;
 
   const subtilesPerSecond = (speedSubtilesPer100Ticks * ticksPerSecond) / 100;
   const pxPerSecond = (subtilesPerSecond / subtilesPerTile) * tilePx;
   return (pxPerSecond * loadPermille) / 1000;
+}
+
+/**
+ * How full a belt is, in permille of the items it could hold shoulder to shoulder.
+ *
+ * Split out of the scroll rate because the far view spends it TWICE — once on how fast the
+ * surface moves and once on how alive it looks — and two copies of a capacity formula is two
+ * copies that can disagree about what a full belt is.
+ *
+ * THE RATE IS THE ONLY THING THIS SCALES, and it never exceeds the belt's real speed: a
+ * surface scrolling faster than the goods on it would be a lie told at exactly the zoom level
+ * where the player is trying to read the factory's circulation.
+ */
+export function beltLoadPermille(
+  itemCount: number,
+  lengthTiles: number,
+  subtilesPerTile: number,
+  itemSpacingSubtiles: number,
+): number {
+  if (itemCount <= 0 || lengthTiles <= 0 || itemSpacingSubtiles <= 0) return 0;
+  const capacity = Math.max(1, Math.floor((lengthTiles * subtilesPerTile) / itemSpacingSubtiles));
+  return Math.min(1000, Math.round((itemCount * 1000) / capacity));
 }
 
 /** Zoom in one rung. Returns the new index; the ladder is the only permitted set. */
