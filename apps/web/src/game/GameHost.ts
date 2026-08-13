@@ -20,6 +20,10 @@ import { createAudioLayer } from '../audio';
 import { HUD_PUBLISH_EVERY_TICKS } from '@/hud/cadence';
 import { perf } from '@/hud/perf';
 import { hudStore } from '@/hud/store';
+// Leaf module, not the `@/reports` barrel, for the same reason as the three lines above: the
+// barrel re-exports a React tree. Three verbs, and the reports layer owns everything behind
+// them ([[033]]).
+import { claimReports, publishReports, releaseReports } from '@/reports/bridge';
 
 import { CommandQueue } from './input/commands';
 import type { HoverTile, InputHost } from './input/context';
@@ -260,9 +264,23 @@ export class GameHost implements InputHost {
 
     // Claim the store and publish once immediately, so the HUD comes up with the world
     // rather than 150 ms after it.
-    hudStore.claim(this.hudToken, (tool) => this.setTool(tool));
+    // Two callbacks, and the asymmetry between them is the boundary working. Tool selection
+    // is UI state and goes straight into a field. Anything that changes the WORLD — research,
+    // an upgrade dial — is handed to `queue.push` and applies at a tick boundary like every
+    // other command, so it lands in the trace and replays (§12). The store never sees the
+    // queue and never sees `WorldState`.
+    hudStore.claim(
+      this.hudToken,
+      (tool) => this.setTool(tool),
+      (command) => this.queue.push(command),
+    );
     perf.reset();
     hudStore.publishWorld(this.hudToken, view(this.state, this.viewBuffer), this.tool);
+
+    // The reports read the same projection through the same token, and the same rules apply:
+    // they never see `WorldState`, and their one way to change the world is `queue.push`.
+    claimReports(this.hudToken, this.seed, (command) => this.queue.push(command));
+    publishReports(this.hudToken, view(this.state, this.viewBuffer));
 
     // Listeners are attached and detached in this one lifecycle pair, never elsewhere. A
     // leaked `keydown` listener from a double-mount means the player walks at double
@@ -294,6 +312,7 @@ export class GameHost implements InputHost {
     // Only takes effect if this host is the one holding the token. A StrictMode-orphaned
     // host disposing after its replacement started is a no-op, which is the whole point.
     hudStore.release(this.hudToken);
+    releaseReports(this.hudToken);
 
     // Wait for a half-finished `start()` before tearing anything down, and swallow its
     // rejection: a failed init is not a reason for cleanup to throw.
@@ -414,6 +433,7 @@ export class GameHost implements InputHost {
     if (this.ticksSincePublish >= HUD_PUBLISH_EVERY_TICKS) {
       this.ticksSincePublish = 0;
       hudStore.publishWorld(this.hudToken, projection, this.tool);
+      publishReports(this.hudToken, projection);
     }
 
     this.rafId = requestAnimationFrame(this.frame);

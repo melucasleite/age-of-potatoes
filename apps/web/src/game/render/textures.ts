@@ -61,6 +61,16 @@ export const ART = {
   item: (id: number) => `item_${ITEM_SLUG.get(id) ?? 'russet_potato'}`,
   /** The belt surface, one seamless tile scrolled by UV offset — never by moving sprites. */
   beltSurface: (tier: number) => `belt_${BELT_SLUG[tier] ?? 'basic'}`,
+  /**
+   * The six pipe frames, in the canonical east-first orientation `pipe-shape.ts` defines.
+   *
+   * Drawn near-white on purpose, exactly like the status lamp: a pipe is MULTIPLIED by its
+   * liquid's colour at draw time, so art baked amber would make water a muddy teal. The one
+   * frame that ships coloured is the shadow under the run, and it is dark rather than hued.
+   */
+  pipeFrame: (frame: string) => `pipe_${frame}`,
+  /** The collar drawn where a real pipe meets a machine. Tinted by what is in that pipe. */
+  uiPipeNub: 'ui_pipe_nub',
   grabberBase: 'grabber_base',
   grabberHand: 'grabber_hand',
   playerNorth: 'player_north',
@@ -75,6 +85,8 @@ export const ART = {
    */
   lamp: 'status_lamp',
   uiHover: 'ui_hover',
+  /** Where a walk-to errand is headed. Corner brackets, so it never reads as the hover box. */
+  uiTarget: 'ui_target',
   uiWrench: 'ui_wrench',
   uiDroplet: 'ui_droplet',
   uiReady: 'ui_ready',
@@ -302,6 +314,7 @@ const PALETTE = {
   potato: 0xc09456,
   metal: 0xa8b0bc,
   metalDark: 0x7c8593,
+  metalLight: 0xd9dee6,
   wood: 0xb07a3c,
   woodDark: 0x8a5c28,
   water: 0x6fc0e8,
@@ -367,123 +380,33 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   // Crop stages are registered per crop id at the bottom of this file — four crops ship,
   // and hand-writing sixteen near-identical plants is how three of them end up wrong.
 
-  [ART.machineSellBin]: {
-    paint: (g) => {
-      g.rect(1, 5, 14, 10).fill(PALETTE.wood);
-      g.rect(1, 5, 14, 2).fill(PALETTE.woodDark);
-      g.rect(0, 3, 16, 2).fill(PALETTE.shirt);
-      g.rect(4, 9, 8, 4).fill(PALETTE.black);
-    },
-  },
+  // Machines are registered at the bottom of this file, keyed by the sim's own slug and
+  // sized from the sim's own footprint. See `registerMachinePlaceholders`.
 
-  [ART.machineChipKitchen]: {
-    width: TILE_PX * 2,
-    height: TILE_PX * 2,
-    paint: (g) => {
-      g.rect(1, 6, 30, 25).fill(PALETTE.metal);
-      g.rect(1, 6, 30, 3).fill(PALETTE.metalDark);
-      g.rect(4, 12, 12, 12).fill(PALETTE.black);
-      g.rect(6, 14, 8, 8).fill(0xe8a33d);
-      g.rect(20, 12, 8, 14).fill(PALETTE.metalDark);
-      g.rect(21, 14, 6, 4).fill(PALETTE.potato);
-      // Chimney, so a 2×2 blob reads as a cooker from across the lot.
-      g.rect(22, 0, 6, 7).fill(PALETTE.metalDark);
-    },
-  },
-
-  [ART.machineSprinkler]: {
-    paint: (g) => {
-      g.rect(6, 8, 4, 7).fill(PALETTE.metalDark);
-      g.rect(3, 13, 10, 2).fill(PALETTE.metal);
-      g.rect(4, 3, 8, 5).fill(PALETTE.water);
-      g.rect(5, 1, 6, 2).fill(PALETTE.metal);
-    },
-  },
-
-  // --- the chip line ---------------------------------------------------------------
+  // --- pipes -----------------------------------------------------------------------
   //
-  // Five 2×2 boxes in a row is exactly the situation §15 warns about: AI-generated
-  // machines are hardest to tell apart, and a line the player cannot read is a line they
-  // cannot debug. So each grey box gets ONE loud, unshared silhouette cue — a drum, a
-  // blade, a chimney, a shaker cone, a bag chute — chosen so the machines differ at 32px
-  // by SHAPE and not only by colour. That survives both a colourblind player and a
-  // half-second glance across the yard.
+  // Plan §5: "solids ride belts (double-line), liquids ride pipes (single-line)". So a
+  // pipe is a THIN LINE down the middle of an otherwise empty tile — the opposite of a
+  // belt, which fills its tile with a bed, two rails and goods. That contrast is what
+  // makes a mature base read as a belt cathedral next to a pipe organ, and it is worth
+  // more than any amount of detail inside either one.
+  //
+  // Near-white, because the pipe layer MULTIPLIES these by the liquid's colour.
 
-  [ART.machine(4)]: {
-    // Washer: a horizontal drum with a porthole, standing in a puddle.
-    width: TILE_PX * 2,
-    height: TILE_PX * 2,
-    paint: (g) => {
-      g.rect(2, 8, 28, 20).fill(PALETTE.metal);
-      g.rect(2, 8, 28, 3).fill(PALETTE.metalDark);
-      g.circle(16, 18, 8).fill(PALETTE.metalDark);
-      g.circle(16, 18, 6).fill(PALETTE.water);
-      g.circle(13, 15, 2).fill(0xbfe8f7);
-      g.rect(2, 28, 28, 3).fill(0x3f7f9c);
-    },
-  },
+  [ART.pipeFrame('stub')]: { paint: pipeTile([]) },
+  [ART.pipeFrame('cap')]: { paint: pipeTile(['e']) },
+  [ART.pipeFrame('straight')]: { paint: pipeTile(['e', 'w']) },
+  [ART.pipeFrame('corner')]: { paint: pipeTile(['e', 's']) },
+  [ART.pipeFrame('tee')]: { paint: pipeTile(['e', 's', 'w']) },
+  [ART.pipeFrame('cross')]: { paint: pipeTile(['n', 'e', 's', 'w']) },
 
-  [ART.machine(5)]: {
-    // Slicer: a blade wheel on a low bench. Teeth on the rim, so it reads as "cuts".
-    width: TILE_PX * 2,
-    height: TILE_PX * 2,
+  [ART.uiPipeNub]: {
+    width: 5,
+    height: 5,
     paint: (g) => {
-      g.rect(2, 16, 28, 14).fill(PALETTE.metalDark);
-      g.rect(2, 16, 28, 2).fill(PALETTE.metal);
-      g.circle(16, 14, 10).fill(0xd9dee6);
-      g.circle(16, 14, 7).fill(PALETTE.metalDark);
-      for (let i = 0; i < 8; i++) {
-        const x = 6 + i * 3;
-        g.rect(x, 3, 2, 3).fill(0xd9dee6);
-      }
-      g.rect(4, 24, 6, 3).fill(0xefe6cf);
-      g.rect(12, 24, 6, 3).fill(0xefe6cf);
-    },
-  },
-
-  [ART.machine(6)]: {
-    // Fryer: the half-speed one, and the machine the player is meant to want a second of.
-    // Loudest silhouette in the line — a tall chimney and a hot orange vat.
-    width: TILE_PX * 2,
-    height: TILE_PX * 2,
-    paint: (g) => {
-      g.rect(20, 0, 8, 12).fill(PALETTE.metalDark);
-      g.rect(22, 0, 4, 3).fill(0x54606e);
-      g.rect(1, 10, 30, 21).fill(PALETTE.metal);
-      g.rect(1, 10, 30, 3).fill(PALETTE.metalDark);
-      g.rect(4, 16, 16, 12).fill(PALETTE.black);
-      g.rect(5, 18, 14, 9).fill(0xe8912d);
-      g.rect(7, 20, 3, 2).fill(0xffd27a);
-      g.rect(13, 22, 3, 2).fill(0xffd27a);
-    },
-  },
-
-  [ART.machine(7)]: {
-    // Seasoner: an inverted cone hopper dusting paprika. Only cone in the line.
-    width: TILE_PX * 2,
-    height: TILE_PX * 2,
-    paint: (g) => {
-      g.rect(2, 18, 28, 13).fill(PALETTE.metal);
-      g.rect(2, 18, 28, 3).fill(PALETTE.metalDark);
-      g.poly([8, 2, 24, 2, 18, 17, 14, 17]).fill(0xc2452f);
-      g.poly([9, 3, 23, 3, 20, 10, 12, 10]).fill(0xe0674a);
-      g.rect(14, 17, 4, 4).fill(PALETTE.metalDark);
-      g.rect(11, 24, 10, 4).fill(0xe8a33d);
-    },
-  },
-
-  [ART.machine(8)]: {
-    // Bagger: a chute over a stack of finished bags. The only machine with a bag on it.
-    width: TILE_PX * 2,
-    height: TILE_PX * 2,
-    paint: (g) => {
-      g.rect(2, 6, 28, 18).fill(PALETTE.metal);
-      g.rect(2, 6, 28, 3).fill(PALETTE.metalDark);
-      g.poly([10, 9, 22, 9, 19, 20, 13, 20]).fill(PALETTE.metalDark);
-      g.rect(4, 24, 10, 7).fill(PALETTE.shirt);
-      g.rect(5, 25, 8, 2).fill(0xf07a6e);
-      g.rect(17, 26, 10, 5).fill(PALETTE.shirt);
-      g.rect(18, 27, 8, 1).fill(0xf07a6e);
+      g.rect(0, 0, 5, 5).fill(PIPE.shadow);
+      g.rect(1, 1, 3, 3).fill(PIPE.body);
+      g.rect(1, 1, 3, 1).fill(PIPE.shine);
     },
   },
 
@@ -561,6 +484,30 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
     },
   },
 
+  /**
+   * FOUR CORNER BRACKETS, NOT A BOX — and the difference is the whole point of the frame.
+   * The destination marker and the hover outline are routinely on screen at the same time
+   * (you click a far tile, then keep moving the mouse), and two identical rectangles in two
+   * colours is a puzzle. Brackets read as "going there" at a glance, at any zoom rung.
+   *
+   * WHITE, like `ART.lamp` and `ART.uiHover`, because it is tinted at draw time — a frame
+   * baked blue would multiply the tint toward black instead of showing it.
+   */
+  [ART.uiTarget]: {
+    paint: (g) => {
+      const arm = 4;
+      const far = TILE_PX - arm;
+      g.rect(0, 0, arm, 1).fill(PALETTE.white);
+      g.rect(0, 0, 1, arm).fill(PALETTE.white);
+      g.rect(far, 0, arm, 1).fill(PALETTE.white);
+      g.rect(TILE_PX - 1, 0, 1, arm).fill(PALETTE.white);
+      g.rect(0, TILE_PX - 1, arm, 1).fill(PALETTE.white);
+      g.rect(0, far, 1, arm).fill(PALETTE.white);
+      g.rect(far, TILE_PX - 1, arm, 1).fill(PALETTE.white);
+      g.rect(TILE_PX - 1, far, 1, arm).fill(PALETTE.white);
+    },
+  },
+
   [ART.uiWrench]: {
     width: 6,
     height: 6,
@@ -611,6 +558,458 @@ function beltTile(bed: number, rail: number, shadow: number): Paint {
   };
 }
 
+/**
+ * The pipe's own three values. Near-neutral, because the pipe layer multiplies them by the
+ * liquid's colour — a pipe drawn amber would make water a muddy teal.
+ *
+ * Concentric rather than top-lit: shadow, body, bright core, all symmetric about the tile
+ * centre. The frames are drawn ONCE facing east and rotated in quarter turns, so a highlight
+ * along the top edge would end up along the bottom edge of every vertical run.
+ */
+const PIPE = {
+  shadow: 0x35343f,
+  body: 0xbcc0cc,
+  shine: 0xefe2c6,
+} as const;
+
+type PipeSideKey = 'n' | 'e' | 's' | 'w';
+
+/** One pipe tile: a hub, plus a 4px arm toward each connected side. Seamless at the edges. */
+function pipeTile(sides: readonly PipeSideKey[]): Paint {
+  const arms: Record<PipeSideKey, readonly [number, number, number, number][]> = {
+    // [shadow, body, core] spans, in draw order.
+    e: [
+      [8, 5, 8, 6],
+      [8, 6, 8, 4],
+      [8, 7, 8, 2],
+    ],
+    w: [
+      [0, 5, 8, 6],
+      [0, 6, 8, 4],
+      [0, 7, 8, 2],
+    ],
+    n: [
+      [5, 0, 6, 8],
+      [6, 0, 4, 8],
+      [7, 0, 2, 8],
+    ],
+    s: [
+      [5, 8, 6, 8],
+      [6, 8, 4, 8],
+      [7, 8, 2, 8],
+    ],
+  };
+  return (g) => {
+    // Read inside the closure, not at call time: `PLACEHOLDERS` is built at module load and
+    // `PIPE` is declared below it. A colour read one line earlier is a temporal-dead-zone
+    // crash on import, which is a spectacular way to lose an afternoon.
+    const layers = [PIPE.shadow, PIPE.body, PIPE.shine];
+    for (let layer = 0; layer < 3; layer++) {
+      for (const side of sides) {
+        const [x, y, w, h] = arms[side][layer]!;
+        g.rect(x, y, w, h).fill(layers[layer]!);
+      }
+    }
+    // The hub last, so a tee's three arms meet under one collar rather than showing the
+    // seams where they overlap. An isolated tile is a hub alone: a flange with no run,
+    // which is exactly what a one-tile pipe is.
+    g.rect(4, 4, 8, 8).fill(PIPE.shadow);
+    g.rect(5, 5, 6, 6).fill(PIPE.body);
+    g.rect(7, 7, 2, 2).fill(PIPE.shine);
+  };
+}
+
+// --- machines ------------------------------------------------------------------------
+//
+// ────────────────────────────────────────────────────────────────────────────────────
+//  TWO DISTRICTS, TWO SILHOUETTE GRAMMARS. (Plan §5.)
+//
+//  "Chip line is a belt cathedral ... Soda line is a pipe organ ... A mature base reads as
+//   two distinct districts."
+//
+//  That is a rendering requirement, and the way it is met is by giving the two lines
+//  different GRAMMARS rather than different details:
+//
+//    chip line — cold grey steel, WIDE and horizontal, cues that cut and heat: a drum, a
+//                blade wheel, a chimney, a cone, a chute. Things goods pass through.
+//    soda line — warm brass and copper, TALL and vertical, cues that hold and pour:
+//                rollers, a bellied kettle, a glass column, a pressure sphere, a gantry.
+//                Things liquid sits inside.
+//
+//  Colour alone would not survive a colourblind player or a half-second glance, so the
+//  split is carried by shape and by aspect first, with the brass as confirmation. §15 warns
+//  that "making 30 machines distinguishable at a glance at 32–48px in one palette" is the
+//  hard part of machine art; a grammar per district is how thirty stays readable.
+// ────────────────────────────────────────────────────────────────────────────────────
+
+/** Brass and copper, from `art/palette/master.json`. The soda district's whole identity. */
+const BRASS = {
+  dark: 0x8a6234,
+  mid: 0xb58b4d,
+  light: 0xd9b475,
+  shine: 0xf5d382,
+  copper: 0x855428,
+} as const;
+
+/** The liquids that show INSIDE soda machines. Same values the pipe layer tints with. */
+const FLUID = {
+  juice: 0x74a340,
+  syrup: 0xd9ab6e,
+  fizz: 0x9fdcef,
+  cola: 0x9e2f27,
+  water: 0x4fa3d1,
+} as const;
+
+/** A machine placeholder painter. `w`/`h` are the machine's footprint in pixels. */
+type MachinePaint = (g: Graphics, w: number, h: number) => void;
+
+/**
+ * Machine looks, keyed by the SIM'S OWN SLUG.
+ *
+ * Keyed by slug and not by kind id on purpose: kind ids belong to `packages/sim`, and the
+ * soda machines are being written by another agent this round. A look listed here appears
+ * the moment a machine with that slug exists, with no edit in this file — which is the
+ * whole "adding a machine kind is a data change" contract.
+ */
+const MACHINE_LOOKS: Record<string, MachinePaint> = {
+  'sell-bin': (g) => {
+    g.rect(1, 5, 14, 10).fill(PALETTE.wood);
+    g.rect(1, 5, 14, 2).fill(PALETTE.woodDark);
+    g.rect(0, 3, 16, 2).fill(PALETTE.shirt);
+    g.rect(4, 9, 8, 4).fill(PALETTE.black);
+  },
+
+  'chip-kitchen': (g) => {
+    g.rect(1, 6, 30, 25).fill(PALETTE.metal);
+    g.rect(1, 6, 30, 3).fill(PALETTE.metalDark);
+    g.rect(4, 12, 12, 12).fill(PALETTE.black);
+    g.rect(6, 14, 8, 8).fill(0xe8a33d);
+    g.rect(20, 12, 8, 14).fill(PALETTE.metalDark);
+    g.rect(21, 14, 6, 4).fill(PALETTE.potato);
+    // Chimney, so a 2×2 blob reads as a cooker from across the lot.
+    g.rect(22, 0, 6, 7).fill(PALETTE.metalDark);
+  },
+
+  sprinkler: (g) => {
+    g.rect(6, 8, 4, 7).fill(PALETTE.metalDark);
+    g.rect(3, 13, 10, 2).fill(PALETTE.metal);
+    g.rect(4, 3, 8, 5).fill(PALETTE.water);
+    g.rect(5, 1, 6, 2).fill(PALETTE.metal);
+  },
+
+  // --- the chip line: cold steel, wide, one loud unshared cue each -------------------
+
+  washer: (g) => {
+    // A horizontal drum with a porthole, standing in a puddle.
+    g.rect(2, 8, 28, 20).fill(PALETTE.metal);
+    g.rect(2, 8, 28, 3).fill(PALETTE.metalDark);
+    g.circle(16, 18, 8).fill(PALETTE.metalDark);
+    g.circle(16, 18, 6).fill(PALETTE.water);
+    g.circle(13, 15, 2).fill(0xbfe8f7);
+    g.rect(2, 28, 28, 3).fill(0x3f7f9c);
+  },
+
+  slicer: (g) => {
+    // A blade wheel on a low bench. Teeth on the rim, so it reads as "cuts".
+    g.rect(2, 16, 28, 14).fill(PALETTE.metalDark);
+    g.rect(2, 16, 28, 2).fill(PALETTE.metal);
+    g.circle(16, 14, 10).fill(0xd9dee6);
+    g.circle(16, 14, 7).fill(PALETTE.metalDark);
+    for (let i = 0; i < 8; i++) {
+      g.rect(6 + i * 3, 3, 2, 3).fill(0xd9dee6);
+    }
+    g.rect(4, 24, 6, 3).fill(0xefe6cf);
+    g.rect(12, 24, 6, 3).fill(0xefe6cf);
+  },
+
+  fryer: (g) => {
+    // The half-speed one, and the machine the player is meant to want a second of.
+    // Loudest silhouette in the line — a tall chimney and a hot orange vat.
+    g.rect(20, 0, 8, 12).fill(PALETTE.metalDark);
+    g.rect(22, 0, 4, 3).fill(0x54606e);
+    g.rect(1, 10, 30, 21).fill(PALETTE.metal);
+    g.rect(1, 10, 30, 3).fill(PALETTE.metalDark);
+    g.rect(4, 16, 16, 12).fill(PALETTE.black);
+    g.rect(5, 18, 14, 9).fill(0xe8912d);
+    g.rect(7, 20, 3, 2).fill(0xffd27a);
+    g.rect(13, 22, 3, 2).fill(0xffd27a);
+  },
+
+  seasoner: (g) => {
+    // An inverted cone hopper dusting paprika. Only cone in the line.
+    g.rect(2, 18, 28, 13).fill(PALETTE.metal);
+    g.rect(2, 18, 28, 3).fill(PALETTE.metalDark);
+    g.poly([8, 2, 24, 2, 18, 17, 14, 17]).fill(0xc2452f);
+    g.poly([9, 3, 23, 3, 20, 10, 12, 10]).fill(0xe0674a);
+    g.rect(14, 17, 4, 4).fill(PALETTE.metalDark);
+    g.rect(11, 24, 10, 4).fill(0xe8a33d);
+  },
+
+  bagger: (g) => {
+    // A chute over a stack of finished bags. The only machine with a bag on it.
+    g.rect(2, 6, 28, 18).fill(PALETTE.metal);
+    g.rect(2, 6, 28, 3).fill(PALETTE.metalDark);
+    g.poly([10, 9, 22, 9, 19, 20, 13, 20]).fill(PALETTE.metalDark);
+    g.rect(4, 24, 10, 7).fill(PALETTE.shirt);
+    g.rect(5, 25, 8, 2).fill(0xf07a6e);
+    g.rect(17, 26, 10, 5).fill(PALETTE.shirt);
+    g.rect(18, 27, 8, 1).fill(0xf07a6e);
+  },
+
+  // --- the soda line: warm brass, tall, things liquid sits inside --------------------
+
+  'cane-press': canePress,
+  juicer: canePress,
+  press: canePress,
+
+  kettle: (g) => {
+    // A bellied copper pot on legs under a domed lid, with a steam pipe curling off it.
+    // The only ROUND-BELLIED machine in the game — a kettle is unmistakable at 32px even
+    // when the brass reads as "some warm colour".
+    g.rect(7, 27, 4, 5).fill(BRASS.copper);
+    g.rect(21, 27, 4, 5).fill(BRASS.copper);
+    g.circle(16, 20, 11).fill(BRASS.copper);
+    g.circle(16, 20, 9).fill(BRASS.mid);
+    g.circle(13, 17, 3).fill(BRASS.light);
+    g.rect(7, 8, 18, 4).fill(BRASS.dark);
+    g.poly([9, 8, 23, 8, 20, 2, 12, 2]).fill(BRASS.light);
+    g.rect(24, 0, 4, 11).fill(PALETTE.metalDark);
+    g.rect(25, 0, 2, 3).fill(PALETTE.metal);
+  },
+
+  grinder: (g) => {
+    // A tall narrow hopper narrowing into a squat mill, with a hand crank out on the flank
+    // and a spill of dark red powder at the foot. The only machine with a wheel ON ITS SIDE
+    // rather than on its face, and the narrowest waist in either district.
+    g.rect(8, 0, 16, 11).fill(PALETTE.metal);
+    g.rect(8, 0, 16, 2).fill(PALETTE.metalLight);
+    g.poly([8, 11, 24, 11, 19, 20, 13, 20]).fill(PALETTE.metalDark);
+    g.rect(13, 20, 6, 3).fill(PALETTE.black);
+    g.rect(4, 23, 24, 9).fill(BRASS.dark);
+    g.rect(4, 23, 24, 2).fill(BRASS.mid);
+    g.circle(28, 27, 4).fill(BRASS.light);
+    g.circle(28, 27, 1).fill(BRASS.dark);
+    g.rect(25, 22, 2, 5).fill(BRASS.mid);
+    g.rect(9, 28, 14, 4).fill(0x5e1c1a);
+    g.rect(11, 28, 10, 1).fill(0x9e2f27);
+  },
+
+  'syrup-mixer': syrupMixer,
+  mixer: syrupMixer,
+
+  carbonator: (g) => {
+    // A pressure sphere in a cradle, banded by two straps, with a gauge on the shoulder.
+    // The ONLY SPHERE in the game. Nothing else in either district is round all the way.
+    g.rect(4, 27, 24, 5).fill(PALETTE.metalDark);
+    g.circle(16, 17, 13).fill(PALETTE.metalDark);
+    g.circle(16, 17, 11).fill(FLUID.fizz);
+    g.circle(12, 13, 3).fill(0xffffff);
+    g.rect(3, 15, 26, 3).fill(BRASS.mid);
+    g.rect(14, 5, 3, 25).fill(BRASS.mid);
+    g.circle(23, 8, 3).fill(BRASS.shine);
+    g.circle(23, 8, 1).fill(PALETTE.black);
+  },
+
+  bottler: (g, w) => {
+    // The 3×2 flagship: a gantry beam on brass uprights, three filling heads in a row, and
+    // a row of finished bottles on the deck. The only machine WIDER THAN IT IS TALL, and
+    // the only one with a repeating rhythm across its face — which is what makes a factory
+    // read as having a "far end" at all.
+    const heads = 3;
+    g.rect(0, 3, w, 4).fill(BRASS.dark);
+    g.rect(0, 7, w, 7).fill(BRASS.mid);
+    g.rect(0, 3, w, 2).fill(BRASS.light);
+    g.rect(0, 3, 4, 29).fill(BRASS.dark);
+    g.rect(w - 4, 3, 4, 29).fill(BRASS.dark);
+    for (let i = 0; i < heads; i++) {
+      const x = Math.round(((i + 0.5) * (w - 8)) / heads) + 2;
+      g.rect(x, 14, 4, 6).fill(PALETTE.metalLight);
+      g.rect(x + 1, 20, 2, 2).fill(FLUID.cola);
+    }
+    g.rect(4, 24, w - 8, 8).fill(PALETTE.metalDark);
+    for (let i = 0; i < heads; i++) {
+      const x = Math.round(((i + 0.5) * (w - 8)) / heads) + 1;
+      g.rect(x, 25, 5, 7).fill(FLUID.cola);
+      g.rect(x + 1, 25, 3, 2).fill(BRASS.light);
+    }
+  },
+
+  // --- the fluid utilities ------------------------------------------------------------
+  //
+  // The pump and the tank belong to the pipe-network item, not to this one. Their looks
+  // live here anyway, for the same reason the soda looks do: a slug that exists is a
+  // machine that draws, and neither agent has to remember to come back.
+
+  pump: (g, w, h) => {
+    g.rect(1, h - 14, w - 2, 13).fill(PALETTE.metalDark);
+    g.rect(1, h - 14, w - 2, 2).fill(PALETTE.metal);
+    g.circle(w / 2, h - 16, 7).fill(BRASS.dark);
+    g.circle(w / 2, h - 16, 5).fill(BRASS.mid);
+    g.circle(w / 2, h - 16, 2).fill(BRASS.shine);
+    g.rect(1, h - 6, w - 2, 5).fill(FLUID.water);
+  },
+
+  tank: (g, w, h) => {
+    g.rect(2, 2, w - 4, h - 4).fill(PALETTE.metal);
+    g.rect(2, 2, w - 4, 3).fill(PALETTE.metalLight);
+    g.rect(2, h - 5, w - 4, 3).fill(PALETTE.metalDark);
+    // The level window. The live fill is drawn over it in code from `tankPermille`, so the
+    // sprite shows the glass and never a fixed level that would contradict the readout.
+    g.rect(Math.round(w / 2) - 2, 5, 4, h - 10).fill(PALETTE.black);
+    g.rect(4, 6, 3, h - 12).fill(BRASS.mid);
+    g.rect(w - 7, 6, 3, h - 12).fill(BRASS.mid);
+  },
+};
+
+/**
+ * The cane press / juicer: paired rollers under a full-width hopper, juice running out.
+ *
+ * The two rollers are the identifying cue — nothing else in either district is a PAIR of
+ * circles — but two circles under a tapered hat is also, unavoidably, a face. So the hopper
+ * runs the full width instead of tapering, and a heavy axle bar crosses both rollers at
+ * their centres. Both changes exist purely to stop the machine looking back at the player.
+ */
+function canePress(g: Graphics): void {
+  g.rect(0, 0, 32, 8).fill(BRASS.light);
+  g.rect(0, 0, 32, 3).fill(BRASS.shine);
+  g.rect(2, 8, 28, 22).fill(BRASS.dark);
+  g.rect(2, 8, 28, 2).fill(BRASS.mid);
+  g.circle(10, 19, 6).fill(PALETTE.metal);
+  g.circle(22, 19, 6).fill(PALETTE.metal);
+  g.circle(10, 19, 2).fill(BRASS.copper);
+  g.circle(22, 19, 2).fill(BRASS.copper);
+  // The axle, straight through both. This is the line that breaks the face.
+  g.rect(1, 18, 30, 3).fill(BRASS.copper);
+  g.rect(1, 18, 30, 1).fill(BRASS.light);
+  // Juice, running out of the press and pooling under it.
+  g.rect(14, 26, 4, 4).fill(FLUID.juice);
+  g.rect(2, 29, 28, 3).fill(FLUID.juice);
+}
+
+/**
+ * The Syrup Mixer — §5's "one machine where the two layers visibly cooperate".
+ *
+ * So it is the one sprite that wears both vocabularies at once: TWO pipe collars stacked on
+ * its west flank, a BELT CHUTE on its north edge, and a glass column between them with a
+ * paddle turning in amber. A player who has learned that collars mean liquid and chutes mean
+ * goods can read the mixer's entire job off its silhouette before clicking it — which is
+ * exactly what a puzzle centrepiece has to do.
+ */
+function syrupMixer(g: Graphics): void {
+  g.rect(4, 5, 24, 26).fill(BRASS.dark);
+  g.rect(4, 5, 24, 3).fill(BRASS.mid);
+  // The glass column and its amber level.
+  g.rect(9, 9, 14, 19).fill(PALETTE.black);
+  g.rect(10, 16, 12, 11).fill(FLUID.syrup);
+  g.rect(10, 16, 12, 1).fill(BRASS.shine);
+  // The paddle, mid-turn.
+  g.rect(15, 10, 2, 14).fill(PALETTE.metalLight);
+  g.rect(11, 21, 10, 2).fill(PALETTE.metalLight);
+  // Two pipe collars on the west flank — the inlets, stacked, unmistakably a pair. Drawn in
+  // the brightest brass in the ramp, because at 32px this pair IS the machine's identity and
+  // a subtle version of it is the same as not drawing it.
+  g.rect(0, 9, 6, 6).fill(BRASS.copper);
+  g.rect(0, 10, 5, 4).fill(BRASS.shine);
+  g.rect(0, 20, 6, 6).fill(BRASS.copper);
+  g.rect(0, 21, 5, 4).fill(BRASS.shine);
+  // One outlet collar east.
+  g.rect(26, 15, 6, 6).fill(BRASS.copper);
+  g.rect(27, 16, 5, 4).fill(BRASS.shine);
+  // The belt chute on the north edge: goods come DOWN into a machine full of liquid.
+  g.rect(11, 0, 10, 6).fill(PALETTE.metalDark);
+  g.rect(13, 1, 6, 4).fill(PALETTE.metalLight);
+  g.rect(14, 5, 4, 2).fill(PALETTE.black);
+}
+
+/**
+ * Machines this renderer is ready for that the simulation has not shipped yet.
+ *
+ * The list is the coordination seam with the sim agent, written down rather than assumed:
+ * these are the slugs and footprints the soda line is drawn at. When `MACHINE_SPECS` grows
+ * an entry with one of these slugs, the real footprint wins and this entry stops being used
+ * — so a disagreement about size costs nothing, and a disagreement about the NAME costs one
+ * line here.
+ *
+ * §5 fixes the sizes: "machines mostly 2×2 (Bottler 3×2 flagship)".
+ */
+const PENDING_MACHINES: Readonly<Record<string, readonly [number, number]>> = {
+  'cane-press': [2, 2],
+  juicer: [2, 2],
+  kettle: [2, 2],
+  grinder: [2, 2],
+  'syrup-mixer': [2, 2],
+  carbonator: [2, 2],
+  bottler: [3, 2],
+  pump: [1, 1],
+  tank: [2, 2],
+};
+
+/**
+ * A machine nobody drew: a body, a topper, and a port band, all chosen by hashing the slug.
+ *
+ * Not a magenta box, and not one shared grey rectangle either. A new machine kind lands in
+ * a build looking like SOMETHING, and — because the hash picks from four toppers and four
+ * tones — looking different from the machine next to it. That is the difference between an
+ * unfinished sprite and an unreadable factory.
+ */
+function genericMachine(slug: string): MachinePaint {
+  let h = 2166136261;
+  for (let i = 0; i < slug.length; i++) {
+    h = Math.imul(h ^ slug.charCodeAt(i), 16777619) >>> 0;
+  }
+  const tones = [PALETTE.metal, BRASS.mid, PALETTE.metalDark, BRASS.dark];
+  const body = tones[h % tones.length]!;
+  const topper = (h >>> 4) % 4;
+
+  return (g, w, hh) => {
+    g.rect(1, 6, w - 2, hh - 7).fill(body);
+    g.rect(1, 6, w - 2, 2).fill(PALETTE.metalLight);
+    g.rect(1, hh - 4, w - 2, 3).fill(PALETTE.black);
+    const cx = Math.round(w / 2);
+    if (topper === 0) g.rect(cx - 3, 0, 6, 7).fill(PALETTE.metalDark);
+    else if (topper === 1) g.circle(cx, 6, 5).fill(PALETTE.metalDark);
+    else if (topper === 2) g.poly([cx - 6, 6, cx + 6, 6, cx + 2, 0, cx - 2, 0]).fill(BRASS.mid);
+    else g.rect(2, 0, w - 4, 6).fill(PALETTE.metalDark);
+  };
+}
+
+/**
+ * Register a placeholder for every machine the sim ships AND every one it is about to.
+ *
+ * Sized from the sim's own footprint, so a 3×2 Bottler is drawn 48×32 without anybody
+ * writing 48 anywhere. This is the function that makes "adding a machine kind is a data
+ * change" true: the sim adds a spec, the renderer already knows the frame name, the size,
+ * and — if the slug is in `MACHINE_LOOKS` — the picture.
+ */
+function registerMachinePlaceholders(): void {
+  const register = (slug: string, tilesWide: number, tilesHigh: number): void => {
+    const width = Math.max(1, tilesWide) * TILE_PX;
+    const height = Math.max(1, tilesHigh) * TILE_PX;
+    const paint = MACHINE_LOOKS[slug] ?? genericMachine(slug);
+    PLACEHOLDERS[`machine_${frameSlug(slug)}`] = {
+      width,
+      height,
+      paint: (g) => paint(g, width, height),
+    };
+  };
+
+  for (const [slug, size] of Object.entries(PENDING_MACHINES)) {
+    register(slug, size[0], size[1]);
+  }
+  // The sim's own specs go LAST so a real footprint always overwrites an assumed one.
+  for (const spec of MACHINE_SPECS) {
+    register(spec.slug, spec.tilesWide, spec.tilesHigh);
+  }
+}
+
+/** Every machine frame that has a placeholder, for the art sheet. Sorted, so it is stable. */
+export function placeholderMachineFrames(): string[] {
+  const names = new Set<string>();
+  for (const slug of Object.keys(PENDING_MACHINES)) names.add(`machine_${frameSlug(slug)}`);
+  for (const spec of MACHINE_SPECS) names.add(`machine_${frameSlug(spec.slug)}`);
+  return [...names].sort();
+}
+
 /** Growth stage sprites for every crop the sim ships, keyed off its own accent colours. */
 function registerCropPlaceholders(): void {
   const accents: Record<number, { leaf: number; leafDark: number; fruit: number }> = {
@@ -655,30 +1054,61 @@ function registerCropPlaceholders(): void {
  */
 export const ITEM_CHIP_PX = 8;
 
-type ItemShape = 'round' | 'bag' | 'flake' | 'stick' | 'seed';
+type ItemShape = 'round' | 'bag' | 'flake' | 'stick' | 'seed' | 'bottle' | 'crate' | 'powder';
 
-const ITEM_LOOK: Record<number, { body: number; accent: number; shape: ItemShape }> = {
-  1: { body: 0x8a6b3a, accent: 0x5c451f, shape: 'seed' }, // potato seed
-  2: { body: 0xc09456, accent: 0x8a6532, shape: 'round' }, // russet potato
-  3: { body: 0xd2493f, accent: 0xf5d76a, shape: 'bag' }, // bagged chips
-  4: { body: 0xdcb888, accent: 0xf3e0bd, shape: 'round' }, // washed potato
-  5: { body: 0xf0dfae, accent: 0xd6bd82, shape: 'flake' }, // slices
-  6: { body: 0xf2cf7a, accent: 0xd9a63a, shape: 'flake' }, // plain chips
-  7: { body: 0xe89a35, accent: 0xb96a1c, shape: 'flake' }, // seasoned chips
-  8: { body: 0x8c8060, accent: 0x5e553f, shape: 'round' }, // day-old potato
-  9: { body: 0x4a3a24, accent: 0x6f7a3a, shape: 'round' }, // compost
-  10: { body: 0x6f7a3a, accent: 0x4a5424, shape: 'seed' }, // cane seed
-  11: { body: 0x8fc85c, accent: 0x5d8f2c, shape: 'stick' }, // sugar cane
-  12: { body: 0x8a9070, accent: 0x5f6449, shape: 'stick' }, // day-old cane
-  13: { body: 0xd8c46a, accent: 0x9a8a3c, shape: 'seed' }, // corn seed
-  14: { body: 0xf2cf4a, accent: 0xb99a1c, shape: 'stick' }, // corn
-  15: { body: 0xa79b6a, accent: 0x776d45, shape: 'stick' }, // day-old corn
-  16: { body: 0x9c4a3a, accent: 0x6b2f22, shape: 'seed' }, // chili seed
-  17: { body: 0xd8402f, accent: 0x8f2418, shape: 'stick' }, // chili
-  18: { body: 0x93685f, accent: 0x64443c, shape: 'stick' }, // day-old chili
+interface ItemLook {
+  body: number;
+  accent: number;
+  shape: ItemShape;
+}
+
+/**
+ * Item chips, keyed by the SIM'S OWN SLUG — same reasoning as the machine looks.
+ *
+ * The soda goods are listed here before `packages/sim` has them, so a bottle that appears on
+ * a belt appears as a bottle rather than as a brown circle. A slug that never materialises
+ * costs one dead entry; a slug that does costs no edit at all.
+ */
+const ITEM_LOOKS: Record<string, ItemLook> = {
+  'potato-seed': { body: 0x8a6b3a, accent: 0x5c451f, shape: 'seed' },
+  'russet-potato': { body: 0xc09456, accent: 0x8a6532, shape: 'round' },
+  'bagged-chips': { body: 0xd2493f, accent: 0xf5d76a, shape: 'bag' },
+  'washed-potato': { body: 0xdcb888, accent: 0xf3e0bd, shape: 'round' },
+  'potato-slices': { body: 0xf0dfae, accent: 0xd6bd82, shape: 'flake' },
+  'plain-chips': { body: 0xf2cf7a, accent: 0xd9a63a, shape: 'flake' },
+  'seasoned-chips': { body: 0xe89a35, accent: 0xb96a1c, shape: 'flake' },
+  'day-old-potato': { body: 0x8c8060, accent: 0x5e553f, shape: 'round' },
+  compost: { body: 0x4a3a24, accent: 0x6f7a3a, shape: 'round' },
+  'cane-seed': { body: 0x6f7a3a, accent: 0x4a5424, shape: 'seed' },
+  'sugar-cane': { body: 0x8fc85c, accent: 0x5d8f2c, shape: 'stick' },
+  'day-old-cane': { body: 0x8a9070, accent: 0x5f6449, shape: 'stick' },
+  'corn-seed': { body: 0xd8c46a, accent: 0x9a8a3c, shape: 'seed' },
+  corn: { body: 0xf2cf4a, accent: 0xb99a1c, shape: 'stick' },
+  'day-old-corn': { body: 0xa79b6a, accent: 0x776d45, shape: 'stick' },
+  'chili-seed': { body: 0x9c4a3a, accent: 0x6b2f22, shape: 'seed' },
+  'chili-pepper': { body: 0xd8402f, accent: 0x8f2418, shape: 'stick' },
+  'day-old-chili': { body: 0x93685f, accent: 0x64443c, shape: 'stick' },
+
+  // --- the soda line's solids ---------------------------------------------------------
+  //
+  // §5: sweeteners are liquids, FLAVOURS ARE POWDERS. Powders ride belts, so they need a
+  // chip that is unmistakably not a chip crisp — a low mound of grains rather than a flake.
+  'kola-powder': { body: 0x5c3f28, accent: 0x855428, shape: 'powder' },
+  'chili-powder': { body: 0x9e2f27, accent: 0xd94f36, shape: 'powder' },
+  'seasoning-powder': { body: 0xb17f47, accent: 0xd9ab6e, shape: 'powder' },
+  // Bottles start store-bought at a posted price (§4's consumable ladder). An empty bottle
+  // is glass-pale; a full one is cola-dark, so a Bottler's in-tray and out-tray never read
+  // as the same thing on the same belt.
+  bottle: { body: 0x9fdcef, accent: 0xefe2c6, shape: 'bottle' },
+  'empty-bottle': { body: 0x9fdcef, accent: 0xefe2c6, shape: 'bottle' },
+  soda: { body: 0x9e2f27, accent: 0xef8f68, shape: 'bottle' },
+  'soda-bottle': { body: 0x9e2f27, accent: 0xef8f68, shape: 'bottle' },
+  'six-pack': { body: 0x9e2f27, accent: 0xf5d382, shape: 'crate' },
+  'snack-combo': { body: 0xd94f36, accent: 0xf5d382, shape: 'crate' },
 };
 
-function itemChip(body: number, accent: number, shape: ItemShape): Paint {
+function itemChip(look: ItemLook): Paint {
+  const { body, accent, shape } = look;
   return (g) => {
     switch (shape) {
       case 'bag':
@@ -697,6 +1127,26 @@ function itemChip(body: number, accent: number, shape: ItemShape): Paint {
         g.rect(2, 3, 2, 2).fill(body);
         g.rect(4, 4, 2, 2).fill(accent);
         break;
+      case 'bottle':
+        // Neck, shoulder, body. Eight pixels is not much, but a two-pixel neck over a
+        // four-pixel body is a bottle and nothing else in the item set is.
+        g.rect(3, 0, 2, 2).fill(accent);
+        g.rect(2, 2, 4, 6).fill(body);
+        g.rect(2, 3, 4, 1).fill(accent);
+        break;
+      case 'crate':
+        // A carrier: two rows of necks over a banded box. The bundle reads as several.
+        g.rect(1, 0, 2, 2).fill(accent);
+        g.rect(5, 0, 2, 2).fill(accent);
+        g.rect(0, 2, 8, 6).fill(body);
+        g.rect(0, 4, 8, 1).fill(accent);
+        break;
+      case 'powder':
+        g.rect(1, 4, 6, 3).fill(body);
+        g.rect(2, 3, 4, 1).fill(body);
+        g.rect(2, 5, 1, 1).fill(accent);
+        g.rect(5, 4, 1, 1).fill(accent);
+        break;
       default:
         g.circle(4, 4, 3).fill(body);
         g.rect(2, 2, 2, 1).fill(accent);
@@ -704,23 +1154,32 @@ function itemChip(body: number, accent: number, shape: ItemShape): Paint {
   };
 }
 
+/** Anything that ends in `-powder` is a powder, `-seed` a seed, and so on. */
+function guessItemLook(slug: string): ItemLook {
+  if (slug.endsWith('-powder')) return { body: 0x855428, accent: 0xb17f47, shape: 'powder' };
+  if (slug.endsWith('-seed')) return { body: 0x8a6b3a, accent: 0x5c451f, shape: 'seed' };
+  if (slug.includes('bottle') || slug.includes('soda')) {
+    return { body: 0x9e2f27, accent: 0xef8f68, shape: 'bottle' };
+  }
+  if (slug.includes('pack') || slug.includes('combo')) {
+    return { body: 0xd94f36, accent: 0xf5d382, shape: 'crate' };
+  }
+  return { body: 0xc09456, accent: 0x8a6532, shape: 'round' };
+}
+
 function registerItemPlaceholders(): void {
   for (const spec of ITEM_SPECS) {
-    const look = ITEM_LOOK[spec.id as number] ?? {
-      body: 0xc09456,
-      accent: 0x8a6532,
-      shape: 'round' as const,
-    };
     PLACEHOLDERS[ART.item(spec.id as number)] = {
       width: ITEM_CHIP_PX,
       height: ITEM_CHIP_PX,
-      paint: itemChip(look.body, look.accent, look.shape),
+      paint: itemChip(ITEM_LOOKS[spec.slug] ?? guessItemLook(spec.slug)),
     };
   }
 }
 
 registerCropPlaceholders();
 registerItemPlaceholders();
+registerMachinePlaceholders();
 
 function pawn(facing: 'north' | 'east' | 'south' | 'west'): Paint {
   return (g) => {

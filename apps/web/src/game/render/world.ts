@@ -18,6 +18,7 @@ import {
 
 import { BeltItemLayer, buildItemPage } from './belt-items';
 import type { ItemPage } from './belt-items';
+import { ArtSheet, artSheetRequested } from './artsheet';
 import { BeltStructureLayer } from './belt-structure';
 import type { Camera } from './camera';
 import { GrabberLayer } from './grabbers';
@@ -25,6 +26,7 @@ import { Hud } from './hud';
 import { createLayers, destroyLayers, LAYER_ORDER } from './layers';
 import type { Layers } from './layers';
 import { DevOverlay } from './overlay';
+import { PipeLayer } from './pipes';
 import { TerrainBaker } from './terrain';
 import type { TerrainSource } from './terrain';
 import { ART } from './textures';
@@ -56,6 +58,17 @@ export interface MachineVisual {
   outputPip: Sprite;
   /** Total upgrade level, as a short chrome strip. Bolt-on shine for a tuned machine. */
   dials: Sprite;
+  /**
+   * Pipe collars, one per typed fluid port, grown on demand and never past `MAX_PORTS`.
+   *
+   * Only machines with a pipe port have any (`MachineSpec.liquid`), which is why they are a
+   * lazily-grown array rather than a fixed field: the chip line's five machines allocate
+   * nothing at all, and the Syrup Mixer — §5's "one machine where the two layers visibly
+   * cooperate" — is the one that grows the most.
+   */
+  ports: Sprite[];
+  /** The level inside a tank, drawn over the sprite's window from `tankPermille`. */
+  tankFill: Sprite;
 }
 
 export interface Droplet {
@@ -84,9 +97,13 @@ export interface WorldScene {
   readonly machines: Map<number, MachineVisual>;
   readonly player: Sprite;
   readonly hover: Sprite;
+  /** Where a pending walk-to errand is headed. Hidden whenever there is no errand. */
+  readonly destination: Sprite;
   readonly droplets: Droplet[];
   readonly hud: Hud;
   readonly overlay: DevOverlay;
+  /** The `?artsheet` screen, or null when the URL did not ask for it. */
+  readonly artSheet: ArtSheet | null;
 
   // --- the factory ------------------------------------------------------------------
   /** One texture source for every belt-rideable good. See `belt-items.ts`. */
@@ -95,6 +112,8 @@ export interface WorldScene {
   readonly beltItems: BeltItemLayer;
   readonly grabbers: GrabberLayer;
   readonly zoneOverlay: ZoneOverlay;
+  /** The fluid layer: single-line, auto-tiled, tinted by liquid, grey when empty (§5). */
+  readonly pipes: PipeLayer;
 
   // --- renderer-local, WRITE-ONLY state (plan §12) --------------------------------
   // Interpolated positions live here, are never read back into the sim, never
@@ -245,6 +264,14 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   contentRoot.addChild(hover);
   layers.worldUi.attach(hover);
 
+  // Anchored at the top-left like `hover`, NOT centred like `readyMarks` — it is positioned
+  // by the same `tileX * TILE_PX` arithmetic and a centred anchor would put it half a tile
+  // up and to the left of the tile it names.
+  const destination = new Sprite(art.get(ART.uiTarget));
+  destination.visible = false;
+  contentRoot.addChild(destination);
+  layers.worldUi.attach(destination);
+
   const dropletTexture = art.get(ART.uiDroplet);
   const droplets: Droplet[] = [];
   for (let i = 0; i < DROPLET_POOL; i++) {
@@ -263,6 +290,11 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   // player places a belt is a visible hitch at exactly the moment they are paying attention.
 
   const itemPage = buildItemPage(app.renderer, art);
+
+  const pipes = new PipeLayer(app.renderer, art, (sprite) => {
+    contentRoot.addChild(sprite);
+    layers.pipes.attach(sprite);
+  });
 
   const beltStructures = new BeltStructureLayer(app.renderer, art, (sprite) => {
     contentRoot.addChild(sprite);
@@ -284,6 +316,11 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   const overlay = new DevOverlay();
   screenRoot.addChild(hud.root, overlay.root);
 
+  // `?artsheet` — the whole sprite set on one screen. Off by default, built only when asked
+  // for, and it reads nothing but the art set. See `artsheet.ts` for why it earns its place.
+  const artSheet = artSheetRequested() ? new ArtSheet(art) : null;
+  if (artSheet !== null) screenRoot.addChild(artSheet.root);
+
   return {
     app,
     art,
@@ -301,14 +338,17 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     machines: new Map(),
     player,
     hover,
+    destination,
     droplets,
     hud,
     overlay,
+    artSheet,
     itemPage,
     beltStructures,
     beltItems,
     grabbers,
     zoneOverlay,
+    pipes,
     prevXSub: 0,
     prevYSub: 0,
     currXSub: 0,
@@ -356,10 +396,12 @@ export function applyDayNight(scene: WorldScene, tick: number): void {
 export function destroyWorldScene(scene: WorldScene): void {
   scene.hud.destroy();
   scene.overlay.destroy();
+  scene.artSheet?.destroy();
   // The particle container before the item page: the page owns the shared texture source
   // every particle points at, and freeing it first hands the container dead frames.
   scene.beltItems.destroy();
   scene.beltStructures.destroy();
+  scene.pipes.destroy();
   scene.grabbers.destroy();
   scene.itemPage.destroy();
   scene.terrain.destroy();

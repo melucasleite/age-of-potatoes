@@ -43,7 +43,15 @@
 // the press keeps both coming, so the release lands and the rect is the one you drew.
 
 import type { Command, CropId, MachineView, WorldView } from '@snack/sim';
-import { Direction, ItemId, LampState, MachineKind, beltSpec, listPriceCents } from '@snack/sim';
+import {
+  Direction,
+  IntentAction,
+  ItemId,
+  LampState,
+  MachineKind,
+  beltSpec,
+  listPriceCents,
+} from '@snack/sim';
 
 import type { BandState } from './chrome';
 import type { HoverTile, InputHost } from './context';
@@ -57,7 +65,7 @@ import {
   zoneIdAt,
 } from './gesture';
 import type { DragRun, TilePoint } from './gesture';
-import { screenToTile, tileAtView } from './picking';
+import { machineWithinReach, screenToTile, tileAtView, tileWithinReach } from './picking';
 import type { InputSystem } from './system';
 import {
   TOOL_INFO,
@@ -182,7 +190,7 @@ export class PointerInput {
         return;
       }
       const command = maintenanceCommand(view, tile);
-      if (command !== null) this.host.queue.push(command);
+      if (command !== null) this.host.queue.push(reachAdjusted(view, tile, command));
       return;
     }
 
@@ -199,7 +207,7 @@ export class PointerInput {
       // One press is one command, on the press edge. Nothing re-fires while it is held —
       // a hold-to-repeat water verb would put one command per frame in the trace.
       const command = primaryCommand(view, tile, tool, this.system.placeDir);
-      if (command !== null) this.host.queue.push(command);
+      if (command !== null) this.host.queue.push(reachAdjusted(view, tile, command));
       return;
     }
 
@@ -308,6 +316,107 @@ export function primaryCommand(
     default:
       return null;
   }
+}
+
+/**
+ * OUT OF REACH IS NOT "NOTHING". Send the farmer instead.
+ *
+ * A click on a thing you cannot quite touch used to build the direct command anyway, and the
+ * sim's reducer would refuse it on the reach check without a sound — the single most common
+ * way this game felt broken, because the cursor said "too far" and the click still did
+ * nothing about it. This wrapper is the whole fix, and it deliberately sits BESIDE
+ * `primaryCommand` rather than inside it: that function's job is "what does this tool mean
+ * here", which is a question about the tool, and this one's is "can he touch it from there",
+ * which is a question about the player. Keeping them apart is what lets the test drive the
+ * reach decision without constructing a tool.
+ *
+ * IN REACH STILL EMITS THE DIRECT COMMAND, and that is not an optimisation. Routing every
+ * click through an errand would make the ordinary case — standing on the tile you are
+ * watering — take a trip through the walk loop and arrive a tick later, which is a feel
+ * regression the player would describe as lag and nobody would find by reading this file.
+ *
+ * NO PATHING LIVES HERE. This chooses a command; the sim does the walking, straight at the
+ * target, over the next hundred-odd ticks (see `advanceErrand`). The input layer never learns
+ * where the farmer is going to put his feet, which is what keeps the walk replayable.
+ *
+ * A verb that is not reach-gated in `tick.ts` falls out of the `default` untouched — belt and
+ * zone drags, placements, research. Walking somewhere to place a machine you can place from
+ * across the lot would be a new rule, not a fix.
+ */
+export function reachAdjusted(view: WorldView, tile: HoverTile, direct: Command): Command {
+  switch (direct.type) {
+    case 'WaterTile':
+      return tileErrand(view, direct, IntentAction.Water, direct.tileX, direct.tileY, 0, 0);
+    case 'PlantTile':
+      return tileErrand(
+        view,
+        direct,
+        IntentAction.Plant,
+        direct.tileX,
+        direct.tileY,
+        direct.crop,
+        0,
+      );
+    case 'HarvestTile':
+      return tileErrand(view, direct, IntentAction.Harvest, direct.tileX, direct.tileY, 0, 0);
+
+    // The counts below are SNAPSHOTTED AT CLICK TIME and may be stale by the time the farmer
+    // arrives — the machine can finish another batch mid-walk. That is safe rather than
+    // merely tolerable: `applyLoadMachine` and `applyUnloadMachine` clamp with `Math.min`, so
+    // a stale count moves less than it could and never fails outright.
+    case 'LoadMachine':
+      return machineErrand(view, direct, IntentAction.Load, tile, 0, direct.count);
+    case 'UnloadMachine':
+      return machineErrand(view, direct, IntentAction.Unload, tile, 0, direct.count);
+    case 'RefillHopper':
+      return machineErrand(view, direct, IntentAction.RefillHopper, tile, 0, 0);
+    case 'RepairMachine':
+      return machineErrand(view, direct, IntentAction.Repair, tile, 0, 0);
+    case 'WhackJam':
+      return machineErrand(view, direct, IntentAction.WhackJam, tile, 0, 0);
+
+    // `SellItem` names no machine, but `handCommand` only ever produces it from a click ON
+    // the Sell Bin — so the clicked tile is the bin, and the bin is what to walk to. The sim
+    // agrees: `intentTargetSubtiles` refuses a Sell errand whose target tile is not a bin.
+    case 'SellItem':
+      return machineErrand(view, direct, IntentAction.Sell, tile, direct.item, direct.count);
+
+    default:
+      return direct;
+  }
+}
+
+function tileErrand(
+  view: WorldView,
+  direct: Command,
+  action: IntentAction,
+  tileX: number,
+  tileY: number,
+  item: number,
+  count: number,
+): Command {
+  if (tileWithinReach(view, tileX, tileY)) return direct;
+  return { type: 'WalkAndAct', action, tileX, tileY, item, count };
+}
+
+/**
+ * The errand's payload is the CLICKED TILE, never the machine id, and that is the sim's
+ * design rather than a shortcut here: `intentTargetSubtiles` re-resolves the machine from
+ * that tile every single tick, so an errand aimed at a machine that gets picked up and moved
+ * mid-walk goes stale and ends instead of marching the player to an empty slab. Any tile the
+ * footprint covers is a correct payload; a machine id would defeat the mechanism.
+ */
+function machineErrand(
+  view: WorldView,
+  direct: Command,
+  action: IntentAction,
+  tile: HoverTile,
+  item: number,
+  count: number,
+): Command {
+  const machine = tileAtView(view, tile.tileX, tile.tileY).machine;
+  if (machine === null || machineWithinReach(view, machine)) return direct;
+  return { type: 'WalkAndAct', action, tileX: tile.tileX, tileY: tile.tileY, item, count };
 }
 
 /** The single command a completed drag becomes, or `null` for "nothing to say". */

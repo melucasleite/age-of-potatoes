@@ -120,7 +120,7 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
   },
   [ToolMode.Water]: {
     label: 'Water',
-    hint: 'click soil in reach to pour the can',
+    hint: 'click soil to pour the can',
     costCents: 0,
     gesture: 'click',
   },

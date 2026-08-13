@@ -16,6 +16,9 @@ import { RenderLayer } from 'pixi.js';
  * Bottom to top. Plan §13's layer table verbatim.
  *
  * - `groundBake` / `zonePaint` are chunked `RenderTexture` bakes, re-baked only on edit.
+ * - `pipes` is the fluid layer, under the belts: a pipe is ground plumbing and a belt is a
+ *   structure standing on it, so where the two districts meet the belt reads as the nearer
+ *   object. They never share a tile, so this only ever settles a tie at the seam.
  * - `beltStructures` becomes a tile layer animated by scrolling UVs (v0.3).
  * - `beltItems` becomes a single `ParticleContainer` on one shared `TextureSource`
  *   ([[012]]). Particles support no interactivity — picking there is a sim-side tile
@@ -28,6 +31,7 @@ import { RenderLayer } from 'pixi.js';
 export const LAYER_ORDER = [
   'groundBake',
   'zonePaint',
+  'pipes',
   'beltStructures',
   'beltItems',
   'groundEntities',
