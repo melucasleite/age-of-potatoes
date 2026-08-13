@@ -25,7 +25,9 @@ const args = process.argv.slice(2);
 const options = new Map(
   args.filter((a) => a.startsWith('--')).map((a) => a.replace(/^--/, '').split('=')),
 );
-const ids = (args.find((a) => !a.startsWith('--')) ?? 'terrain_grass,terrain_soil,terrain_soil_tilled')
+const ids = (
+  args.find((a) => !a.startsWith('--')) ?? 'terrain_grass,terrain_soil,terrain_soil_tilled'
+)
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);

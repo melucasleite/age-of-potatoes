@@ -1,0 +1,24 @@
+{
+  "id": "ui_font",
+  "provider": "local",
+  "model": "local:local/ui_font.png",
+  "seed": null,
+  "prompt": "The game's own 6x10 monospaced bitmap font — 104 glyphs on a 32-column grid — authored from the master palette by art/tools/make-ui-font.mjs. §15 puts text-in-sprites on the NEVER list and names a runtime bitmap font as the only sanctioned way to draw text, and says in the same breath not to ask an image model for letterforms. Monospaced on purpose: every site it replaces asked the browser for `ui-monospace`, and a fixed advance means the font publishes NO per-glyph metrics — a cell is index%%32 across and index/32 down, which is the same arithmetic on both sides. Column 5 and row 9 of every cell are an advance gutter so nearest-neighbour sampling at a seam picks up transparency rather than the next letter; the em dash is the one glyph allowed to use all six columns, because that is what an em dash is. Drawn in `paper`, the palette's declared UI-text-on-dark value, and tinted at draw time. `trim` is false — trimming a glyph grid to its overall bounds would slide every cell off the grid, the same reason the crop strips opt out.",
+  "promptStyle": null,
+  "native": {
+    "width": 192,
+    "height": 40
+  },
+  "requested": {
+    "width": 192,
+    "height": 40
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "font",
+  "costUsd": 0,
+  "generatedAt": "2026-08-13T15:15:58.734Z"
+}

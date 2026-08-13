@@ -31,7 +31,7 @@ import { bestSellable } from '../input/pointer';
 import { beltItemAtTile } from './belt-items';
 import { FarmFx } from './farm-fx';
 import { money } from './hud';
-import { lampAlpha, lampTint } from './lamps';
+import { LAMP_PX, lampAlpha, lampTint } from './lamps';
 import { liquidName, liquidTint, portHintTint } from './liquids';
 import { pipeAtTile } from './pipes';
 import { ART } from './textures';
@@ -334,15 +334,19 @@ function updateMachines(scene: WorldScene, view: WorldView): void {
     // machine two thirds the size of the tiles it occupies and read as a placement bug.
     visual.body.setSize(width, height);
 
-    // The lamp: ONE white sprite, tinted. See `lamps.ts` for why there is not one per state.
-    const lampX = left + width - 5;
+    // The lamp: one white sprite per state, SHAPED and tinted. Assigning `.texture` on an
+    // unchanged state is a no-op inside Pixi, so selecting by state every frame is free —
+    // and it is what makes the state legible to a player who cannot use the colour (§16,
+    // and `lamps.ts` for the whole argument).
+    const lampX = left + width - LAMP_PX - 1;
     const lampY = top + 1;
+    visual.lamp.texture = scene.art.get(ART.lamp(m.lamp));
     visual.lamp.position.set(lampX, lampY);
     visual.lamp.visible = m.lamp !== LampState.Off;
     visual.lamp.tint = lampTint(m.lamp);
     visual.lamp.alpha = lampAlpha(m.lamp, now);
 
-    visual.wrench.position.set(lampX - 8, lampY);
+    visual.wrench.position.set(lampX - 7, lampY);
     visual.wrench.visible = m.wrenchDue === 1;
 
     // Progress along the base. A bar rather than an animated body: §15 rates machine
@@ -644,7 +648,7 @@ function createMachineVisual(scene: WorldScene, m: MachineView): MachineVisual {
   hopper.alpha = 0.9;
   hopper.visible = false;
 
-  const lamp = new Sprite(scene.art.get(ART.lamp));
+  const lamp = new Sprite(scene.art.get(ART.lamp(m.lamp)));
   lamp.visible = false;
 
   const wrench = new Sprite(scene.art.get(ART.uiWrench));

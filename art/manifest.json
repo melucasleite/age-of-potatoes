@@ -182,7 +182,7 @@
       "provider": "local",
       "width": 16,
       "height": 16,
-      "prompt": "One 16x16 conveyor belt corner tile \u2014 in from the left edge, out through the bottom edge \u2014 authored from the master palette by art/tools/make-factory-parts.mjs. Hand-authored after two paid takes; the second came back as a brown scribble on a background that quantised to violet. Drawn as a solid plate rather than a cutout, matching the straight tile: a belt corner is machinery sitting on the ground, not a decal floating over it.",
+      "prompt": "One 16x16 conveyor belt corner tile — in from the left edge, out through the bottom edge — authored from the master palette by art/tools/make-factory-parts.mjs. Hand-authored after two paid takes; the second came back as a brown scribble on a background that quantised to violet. Drawn as a solid plate rather than a cutout, matching the straight tile: a belt corner is machinery sitting on the ground, not a decal floating over it.",
       "anchor": "top-left",
       "atlasGroup": "belts",
       "source": "local/belt_corner.png"
@@ -192,7 +192,7 @@
       "provider": "local",
       "width": 16,
       "height": 16,
-      "prompt": "One 16x16 grabber arm, drawn pointing EAST and centred, authored from the master palette by art/tools/make-factory-parts.mjs. Hand-authored after two paid takes returned an inkblot with no claw. The structural reason it stays hand-authored: the renderer gets the other three directions by rotating this 90 degrees about the sprite centre, so it has to be centred and symmetric about its own axis or it wobbles as it turns \u2014 a guarantee arithmetic can make and a diffusion model cannot.",
+      "prompt": "One 16x16 grabber arm, drawn pointing EAST and centred, authored from the master palette by art/tools/make-factory-parts.mjs. Hand-authored after two paid takes returned an inkblot with no claw. The structural reason it stays hand-authored: the renderer gets the other three directions by rotating this 90 degrees about the sprite centre, so it has to be centred and symmetric about its own axis or it wobbles as it turns — a guarantee arithmetic can make and a diffusion model cannot.",
       "anchor": "center",
       "atlasGroup": "belts",
       "source": "local/grabber_arm.png"
@@ -285,7 +285,7 @@
       "provider": "local",
       "width": 16,
       "height": 16,
-      "prompt": "One 16x16 tileable diagonal hatch, authored from the master palette by art/tools/make-zone-overlay.mjs and tinted per zone in code. A zone is a plan, not a machine (plan \u00a75), so it reads as an annotation drawn over the world. Hand-authored because it must tile EXACTLY in both axes and must have binary alpha \u2014 the cook stage binarises alpha, so a soft wash would come back opaque and bury the field it annotates.",
+      "prompt": "One 16x16 tileable diagonal hatch, authored from the master palette by art/tools/make-zone-overlay.mjs and tinted per zone in code. A zone is a plan, not a machine (plan §5), so it reads as an annotation drawn over the world. Hand-authored because it must tile EXACTLY in both axes and must have binary alpha — the cook stage binarises alpha, so a soft wash would come back opaque and bury the field it annotates.",
       "anchor": "top-left",
       "atlasGroup": "overlay",
       "tileX": true,
@@ -293,14 +293,92 @@
       "source": "local/zone_overlay.png"
     },
     {
-      "id": "status_lamp",
+      "id": "lamp_off",
       "provider": "local",
-      "width": 4,
-      "height": 4,
-      "prompt": "One 4x4 status lamp, authored from the master palette by art/tools/make-status-lamp.mjs and tinted per state in code. Plan \u00a713: one sprite multiplied by a lamp colour beats five sprites, and it is the only way thirty machines animate state for the cost of one frame.",
+      "width": 7,
+      "height": 7,
+      "prompt": "One 7x7 status lamp — a single lit pixel — for the off state (no work cycle at all — the sell bin, a decorative object). Authored from the master palette by art/tools/make-status-lamp.mjs. Seven shapes, one per LampState, because §16 lists colourblind-safe machine status as lamp SHAPE variation rather than colour alone — and the palette makes that urgent rather than optional, since starved amber and blocked red are deliberate neighbours on a warm limited palette and are near-identical under deuteranopia. Still ONE tint per state applied in code (§13), so the batch and the page are unchanged; the shape now carries the state and the colour reinforces it. The generator asserts every pair of shapes differs by at least six of twenty-five pixels, which is the greyscale criterion made mechanical. Core is `paper` so a multiply tint lands on the intended hue; the `ink` halo is what keeps a pale lamp legible on a pale machine. `trim` is false: all seven must sit on the same 7x7 grid or the lamp would jump around the machine as its state changed.",
       "anchor": "center",
       "atlasGroup": "status",
-      "source": "local/status_lamp.png"
+      "trim": false,
+      "source": "local/lamp_off.png"
+    },
+    {
+      "id": "lamp_running",
+      "provider": "local",
+      "width": 7,
+      "height": 7,
+      "prompt": "One 7x7 status lamp — a filled disc, the only fully round shape in the set — for the running state (green: the work cycle is turning). Authored from the master palette by art/tools/make-status-lamp.mjs. Seven shapes, one per LampState, because §16 lists colourblind-safe machine status as lamp SHAPE variation rather than colour alone — and the palette makes that urgent rather than optional, since starved amber and blocked red are deliberate neighbours on a warm limited palette and are near-identical under deuteranopia. Still ONE tint per state applied in code (§13), so the batch and the page are unchanged; the shape now carries the state and the colour reinforces it. The generator asserts every pair of shapes differs by at least six of twenty-five pixels, which is the greyscale criterion made mechanical. Core is `paper` so a multiply tint lands on the intended hue; the `ink` halo is what keeps a pale lamp legible on a pale machine. `trim` is false: all seven must sit on the same 7x7 grid or the lamp would jump around the machine as its state changed.",
+      "anchor": "center",
+      "atlasGroup": "status",
+      "trim": false,
+      "source": "local/lamp_running.png"
+    },
+    {
+      "id": "lamp_starved",
+      "provider": "local",
+      "width": 7,
+      "height": 7,
+      "prompt": "One 7x7 status lamp — a triangle pointing up, toward the supply — for the starved state (amber: no input. Look upstream). Authored from the master palette by art/tools/make-status-lamp.mjs. Seven shapes, one per LampState, because §16 lists colourblind-safe machine status as lamp SHAPE variation rather than colour alone — and the palette makes that urgent rather than optional, since starved amber and blocked red are deliberate neighbours on a warm limited palette and are near-identical under deuteranopia. Still ONE tint per state applied in code (§13), so the batch and the page are unchanged; the shape now carries the state and the colour reinforces it. The generator asserts every pair of shapes differs by at least six of twenty-five pixels, which is the greyscale criterion made mechanical. Core is `paper` so a multiply tint lands on the intended hue; the `ink` halo is what keeps a pale lamp legible on a pale machine. `trim` is false: all seven must sit on the same 7x7 grid or the lamp would jump around the machine as its state changed.",
+      "anchor": "center",
+      "atlasGroup": "status",
+      "trim": false,
+      "source": "local/lamp_starved.png"
+    },
+    {
+      "id": "lamp_blocked",
+      "provider": "local",
+      "width": 7,
+      "height": 7,
+      "prompt": "One 7x7 status lamp — a bar laid across the outlet — for the blocked state (red: output full. Look downstream). Authored from the master palette by art/tools/make-status-lamp.mjs. Seven shapes, one per LampState, because §16 lists colourblind-safe machine status as lamp SHAPE variation rather than colour alone — and the palette makes that urgent rather than optional, since starved amber and blocked red are deliberate neighbours on a warm limited palette and are near-identical under deuteranopia. Still ONE tint per state applied in code (§13), so the batch and the page are unchanged; the shape now carries the state and the colour reinforces it. The generator asserts every pair of shapes differs by at least six of twenty-five pixels, which is the greyscale criterion made mechanical. Core is `paper` so a multiply tint lands on the intended hue; the `ink` halo is what keeps a pale lamp legible on a pale machine. `trim` is false: all seven must sit on the same 7x7 grid or the lamp would jump around the machine as its state changed.",
+      "anchor": "center",
+      "atlasGroup": "status",
+      "trim": false,
+      "source": "local/lamp_blocked.png"
+    },
+    {
+      "id": "lamp_utility",
+      "provider": "local",
+      "width": 7,
+      "height": 7,
+      "prompt": "One 7x7 status lamp — a droplet pointing down — for the utility state (blue: a utility is missing — an empty barrel or a dry pipe). Authored from the master palette by art/tools/make-status-lamp.mjs. Seven shapes, one per LampState, because §16 lists colourblind-safe machine status as lamp SHAPE variation rather than colour alone — and the palette makes that urgent rather than optional, since starved amber and blocked red are deliberate neighbours on a warm limited palette and are near-identical under deuteranopia. Still ONE tint per state applied in code (§13), so the batch and the page are unchanged; the shape now carries the state and the colour reinforces it. The generator asserts every pair of shapes differs by at least six of twenty-five pixels, which is the greyscale criterion made mechanical. Core is `paper` so a multiply tint lands on the intended hue; the `ink` halo is what keeps a pale lamp legible on a pale machine. `trim` is false: all seven must sit on the same 7x7 grid or the lamp would jump around the machine as its state changed.",
+      "anchor": "center",
+      "atlasGroup": "status",
+      "trim": false,
+      "source": "local/lamp_utility.png"
+    },
+    {
+      "id": "lamp_jammed",
+      "provider": "local",
+      "width": 7,
+      "height": 7,
+      "prompt": "One 7x7 status lamp — a saltire, struck through — for the jammed state (red with the whack icon: right-click to clear it). Authored from the master palette by art/tools/make-status-lamp.mjs. Seven shapes, one per LampState, because §16 lists colourblind-safe machine status as lamp SHAPE variation rather than colour alone — and the palette makes that urgent rather than optional, since starved amber and blocked red are deliberate neighbours on a warm limited palette and are near-identical under deuteranopia. Still ONE tint per state applied in code (§13), so the batch and the page are unchanged; the shape now carries the state and the colour reinforces it. The generator asserts every pair of shapes differs by at least six of twenty-five pixels, which is the greyscale criterion made mechanical. Core is `paper` so a multiply tint lands on the intended hue; the `ink` halo is what keeps a pale lamp legible on a pale machine. `trim` is false: all seven must sit on the same 7x7 grid or the lamp would jump around the machine as its state changed.",
+      "anchor": "center",
+      "atlasGroup": "status",
+      "trim": false,
+      "source": "local/lamp_jammed.png"
+    },
+    {
+      "id": "lamp_halted",
+      "provider": "local",
+      "width": 7,
+      "height": 7,
+      "prompt": "One 7x7 status lamp — a hollow box, an empty frame — for the halted state (grey: stopped dead at zero condition). Authored from the master palette by art/tools/make-status-lamp.mjs. Seven shapes, one per LampState, because §16 lists colourblind-safe machine status as lamp SHAPE variation rather than colour alone — and the palette makes that urgent rather than optional, since starved amber and blocked red are deliberate neighbours on a warm limited palette and are near-identical under deuteranopia. Still ONE tint per state applied in code (§13), so the batch and the page are unchanged; the shape now carries the state and the colour reinforces it. The generator asserts every pair of shapes differs by at least six of twenty-five pixels, which is the greyscale criterion made mechanical. Core is `paper` so a multiply tint lands on the intended hue; the `ink` halo is what keeps a pale lamp legible on a pale machine. `trim` is false: all seven must sit on the same 7x7 grid or the lamp would jump around the machine as its state changed.",
+      "anchor": "center",
+      "atlasGroup": "status",
+      "trim": false,
+      "source": "local/lamp_halted.png"
+    },
+    {
+      "id": "ui_font",
+      "provider": "local",
+      "width": 192,
+      "height": 40,
+      "prompt": "The game's own 6x10 monospaced bitmap font — 104 glyphs on a 32-column grid — authored from the master palette by art/tools/make-ui-font.mjs. §15 puts text-in-sprites on the NEVER list and names a runtime bitmap font as the only sanctioned way to draw text, and says in the same breath not to ask an image model for letterforms. Monospaced on purpose: every site it replaces asked the browser for `ui-monospace`, and a fixed advance means the font publishes NO per-glyph metrics — a cell is index%%32 across and index/32 down, which is the same arithmetic on both sides. Column 5 and row 9 of every cell are an advance gutter so nearest-neighbour sampling at a seam picks up transparency rather than the next letter; the em dash is the one glyph allowed to use all six columns, because that is what an em dash is. Drawn in `paper`, the palette's declared UI-text-on-dark value, and tinted at draw time. `trim` is false — trimming a glyph grid to its overall bounds would slide every cell off the grid, the same reason the crop strips opt out.",
+      "anchor": "top-left",
+      "atlasGroup": "font",
+      "trim": false,
+      "source": "local/ui_font.png"
     },
     {
       "id": "machine_juicer",
@@ -660,7 +738,7 @@
       "provider": "local",
       "width": 16,
       "height": 16,
-      "prompt": "One 16x16 conveyor belt tee \u2014 the run passes west to east and a branch leaves through the south \u2014 authored by art/tools/make-factory-parts.mjs. Four rotations reach every tee a grid can contain, and a merger is a splitter read the other way. Its through-run edges are asserted equal to the straight tile's, so a tee dropped into the middle of a run shows no seam at either end of itself.",
+      "prompt": "One 16x16 conveyor belt tee — the run passes west to east and a branch leaves through the south — authored by art/tools/make-factory-parts.mjs. Four rotations reach every tee a grid can contain, and a merger is a splitter read the other way. Its through-run edges are asserted equal to the straight tile's, so a tee dropped into the middle of a run shows no seam at either end of itself.",
       "anchor": "top-left",
       "atlasGroup": "belts",
       "source": "local/belt_junction.png"
@@ -737,7 +815,7 @@
       "provider": "local",
       "width": 32,
       "height": 32,
-      "prompt": "One 32x32 speed upgrade decal, level 1 of 3 \u2014 a chrome exhaust stack on the roof, taller at level 2 and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan \u00a73 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last \u2014 a dial the player cannot see is a dial that only half works.",
+      "prompt": "One 32x32 speed upgrade decal, level 1 of 3 — a chrome exhaust stack on the roof, taller at level 2 and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan §3 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last — a dial the player cannot see is a dial that only half works.",
       "anchor": "bottom-center",
       "atlasGroup": "decals",
       "source": "local/decal_speed_1.png"
@@ -747,7 +825,7 @@
       "provider": "local",
       "width": 32,
       "height": 32,
-      "prompt": "One 32x32 speed upgrade decal, level 2 of 3 \u2014 a chrome exhaust stack on the roof, taller at level 2 and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan \u00a73 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last \u2014 a dial the player cannot see is a dial that only half works.",
+      "prompt": "One 32x32 speed upgrade decal, level 2 of 3 — a chrome exhaust stack on the roof, taller at level 2 and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan §3 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last — a dial the player cannot see is a dial that only half works.",
       "anchor": "bottom-center",
       "atlasGroup": "decals",
       "source": "local/decal_speed_2.png"
@@ -757,7 +835,7 @@
       "provider": "local",
       "width": 32,
       "height": 32,
-      "prompt": "One 32x32 speed upgrade decal, level 3 of 3 \u2014 a chrome exhaust stack on the roof, taller at level 2 and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan \u00a73 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last \u2014 a dial the player cannot see is a dial that only half works.",
+      "prompt": "One 32x32 speed upgrade decal, level 3 of 3 — a chrome exhaust stack on the roof, taller at level 2 and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan §3 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last — a dial the player cannot see is a dial that only half works.",
       "anchor": "bottom-center",
       "atlasGroup": "decals",
       "source": "local/decal_speed_3.png"
@@ -767,7 +845,7 @@
       "provider": "local",
       "width": 32,
       "height": 32,
-      "prompt": "One 32x32 capacity upgrade decal, level 1 of 3 \u2014 a hopper on the roof whose mouth widens with each level while its throat stays put, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan \u00a73 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last \u2014 a dial the player cannot see is a dial that only half works.",
+      "prompt": "One 32x32 capacity upgrade decal, level 1 of 3 — a hopper on the roof whose mouth widens with each level while its throat stays put, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan §3 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last — a dial the player cannot see is a dial that only half works.",
       "anchor": "bottom-center",
       "atlasGroup": "decals",
       "source": "local/decal_capacity_1.png"
@@ -777,7 +855,7 @@
       "provider": "local",
       "width": 32,
       "height": 32,
-      "prompt": "One 32x32 capacity upgrade decal, level 2 of 3 \u2014 a hopper on the roof whose mouth widens with each level while its throat stays put, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan \u00a73 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last \u2014 a dial the player cannot see is a dial that only half works.",
+      "prompt": "One 32x32 capacity upgrade decal, level 2 of 3 — a hopper on the roof whose mouth widens with each level while its throat stays put, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan §3 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last — a dial the player cannot see is a dial that only half works.",
       "anchor": "bottom-center",
       "atlasGroup": "decals",
       "source": "local/decal_capacity_2.png"
@@ -787,7 +865,7 @@
       "provider": "local",
       "width": 32,
       "height": 32,
-      "prompt": "One 32x32 capacity upgrade decal, level 3 of 3 \u2014 a hopper on the roof whose mouth widens with each level while its throat stays put, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan \u00a73 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last \u2014 a dial the player cannot see is a dial that only half works.",
+      "prompt": "One 32x32 capacity upgrade decal, level 3 of 3 — a hopper on the roof whose mouth widens with each level while its throat stays put, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan §3 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last — a dial the player cannot see is a dial that only half works.",
       "anchor": "bottom-center",
       "atlasGroup": "decals",
       "source": "local/decal_capacity_3.png"
@@ -797,7 +875,7 @@
       "provider": "local",
       "width": 32,
       "height": 32,
-      "prompt": "One 32x32 efficiency upgrade decal, level 1 of 3 \u2014 a band of green trim painted along the chassis, longer each level and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan \u00a73 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last \u2014 a dial the player cannot see is a dial that only half works.",
+      "prompt": "One 32x32 efficiency upgrade decal, level 1 of 3 — a band of green trim painted along the chassis, longer each level and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan §3 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last — a dial the player cannot see is a dial that only half works.",
       "anchor": "bottom-center",
       "atlasGroup": "decals",
       "source": "local/decal_efficiency_1.png"
@@ -807,7 +885,7 @@
       "provider": "local",
       "width": 32,
       "height": 32,
-      "prompt": "One 32x32 efficiency upgrade decal, level 2 of 3 \u2014 a band of green trim painted along the chassis, longer each level and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan \u00a73 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last \u2014 a dial the player cannot see is a dial that only half works.",
+      "prompt": "One 32x32 efficiency upgrade decal, level 2 of 3 — a band of green trim painted along the chassis, longer each level and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan §3 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last — a dial the player cannot see is a dial that only half works.",
       "anchor": "bottom-center",
       "atlasGroup": "decals",
       "source": "local/decal_efficiency_2.png"
@@ -817,7 +895,7 @@
       "provider": "local",
       "width": 32,
       "height": 32,
-      "prompt": "One 32x32 efficiency upgrade decal, level 3 of 3 \u2014 a band of green trim painted along the chassis, longer each level and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan \u00a73 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last \u2014 a dial the player cannot see is a dial that only half works.",
+      "prompt": "One 32x32 efficiency upgrade decal, level 3 of 3 — a band of green trim painted along the chassis, longer each level and doubled at level 3, authored from the master palette by art/tools/make-upgrade-decals.mjs. Plan §3 asks that an upgrade be physically visible from across the field. Drawn as a full 32x32 overlay in the machine's own coordinate space so the renderer composites it at the machine's position with no offset table and no per-machine anchor. The script asserts each level puts more paint on the sprite than the last — a dial the player cannot see is a dial that only half works.",
       "anchor": "bottom-center",
       "atlasGroup": "decals",
       "source": "local/decal_efficiency_3.png"

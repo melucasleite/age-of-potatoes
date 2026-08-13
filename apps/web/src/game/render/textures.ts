@@ -8,9 +8,11 @@ import { TILE_PX } from './pixel';
 import { Assets, Graphics, Rectangle, Texture } from 'pixi.js';
 import type { Renderer, Spritesheet } from 'pixi.js';
 
-import { BeltTier, CROP_SPECS, ITEM_SPECS, MACHINE_SPECS } from '@snack/sim';
+import { BeltTier, CROP_SPECS, ITEM_SPECS, LampState, MACHINE_SPECS } from '@snack/sim';
 
 import { ATLAS_FRAMES, ATLAS_JSON_URL } from '@/art/manifest.generated';
+
+import { LAMP_FRAME, LAMP_PX, lampFrame } from './lamps';
 
 /** Frame ids are the sim's own slugs with dashes swapped for underscores. One vocabulary. */
 function frameSlug(slug: string): string {
@@ -81,12 +83,23 @@ export const ART = {
   playerSouth: 'player_south',
   playerWest: 'player_west',
   /**
-   * ONE lamp sprite, tinted in code (§13, and [[012]]'s "30 machines' worth of state
-   * animation for the cost of one sprite"). There is deliberately no `lamp_running` frame:
-   * a sprite per state is six chances for the art to disagree with itself about what amber
-   * means, and it would put the lamps on their own atlas page for no gain.
+   * ONE SHAPE PER LAMP STATE, still tinted in code.
+   *
+   * §13's "one sprite, tinted" bought thirty machines' worth of state animation for the cost
+   * of one frame, and every part of that survives here: seven 7×7 frames share the same atlas
+   * page as everything else, the tint is still applied at draw time, and the draw is still one
+   * ordinary sprite per machine. What it could not buy was a lamp a colourblind player can
+   * read, which §16 lists as a known gap and specifies the fix for. See `lamps.ts`.
    */
-  lamp: 'status_lamp',
+  lamp: (state: number) => lampFrame(state),
+  /**
+   * The bitmap font's glyph grid: one 192×40 frame carrying 104 monospaced cells.
+   *
+   * Never fetched as a sprite. `font.ts` hands it to `BitmapFont` as a page and the glyph
+   * rects are arithmetic on top of it, which is what lets the font ride the shared atlas
+   * instead of needing a texture of its own.
+   */
+  uiFont: 'ui_font',
   /**
    * The upgrade decals: nine frames, `decal_<dial>_<level>` with level 1–3.
    *
@@ -463,17 +476,7 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   [ART.playerEast]: { paint: pawn('east') },
   [ART.playerWest]: { paint: pawn('west') },
 
-  // WHITE, on purpose. The lamp is tinted at draw time, and a lamp baked green would
-  // multiply every other state toward black — a bug that reads as "the amber lamp is
-  // broken" rather than as "the sprite was the wrong colour".
-  [ART.lamp]: {
-    width: 4,
-    height: 4,
-    paint: (g) => {
-      g.rect(0, 0, 4, 4).fill(PALETTE.black);
-      g.rect(1, 1, 2, 2).fill(PALETTE.white);
-    },
-  },
+  // The seven lamp shapes are registered below, next to the masks they are drawn from.
 
   [ART.uiPixel]: { width: 1, height: 1, paint: (g) => g.rect(0, 0, 1, 1).fill(PALETTE.white) },
 
@@ -1215,9 +1218,66 @@ function registerItemPlaceholders(): void {
   }
 }
 
+/**
+ * The seven lamp shapes as grey boxes — the same seven silhouettes `make-status-lamp.mjs`
+ * bakes, drawn again here.
+ *
+ * A second copy of the drawing, deliberately, and for the reason `make-pipes.mjs` gives about
+ * its own placeholder: "the shipped frame and the fallback frame are the same picture", so a
+ * grey-box build is not quietly a less legible build. Colourblind-safe status is an
+ * accessibility floor rather than a finish, and a floor that only exists once the art pipeline
+ * has run is not a floor.
+ *
+ * WHITE core on ink, on purpose. The lamp is tinted at draw time, and a lamp baked green would
+ * multiply every other state toward black — a bug that reads as "the amber lamp is broken"
+ * rather than as "the sprite was the wrong colour".
+ */
+const LAMP_MASKS: Record<string, readonly string[]> = {
+  [LAMP_FRAME[LampState.Off]]: ['.....', '.....', '..#..', '.....', '.....'],
+  [LAMP_FRAME[LampState.Running]]: ['.###.', '#####', '#####', '#####', '.###.'],
+  [LAMP_FRAME[LampState.Starved]]: ['..#..', '..#..', '.###.', '.###.', '#####'],
+  [LAMP_FRAME[LampState.Blocked]]: ['.....', '.....', '#####', '#####', '.....'],
+  [LAMP_FRAME[LampState.UtilityMissing]]: ['.###.', '#####', '.###.', '..#..', '..#..'],
+  [LAMP_FRAME[LampState.Jammed]]: ['#...#', '.#.#.', '..#..', '.#.#.', '#...#'],
+  [LAMP_FRAME[LampState.Halted]]: ['#####', '#...#', '#...#', '#...#', '#####'],
+};
+
+function registerLampPlaceholders(): void {
+  for (const [name, rows] of Object.entries(LAMP_MASKS)) {
+    PLACEHOLDERS[name] = {
+      width: LAMP_PX,
+      height: LAMP_PX,
+      paint: (g) => {
+        // The ink halo first, as one dilated pass, then the core over it. Same construction as
+        // the generator's, so the negative space inside the saltire and the hollow box fills
+        // with ink and the bright figure reads on any machine.
+        const lit = (x: number, y: number): boolean =>
+          y >= 0 && y < rows.length && x >= 0 && x < 5 && rows[y]![x] === '#';
+        for (let y = 0; y < LAMP_PX; y++) {
+          for (let x = 0; x < LAMP_PX; x++) {
+            let touching = false;
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                if (lit(x - 1 + dx, y - 1 + dy)) touching = true;
+              }
+            }
+            if (touching) g.rect(x, y, 1, 1).fill(PALETTE.black);
+          }
+        }
+        for (let y = 0; y < LAMP_PX; y++) {
+          for (let x = 0; x < LAMP_PX; x++) {
+            if (lit(x - 1, y - 1)) g.rect(x, y, 1, 1).fill(PALETTE.white);
+          }
+        }
+      },
+    };
+  }
+}
+
 registerCropPlaceholders();
 registerItemPlaceholders();
 registerMachinePlaceholders();
+registerLampPlaceholders();
 
 function pawn(facing: 'north' | 'east' | 'south' | 'west'): Paint {
   return (g) => {

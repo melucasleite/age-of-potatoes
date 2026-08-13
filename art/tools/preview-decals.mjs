@@ -37,13 +37,19 @@ for (let row = 0; row < DIALS.length; row++) {
   for (let col = 0; col <= LEVELS.length; col++) {
     let framed;
     if (col === 0) {
-      framed = await sharp(machine).resize(SIZE * ZOOM, SIZE * ZOOM, { kernel: 'nearest' }).png().toBuffer();
+      framed = await sharp(machine)
+        .resize(SIZE * ZOOM, SIZE * ZOOM, { kernel: 'nearest' })
+        .png()
+        .toBuffer();
     } else {
       const decal = resolve(ART, 'local', `decal_${DIALS[row]}_${LEVELS[col - 1]}.png`);
       const merged = await sharp(machine)
         .composite([{ input: await sharp(decal).toBuffer() }])
         .toBuffer();
-      framed = await sharp(merged).resize(SIZE * ZOOM, SIZE * ZOOM, { kernel: 'nearest' }).png().toBuffer();
+      framed = await sharp(merged)
+        .resize(SIZE * ZOOM, SIZE * ZOOM, { kernel: 'nearest' })
+        .png()
+        .toBuffer();
     }
     composites.push({ input: framed, left: PAD + col * cell, top: PAD + row * cell });
   }
@@ -62,4 +68,6 @@ await sharp({
   .png()
   .toFile(out);
 
-console.log(`Wrote ${out} — rows ${DIALS.join(' / ')}, columns bare / L1 / L2 / L3, on ${machineId}.`);
+console.log(
+  `Wrote ${out} — rows ${DIALS.join(' / ')}, columns bare / L1 / L2 / L3, on ${machineId}.`,
+);

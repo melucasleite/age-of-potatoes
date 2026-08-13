@@ -35,7 +35,7 @@
 
 import { TILE_PX } from './pixel';
 
-import { Container, Graphics, Sprite, Text } from 'pixi.js';
+import { BitmapText, Container, Graphics, Sprite } from 'pixi.js';
 import type { Texture } from 'pixi.js';
 
 import { CeremonyId, MachineKind } from '@snack/sim';
@@ -46,6 +46,20 @@ import type { MachineView, WorldView } from '@snack/sim';
 // the layer that draws them: `textures.ts` pulls in the generated atlas manifest through the
 // `@/` alias, and a module that touches it cannot be loaded by a test. The frame this wants
 // is `ART.uiHover`, and `world.ts` is where that is looked up.
+//
+// It does not import `./font` either, for exactly the same reason — so the family name and
+// the base size are spelled out below. `BitmapText` with an uninstalled family is inert
+// rather than fatal, which is what keeps `ceremony.test.ts` able to construct one; in the
+// game `world.ts` installs the font before this is ever built. Plain literals rather than
+// imports IS the cost of that, and it is the same cost `ART.uiHover` already pays.
+
+/**
+ * The game's bitmap font, spelled out rather than imported — see the note above about why
+ * this module cannot reach `./font`. `UI_FONT.family` and `UI_FONT.fontSize` are the source
+ * of truth; if they ever move, these move with them.
+ */
+const PLAQUE_FONT = 'snack';
+const PLAQUE_BASE_SIZE = 10;
 
 /** The whole show, in milliseconds. §3 says "~10 seconds"; this is that. */
 const CEREMONY_MS = 10_000;
@@ -124,8 +138,8 @@ export class Ceremony {
   private readonly attach: (sprite: Sprite) => void;
 
   private readonly plaque = new Graphics();
-  private readonly title: Text;
-  private readonly subtitle: Text;
+  private readonly title: BitmapText;
+  private readonly subtitle: BitmapText;
   private readonly halo: Sprite;
 
   /** Grown on demand, reused across ceremonies, never shrunk. */
@@ -144,25 +158,23 @@ export class Ceremony {
     this.frame = frame;
     this.attach = attach;
 
-    this.title = new Text({
+    // Exactly 2x the font's base size, and 1x for the subtitle. An integer multiple is the
+    // whole reason the plaque no longer shimmers: at 19px of a browser face the glyph grid
+    // landed between screen pixels and the title crawled as it faded in.
+    this.title = new BitmapText({
       text: '',
       style: {
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        fontSize: 19,
-        fontWeight: 'bold',
+        fontFamily: PLAQUE_FONT,
+        fontSize: PLAQUE_BASE_SIZE * 2,
         letterSpacing: 2,
-        fill: 0xf2ecdd,
+        fill: 0xffffff,
       },
     });
     this.title.anchor.set(0.5, 0);
 
-    this.subtitle = new Text({
+    this.subtitle = new BitmapText({
       text: '',
-      style: {
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        fontSize: 12,
-        fill: 0xb9ae97,
-      },
+      style: { fontFamily: PLAQUE_FONT, fontSize: PLAQUE_BASE_SIZE, fill: 0xc6b8a0 },
     });
     this.subtitle.anchor.set(0.5, 0);
 
@@ -369,8 +381,11 @@ export class Ceremony {
     const y = Math.round(restY + (height + 40) * (1 - shown));
     this.screenRoot.position.set(x, y);
 
-    this.title.position.set(width / 2, 13);
-    this.subtitle.position.set(width / 2, 38);
+    // Rounded, because half a pixel is all it takes to blur a bitmap glyph — the plaque's
+    // width follows the viewport and lands on odd numbers half the time.
+    const centre = Math.round(width / 2);
+    this.title.position.set(centre, 14);
+    this.subtitle.position.set(centre, 40);
     this.title.alpha = shown;
     this.subtitle.alpha = shown * 0.9;
   }

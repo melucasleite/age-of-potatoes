@@ -225,7 +225,9 @@ async function write(name, grid) {
 const straight = beltStraight();
 for (let y = 0; y < SIZE; y++) {
   if (straight[y][0] !== straight[y][SIZE - 1]) {
-    throw new Error(`belt_straight seams at row ${y}: "${straight[y][0]}" vs "${straight[y][SIZE - 1]}".`);
+    throw new Error(
+      `belt_straight seams at row ${y}: "${straight[y][0]}" vs "${straight[y][SIZE - 1]}".`,
+    );
   }
 }
 

@@ -20,8 +20,12 @@
 
 import { TILE_PX } from './pixel';
 
-import { Container, Graphics, Sprite, Text } from 'pixi.js';
+import { Container, Graphics, Sprite } from 'pixi.js';
 
+import { LampState } from '@snack/sim';
+
+import { UI_FONT_SIZE, uiText } from './font';
+import { LAMP_PX, lampTint } from './lamps';
 import { EMPTY_PIPE_TINT, LIQUID_LOOKS, liquidTint } from './liquids';
 import { PIPE_FRAMES, PipeSide, pipeShape } from './pipe-shape';
 import { ART, placeholderMachineFrames } from './textures';
@@ -39,11 +43,10 @@ const SHEET_WIDTH = 1220;
  * become invisible — which is exactly what happened the first time this ran.
  */
 const SHEET_TOP = 285;
-const LABEL_STYLE = {
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 11,
-  fill: 0xcbb99b,
-} as const;
+
+/** `bone` — the palette's UI label value, over `paper` for headings. */
+const LABEL_FILL = 0xcbb99b;
+const HEADING_FILL = 0xf5d382;
 
 /** True when the page was opened with `?artsheet`. Read once; never re-read. */
 export function artSheetRequested(): boolean {
@@ -65,6 +68,10 @@ export class ArtSheet {
     y = this.pipeRow(art, y);
     y = this.section('liquids — the whole vocabulary, plus the grey that means empty', y);
     y = this.liquidRow(art, y);
+    y = this.section('status lamps — seven states, seven shapes, greyscale-legible (§16)', y);
+    y = this.lampRow(art, y);
+    y = this.section('the bitmap font — every glyph it can draw, at 1x and 2x', y);
+    y = this.fontRow(y);
 
     this.panel.rect(0, 0, SHEET_WIDTH, y + PAD).fill({ color: 0x14100e, alpha: 0.94 });
     this.root.position.set(16, SHEET_TOP);
@@ -75,14 +82,14 @@ export class ArtSheet {
   }
 
   private section(title: string, y: number): number {
-    const text = new Text({ text: title, style: { ...LABEL_STYLE, fill: 0xf5d382 } });
+    const text = uiText(title, { fill: HEADING_FILL });
     text.position.set(PAD, y);
     this.root.addChild(text);
     return y + 20;
   }
 
   private label(value: string, x: number, y: number): void {
-    const text = new Text({ text: value, style: LABEL_STYLE });
+    const text = uiText(value, { fill: LABEL_FILL });
     text.position.set(x, y);
     this.root.addChild(text);
   }
@@ -162,6 +169,71 @@ export class ArtSheet {
     this.label('a junction: four liquids and one dead arm', originX, y + cell * 2 + 4);
 
     return y + cell * 2 + 34;
+  }
+
+  /**
+   * All seven lamp states side by side, twice: tinted as they ship, and again at full white.
+   *
+   * The second row is the point. Colour is what a sighted player reads first and therefore
+   * what hides a shape problem — laid out in white, the row shows exactly the information a
+   * player who cannot use the hue gets, which is the criterion [[042]] is actually judged on.
+   */
+  private lampRow(art: ArtSet, y: number): number {
+    const step = LAMP_PX * SCALE + 34;
+    const states: [string, LampState][] = [
+      ['off', LampState.Off],
+      ['running', LampState.Running],
+      ['starved', LampState.Starved],
+      ['blocked', LampState.Blocked],
+      ['utility', LampState.UtilityMissing],
+      ['jammed', LampState.Jammed],
+      ['halted', LampState.Halted],
+    ];
+
+    states.forEach(([name, state], index) => {
+      const x = PAD + index * step;
+      const tinted = new Sprite(art.get(ART.lamp(state)));
+      tinted.scale.set(SCALE * 2);
+      tinted.position.set(x, y);
+      tinted.tint = lampTint(state);
+      this.root.addChild(tinted);
+
+      const plain = new Sprite(art.get(ART.lamp(state)));
+      plain.scale.set(SCALE * 2);
+      plain.position.set(x, y + LAMP_PX * SCALE * 2 + 6);
+      this.root.addChild(plain);
+
+      this.label(name, x, y + LAMP_PX * SCALE * 4 + 14);
+    });
+
+    return y + LAMP_PX * SCALE * 4 + 40;
+  }
+
+  /**
+   * The font's whole repertoire, so a missing glyph is visible rather than silently blank.
+   *
+   * At 1x and 2x because pixel-crispness is the criterion and the failure mode is a
+   * half-pixel: if the 2x row is not exactly the 1x row with every pixel doubled, something
+   * in the pipeline is resampling and the whole exercise has failed.
+   */
+  private fontRow(y: number): number {
+    const rows = [
+      ' !"#$%&\'()*+,-./0123456789:;<=>?@',
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`',
+      'abcdefghijklmnopqrstuvwxyz{|}~',
+      '· — – × − ↑ ↓ ← →   $1,204.50   day 3  09:41',
+    ];
+    let cursor = y;
+    for (const row of rows) {
+      const text = uiText(row);
+      text.position.set(PAD, cursor);
+      this.root.addChild(text);
+      cursor += UI_FONT_SIZE + 3;
+    }
+    const doubled = uiText('the quick brown fox — 0O 1lI| 68', { fontSize: UI_FONT_SIZE * 2 });
+    doubled.position.set(PAD, cursor + 4);
+    this.root.addChild(doubled);
+    return cursor + UI_FONT_SIZE * 2 + 14;
   }
 
   private liquidRow(art: ArtSet, y: number): number {

@@ -1,37 +1,96 @@
-// The status lamp: ONE sprite, tinted.
+// The status lamp: SEVEN shapes, each tinted. Shape carries the state; colour reinforces it.
 //
-// Plan §13 and [[012]] both land on the same design, and for the same reason. Six lamp
-// sprites is six chances for the art to disagree with itself about what amber means, and —
-// the part that actually bites — status lamps on the machine atlas would either break the
-// single-page contract or push machines onto a second page, at which point the belt-item
-// particle batch silently draws the wrong frames. A 4px white lamp tinted in code gives
-// thirty machines' worth of state animation for the cost of one sprite and cannot do that.
+// ── WHAT CHANGED FROM ONE SPRITE TO SEVEN, AND WHY THE OLD ARGUMENT STILL HOLDS ─────────
 //
-// THE TRAP THAT COMES WITH IT: tint is a STATIC property on a `ParticleContainer`. Lamps
-// here are ordinary sprites, where tint is a batched vertex attribute and changing it is
-// free — but if lamps are ever moved into a particle batch, every tint change needs an
-// explicit `container.update()` or the colour simply will not appear, with nothing in the
-// console to say so.
+// This file used to say "ONE sprite, tinted", and §13's reasoning for that was right about
+// everything except the player. One 4px bead multiplied by a lamp colour genuinely does buy
+// thirty machines' worth of state animation for the cost of one frame, and genuinely does keep
+// status lamps off the machine atlas page — where they would either break the single-page
+// contract or push the machines onto a second page, at which point the belt-item particle
+// batch silently draws the wrong frames.
 //
-// The grammar itself is plan §5's, and it is the same grammar on every machine in the game:
-// green running, amber starved (look upstream), red blocked (look downstream), blue utility
-// missing, red-plus-icon jammed, grey halted.
+// None of that changes here. Seven 7x7 frames is 343 pixels; they share the atlas page every
+// other frame shares, the tint is still applied in code, and the draw is still one ordinary
+// sprite per machine. What changes is that the sprite now has a SHAPE.
 //
-// §16's known gaps list colourblind-safe status as SHAPE variation rather than colour alone.
-// That is not solved here. What is solved here is that solving it later means adding one
-// overlay glyph per state in one place, not re-cutting six sprites.
+// ── WHY IT HAD TO ──────────────────────────────────────────────────────────────────────
+//
+// §16 lists colourblind-safe machine status as a known gap and specifies the fix: lamp SHAPE
+// variation, not colour alone, "on a deliberately warm limited palette". The palette is what
+// makes it urgent rather than nice-to-have. `lamp_starved` (#f2a93b) and `red_bright`
+// (#d94f36) are NEIGHBOURS by design, because a warm limited palette is the look — and a
+// player with deuteranopia sees them as very nearly the same colour. Under greyscale, which is
+// the honest worst case, the old lamp gave exactly zero bits: one bead at seven luminances,
+// two pairs of which were the same hex.
+//
+// Now the amber triangle points up and the red bar lies flat, and neither the palette nor the
+// grammar had to be reopened to get there.
+//
+// ── THE GRAMMAR IS §5'S AND IS NOT TOUCHED ─────────────────────────────────────────────
+//
+// Green running / amber starved (look upstream) / red blocked (look downstream) / blue utility
+// missing / red-plus-icon jammed / grey halted. Note what that means for Blocked and Jammed:
+// §5 says jammed IS the red blocked lamp with its own icon, so they still share a hue on
+// purpose. Splitting them by inventing an eighth colour would be solving a shape problem with
+// colour, which is the mistake this file exists to undo — a bar and a saltire are not
+// confusable under any simulation, and that is where the distinction belongs.
+//
+// ── THE TRAP THAT CAME WITH THE OLD DESIGN AND HAS NOT GONE AWAY ───────────────────────
+//
+// Tint is a STATIC property on a `ParticleContainer`. Lamps here are ordinary sprites, where
+// tint is a batched vertex attribute and changing it is free — but if lamps are ever moved into
+// a particle batch, every tint change needs an explicit `container.update()` or the colour
+// simply will not appear, with nothing in the console to say so.
 
 import { LampState } from '@snack/sim';
 
-/** Lamp colour per state. The only place these six hexes are written. */
+import { overPaper } from './tint';
+
+/** Source pixels per side. All seven frames are this, so a lamp never moves as its state does. */
+export const LAMP_PX = 7;
+
+/**
+ * Frame name per state — the shape half of the grammar.
+ *
+ * `Record<LampState, string>` and not `Record<number, string>`: TypeScript then fails the build
+ * the day the sim adds an eighth state, which is exactly the day somebody would otherwise ship
+ * a lamp that silently falls back to the "off" dot.
+ */
+export const LAMP_FRAME: Record<LampState, string> = {
+  [LampState.Off]: 'lamp_off',
+  [LampState.Running]: 'lamp_running',
+  [LampState.Starved]: 'lamp_starved',
+  [LampState.Blocked]: 'lamp_blocked',
+  [LampState.UtilityMissing]: 'lamp_utility',
+  [LampState.Jammed]: 'lamp_jammed',
+  [LampState.Halted]: 'lamp_halted',
+};
+
+export function lampFrame(lamp: number): string {
+  return LAMP_FRAME[lamp as LampState] ?? LAMP_FRAME[LampState.Off];
+}
+
+/**
+ * Lamp colour per state — the colour half, and the only place these seven are written.
+ *
+ * Each is the master palette's own swatch for that status role, divided by `paper` so that
+ * what lands on screen IS the swatch rather than the swatch multiplied by the sprite (see
+ * `tint.ts`). The hexes below are quoted from `art/palette/master.json`, where each carries the
+ * readability note that justifies it — `red_bright`'s says "chosen to survive as 3-4 pixels on
+ * soil_mid or metal_mid", which is a promise only kept if the pixel really is that colour.
+ *
+ * Off and Halted are both grey, per §5, at two values: Off is the dimmer, because it means "no
+ * work cycle" on a decorative object and should recede, while Halted means a machine the player
+ * has to go and deal with.
+ */
 export const LAMP_TINT: Record<number, number> = {
-  [LampState.Off]: 0x6b6b6b,
-  [LampState.Running]: 0x4bd25f,
-  [LampState.Starved]: 0xe8b53d,
-  [LampState.Blocked]: 0xe8503d,
-  [LampState.UtilityMissing]: 0x4bb6e8,
-  [LampState.Jammed]: 0xe8503d,
-  [LampState.Halted]: 0x6b6b6b,
+  [LampState.Off]: overPaper(0x6d5c4d), // stone_mid
+  [LampState.Running]: overPaper(0x5fd44a), // lamp_running
+  [LampState.Starved]: overPaper(0xf2a93b), // lamp_starved
+  [LampState.Blocked]: overPaper(0xd94f36), // red_bright
+  [LampState.UtilityMissing]: overPaper(0x4fa3d1), // water_bright
+  [LampState.Jammed]: overPaper(0xd94f36), // red_bright — §5: jammed IS the blocked red, plus a shape
+  [LampState.Halted]: overPaper(0x9a8873), // stone_light
 };
 
 export function lampTint(lamp: number): number {
@@ -44,6 +103,11 @@ export function lampTint(lamp: number): number {
  * Cosmetic, renderer-local, and derived from wall time rather than the tick — a lamp that
  * throbbed only while the sim advanced would go still exactly when the player most needs to
  * notice it. `Math.sin` is fine here and banned in `packages/sim`; see §12.
+ *
+ * The pulse bottoms out at 0.44 and never reaches zero, which matters more now than it did:
+ * the shape is the information, and a shape that blinks out entirely is one a player has to
+ * wait for. Unchanged from the one-sprite era on purpose — the feel of a blocked lamp is not
+ * what [[042]] was asked to reopen.
  */
 export function lampAlpha(lamp: number, nowMs: number): number {
   if (lamp === LampState.Blocked || lamp === LampState.Jammed) {

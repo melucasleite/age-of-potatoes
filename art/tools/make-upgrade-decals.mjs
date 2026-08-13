@@ -161,7 +161,9 @@ async function write(name, grid) {
     .png({ palette: false, compressionLevel: 9 })
     .toBuffer();
   writeFileSync(resolve(HERE, `../local/${name}.png`), png);
-  console.log(`Wrote art/local/${name}.png — ${SIZE}x${SIZE}, ${opaque}px opaque, ${png.length} bytes.`);
+  console.log(
+    `Wrote art/local/${name}.png — ${SIZE}x${SIZE}, ${opaque}px opaque, ${png.length} bytes.`,
+  );
   return opaque;
 }
 

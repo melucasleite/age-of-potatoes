@@ -23,6 +23,7 @@ import { BeltStructureLayer } from './belt-structure';
 import type { Camera } from './camera';
 import { Ceremony } from './ceremony';
 import { FarmFx } from './farm-fx';
+import { installUiFont } from './font';
 import { GrabberLayer } from './grabbers';
 import { Hud } from './hud';
 import { LandOverlay } from './land';
@@ -354,6 +355,11 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     layers.player.attach(visual.hand);
     layers.player.attach(visual.cargo);
   });
+
+  // BEFORE anything that draws text. `BitmapText` resolves its font lazily, so a plaque built
+  // first would still come out right — but it would come out right by accident, and the one
+  // that does not is the ceremony firing in the same frame the scene is built.
+  installUiFont(art);
 
   // The frame rather than the whole art set: `ceremony.ts` stays free of `textures.ts` so it
   // can be loaded by a test. See the note at the top of that file.

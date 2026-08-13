@@ -377,7 +377,7 @@
     "item_bottle": {
       "frame": {
         "x": 0,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -399,7 +399,7 @@
     "item_chip_bag": {
       "frame": {
         "x": 17,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -421,7 +421,7 @@
     "item_kola_nut": {
       "frame": {
         "x": 34,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -443,7 +443,7 @@
     "item_kola_powder": {
       "frame": {
         "x": 51,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -465,7 +465,7 @@
     "item_plain_chips": {
       "frame": {
         "x": 68,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -487,7 +487,7 @@
     "item_potato": {
       "frame": {
         "x": 85,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -509,7 +509,7 @@
     "item_potato_slices": {
       "frame": {
         "x": 102,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -531,7 +531,7 @@
     "item_repair_kit": {
       "frame": {
         "x": 119,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -553,7 +553,7 @@
     "item_rustic_style_chips": {
       "frame": {
         "x": 136,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -575,7 +575,7 @@
     "item_seasoned_chips": {
       "frame": {
         "x": 153,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -597,7 +597,7 @@
     "item_six_pack": {
       "frame": {
         "x": 170,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -619,7 +619,7 @@
     "item_snack_combo": {
       "frame": {
         "x": 187,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -641,7 +641,7 @@
     "item_soda": {
       "frame": {
         "x": 204,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -663,7 +663,7 @@
     "item_washed_potato": {
       "frame": {
         "x": 221,
-        "y": 67,
+        "y": 108,
         "w": 16,
         "h": 16
       },
@@ -682,10 +682,164 @@
       "anchorMode": "center",
       "group": "items"
     },
+    "lamp_blocked": {
+      "frame": {
+        "x": 0,
+        "y": 209,
+        "w": 7,
+        "h": 7
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 7,
+        "h": 7
+      },
+      "sourceSize": {
+        "w": 7,
+        "h": 7
+      },
+      "anchorMode": "center",
+      "group": "status"
+    },
+    "lamp_halted": {
+      "frame": {
+        "x": 8,
+        "y": 209,
+        "w": 7,
+        "h": 7
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 7,
+        "h": 7
+      },
+      "sourceSize": {
+        "w": 7,
+        "h": 7
+      },
+      "anchorMode": "center",
+      "group": "status"
+    },
+    "lamp_jammed": {
+      "frame": {
+        "x": 16,
+        "y": 209,
+        "w": 7,
+        "h": 7
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 7,
+        "h": 7
+      },
+      "sourceSize": {
+        "w": 7,
+        "h": 7
+      },
+      "anchorMode": "center",
+      "group": "status"
+    },
+    "lamp_off": {
+      "frame": {
+        "x": 24,
+        "y": 209,
+        "w": 7,
+        "h": 7
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 7,
+        "h": 7
+      },
+      "sourceSize": {
+        "w": 7,
+        "h": 7
+      },
+      "anchorMode": "center",
+      "group": "status"
+    },
+    "lamp_running": {
+      "frame": {
+        "x": 32,
+        "y": 209,
+        "w": 7,
+        "h": 7
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 7,
+        "h": 7
+      },
+      "sourceSize": {
+        "w": 7,
+        "h": 7
+      },
+      "anchorMode": "center",
+      "group": "status"
+    },
+    "lamp_starved": {
+      "frame": {
+        "x": 40,
+        "y": 209,
+        "w": 7,
+        "h": 7
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 7,
+        "h": 7
+      },
+      "sourceSize": {
+        "w": 7,
+        "h": 7
+      },
+      "anchorMode": "center",
+      "group": "status"
+    },
+    "lamp_utility": {
+      "frame": {
+        "x": 48,
+        "y": 209,
+        "w": 7,
+        "h": 7
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 7,
+        "h": 7
+      },
+      "sourceSize": {
+        "w": 7,
+        "h": 7
+      },
+      "anchorMode": "center",
+      "group": "status"
+    },
     "machine_bagger": {
       "frame": {
         "x": 0,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -707,7 +861,7 @@
     "machine_bottler": {
       "frame": {
         "x": 33,
-        "y": 84,
+        "y": 125,
         "w": 48,
         "h": 32
       },
@@ -729,7 +883,7 @@
     "machine_carbonator": {
       "frame": {
         "x": 82,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -751,7 +905,7 @@
     "machine_chip_kitchen": {
       "frame": {
         "x": 115,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -773,7 +927,7 @@
     "machine_fryer": {
       "frame": {
         "x": 148,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -795,7 +949,7 @@
     "machine_grinder": {
       "frame": {
         "x": 181,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -817,7 +971,7 @@
     "machine_juicer": {
       "frame": {
         "x": 214,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -839,7 +993,7 @@
     "machine_kettle": {
       "frame": {
         "x": 247,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -861,7 +1015,7 @@
     "machine_seasoner": {
       "frame": {
         "x": 280,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -883,7 +1037,7 @@
     "machine_slicer": {
       "frame": {
         "x": 313,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -905,7 +1059,7 @@
     "machine_sprinkler": {
       "frame": {
         "x": 412,
-        "y": 84,
+        "y": 125,
         "w": 16,
         "h": 16
       },
@@ -927,7 +1081,7 @@
     "machine_syrup_mixer": {
       "frame": {
         "x": 346,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -949,7 +1103,7 @@
     "machine_washer": {
       "frame": {
         "x": 379,
-        "y": 84,
+        "y": 125,
         "w": 32,
         "h": 32
       },
@@ -971,7 +1125,7 @@
     "pipe_cap": {
       "frame": {
         "x": 0,
-        "y": 134,
+        "y": 175,
         "w": 16,
         "h": 16
       },
@@ -993,7 +1147,7 @@
     "pipe_corner": {
       "frame": {
         "x": 17,
-        "y": 134,
+        "y": 175,
         "w": 16,
         "h": 16
       },
@@ -1015,7 +1169,7 @@
     "pipe_cross": {
       "frame": {
         "x": 34,
-        "y": 134,
+        "y": 175,
         "w": 16,
         "h": 16
       },
@@ -1037,7 +1191,7 @@
     "pipe_straight": {
       "frame": {
         "x": 51,
-        "y": 134,
+        "y": 175,
         "w": 16,
         "h": 16
       },
@@ -1059,7 +1213,7 @@
     "pipe_stub": {
       "frame": {
         "x": 68,
-        "y": 134,
+        "y": 175,
         "w": 16,
         "h": 16
       },
@@ -1081,7 +1235,7 @@
     "pipe_tee": {
       "frame": {
         "x": 85,
-        "y": 134,
+        "y": 175,
         "w": 16,
         "h": 16
       },
@@ -1103,7 +1257,7 @@
     "player_walk_down": {
       "frame": {
         "x": 0,
-        "y": 151,
+        "y": 192,
         "w": 32,
         "h": 16
       },
@@ -1125,7 +1279,7 @@
     "player_walk_side": {
       "frame": {
         "x": 33,
-        "y": 151,
+        "y": 192,
         "w": 32,
         "h": 16
       },
@@ -1144,32 +1298,10 @@
       "anchorMode": "top-left",
       "group": "player"
     },
-    "status_lamp": {
-      "frame": {
-        "x": 0,
-        "y": 168,
-        "w": 4,
-        "h": 4
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 4,
-        "h": 4
-      },
-      "sourceSize": {
-        "w": 4,
-        "h": 4
-      },
-      "anchorMode": "center",
-      "group": "status"
-    },
     "tech_agronomy_cane": {
       "frame": {
         "x": 0,
-        "y": 173,
+        "y": 217,
         "w": 32,
         "h": 32
       },
@@ -1191,7 +1323,7 @@
     "tech_agronomy_chili": {
       "frame": {
         "x": 33,
-        "y": 173,
+        "y": 217,
         "w": 32,
         "h": 32
       },
@@ -1213,7 +1345,7 @@
     "tech_agronomy_corn": {
       "frame": {
         "x": 66,
-        "y": 173,
+        "y": 217,
         "w": 32,
         "h": 32
       },
@@ -1235,7 +1367,7 @@
     "tech_agronomy_seed_hopper": {
       "frame": {
         "x": 99,
-        "y": 173,
+        "y": 217,
         "w": 32,
         "h": 32
       },
@@ -1257,7 +1389,7 @@
     "tech_fabrication_fryer": {
       "frame": {
         "x": 132,
-        "y": 173,
+        "y": 217,
         "w": 32,
         "h": 32
       },
@@ -1279,7 +1411,7 @@
     "tech_fabrication_wash_and_slice": {
       "frame": {
         "x": 165,
-        "y": 173,
+        "y": 217,
         "w": 32,
         "h": 32
       },
@@ -1301,7 +1433,7 @@
     "terrain_grass": {
       "frame": {
         "x": 0,
-        "y": 206,
+        "y": 250,
         "w": 16,
         "h": 16
       },
@@ -1323,7 +1455,7 @@
     "terrain_soil": {
       "frame": {
         "x": 17,
-        "y": 206,
+        "y": 250,
         "w": 16,
         "h": 16
       },
@@ -1345,7 +1477,7 @@
     "terrain_soil_tilled": {
       "frame": {
         "x": 34,
-        "y": 206,
+        "y": 250,
         "w": 16,
         "h": 16
       },
@@ -1364,10 +1496,32 @@
       "anchorMode": "top-left",
       "group": "terrain"
     },
+    "ui_font": {
+      "frame": {
+        "x": 0,
+        "y": 67,
+        "w": 192,
+        "h": 40
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 40
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 40
+      },
+      "anchorMode": "top-left",
+      "group": "font"
+    },
     "zone_overlay": {
       "frame": {
         "x": 0,
-        "y": 117,
+        "y": 158,
         "w": 16,
         "h": 16
       },
@@ -1389,11 +1543,11 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.294f137b.png",
+    "image": "atlas.8a728c8e.png",
     "format": "RGBA8888",
     "size": {
       "w": 512,
-      "h": 256
+      "h": 512
     },
     "scale": "1",
     "groups": [
@@ -1422,9 +1576,17 @@
         "count": 9
       },
       {
-        "group": "items",
+        "group": "font",
         "x": 0,
         "y": 67,
+        "width": 192,
+        "height": 40,
+        "count": 1
+      },
+      {
+        "group": "items",
+        "x": 0,
+        "y": 108,
         "width": 237,
         "height": 16,
         "count": 14
@@ -1432,7 +1594,7 @@
       {
         "group": "machines",
         "x": 0,
-        "y": 84,
+        "y": 125,
         "width": 428,
         "height": 32,
         "count": 13
@@ -1440,7 +1602,7 @@
       {
         "group": "overlay",
         "x": 0,
-        "y": 117,
+        "y": 158,
         "width": 16,
         "height": 16,
         "count": 1
@@ -1448,7 +1610,7 @@
       {
         "group": "pipes",
         "x": 0,
-        "y": 134,
+        "y": 175,
         "width": 101,
         "height": 16,
         "count": 6
@@ -1456,7 +1618,7 @@
       {
         "group": "player",
         "x": 0,
-        "y": 151,
+        "y": 192,
         "width": 65,
         "height": 16,
         "count": 2
@@ -1464,15 +1626,15 @@
       {
         "group": "status",
         "x": 0,
-        "y": 168,
-        "width": 4,
-        "height": 4,
-        "count": 1
+        "y": 209,
+        "width": 55,
+        "height": 7,
+        "count": 7
       },
       {
         "group": "tech",
         "x": 0,
-        "y": 173,
+        "y": 217,
         "width": 197,
         "height": 32,
         "count": 6
@@ -1480,7 +1642,7 @@
       {
         "group": "terrain",
         "x": 0,
-        "y": 206,
+        "y": 250,
         "width": 50,
         "height": 16,
         "count": 3

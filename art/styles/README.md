@@ -39,3 +39,27 @@ mutate: if the look moves again, `v2` gets a new file and `v1` stays reproducibl
 
 A full v1.0 pass on Pro is the number Lucas needs before committing: at ~$0.18/image with the
 generous rerolls §15 assumes, that is the $150-$400 range the plan already predicted.
+
+## The UI font — licence and provenance
+
+**`snack` is authored in this repository and carries this repository's licence. No third-party
+typeface was used, referenced, or traced.**
+
+The letterforms live in `art/tools/make-ui-font.mjs` as literal pixel masks and are the only
+"style record" the font has — a 6x10 monospaced cell, a 5x7 body with two descender rows, 104
+glyphs (printable ASCII plus the nine non-ASCII characters the renderer's format strings
+actually print). Regenerating it is `node art/tools/make-ui-font.mjs`, which rewrites
+`art/local/ui_font.png` and `apps/web/src/art/ui-font.generated.ts` together.
+
+**Why authored rather than vendored.** §15 rules out asking an image model for letterforms —
+a diffusion model cannot be asked for the same stroke weight a hundred times, which is the
+entire content of a font. That leaves adopting an open-licensed pixel font or drawing one. An
+adopted font arrives with a licence to track, a file to vendor, metrics to trust, and a
+character set somebody else chose; at 5x7, drawing one is an afternoon and the result is
+unambiguously ours. The same argument the belts and pipes make for `provider: "local"`, one
+step further.
+
+**Why it is not a style record.** Nothing in `art/manifest.json` generates through it and no
+provider ever sees it. It is listed here because a font is the one asset in a repository that
+people are right to ask the licence of, and the answer should be in the file where licences
+live rather than in a commit message.
