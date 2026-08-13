@@ -166,7 +166,30 @@ export type StyleName =
   | 'dialCompete'
   | 'dialMaxed'
   | 'benchLocked'
-  | 'benchDivider';
+  | 'benchDivider'
+  // --- the field card ---
+  | 'fieldCard'
+  | 'fieldRow'
+  | 'fieldName'
+  | 'fieldReadout'
+  | 'fieldSep'
+  | 'fieldWilting'
+  | 'fieldWilted'
+  | 'fieldAlert'
+  | 'fieldAlertMark'
+  // --- the Welcome Back card ---
+  | 'topCentre'
+  | 'welcome'
+  | 'welcomeHead'
+  | 'welcomeClose'
+  | 'welcomeAway'
+  | 'welcomeSafe'
+  | 'welcomeStats'
+  | 'welcomeStat'
+  | 'welcomeStatLabel'
+  | 'welcomeStatValue'
+  | 'welcomeStatWarn'
+  | 'welcomeNote';
 
 export const s = raw as Readonly<Record<StyleName, string>>;
 

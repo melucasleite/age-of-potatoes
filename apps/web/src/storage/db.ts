@@ -12,10 +12,24 @@ import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 import type { SaveEnvelope } from '@snack/sim';
 
 export const DB_NAME = 'snack-mogul';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const SAVES_STORE = 'saves';
 export const TRACES_STORE = 'traces';
+
+/**
+ * Host-side facts about the player's visits. **Never world state.**
+ *
+ * A SEPARATE STORE, and the separation is the point rather than tidiness. Work item 040's
+ * hard constraint is that the last-played timestamp lives "outside `SavePayload`, outside
+ * `WorldState`, and outside `hashState()`" — because §6 and §12 ban `Date` from
+ * `packages/sim` entirely, and a wall-clock value that found its way into the world would
+ * change the state hash on every save and take every replay and every leaderboard with it.
+ *
+ * Keeping it in its own store means the mistake is not merely discouraged, it is awkward:
+ * there is no code path that reads this store and hands the result to the sim.
+ */
+export const META_STORE = 'meta';
 
 /**
  * Where a record that would not load goes to be kept.
@@ -83,10 +97,26 @@ export interface QuarantinedSave {
   fingerprint: string;
 }
 
+/**
+ * When the player was last actually here, and how far their world had got.
+ *
+ * `tick` is stored alongside the wall clock for one reason: it is how the Welcome Back card
+ * tells a returning player from someone who opened the game a month ago, did nothing, and
+ * closed it. "Your factory is exactly where you left it" is a hollow sentence when there is
+ * no factory, and a card that says it anyway is the game failing to know its own player.
+ */
+export interface PlaySession {
+  /** Wall-clock milliseconds at the last moment the world was observed advancing. */
+  at: number;
+  /** `state.tick` at that moment. */
+  tick: number;
+}
+
 interface SnackMogulDB extends DBSchema {
   [SAVES_STORE]: { key: string; value: SaveEnvelope };
   [TRACES_STORE]: { key: number; value: TraceBatch };
   [QUARANTINE_STORE]: { key: number; value: QuarantinedSave };
+  [META_STORE]: { key: string; value: PlaySession };
 }
 
 let connection: Promise<IDBPDatabase<SnackMogulDB>> | null = null;
@@ -126,6 +156,13 @@ export function getDb(): Promise<IDBPDatabase<SnackMogulDB>> {
           // because these are an accumulating log, not a keyed lookup — every failure is its
           // own record and none of them replaces another.
           db.createObjectStore(QUARANTINE_STORE, { autoIncrement: true });
+        }
+        if (oldVersion < 3) {
+          // Append-only again: version 1 and 2 databases in the wild gain the meta store and
+          // keep everything else exactly where it is. Out-of-line string keys, one record —
+          // this is a lookup, not a log, and last week's visit is of no interest once this
+          // week's has happened.
+          db.createObjectStore(META_STORE);
         }
       },
       terminated() {

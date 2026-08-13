@@ -1470,6 +1470,187 @@
   box-shadow: 0 1px 0 #46392f;
 }
 
+/* --- the field card ------------------------------------------------------------- */
+
+/*
+ * The withering readout ([[021]]). It sits above the clipboard rather than on it: the
+ * clipboard is paper the player reads at leisure, and a field going Day-Old is the one
+ * thing in this corner with a deadline on it.
+ */
+.fieldCard {
+  width: 292px;
+  padding: 10px 12px;
+}
+
+.fieldRow {
+  margin-top: 6px;
+}
+
+.fieldName {
+  font-size: 11px;
+  color: #cbb99b;
+}
+
+.fieldReadout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-size: 11px;
+  color: #9a8873;
+}
+
+/*
+ * The separator is a pseudo-element rather than a character in the text, so it can never be
+ * selected, read aloud by a screen reader, or left dangling at the end of a wrapped line.
+ */
+.fieldSep::before {
+  content: '·';
+  margin: 0 6px;
+  color: #6d5c4d;
+}
+
+/* Amber: still saveable at full price. The colour the sprinkler's barrel warning uses. */
+.fieldWilting {
+  color: #f2a93b;
+}
+
+/* Red: already discounted, and on its way to compost. */
+.fieldWilted {
+  color: #d94f36;
+}
+
+/*
+ * The alert. It has earned sixty seconds of continuous bleed by the time it renders, so it
+ * is allowed to be the loudest thing in the corner — and it is the ONLY thing in the HUD
+ * permitted to be, per plan §5.
+ */
+.fieldAlert {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 2px solid #14100e;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #ef8f68;
+}
+
+.fieldAlertMark {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 1px;
+  background: #d94f36;
+  box-shadow: 0 0 0 1px rgba(20, 16, 14, 0.45);
+}
+
+/* --- the Welcome Back card ------------------------------------------------------ */
+
+/*
+ * Top centre, which is the one region of the HUD that is otherwise empty — and it is empty
+ * because nothing permanent belongs there. A card that appears after a month away and never
+ * again can have the best seat in the house.
+ */
+.topCentre {
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+}
+
+.welcome {
+  width: 360px;
+  max-width: calc(100vw - 28px);
+  /*
+   * NOT a modal. No scrim, no backdrop, and the game is live underneath it. §6 cut pausing
+   * from this game permanently, so a card that stopped the world to say hello would be the
+   * one thing in the build that can pause it.
+   */
+  pointer-events: none;
+}
+
+.welcomeHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/*
+ * The only part of the card that takes a click. Everything else stays transparent to the
+ * pointer so the lot underneath is still playable through it.
+ */
+.welcomeClose {
+  pointer-events: auto;
+  cursor: pointer;
+  appearance: none;
+  border: 0;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  color: #9a8873;
+  background: #14100e;
+  box-shadow: inset 0 0 0 2px #46392f;
+}
+
+.welcomeClose:hover {
+  color: #efe2c6;
+  background: #46392f;
+}
+
+.welcomeAway {
+  margin-top: 8px;
+  font-size: 15px;
+  color: #efe2c6;
+}
+
+.welcomeSafe {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  /* Grass, not gold: this is reassurance, not money. */
+  color: #a3c65c;
+}
+
+.welcomeStats {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.welcomeStat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11.5px;
+}
+
+.welcomeStatLabel {
+  color: #6d5c4d;
+  text-transform: lowercase;
+}
+
+.welcomeStatValue {
+  color: #cbb99b;
+  text-align: right;
+}
+
+.welcomeStatWarn {
+  color: #f2a93b;
+}
+
+/* The clipboard's notes on a dark card rather than on paper. */
+.welcomeNote {
+  color: #9a8873;
+  font-size: 11px;
+}
+
 /* --- small screens -------------------------------------------------------------- */
 
 /*
@@ -1479,6 +1660,15 @@
 @media (max-width: 1040px) {
   .clipboard {
     display: none;
+  }
+  /*
+   * The field card does NOT go with it. The clipboard is observations the player can catch
+   * up on later; this is the one alert in the game, it only speaks after a minute of actual
+   * losses, and hiding it on a narrow window would mean the smallest screens are the ones
+   * that silently lose crops. It gives up width instead.
+   */
+  .fieldCard {
+    width: 238px;
   }
   .money {
     font-size: 24px;

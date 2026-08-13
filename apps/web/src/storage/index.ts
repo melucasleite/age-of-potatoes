@@ -14,6 +14,7 @@ export {
   CURRENT_KEY,
   DB_NAME,
   DB_VERSION,
+  META_STORE,
   PREVIOUS_KEY,
   QUARANTINE_STORE,
   SAVES_STORE,
@@ -21,7 +22,21 @@ export {
   closeDb,
   isStorageAvailable,
 } from './db';
-export type { QuarantinedSave, TraceBatch } from './db';
+export type { PlaySession, QuarantinedSave, TraceBatch } from './db';
+// The one wall clock in the game, kept deliberately outside the save payload and outside the
+// state hash — see `session.ts`. The HUD's Welcome Back card is the only consumer.
+export {
+  PLAYED_ENOUGH_TICKS,
+  PRESENCE_POLL_MS,
+  SESSION_KEY,
+  WELCOME_BACK_THRESHOLD_MS,
+  deservesWelcome,
+  formatTimeAway,
+  readLastSession,
+  recordSession,
+  startPresenceClock,
+} from './session';
+export type { PresenceHandle } from './session';
 export { requestPersistentStorage } from './persist';
 export type { PersistenceResult } from './persist';
 export { CONFLICT_KEY, adoptCloudEnvelope, readConflictEnvelope } from './cloudHandoff';

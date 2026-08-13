@@ -182,6 +182,65 @@ export interface BenchSlice {
   readonly dials: readonly BenchDial[];
 }
 
+/**
+ * One zone's readout line — plan §5's "47/60 planted · 12 mature · 3 dry", with the two
+ * withering counts [[021]] adds to it.
+ *
+ * The counts come from the sim, which owns what a zone contains. `atRiskCents` does not:
+ * cents are the sim's, but which of them are "at risk" is a phrasing decision, and those
+ * live on this side of the seam (`derive-lot.ts`).
+ */
+export interface ZoneRow {
+  readonly id: number;
+  readonly name: string;
+  readonly tiles: number;
+  readonly planted: number;
+  readonly mature: number;
+  /** Past its grace and drooping. Still harvests at full price. */
+  readonly wilting: number;
+  /** Turned. Harvests as Day-Old at half, and collapses to compost if left. */
+  readonly wilted: number;
+  readonly dry: number;
+  readonly compost: number;
+  readonly atRiskCents: number;
+}
+
+/**
+ * The single cash-phrased alert (plan §5). Null far more often than not, and that is the
+ * design — see `derive-lot.ts` on why the sixty-second delay is the feature.
+ */
+export interface LotAlert {
+  readonly id: string;
+  readonly text: string;
+  readonly costCents: number;
+}
+
+/**
+ * The state of the lot, as opposed to the state of the wallet.
+ *
+ * Read by two panels that ask the same question at different moments: the zone card wants to
+ * know what is wilting now, and the Welcome Back card wants to know what the factory looks
+ * like to someone who has forgotten building it.
+ */
+export interface LotSlice {
+  readonly version: number;
+  readonly zones: readonly ZoneRow[];
+  readonly wilting: number;
+  readonly wilted: number;
+  readonly atRiskCents: number;
+  /** Compost lying on the ground, waiting to be swept up. */
+  readonly compost: number;
+  readonly alert: LotAlert | null;
+  /** Machines the player built. The sell bin is scenery and is not counted. */
+  readonly machines: number;
+  readonly running: number;
+  readonly halted: number;
+  readonly jammed: number;
+  readonly starved: number;
+  readonly blocked: number;
+  readonly sprinklers: number;
+}
+
 export interface HudSnapshot {
   readonly economy: EconomySlice;
   readonly unlock: UnlockSlice;
@@ -190,6 +249,7 @@ export interface HudSnapshot {
   readonly clipboard: ClipboardSlice;
   readonly tech: TechSlice;
   readonly bench: BenchSlice;
+  readonly lot: LotSlice;
 }
 
 export type SliceName = keyof HudSnapshot;
@@ -264,6 +324,23 @@ export const ZERO_BENCH: BenchSlice = Object.freeze({
   dials: Object.freeze([]),
 });
 
+export const ZERO_LOT: LotSlice = Object.freeze({
+  version: 0,
+  zones: Object.freeze([]),
+  wilting: 0,
+  wilted: 0,
+  atRiskCents: 0,
+  compost: 0,
+  alert: null,
+  machines: 0,
+  running: 0,
+  halted: 0,
+  jammed: 0,
+  starved: 0,
+  blocked: 0,
+  sprinklers: 0,
+});
+
 /**
  * The server snapshot, frozen and shared.
  *
@@ -279,4 +356,5 @@ export const ZERO_SNAPSHOT: HudSnapshot = Object.freeze({
   clipboard: ZERO_CLIPBOARD,
   tech: ZERO_TECH,
   bench: ZERO_BENCH,
+  lot: ZERO_LOT,
 });

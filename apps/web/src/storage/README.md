@@ -67,7 +67,8 @@ The stored value _is_ the envelope, with no wrapper object — legible in DevToo
 Application → IndexedDB, and an upload rather than a redesign when cloud sync lands.
 
 `quarantine` is a fourth store rather than a third record, and it is not a slot either: it is
-where records that failed to load are kept, and nothing ever loads from it.
+where records that failed to load are kept, and nothing ever loads from it. `meta` is a fifth,
+holding host-side facts about the player's visits and never world state — see below.
 
 ## The trace has its own store
 
@@ -131,6 +132,28 @@ time rather than dropping everything the first time it meets a limit that might 
 If the retry still fails, `saveWorld` rejects with a `StorageFullError` whose message is the
 sentence the player is already reading on screen.
 
+## The one wall clock, and why it is over here
+
+`session.ts` records **when the player was last actually present**, in its own `meta` object
+store, keyed `last-played`. The Welcome Back card ([[040]]) is its only consumer.
+
+It lives in this directory because it cannot live in the other one. §6 says the sim has no wall
+clock and §12 bans `Date` from `packages/sim` outright — a timestamp inside `WorldState` would
+change the state hash on every save and take every replay and every leaderboard with it. Its
+own object store, rather than a field on the save, so there is no code path that reads it and
+hands the result to the sim.
+
+**Presence is gated on ticks, not on the page being open.** This is the same insight autosave
+runs on, applied to a different question: the clock only writes when `state.tick` has _moved_
+since the last write. A tab left open overnight is not a player playing overnight, and if the
+timestamp kept advancing while nothing moved, a genuine week-long absence would be measured
+from the wrong end. Wall clock answers _how long ago_; ticks answer _were they here_.
+
+**Read before you write.** `startPresenceClock` overwrites the record, so anything that wants
+the previous visit must call `readLastSession()` first. The HUD's `use-welcome.ts` memoises
+that read at module scope specifically so a StrictMode double-mount cannot read back its own
+heartbeat and conclude the player never left.
+
 ## Nothing fails quietly
 
 `log.ts` writes to a console nobody has open. `notices.ts` is the channel to the **player**:
@@ -168,4 +191,5 @@ first minute AGENTS.md says the whole project is in service of.
 | `quota.ts`      | `isQuotaError`, the single retry, and the full-disk wording |
 | `quarantine.ts` | Filing a record that would not load, and reading them back  |
 | `notices.ts`    | The plain-language channel to the player                    |
+| `session.ts`    | The last-played timestamp and the presence clock            |
 | `index.ts`      | The public surface, plus `bootWorld()`                      |

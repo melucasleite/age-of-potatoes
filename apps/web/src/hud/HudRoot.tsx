@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { Clipboard } from './Clipboard';
+import { FieldCard } from './FieldCard';
 import { s } from './styles';
 import { PerfOverlay } from './PerfOverlay';
 import { Pouch } from './Pouch';
@@ -25,6 +26,7 @@ import { TechPanel, TechToggle } from './TechTree';
 import { Ticker } from './Ticker';
 import { Toolbelt } from './Toolbelt';
 import { UpgradeBench } from './UpgradeBench';
+import { WelcomeBack } from './WelcomeBack';
 import { useHudSlice } from './use-hud';
 
 /**
@@ -77,8 +79,24 @@ export default function HudRoot() {
           <Toolbelt />
         </div>
 
+        {/*
+        Field card above the clipboard, deliberately. Both are read at a glance from the same
+        corner, but the clipboard is paper you catch up on and the field card is the only
+        thing in the HUD with a clock running on it ([[021]]) — so it sits where the eye
+        arrives first rather than underneath three lines of observation.
+      */}
         <div className={`${s.corner} ${s.bottomRight}`}>
+          <FieldCard />
           <Clipboard />
+        </div>
+
+        {/*
+        The Welcome Back card ([[040]]). Rendered unconditionally — it decides for itself
+        whether it has anything to say, and on all but a handful of boots the answer is no
+        and it returns null. Top centre because it is the rarest thing in the HUD.
+      */}
+        <div className={`${s.corner} ${s.topCentre}`}>
+          <WelcomeBack />
         </div>
 
         {DEV ? (

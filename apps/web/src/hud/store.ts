@@ -42,6 +42,8 @@ import {
   deriveUnlock,
 } from './derive';
 import type { MachineCounts, UnlockFields } from './derive';
+import { RiskWatch, createLotFields, deriveLot } from './derive-lot';
+import type { LotFields } from './derive-lot';
 import { createBenchFields, createTechFields, deriveBench, deriveTech } from './derive-tech';
 import type { BenchFields, TechFields } from './derive-tech';
 import { RateMeter } from './rate';
@@ -53,6 +55,7 @@ import type {
   EconomySlice,
   HudLive,
   HudSnapshot,
+  LotSlice,
   PouchItem,
   PouchSlice,
   SliceName,
@@ -61,11 +64,13 @@ import type {
   ToolSlice,
   ToolSlot,
   UnlockSlice,
+  ZoneRow,
 } from './types';
 import {
   ZERO_BENCH,
   ZERO_CLIPBOARD,
   ZERO_ECONOMY,
+  ZERO_LOT,
   ZERO_POUCH,
   ZERO_SNAPSHOT,
   ZERO_TECH,
@@ -92,6 +97,7 @@ export class HudStore {
   private clipboard: ClipboardSlice = ZERO_CLIPBOARD;
   private tech: TechSlice = ZERO_TECH;
   private bench: BenchSlice = ZERO_BENCH;
+  private lot: LotSlice = ZERO_LOT;
   private snapshot: HudSnapshot = ZERO_SNAPSHOT;
 
   private owner: object | null = null;
@@ -102,6 +108,8 @@ export class HudStore {
   private readonly counts: MachineCounts = createMachineCounts();
   private readonly techScratch: TechFields = createTechFields();
   private readonly benchScratch: BenchFields = createBenchFields();
+  private readonly lotScratch: LotFields = createLotFields();
+  private readonly riskWatch = new RiskWatch();
   private readonly unlockScratch: UnlockFields = {
     id: null,
     label: '',
@@ -137,6 +145,7 @@ export class HudStore {
     clipboard: () => this.snapshot.clipboard,
     tech: () => this.snapshot.tech,
     bench: () => this.snapshot.bench,
+    lot: () => this.snapshot.lot,
   };
 
   /**
@@ -152,6 +161,7 @@ export class HudStore {
     clipboard: () => ZERO_SNAPSHOT.clipboard,
     tech: () => ZERO_SNAPSHOT.tech,
     bench: () => ZERO_SNAPSHOT.bench,
+    lot: () => ZERO_SNAPSHOT.lot,
   };
 
   getSnapshot(): HudSnapshot {
@@ -170,6 +180,10 @@ export class HudStore {
     this.selector = selectTool;
     this.dispatcher = dispatch;
     this.meter.reset();
+    // A fresh world does not inherit the last one's bleed. Without this, loading a save
+    // could fire the sixty-second alert on the first publish, which is the exact
+    // fire-immediately behaviour the delay exists to prevent.
+    this.riskWatch.reset();
     this.clipboardDueTick = -(2 ** 30);
     this.live.tick = 0;
     this.live.moneyCents = 0;
@@ -195,6 +209,7 @@ export class HudStore {
     this.clipboard = ZERO_CLIPBOARD;
     this.tech = ZERO_TECH;
     this.bench = ZERO_BENCH;
+    this.lot = ZERO_LOT;
     this.snapshot = ZERO_SNAPSHOT;
     this.notify();
   }
@@ -228,6 +243,7 @@ export class HudStore {
     if (this.setTools(view.moneyCents, tool)) changed = true;
     if (this.setTech(deriveTech(view, this.techScratch))) changed = true;
     if (this.setBench(deriveBench(view, this.benchScratch))) changed = true;
+    if (this.setLot(deriveLot(view, this.riskWatch, this.lotScratch))) changed = true;
 
     if (view.tick >= this.clipboardDueTick) {
       this.clipboardDueTick = view.tick + CLIPBOARD_PERIOD_TICKS;
@@ -297,6 +313,7 @@ export class HudStore {
       clipboard: this.clipboard,
       tech: this.tech,
       bench: this.bench,
+      lot: this.lot,
     };
   }
 
@@ -480,6 +497,75 @@ export class HudStore {
       listPriceCents: next.listPriceCents,
       researched: next.researched,
       dials: Object.freeze(next.dials.map((dial) => Object.freeze({ ...dial }))),
+    });
+    return true;
+  }
+
+  /**
+   * The lot slice: what is wilting, what that costs, and what the machines are doing.
+   *
+   * Every number here moves in discrete jumps — a tile changes wilt stage, a lamp changes
+   * colour — so this comparison genuinely settles rather than merely narrowing. The one
+   * thing that could have made it churn is the alert, which is why the sixty-second arming
+   * lives in `RiskWatch` and produces a null-or-stable object rather than a countdown: an
+   * alert carrying "58 seconds so far" would rebuild this slice on every publish forever.
+   */
+  private setLot(next: LotFields): boolean {
+    const current = this.lot;
+    const alert = next.alert;
+    const was = current.alert;
+
+    if (
+      current.wilting === next.wilting &&
+      current.wilted === next.wilted &&
+      current.atRiskCents === next.atRiskCents &&
+      current.compost === next.compost &&
+      current.machines === next.machines &&
+      current.running === next.running &&
+      current.halted === next.halted &&
+      current.jammed === next.jammed &&
+      current.starved === next.starved &&
+      current.blocked === next.blocked &&
+      current.sprinklers === next.sprinklers &&
+      current.zones.length === next.zones.length &&
+      (was === null ? alert === null : alert !== null && was.text === alert.text)
+    ) {
+      let same = true;
+      for (let i = 0; i < next.zones.length; i++) {
+        const a = current.zones[i] as ZoneRow;
+        const b = next.zones[i]!;
+        if (
+          a.id !== b.id ||
+          a.planted !== b.planted ||
+          a.mature !== b.mature ||
+          a.wilting !== b.wilting ||
+          a.wilted !== b.wilted ||
+          a.dry !== b.dry ||
+          a.tiles !== b.tiles ||
+          a.compost !== b.compost
+        ) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return false;
+    }
+
+    this.lot = Object.freeze({
+      version: current.version + 1,
+      zones: Object.freeze(next.zones.map((zone) => Object.freeze({ ...zone }))),
+      wilting: next.wilting,
+      wilted: next.wilted,
+      atRiskCents: next.atRiskCents,
+      compost: next.compost,
+      alert: alert === null ? null : Object.freeze({ ...alert }),
+      machines: next.machines,
+      running: next.running,
+      halted: next.halted,
+      jammed: next.jammed,
+      starved: next.starved,
+      blocked: next.blocked,
+      sprinklers: next.sprinklers,
     });
     return true;
   }
