@@ -67,6 +67,16 @@ export const ART = {
   /** The belt surface, one seamless tile scrolled by UV offset — never by moving sprites. */
   beltSurface: (tier: number) => `belt_${BELT_SLUG[tier] ?? 'basic'}`,
   /**
+   * The conveyor tee a `BeltJunction` wears: the run west to east, a branch leaving south.
+   *
+   * ONE FRAME AND FOUR TURNS, chosen from the belts around it by `junction.ts` — the same
+   * auto-tiling the pipe layer does, because a junction has no facing of its own and the belts
+   * the player ran into it are the only thing that knows which way it points. It rides the belt
+   * page rather than the machine page for the reason it is drawn at all: a junction dropped
+   * into a run must not read as a boxed machine parked across the line.
+   */
+  beltJunction: 'belt_junction',
+  /**
    * The six pipe frames, in the canonical east-first orientation `pipe-shape.ts` defines.
    *
    * Drawn near-white on purpose, exactly like the status lamp: a pipe is MULTIPLIED by its
@@ -451,13 +461,23 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   [ART.pipeFrame('tee')]: { paint: pipeTile(['e', 's', 'w']) },
   [ART.pipeFrame('cross')]: { paint: pipeTile(['n', 'e', 's', 'w']) },
 
+  /**
+   * The collar where a real pipe meets a machine — SIX pixels, not five, and concentric.
+   *
+   * It has to be the run's own cross-section or it is not a collar. A pipe arm is 6px thick
+   * (`pipeTile`'s spans: shadow, body, core, core, body, shadow) and both the arm and this are
+   * centred on the same tile centre, so a 5px collar sat half a pixel off and one shade short at
+   * every port — visible as a nick in the line exactly where the plumbing is supposed to read as
+   * continuous. Written out as three concentric rings rather than as a top-lit box, for the same
+   * reason `PIPE` is: the collar is drawn once and lands on all four faces unrotated.
+   */
   [ART.uiPipeNub]: {
-    width: 5,
-    height: 5,
+    width: 6,
+    height: 6,
     paint: (g) => {
-      g.rect(0, 0, 5, 5).fill(PIPE.shadow);
-      g.rect(1, 1, 3, 3).fill(PIPE.body);
-      g.rect(1, 1, 3, 1).fill(PIPE.shine);
+      g.rect(0, 0, 6, 6).fill(PIPE.shadow);
+      g.rect(1, 1, 4, 4).fill(PIPE.body);
+      g.rect(2, 2, 2, 2).fill(PIPE.shine);
     },
   },
 
@@ -470,6 +490,11 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   [ART.beltSurface(1)]: { paint: beltTile(0x5a5f68, 0x8f96a2, 0x2f333a) },
   [ART.beltSurface(2)]: { paint: beltTile(0x5b5340, 0xd8b34a, 0x322d22) },
   [ART.beltSurface(3)]: { paint: beltTile(0x40505b, 0x62d6e0, 0x222c33) },
+  // Painted in the BASIC tier's colours, because a junction has no tier of its own — it is one
+  // $8 casting that any belt can be run into, and tinting it after whichever belt happens to
+  // touch it first would make an express line's junction change colour when a basic belt was
+  // laid on its far side.
+  [ART.beltJunction]: { paint: beltJunctionTile(0x5a5f68, 0x8f96a2, 0x2f333a) },
 
   [ART.playerSouth]: { paint: pawn('south') },
   [ART.playerNorth]: { paint: pawn('north') },
@@ -595,6 +620,44 @@ function beltTile(bed: number, rail: number, shadow: number): Paint {
         g.rect(ox + i, 4 + i, 1, 1).fill(rail);
         g.rect(ox + i, 11 - i, 1, 1).fill(rail);
       }
+    }
+  };
+}
+
+/**
+ * The junction placeholder: the belt tee, in its canonical turn.
+ *
+ * Its through-run edges are the straight tile's, deliberately — a tee dropped into the middle
+ * of a run must show no seam at either end of itself, which is the property the real frame is
+ * authored and asserted against. Only the south rail is cut, for the branch.
+ *
+ * NOT SCROLLED. The junction is a fixed sprite that the auto-tiler turns; the belts either side
+ * carry the motion. A tee whose surface crawled would have to crawl in two directions at once.
+ */
+function beltJunctionTile(bed: number, rail: number, shadow: number): Paint {
+  return (g) => {
+    g.rect(0, 0, TILE_PX, TILE_PX).fill(bed);
+    g.rect(0, 0, TILE_PX, 2).fill(rail);
+    g.rect(0, 2, TILE_PX, 1).fill(shadow);
+    // The south rail, broken either side of the branch mouth.
+    g.rect(0, TILE_PX - 2, 5, 2).fill(rail);
+    g.rect(TILE_PX - 5, TILE_PX - 2, 5, 2).fill(rail);
+    g.rect(0, TILE_PX - 3, 5, 1).fill(shadow);
+    g.rect(TILE_PX - 5, TILE_PX - 3, 5, 1).fill(shadow);
+    // The branch's own cheeks, running down either side of the mouth at x = 5..10.
+    g.rect(4, TILE_PX - 5, 1, 5).fill(shadow);
+    g.rect(TILE_PX - 5, TILE_PX - 5, 1, 5).fill(shadow);
+    // Chevrons: two along the run pointing east, one down the branch pointing south, so the
+    // fork is legible at 16px and the two directions are told apart by shape rather than tone.
+    for (let i = 0; i < 4; i++) {
+      g.rect(2 + i, 4 + i, 1, 1).fill(rail);
+      g.rect(2 + i, 11 - i, 1, 1).fill(rail);
+      g.rect(11 + i, 4 + i, 1, 1).fill(rail);
+      g.rect(11 + i, 11 - i, 1, 1).fill(rail);
+    }
+    for (let i = 0; i < 3; i++) {
+      g.rect(6 + i, 9 + i, 1, 1).fill(rail);
+      g.rect(10 - i, 9 + i, 1, 1).fill(rail);
     }
   };
 }

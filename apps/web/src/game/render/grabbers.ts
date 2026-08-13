@@ -13,16 +13,26 @@
 // and again at the moment it puts down (empty). At rest the permille reads full and the
 // hand parks over its source, waiting — so an arm stuck holding an item, hovering over a
 // full destination, is plan §5's "look downstream" told without a single word of UI.
+//
+// ── AND NOW IT IS TOLD WITH THE SAME LAMP EVERY MACHINE WEARS ──────────────────────────
+//
+// "Without a single word of UI" was doing a lot of work above, because reading a stall off an
+// arm's resting pose requires already knowing the rule. `GrabberView.lamp` publishes the same
+// three states the sim's own grammar uses — green mid-swing, amber empty and waiting, red
+// holding with nowhere to put it — and this file draws them with `lamps.ts`'s shapes and
+// `lamps.ts`'s colours. Not a second vocabulary for arms: an amber arm and an amber Fryer mean
+// the identical thing, look upstream, and a player who has learned one has learned both.
 
 import { TILE_PX } from './pixel';
 
 import { Sprite } from 'pixi.js';
-import { GRABBER_SPECS, grabberSpec } from '@snack/sim';
+import { GRABBER_SPECS, LampState, grabberSpec } from '@snack/sim';
 import type { WorldView } from '@snack/sim';
 
 import type { ItemPage } from './belt-items';
 import type { WorldRect } from './camera';
 import { stepX as dirStepX, stepY as dirStepY } from './directions';
+import { LAMP_PX, lampAlpha, lampTint } from './lamps';
 import { ART } from './textures';
 import type { ArtSet } from './textures';
 
@@ -30,6 +40,8 @@ interface GrabberVisual {
   base: Sprite;
   hand: Sprite;
   cargo: Sprite;
+  /** Plan §5's status lamp, on the arm. Same seven shapes, same tints, same pulse. */
+  lamp: Sprite;
 }
 
 /** Reach in tiles, defaulting to the shortest arm when a tier is unknown to this build. */
@@ -46,7 +58,7 @@ export class GrabberLayer {
     private readonly attach: (visual: GrabberVisual) => void,
   ) {}
 
-  update(view: WorldView, rect: WorldRect): void {
+  update(view: WorldView, rect: WorldRect, nowMs: number): void {
     const seen = new Set<number>();
 
     for (let i = 0; i < view.grabbers.length; i++) {
@@ -59,6 +71,7 @@ export class GrabberLayer {
           base: new Sprite(this.art.get(ART.grabberBase)),
           hand: new Sprite(this.art.get(ART.grabberHand)),
           cargo: new Sprite(this.items.texture(g.held)),
+          lamp: new Sprite(this.art.get(ART.lamp(g.lamp))),
         };
         visual.hand.anchor.set(0.5, 0.5);
         visual.cargo.anchor.set(0.5, 0.5);
@@ -82,9 +95,19 @@ export class GrabberLayer {
       visual.base.visible = visible;
       visual.hand.visible = visible;
       visual.cargo.visible = visible && g.held !== 0;
+      visual.lamp.visible = visible && g.lamp !== LampState.Off;
       if (!visible) continue;
 
       visual.base.position.set(originX, originY);
+
+      // Top-right of the pedestal — the same corner of the same footprint a machine's lamp
+      // sits in, so the eye finds every status light in the factory in the same place. It
+      // rides the pedestal rather than the hand on purpose: a lamp that swung with the arm
+      // would be hardest to read at exactly the moment the arm is stalled at full extension.
+      visual.lamp.texture = this.art.get(ART.lamp(g.lamp));
+      visual.lamp.position.set(originX + TILE_PX - LAMP_PX - 1, originY + 1);
+      visual.lamp.tint = lampTint(g.lamp);
+      visual.lamp.alpha = lampAlpha(g.lamp, nowMs);
 
       // 0 at the far end of the current half-swing, 1 at rest. Carrying runs source→dest;
       // empty runs dest→source, which is the return stroke.
@@ -106,21 +129,30 @@ export class GrabberLayer {
 
     for (const [id, visual] of this.visuals) {
       if (seen.has(id)) continue;
-      visual.base.destroy();
-      visual.hand.destroy();
-      visual.cargo.destroy();
+      destroyVisual(visual);
       this.visuals.delete(id);
     }
   }
 
   destroy(): void {
-    for (const visual of this.visuals.values()) {
-      visual.base.destroy();
-      visual.hand.destroy();
-      visual.cargo.destroy();
-    }
+    for (const visual of this.visuals.values()) destroyVisual(visual);
     this.visuals.clear();
   }
+}
+
+/**
+ * Free one arm's sprites.
+ *
+ * `destroy()` with no argument leaves the TEXTURE alone — every one of these points at the
+ * shared atlas or the item page, neither of which is this sprite's to free. One function rather
+ * than two copies of the list, because the copy that gets a new sprite added to it and the copy
+ * that does not is how a lamp leaks on every belt the player ever demolishes.
+ */
+function destroyVisual(visual: GrabberVisual): void {
+  visual.base.destroy();
+  visual.hand.destroy();
+  visual.cargo.destroy();
+  visual.lamp.destroy();
 }
 
 export type { GrabberVisual };

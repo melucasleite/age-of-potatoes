@@ -31,7 +31,7 @@
 //
 // The last line is the one the design is actually about.
 
-import { HAND_REACH_SUBTILES, LampState, MachineKind, SUBTILE } from '@snack/sim';
+import { ContractPhase, HAND_REACH_SUBTILES, LampState, MachineKind, SUBTILE } from '@snack/sim';
 import type { MachineView, WorldView } from '@snack/sim';
 
 // `TILE_PX` is the renderer's single source of truth for tile size and is imported rather
@@ -61,6 +61,15 @@ const STREAK_WINDOW_TICKS = 60;
 
 /** Where the ladder stops. Eight steps of a semitone each is a minor sixth — plenty. */
 const MAX_STREAK_STEPS = 8;
+
+/**
+ * Ticks between the two honks: 400 ms at 20 Hz.
+ *
+ * Long enough to clear `MachinePlace`'s 200 ms floor in the voice pool — below that the pool
+ * drops the second blast and the ceremony's whole rhythm with it — and short enough that the
+ * pair still reads as one gesture rather than as two separate events at the same dock.
+ */
+const HONK_GAP_TICKS = 8;
 
 const HAND_REACH_SQUARED = HAND_REACH_SUBTILES * HAND_REACH_SUBTILES;
 
@@ -105,6 +114,30 @@ export class WorldObserver {
    */
   private sprinklerHasRun = false;
 
+  /**
+   * Whether the first truck has ever left THIS WORLD — read off the sim's own ceremony flag.
+   *
+   * Unlike `sprinklerHasRun` above, this needs no reconstruction from a lifetime counter and
+   * gets none: `commerce.firstDepartureSeen` IS `CeremonyId.FirstTruck` in `WorldState`,
+   * hashed, saved and sorted, projected as a number so nothing scans a string array per frame.
+   * Primed on the same branch that snapshots without emitting, so opening an old world is
+   * quiet — a first time that happens again is not a first time.
+   */
+  private firstDepartureSeen = false;
+
+  /**
+   * THE SECOND HONK. Plan §3 names this ceremony by example and it is two blasts, not one —
+   * one thud is a machine settling, two is a vehicle telling you it is leaving.
+   *
+   * A tick rather than a timer, and this is the whole trick: an `Immediate` sound answers
+   * `now`, so pushing both at once would put them in the same millisecond and the voice pool's
+   * `minIntervalMs` would drop the second outright. Owing the second honk to a FUTURE TICK
+   * spaces them on the sim's own clock, which is the one clock in this file that is allowed to
+   * decide when anything happens. -1 means nothing is owed.
+   */
+  private honkDueTick = -1;
+  private honkMachineId = 0;
+
   private readonly ensemble: EnsembleVoice[] = [];
 
   constructor(scheduler: Scheduler) {
@@ -136,6 +169,7 @@ export class WorldObserver {
       this.diffField(view, rect);
       this.diffMachines(view, rect);
       this.diffStats(view, rect);
+      this.diffCommerce(view, rect);
       this.snapshot(view);
       this.prevTick = view.tick;
     }
@@ -154,6 +188,8 @@ export class WorldObserver {
     // Cleared so that `primeCeremonies` is the ONLY thing that can set it. Left true, a
     // teardown followed by a fresh world would silently suppress that world's first run.
     this.sprinklerHasRun = false;
+    this.firstDepartureSeen = false;
+    this.honkDueTick = -1;
   }
 
   /**
@@ -163,6 +199,11 @@ export class WorldObserver {
    * fire every sound in the catalogue nor forget which fanfares it has already earned.
    */
   private primeCeremonies(view: WorldView): void {
+    // Nothing is owed across a reload. A honk queued on the tick before a save would otherwise
+    // sound on the tick after the load, at a depot that has been quiet for a fortnight.
+    this.honkDueTick = -1;
+    this.firstDepartureSeen = view.commerce.firstDepartureSeen === 1;
+
     for (const machine of view.machines) {
       if (machine.kind === MachineKind.Sprinkler && machine.wateredCount > 0) {
         this.sprinklerHasRun = true;
@@ -281,6 +322,51 @@ export class WorldObserver {
         this.emitAtMachine(SoundId.SellKaching, view.tick, bin, 1, 1, rect);
       }
     }
+  }
+
+  /**
+   * The first truck leaving, and the second honk it owes.
+   *
+   * ────────────────────────────────────────────────────────────────────────────────────
+   *  THERE IS NO HORN IN THE CATALOGUE, AND THIS DOES NOT PRETEND OTHERWISE.
+   *
+   *  `synth.ts` holds thirteen recipes and none of them is a truck. The nearest neighbour
+   *  timbrally is `MachineJam` — two detuned reeds beating against each other genuinely is
+   *  how an air horn works — and it is disqualified outright, because it is the sound this
+   *  game uses for SOMETHING IS BROKEN. Spending the factory's one alarm on its proudest
+   *  moment would teach the player the wrong thing on the exact frame they are paying most
+   *  attention.
+   *
+   *  So it is `MachinePlace`: "something heavy meeting dirt", which is not a horn but is
+   *  never a lie — a heavy vehicle moving, twice, at a loading dock. The handoff stands: a
+   *  `truck-horn` recipe belongs in `sounds.ts` and `synth.ts`, and this line changes to
+   *  name it and nothing else moves.
+   * ────────────────────────────────────────────────────────────────────────────────────
+   */
+  private diffCommerce(view: WorldView, rect: WorldRect): void {
+    if (this.honkDueTick >= 0 && view.tick >= this.honkDueTick) {
+      this.honkDueTick = -1;
+      // A shade lower and longer than the first, so the pair reads as deliberate rather than
+      // as one sound double-triggering.
+      this.honkAt(view, this.honkMachineId, rect, 0.94);
+    }
+
+    if (this.firstDepartureSeen || view.commerce.firstDepartureSeen !== 1) return;
+    this.firstDepartureSeen = true;
+
+    this.honkMachineId = departingDepotId(view);
+    this.honkAt(view, this.honkMachineId, rect, 1);
+    this.honkDueTick = view.tick + HONK_GAP_TICKS;
+  }
+
+  /** One blast, at the dock if we can find it and at the player if the depot has gone. */
+  private honkAt(view: WorldView, machineId: number, rect: WorldRect, rate: number): void {
+    const depot = view.machines.find((m) => m.id === machineId);
+    if (depot === undefined) {
+      this.emitAtPlayer(SoundId.MachinePlace, view, rect);
+      return;
+    }
+    this.emitAtMachine(SoundId.MachinePlace, view.tick, depot, 1, rate, rect);
   }
 
   // --- the ensemble ---------------------------------------------------------------------
@@ -429,6 +515,22 @@ export class WorldObserver {
 
     this.prevItemsSold = view.stats.itemsSold;
   }
+}
+
+/**
+ * The depot whose truck is on the road, or the first one on the lot.
+ *
+ * Same reasoning as `ceremony.ts`'s own version, and the same fallback: the projection does not
+ * name the departing depot, but a contract in `Rolling` is a truck out THIS INSTANT, and on the
+ * frame the flag first appears that is the truck being celebrated. Two depots and one moving
+ * truck is the case where honking at whichever was built first is wrong half the time.
+ */
+function departingDepotId(view: WorldView): number {
+  for (const contract of view.commerce.contracts) {
+    if (contract.phase === ContractPhase.Rolling) return contract.depotId;
+  }
+  const depot = view.commerce.depots[0];
+  return depot === undefined ? 0 : depot.id;
 }
 
 /** Which instrument a machine kind plays, or `null` for the ones that just sit there. */

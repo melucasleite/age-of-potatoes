@@ -44,6 +44,9 @@ const SHEET_WIDTH = 1220;
  */
 const SHEET_TOP = 285;
 
+/** Which faces each quarter turn of the junction tee opens. Mirrors `junction.ts`'s table. */
+const OPEN_FACES: readonly string[] = ['w-e-s', 'n-s-w', 'e-w-n', 's-n-e'];
+
 /** `bone` — the palette's UI label value, over `paper` for headings. */
 const LABEL_FILL = 0xcbb99b;
 const HEADING_FILL = 0xf5d382;
@@ -64,6 +67,8 @@ export class ArtSheet {
     let y = PAD;
     y = this.section('machines — chip line is steel and wide, soda line is brass and tall', y);
     y = this.machineRow(art, y);
+    y = this.section('belts — three tiers, and the junction tee at all four of its turns', y);
+    y = this.beltRow(art, y);
     y = this.section('pipes — one frame per neighbour mask, rotated, tinted by liquid', y);
     y = this.pipeRow(art, y);
     y = this.section('liquids — the whole vocabulary, plus the grey that means empty', y);
@@ -124,6 +129,56 @@ export class ArtSheet {
       );
     }
     return rowTop + tallest + 34;
+  }
+
+  /**
+   * The belt surfaces, and the junction tee at every turn it can take.
+   *
+   * THE FOUR TURNS ARE THE ROW'S REASON TO EXIST. A junction has no facing of its own — the
+   * turn is picked from the belts around it — so the failure this catches is a tee whose
+   * shading is top-lit rather than symmetric: rotated three quarters, such a frame is lit from
+   * underneath, and it is invisible until the one junction on the lot that happens to need
+   * that turn gets built. Laid out in a row, the four are either identical under rotation or
+   * they are obviously not.
+   *
+   * The mask each turn serves is printed beneath it, in the compass letters `junction.ts`
+   * uses, so a wrong entry in that table is legible here rather than only in the factory.
+   */
+  private beltRow(art: ArtSet, y: number): number {
+    const cell = TILE_PX * SCALE;
+    const step = cell + 14;
+
+    const tiers: [string, number][] = [
+      ['basic', 1],
+      ['fast', 2],
+      ['express', 3],
+    ];
+    tiers.forEach(([name, tier], index) => {
+      const sprite = new Sprite(art.get(ART.beltSurface(tier)));
+      sprite.scale.set(SCALE);
+      sprite.position.set(PAD + index * step, y);
+      this.root.addChild(sprite);
+      this.label(name, PAD + index * step, y + cell + 4);
+    });
+
+    const originX = PAD + tiers.length * step + 24;
+    for (let turns = 0; turns < 4; turns++) {
+      const sprite = new Sprite(art.get(ART.beltJunction));
+      sprite.anchor.set(0.5, 0.5);
+      sprite.scale.set(SCALE);
+      sprite.rotation = (turns * Math.PI) / 2;
+      sprite.position.set(originX + turns * step + cell / 2, y + cell / 2);
+      this.root.addChild(sprite);
+      this.label(OPEN_FACES[turns]!, originX + turns * step, y + cell + 4);
+    }
+
+    this.label(
+      `junction${art.isReal(ART.beltJunction) ? '' : ' *'} — one frame, turned by its neighbours`,
+      originX + 4 * step + 12,
+      y + cell / 2 - 4,
+    );
+
+    return y + cell + 26;
   }
 
   /**

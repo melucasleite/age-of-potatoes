@@ -49,8 +49,15 @@ function machine(overrides: Partial<MachineView> = {}): MachineView {
   } as unknown as MachineView;
 }
 
-function view(ceremonies: string[], machines: MachineView[]): WorldView {
-  return { ceremonies, machines } as unknown as WorldView;
+function view(
+  ceremonies: string[],
+  machines: MachineView[],
+  contracts: { depotId: number; phase: number }[] = [],
+): WorldView {
+  // `commerce` is spelled out rather than left off: the truck ceremony reads the contract
+  // phases to find which dock the truck actually rolled out of, and the real projection always
+  // carries the field. A fixture that omitted it would be testing a shape the game never sees.
+  return { ceremonies, machines, commerce: { contracts } } as unknown as WorldView;
 }
 
 /** Run the clock forward in frame-sized steps, the way the render loop does. */
@@ -130,6 +137,69 @@ describe('ceremony triggering', () => {
     // Present on the very first frame: this world played it long ago.
     ceremony.observe(view([CeremonyId.IrrigationHub], hub));
     ceremony.observe(view([CeremonyId.IrrigationHub], hub));
+    expect(ceremony.playing).toBe(false);
+  });
+
+  // THE TRUCK IS THE FIRST CEREMONY THAT IS NOT ABOUT WATER, and `locate` used to open by
+  // skipping every machine with no coverage radius — which is every depot ever built. Reached
+  // through that filter this fired with the halo parked on a sprinkler across the lot, or on
+  // nothing at all. Three cases, because each fails differently.
+  it('fires on the first truck and points at the depot, not at a sprinkler', () => {
+    const ceremony = make();
+    const depot = machine({
+      id: 7,
+      kind: MachineKind.TruckDepot,
+      tileX: 20,
+      tileY: 9,
+      tilesWide: 2,
+      tilesHigh: 2,
+      coverageRadius: 0,
+    });
+    const world = [machine({ wateredCount: 3 }), depot];
+
+    ceremony.observe(view([], world));
+    ceremony.observe(view([CeremonyId.FirstTruck], world, [{ depotId: 7, phase: 2 }]));
+    expect(ceremony.playing).toBe(true);
+
+    // The camera leans toward tile (20,9) — world pixel 336 — and never toward the sprinkler
+    // at pixel 72, which is where the coverage scan would have sent it.
+    const out = { x: 0, y: 0 };
+    advance(ceremony, 1_000);
+    ceremony.cameraTarget(0, 0, out);
+    expect(out.x).toBeGreaterThan(100);
+  });
+
+  it('picks the depot whose truck is actually rolling', () => {
+    const ceremony = make();
+    const near = machine({ id: 3, kind: MachineKind.TruckDepot, tileX: 2, tileY: 2 });
+    const far = machine({ id: 9, kind: MachineKind.TruckDepot, tileX: 40, tileY: 2 });
+
+    ceremony.observe(view([], [near, far]));
+    // The FAR one is out on the road; the near one is only waiting on stock.
+    ceremony.observe(
+      view(
+        [CeremonyId.FirstTruck],
+        [near, far],
+        [
+          { depotId: 3, phase: 0 },
+          { depotId: 9, phase: 2 },
+        ],
+      ),
+    );
+
+    const out = { x: 0, y: 0 };
+    advance(ceremony, 1_000);
+    ceremony.cameraTarget(0, 0, out);
+    // Tile 40 is world pixel 640; tile 2 is 32. Anything past 200 can only be the far depot.
+    expect(out.x).toBeGreaterThan(200);
+  });
+
+  it('stays silent for a first truck with no depot on the lot', () => {
+    const ceremony = make();
+    ceremony.observe(view([], POURED));
+    // A sprinkler is standing right there and waters a 5x5 patch. It is not a truck depot, and
+    // the old fallback would have celebrated it.
+    ceremony.observe(view([CeremonyId.FirstTruck], POURED));
     expect(ceremony.playing).toBe(false);
   });
 

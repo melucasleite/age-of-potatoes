@@ -350,10 +350,13 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   layers.beltItems.attach(beltItems.container);
 
   const grabbers = new GrabberLayer(art, itemPage, (visual) => {
-    contentRoot.addChild(visual.base, visual.hand, visual.cargo);
+    contentRoot.addChild(visual.base, visual.hand, visual.cargo, visual.lamp);
     layers.machines.attach(visual.base);
     layers.player.attach(visual.hand);
     layers.player.attach(visual.cargo);
+    // The lamp goes on `worldUi` with every other status light, ABOVE the arm's own hand.
+    // A readout the machine can swing in front of is a readout you have to wait for.
+    layers.worldUi.attach(visual.lamp);
   });
 
   // BEFORE anything that draws text. `BitmapText` resolves its font lazily, so a plaque built

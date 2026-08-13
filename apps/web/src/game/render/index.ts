@@ -17,6 +17,7 @@ import {
   LampState,
   MachineKind,
   SUBTILE,
+  TICKS_PER_SECOND,
   WiltStage,
   itemSpec,
   machineSpec,
@@ -31,6 +32,7 @@ import { bestSellable } from '../input/pointer';
 import { beltItemAtTile } from './belt-items';
 import { FarmFx } from './farm-fx';
 import { money } from './hud';
+import { junctionMask, junctionQuarterTurns } from './junction';
 import { LAMP_PX, lampAlpha, lampTint } from './lamps';
 import { liquidName, liquidTint, portHintTint } from './liquids';
 import { pipeAtTile } from './pipes';
@@ -138,15 +140,25 @@ export function render(
   //    `camera.zoom` — the scale that was actually applied to the world root a few lines
   //    above — rather than off input's published `viewLod`, so the picture can never disagree
   //    with the transform it was drawn under, which is the same rule `picking.ts` follows.
+  //
+  //    ONE WALL-CLOCK READING for the whole frame, taken here and threaded down. Every lamp
+  //    pulse, flow scroll and bob is derived from it, and three separate `performance.now()`
+  //    calls a frame would put the arm's lamp a fraction of a millisecond out of phase with the
+  //    machine's next to it — invisible individually, and exactly how a row of lamps that should
+  //    breathe together ends up shimmering.
+  const nowMs = performance.now();
   const beltItemsVisible = beltItemsVisibleAt(scene.camera.zoom);
-  scene.pipes.update(view, rect, performance.now());
+  scene.pipes.update(view, rect, nowMs);
   scene.beltStructures.update(view, alpha, rect, !beltItemsVisible);
   if (beltItemsVisible) scene.beltItems.update(view, alpha, rect);
   else scene.beltItems.clear();
-  scene.grabbers.update(view, rect);
+  scene.grabbers.update(view, rect, nowMs);
 
-  // 7. Machines.
-  updateMachines(scene, view);
+  // 7. Machines, and then the vehicles among them: a cart's own readouts are in the commerce
+  //    projection rather than on its `MachineView`, so they are applied as a second pass over
+  //    the same pooled sprites.
+  updateMachines(scene, view, nowMs);
+  updateCommerce(scene, view);
 
   // 8. Hover highlight — renderer state, never a command (§12) — and the errand's
   //    destination, which unlike hover is projected straight out of the sim.
@@ -307,9 +319,8 @@ function updateDroplets(scene: WorldScene, deltaMs: number): void {
 
 // --- machines ------------------------------------------------------------------------
 
-function updateMachines(scene: WorldScene, view: WorldView): void {
+function updateMachines(scene: WorldScene, view: WorldView, now: number): void {
   const seen = new Set<number>();
-  const now = performance.now();
 
   for (let i = 0; i < view.machines.length; i++) {
     const m = view.machines[i]!;
@@ -326,13 +337,17 @@ function updateMachines(scene: WorldScene, view: WorldView): void {
     const width = m.tilesWide * TILE_PX;
     const height = m.tilesHigh * TILE_PX;
 
-    visual.body.position.set(left, top);
-    visual.body.texture = scene.art.get(ART.machine(m.kind));
-    // Pin the body to its FOOTPRINT rather than trusting the frame's own size. Placeholders
-    // are generated at the sim's footprint so this is a no-op for them — it is here for the
-    // day an atlas ships a 32×32 frame for the 3×2 Bottler, which would otherwise draw a
-    // machine two thirds the size of the tiles it occupies and read as a placement bug.
-    visual.body.setSize(width, height);
+    if (m.kind === MachineKind.BeltJunction) {
+      updateJunctionBody(scene, view, m, visual, left, top, width, height);
+    } else {
+      visual.body.position.set(left, top);
+      visual.body.texture = scene.art.get(ART.machine(m.kind));
+      // Pin the body to its FOOTPRINT rather than trusting the frame's own size. Placeholders
+      // are generated at the sim's footprint so this is a no-op for them — it is here for the
+      // day an atlas ships a 32×32 frame for the 3×2 Bottler, which would otherwise draw a
+      // machine two thirds the size of the tiles it occupies and read as a placement bug.
+      visual.body.setSize(width, height);
+    }
 
     // The lamp: one white sprite per state, SHAPED and tinted. Assigning `.texture` on an
     // unchanged state is a no-op inside Pixi, so selecting by state every frame is free —
@@ -393,6 +408,134 @@ function updateMachines(scene: WorldScene, view: WorldView): void {
     destroyMachineVisual(visual);
     scene.machines.delete(id);
   }
+}
+
+/**
+ * The belt junction's body: the conveyor tee, turned to face the belts around it.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  THE ONLY MACHINE IN THE GAME THAT DOES NOT DRAW ITS OWN MACHINE FRAME, and the reason
+ *  is what it IS rather than a shortcut. A junction is $8 of pressed steel sitting in the
+ *  middle of a belt run: plan §5's splitter and merger in one tile, with no work cycle, no
+ *  buffer, no facing and no dials. Drawn from `ART.machine` it would wear the generic
+ *  placeholder body — a boxed machine with a topper, parked across the line, reading as
+ *  something that processes goods rather than something the goods pass through.
+ *
+ *  So it wears `belt_junction` off the BELT page, and `junction.ts` picks the quarter turn
+ *  from the belts the player actually ran into it. That is the whole splitter/merger
+ *  distinction on screen: two belts arriving and one leaving is a merger, one arriving and
+ *  two leaving is a splitter, and the tee points the same way in both because it is the
+ *  same casting. The sim's own note is that "the device does not know which it is and does
+ *  not need to" — this is that sentence, drawn.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * Anchored at its CENTRE, unlike every other body, because a rotation about a sprite's
+ * top-left corner throws the tile into its neighbour. Set every frame rather than at
+ * creation: one property write against a branch and a flag, and it cannot drift out of step
+ * with the texture it belongs to.
+ */
+function updateJunctionBody(
+  scene: WorldScene,
+  view: WorldView,
+  m: MachineView,
+  visual: MachineVisual,
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): void {
+  visual.body.texture = scene.art.get(ART.beltJunction);
+  visual.body.anchor.set(0.5, 0.5);
+  visual.body.setSize(width, height);
+  visual.body.position.set(left + width / 2, top + height / 2);
+  visual.body.rotation =
+    (junctionQuarterTurns(junctionMask(view.belts, m.tileX, m.tileY)) * Math.PI) / 2;
+}
+
+/**
+ * The vehicles: what a cart is carrying, and whether it is even here.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  A CART IN TRANSIT IS OFF THE MAP BY DESIGN (item 032), and that is a rendering problem
+ *  rather than a rendering saving. The machine is still on its tile — you cannot build
+ *  there, the sim still ticks it, `view.machines` still lists it — but the vehicle itself is
+ *  somewhere on a road this game never draws. Left alone it sits in the yard looking parked
+ *  while the panel insists it is out, which is the version of this that generates a bug
+ *  report.
+ *
+ *  So a departed cart becomes a GHOST at its stand — visibly the cart, visibly not there —
+ *  with the run on the progress bar the machine already owns. "Where did my cart go" and
+ *  "when is it back" are then the same glance, and neither costs a sprite.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * Runs AFTER `updateMachines` and deliberately overrides it. A cart's cargo and a depot's
+ * stock live in `CommerceView`, not on `MachineView` — the cart holds one product per run in
+ * its own hold rather than in a recipe's buffers, so `inputCapacity` and `outputCount` are
+ * both zero and the generic pass correctly hides both readouts. This is the second half of
+ * the same sentence, not a fight with the first.
+ */
+function updateCommerce(scene: WorldScene, view: WorldView): void {
+  const commerce = view.commerce;
+
+  for (let i = 0; i < commerce.carts.length; i++) {
+    const cart = commerce.carts[i]!;
+    const visual = scene.machines.get(cart.id);
+    if (visual === undefined) continue;
+
+    const away = cart.away === 1;
+    visual.body.alpha = away ? DEPARTED_ALPHA : 1;
+
+    // The round trip, on the bar that already means "work in progress". `runTicks` is
+    // per-cart — the sim charges ten ticks a tile out to the road — so two carts at opposite
+    // ends of the lot draw honestly different bars rather than one shared fiction.
+    const rolling = away && cart.runTicks > 0;
+    visual.progress.visible = rolling;
+    if (rolling) {
+      const done = Math.max(0, Math.min(1, (cart.runTicks - cart.ticksRemaining) / cart.runTicks));
+      visual.progress.position.set(cart.tileX * TILE_PX + 1, (cart.tileY + 1) * TILE_PX - 2);
+      visual.progress.scale.set((TILE_PX - 2) * done, 1);
+    }
+
+    // What is aboard, and how full. Hidden while it is away: a pip bobbing over an empty
+    // stand would be goods sitting in the yard, which is the one thing they are not.
+    const loaded = !away && cart.loaded > 0 && cart.item !== 0;
+    visual.outputPip.visible = loaded;
+    if (loaded) {
+      visual.outputPip.texture = scene.itemPage.texture(cart.item);
+      visual.outputPip.position.set(cart.tileX * TILE_PX + TILE_PX / 2, cart.tileY * TILE_PX - 3);
+    }
+    fillColumn(visual, cart.tileX, cart.tileY, 1, !away ? cart.loaded : 0, cart.capacity);
+  }
+
+  // A depot's floor stock is the same fact a hopper column shows on a Fryer — goods waiting
+  // for the thing that consumes them — so it is the same column, on a 2×2 footprint.
+  for (let i = 0; i < commerce.depots.length; i++) {
+    const depot = commerce.depots[i]!;
+    const visual = scene.machines.get(depot.id);
+    if (visual === undefined) continue;
+    fillColumn(visual, depot.tileX, depot.tileY, 2, depot.stocked, depot.capacity);
+  }
+}
+
+/** How present a departed cart still is. Enough to find its stand; not enough to look parked. */
+const DEPARTED_ALPHA = 0.26;
+
+/** The hopper column, driven from a count the `MachineView` does not carry. */
+function fillColumn(
+  visual: MachineVisual,
+  tileX: number,
+  tileY: number,
+  tilesHigh: number,
+  count: number,
+  capacity: number,
+): void {
+  const fill = capacity > 0 ? Math.min(1, count / capacity) : 0;
+  visual.hopper.visible = fill > 0;
+  if (fill <= 0) return;
+  const height = tilesHigh * TILE_PX;
+  const bar = Math.max(1, Math.round((height - 4) * fill));
+  visual.hopper.position.set(tileX * TILE_PX, tileY * TILE_PX + height - 2 - bar);
+  visual.hopper.scale.set(1, bar);
 }
 
 /** Never more collars than a machine could plausibly have plumbed. */
@@ -883,8 +1026,65 @@ function compass(dir: number): string {
   }
 }
 
+/**
+ * The commerce row's own sentences, or null for a machine this does not speak for.
+ *
+ * A junction is answered from the belts around it rather than from the machine, because that is
+ * where the answer is: the same mask the tee is turned by, counted. "Two in, one out" is the
+ * only sentence in the game that tells a player which of the two devices they just built.
+ */
+function vehicleStatus(view: WorldView, m: MachineView): string | null {
+  if (m.kind === MachineKind.BeltJunction) {
+    const mask = junctionMask(view.belts, m.tileX, m.tileY);
+    const arms = junctionArms(mask);
+    if (arms === 0) return 'belt junction — run a belt into it';
+    if (arms === 1) return 'belt junction — one belt only, nothing to split';
+    return `belt junction — ${arms} belts, splitting round-robin`;
+  }
+
+  if (m.kind === MachineKind.DeliveryCart) {
+    const cart = view.commerce.carts.find((c) => c.id === m.id);
+    if (cart === undefined) return null;
+    if (cart.away === 1) {
+      return `delivery cart out — back in ${Math.ceil(cart.ticksRemaining / TICKS_PER_SECOND)}s`;
+    }
+    return cart.loaded > 0
+      ? `delivery cart — ${cart.loaded}/${cart.capacity} ${itemName(cart.item)}, click to send it`
+      : 'delivery cart — load it with goods to sell';
+  }
+
+  if (m.kind === MachineKind.TruckDepot) {
+    const depot = view.commerce.depots.find((d) => d.id === m.id);
+    if (depot === undefined) return null;
+    if (depot.contractIds.length === 0) return 'truck depot — click to sign a contract';
+    const routes =
+      depot.contractIds.length === 1 ? '1 route' : `${depot.contractIds.length} routes`;
+    return `truck depot — ${routes}, ${depot.stocked}/${depot.capacity} on the floor`;
+  }
+
+  return null;
+}
+
+/** How many faces of a junction mask carry belt. Four bits, counted the readable way. */
+function junctionArms(mask: number): number {
+  let count = 0;
+  for (let bit = 1; bit <= 8; bit <<= 1) {
+    if ((mask & bit) !== 0) count += 1;
+  }
+  return count;
+}
+
 function machineStatus(view: WorldView, m: MachineView): string {
   const name = machineName(m.kind);
+
+  // THE THREE THAT HAVE NO WORK CYCLE AND ARE NOT DECORATION. All three answer `LampState.Off`
+  // — no `workPerOperation`, so the sim's grammar has nothing to say about them — and all three
+  // would otherwise fall to the "idle" line at the bottom, which is true of a cart out on the
+  // road in the least useful possible way. Answered above the lamp switch because the lamp is
+  // the thing that has no answer for them.
+  const vehicle = vehicleStatus(view, m);
+  if (vehicle !== null) return vehicle;
+
   switch (m.lamp) {
     case LampState.Jammed:
       return `${name} jammed — right-click to whack it`;

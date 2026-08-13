@@ -7,8 +7,10 @@
 // renderer, reads the same `WorldView` everything else reads, and holds no state of its
 // own. When 013 lands, delete this or leave it as the in-canvas fallback.
 //
-// Money is formatted HERE. `packages/sim` deals in cents and never divides by 100 —
-// "$123.45" is a renderer concern (see `units.ts`).
+// Money is NOT formatted here any more. `packages/sim` deals in cents and never divides by 100
+// — "$123.45" is a presentation concern (see `units.ts`) — but it is not a RENDERER concern
+// specifically, which is what this file used to assume and what earned the game two spellings
+// of a negative balance. `format/money.ts` owns it for both sides now.
 //
 // TEXT IS THE GAME'S OWN BITMAP FONT ([[042]]). This panel used to ask the browser for
 // `ui-monospace, SFMono-Regular, Menlo, monospace`, which is a different typeface on every
@@ -20,6 +22,8 @@ import type { BitmapText } from 'pixi.js';
 
 import { ItemId } from '@snack/sim';
 import type { WorldView } from '@snack/sim';
+
+import { formatCents } from '../../format/money';
 
 import { uiLineHeight, uiText, uiTextWidth } from './font';
 import { dayPhase, TICKS_PER_DAY } from './pixel';
@@ -103,14 +107,17 @@ export class Hud {
   }
 }
 
-/** Cents → "$123.45". The sim never does this; see `packages/sim/src/units.ts`. */
-export function money(cents: number): string {
-  const negative = cents < 0;
-  const abs = Math.abs(Math.trunc(cents));
-  const whole = Math.floor(abs / 100);
-  const part = abs % 100;
-  return `${negative ? '-' : ''}$${whole.toLocaleString('en-US')}.${String(part).padStart(2, '0')}`;
-}
+/**
+ * Cents → "$123.45", for this panel and for `render/index.ts`'s ribbon.
+ *
+ * AN ALIAS, NOT AN IMPLEMENTATION. It stays exported under this name because the ribbon reads
+ * better as `money(cost)` than as `formatCents(cost)` and because renaming it would have put
+ * an unrelated file in the diff. What it used to be was a fourth copy that disagreed with the
+ * React HUD twice over: an ASCII hyphen for negatives where every other surface used U+2212,
+ * and `toLocaleString('en-US')` for separators — a second grouping rule that happens to agree
+ * with ours today and is an ICU implementation detail rather than a promise.
+ */
+export const money = formatCents;
 
 /** Plan §2: the in-game day is 8 real minutes. Purely cosmetic — no night mechanics. */
 export function clock(tick: number): string {

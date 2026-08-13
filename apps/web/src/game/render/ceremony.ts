@@ -38,7 +38,7 @@ import { TILE_PX } from './pixel';
 import { BitmapText, Container, Graphics, Sprite } from 'pixi.js';
 import type { Texture } from 'pixi.js';
 
-import { CeremonyId, MachineKind } from '@snack/sim';
+import { CeremonyId, ContractPhase, MachineKind } from '@snack/sim';
 import type { MachineView, WorldView } from '@snack/sim';
 
 // NOTE: this module deliberately does NOT import `./textures`. It takes its one frame as a
@@ -108,7 +108,28 @@ const COPY: Record<string, CeremonyCopy> = {
     subtitle: 'it waters only what is thirsty',
     tint: 0x9ef0a8,
   },
+  // THE ONLY WARM ONE, and that is the point rather than a coincidence. The other three are
+  // water — cool blues and a green — because all three are the same promise about the same
+  // chore. This one is the lot's goods leaving without the player standing at the bin, so it
+  // takes the Commerce row's own colour: timber and brand red, which is what the cart and the
+  // depot are painted in. The plaque tells you which ladder you just climbed before you read it.
+  [CeremonyId.FirstTruck]: {
+    title: 'THE FIRST TRUCK',
+    subtitle: 'it sells while you are elsewhere',
+    tint: 0xe0674a,
+  },
 };
+
+/**
+ * How far west the departure trail runs, in tiles, and how long each tile holds the eye.
+ *
+ * West because that is where the road is: `cartRunTicks` charges ten ticks per tile between the
+ * vehicle and the lot's WEST edge, so the direction goods leave in is a fact about the sim and
+ * not a flourish. The step is slow on purpose — a truck pulling out is a heavier thing than
+ * water arriving down a row, and at the sweep's 90 ms it read as a spark running along a fuse.
+ */
+const TRAIL_TILES = 12;
+const TRAIL_STEP_MS = 240;
 
 interface Flash {
   sprite: Sprite;
@@ -304,7 +325,7 @@ export class Ceremony {
       elapsedMs: 0,
       focusX,
       focusY,
-      flashes: this.buildSweep(machine),
+      flashes: this.buildSweep(id, machine),
     };
 
     this.title.text = copy.title;
@@ -417,7 +438,58 @@ export class Ceremony {
     }
   }
 
-  private buildSweep(machine: MachineView): Flash[] {
+  /**
+   * The in-world half of a ceremony: what lights up, and in what order.
+   *
+   * TWO GESTURES, because there are two kinds of first time. Everything the sprinklers celebrate
+   * is water reaching a PATCH, so it sweeps the coverage square a tile at a time. The truck
+   * celebrates something LEAVING, so it runs a trail out to the road instead — the same pooled
+   * sprites, told to go in a line rather than fill a square.
+   */
+  private buildSweep(id: string, machine: MachineView): Flash[] {
+    const flashes =
+      machine.coverageRadius > 0 ? this.coverageSweep(machine) : this.departureTrail(id, machine);
+    // Parked HERE rather than inside each gesture, so an early return in either one cannot leave
+    // the last ceremony's tiles lit under this one. Both build from index 0 of the same pool, so
+    // the count is always the prefix that is in use.
+    this.parkUnused(flashes.length);
+    return flashes;
+  }
+
+  /**
+   * The truck pulling out: one tile at a time, west, toward the road at the lot's edge.
+   *
+   * Stops at the map edge rather than running off it — `tileX` tiles is exactly how far there is
+   * to go, and a trail that kept flashing past the fence would be celebrating a truck driving
+   * through a hedge. A depot sitting hard against the west edge gets a trail of nothing, which
+   * is honest: the plaque and the halo still play.
+   */
+  private departureTrail(id: string, machine: MachineView): Flash[] {
+    const flashes: Flash[] = [];
+    if (id !== CeremonyId.FirstTruck) return flashes;
+
+    const length = Math.min(TRAIL_TILES, machine.tileX);
+    const y = (machine.tileY + (machine.tilesHigh - 1) / 2) * TILE_PX;
+
+    let used = 0;
+    for (let step = 1; step <= length; step++) {
+      if (used >= MAX_FLASHES) break;
+      const sprite = this.flashSprite(used);
+      used += 1;
+      flashes.push({
+        sprite,
+        x: (machine.tileX - step) * TILE_PX,
+        y,
+        // A little jitter, exactly as the sweep has, so the trail reads as a vehicle rather
+        // than as a progress bar. Cosmetic `Math.random`, never a sim stream — see the header.
+        atMs: SWEEP_START_MS + step * TRAIL_STEP_MS + Math.random() * 70,
+      });
+    }
+
+    return flashes;
+  }
+
+  private coverageSweep(machine: MachineView): Flash[] {
     const flashes: Flash[] = [];
     const radius = machine.coverageRadius;
     if (radius <= 0) return flashes;
@@ -443,11 +515,14 @@ export class Ceremony {
       }
     }
 
-    // Anything the previous ceremony lit that this one does not: park it off screen.
+    return flashes;
+  }
+
+  /** Anything the previous ceremony lit that this one does not: park it off screen. */
+  private parkUnused(used: number): void {
     for (let i = used; i < this.flashPool.length; i++) {
       this.flashPool[i]!.visible = false;
     }
-    return flashes;
   }
 
   private flashSprite(index: number): Sprite {
@@ -471,6 +546,12 @@ export class Ceremony {
 
 /** The machine a ceremony is about, or null when nothing in the world matches. */
 function locate(id: string, view: WorldView): MachineView | null {
+  // THE TRUCK IS ANSWERED BEFORE THE COVERAGE SCAN, not inside it. Every other ceremony is about
+  // water, so the loop below opens by skipping anything that waters nothing — which is every
+  // depot on the lot. Reached through that filter the truck ceremony would have haloed a
+  // sprinkler on the far side of the map and called it the first departure.
+  if (id === CeremonyId.FirstTruck) return locateDepartingDepot(view);
+
   let fallback: MachineView | null = null;
 
   for (const machine of view.machines) {
@@ -488,6 +569,33 @@ function locate(id: string, view: WorldView): MachineView | null {
     }
   }
 
+  return fallback;
+}
+
+/**
+ * The depot whose truck just left, or the first one on the lot.
+ *
+ * The projection does not name the departing depot — the ceremony flag is a bare id — but it
+ * does publish every contract's phase, and `Rolling` means "out on the road" this instant. On the
+ * frame the flag first appears that is the truck being celebrated, so the halo lands on the dock
+ * it actually rolled out of rather than on whichever depot was built first. With two depots and
+ * one truck moving, guessing would be wrong half the time.
+ */
+function locateDepartingDepot(view: WorldView): MachineView | null {
+  let depotId = 0;
+  for (const contract of view.commerce.contracts) {
+    if (contract.phase === ContractPhase.Rolling) {
+      depotId = contract.depotId;
+      break;
+    }
+  }
+
+  let fallback: MachineView | null = null;
+  for (const machine of view.machines) {
+    if (machine.kind !== MachineKind.TruckDepot) continue;
+    if (machine.id === depotId) return machine;
+    if (fallback === null) fallback = machine;
+  }
   return fallback;
 }
 
