@@ -97,12 +97,99 @@ export interface ClipboardSlice {
   readonly notes: readonly ClipboardNote[];
 }
 
+/**
+ * Where a node stands, from the player's side of the glass.
+ *
+ *   `owned`   — researched. It is a thing you can do now.
+ *   `ready`   — every gate is met and the money is on hand. THE FRONTIER; the panel is laid
+ *               out so this state is the one your eye lands on.
+ *   `short`   — legal, but you cannot pay for it yet. Shows a price and an ETA.
+ *   `pending` — a Charter whose money is fine and whose milestone is not. Shows the counter.
+ *   `blocked` — a prerequisite is missing, and the panel names it rather than gesturing.
+ */
+export type TechStatus = 'owned' | 'ready' | 'short' | 'pending' | 'blocked';
+
+export interface TechCard {
+  readonly id: string;
+  readonly branch: number;
+  /** Which era band it draws in. Derived from the prerequisite closure — see `derive-tech.ts`. */
+  readonly era: number;
+  readonly title: string;
+  /** The promise, imperative, under six words. Never a percentage (plan §1, §3). */
+  readonly verb: string;
+  readonly detail: string;
+  readonly priceCents: number;
+  readonly status: TechStatus;
+  /** Titles of unmet prerequisites. The answer to the build menu's unhelpful "needs Belts". */
+  readonly missing: readonly string[];
+  readonly milestoneKind: number;
+  readonly milestoneNeed: number;
+  /**
+   * Where the player is on that counter, published whether or not the node is close.
+   * Plan §7 ruling 3: a Charter's demonstrated half is visible from the first time the panel
+   * is opened, because a milestone you discover by accidentally completing it is a hidden gate
+   * wearing a badge.
+   */
+  readonly milestoneHave: number;
+  readonly isCharter: number;
+}
+
+export interface TechSlice {
+  readonly version: number;
+  readonly cards: readonly TechCard[];
+  readonly ownedCount: number;
+  /** 1, 2, 3 — one plus the number of Charters signed. */
+  readonly era: number;
+  /** What the panel selects on open. Never the root; see `deriveTech`. */
+  readonly frontierId: string | null;
+}
+
+/** One dial on the machine the player is standing at. */
+export interface BenchDial {
+  readonly dial: number;
+  readonly name: string;
+  /** The trade-off, stated as a trade. This is what makes the panel a decision. */
+  readonly trade: string;
+  readonly effect: string;
+  readonly level: number;
+  readonly maxLevel: number;
+  /** Cents for the next level, or -1 when maxed. */
+  readonly costCents: number;
+  readonly affordable: number;
+  /** What the machine does now, in the dial's own units. */
+  readonly now: string;
+  /** What it would do one level up. Empty at max. */
+  readonly next: string;
+  /** 1 when this level costs more than another machine of the same kind (plan §3's argument). */
+  readonly outpricesAnother: number;
+}
+
+/**
+ * The at-the-machine panel. Plan §5's posture: you walk over and interact, rather than opening
+ * a menu and picking a machine out of a list.
+ */
+export interface BenchSlice {
+  readonly version: number;
+  /** 0 when the player is not standing at an upgradeable machine. */
+  readonly machineId: number;
+  readonly kind: number;
+  readonly label: string;
+  readonly conditionPermille: number;
+  /** List price of another one of these — the thing the third dial level competes with. */
+  readonly listPriceCents: number;
+  /** 1 once the Upgrade Bench node is researched. The dials are inert until then. */
+  readonly researched: number;
+  readonly dials: readonly BenchDial[];
+}
+
 export interface HudSnapshot {
   readonly economy: EconomySlice;
   readonly unlock: UnlockSlice;
   readonly pouch: PouchSlice;
   readonly tools: ToolSlice;
   readonly clipboard: ClipboardSlice;
+  readonly tech: TechSlice;
+  readonly bench: BenchSlice;
 }
 
 export type SliceName = keyof HudSnapshot;
@@ -158,6 +245,25 @@ export const ZERO_CLIPBOARD: ClipboardSlice = Object.freeze({
   notes: Object.freeze([]),
 });
 
+export const ZERO_TECH: TechSlice = Object.freeze({
+  version: 0,
+  cards: Object.freeze([]),
+  ownedCount: 0,
+  era: 1,
+  frontierId: null,
+});
+
+export const ZERO_BENCH: BenchSlice = Object.freeze({
+  version: 0,
+  machineId: 0,
+  kind: 0,
+  label: '',
+  conditionPermille: 0,
+  listPriceCents: 0,
+  researched: 0,
+  dials: Object.freeze([]),
+});
+
 /**
  * The server snapshot, frozen and shared.
  *
@@ -171,4 +277,6 @@ export const ZERO_SNAPSHOT: HudSnapshot = Object.freeze({
   pouch: ZERO_POUCH,
   tools: ZERO_TOOLS,
   clipboard: ZERO_CLIPBOARD,
+  tech: ZERO_TECH,
+  bench: ZERO_BENCH,
 });

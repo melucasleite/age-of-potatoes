@@ -29,7 +29,7 @@
 // for the same reason (§12): a live reference is free today and makes the Worker move a
 // rewrite instead of a transport change.
 
-import type { WorldView } from '@snack/sim';
+import type { Command, WorldView } from '@snack/sim';
 
 import type { ToolMode } from '@/game/input/tools';
 
@@ -42,8 +42,12 @@ import {
   deriveUnlock,
 } from './derive';
 import type { MachineCounts, UnlockFields } from './derive';
+import { createBenchFields, createTechFields, deriveBench, deriveTech } from './derive-tech';
+import type { BenchFields, TechFields } from './derive-tech';
 import { RateMeter } from './rate';
 import type {
+  BenchDial,
+  BenchSlice,
   ClipboardNote,
   ClipboardSlice,
   EconomySlice,
@@ -52,15 +56,19 @@ import type {
   PouchItem,
   PouchSlice,
   SliceName,
+  TechCard,
+  TechSlice,
   ToolSlice,
   ToolSlot,
   UnlockSlice,
 } from './types';
 import {
+  ZERO_BENCH,
   ZERO_CLIPBOARD,
   ZERO_ECONOMY,
   ZERO_POUCH,
   ZERO_SNAPSHOT,
+  ZERO_TECH,
   ZERO_TOOLS,
   ZERO_UNLOCK,
 } from './types';
@@ -82,13 +90,18 @@ export class HudStore {
   private pouch: PouchSlice = ZERO_POUCH;
   private tools: ToolSlice = ZERO_TOOLS;
   private clipboard: ClipboardSlice = ZERO_CLIPBOARD;
+  private tech: TechSlice = ZERO_TECH;
+  private bench: BenchSlice = ZERO_BENCH;
   private snapshot: HudSnapshot = ZERO_SNAPSHOT;
 
   private owner: object | null = null;
   private selector: ((tool: ToolMode) => void) | null = null;
+  private dispatcher: ((command: Command) => void) | null = null;
 
   private readonly meter = new RateMeter();
   private readonly counts: MachineCounts = createMachineCounts();
+  private readonly techScratch: TechFields = createTechFields();
+  private readonly benchScratch: BenchFields = createBenchFields();
   private readonly unlockScratch: UnlockFields = {
     id: null,
     label: '',
@@ -122,6 +135,8 @@ export class HudStore {
     pouch: () => this.snapshot.pouch,
     tools: () => this.snapshot.tools,
     clipboard: () => this.snapshot.clipboard,
+    tech: () => this.snapshot.tech,
+    bench: () => this.snapshot.bench,
   };
 
   /**
@@ -135,6 +150,8 @@ export class HudStore {
     pouch: () => ZERO_SNAPSHOT.pouch,
     tools: () => ZERO_SNAPSHOT.tools,
     clipboard: () => ZERO_SNAPSHOT.clipboard,
+    tech: () => ZERO_SNAPSHOT.tech,
+    bench: () => ZERO_SNAPSHOT.bench,
   };
 
   getSnapshot(): HudSnapshot {
@@ -144,9 +161,14 @@ export class HudStore {
   // --- ownership ---------------------------------------------------------------------
 
   /** Called by a starting `GameHost`. Wipes whatever the previous host left behind. */
-  claim(token: object, selectTool: (tool: ToolMode) => void): void {
+  claim(
+    token: object,
+    selectTool: (tool: ToolMode) => void,
+    dispatch: (command: Command) => void,
+  ): void {
     this.owner = token;
     this.selector = selectTool;
+    this.dispatcher = dispatch;
     this.meter.reset();
     this.clipboardDueTick = -(2 ** 30);
     this.live.tick = 0;
@@ -161,6 +183,7 @@ export class HudStore {
     if (this.owner !== token) return;
     this.owner = null;
     this.selector = null;
+    this.dispatcher = null;
     this.resetSlices();
   }
 
@@ -170,6 +193,8 @@ export class HudStore {
     this.pouch = ZERO_POUCH;
     this.tools = ZERO_TOOLS;
     this.clipboard = ZERO_CLIPBOARD;
+    this.tech = ZERO_TECH;
+    this.bench = ZERO_BENCH;
     this.snapshot = ZERO_SNAPSHOT;
     this.notify();
   }
@@ -201,6 +226,8 @@ export class HudStore {
     if (this.setUnlock(unlock)) changed = true;
     if (this.setPouch(derivePouch(view))) changed = true;
     if (this.setTools(view.moneyCents, tool)) changed = true;
+    if (this.setTech(deriveTech(view, this.techScratch))) changed = true;
+    if (this.setBench(deriveBench(view, this.benchScratch))) changed = true;
 
     if (view.tick >= this.clipboardDueTick) {
       this.clipboardDueTick = view.tick + CLIPBOARD_PERIOD_TICKS;
@@ -213,13 +240,7 @@ export class HudStore {
     this.live.moneyCents = view.moneyCents;
 
     if (!changed) return;
-    this.snapshot = {
-      economy: this.economy,
-      unlock: this.unlock,
-      pouch: this.pouch,
-      tools: this.tools,
-      clipboard: this.clipboard,
-    };
+    this.rebuildSnapshot();
     this.notify();
   }
 
@@ -233,13 +254,7 @@ export class HudStore {
   publishTool(token: object, tool: ToolMode, moneyCents: number): void {
     if (this.owner !== token) return;
     if (!this.setTools(moneyCents, tool)) return;
-    this.snapshot = {
-      economy: this.economy,
-      unlock: this.unlock,
-      pouch: this.pouch,
-      tools: this.tools,
-      clipboard: this.clipboard,
-    };
+    this.rebuildSnapshot();
     this.notify();
   }
 
@@ -253,6 +268,36 @@ export class HudStore {
    */
   selectTool(tool: ToolMode): void {
     this.selector?.(tool);
+  }
+
+  /**
+   * The way out for a HUD control that must change the WORLD, and the only one.
+   *
+   * `Toolbelt.tsx`'s header describes this door before it existed: "a HUD control that needed
+   * to change the world would push a `Command` onto the host's queue instead; none does yet".
+   * Research and the upgrade dials are the first two that do, and they go through here, which
+   * means they are ordinary commands — applied at a tick boundary, validated inside the sim,
+   * written into the trace, and replayable. Nothing in the HUD touches `WorldState`, and the
+   * store deliberately holds a *dispatcher* rather than the queue itself so it has no way to.
+   *
+   * Legality is NOT checked here. The panel disables a button it expects to be refused, but
+   * that is a courtesy to the player, not a gate — the sim decides, exactly as it does for a
+   * click on a tile (§12). A refused command is a no-op and leaves no trace entry.
+   */
+  dispatch(command: Command): void {
+    this.dispatcher?.(command);
+  }
+
+  private rebuildSnapshot(): void {
+    this.snapshot = {
+      economy: this.economy,
+      unlock: this.unlock,
+      pouch: this.pouch,
+      tools: this.tools,
+      clipboard: this.clipboard,
+      tech: this.tech,
+      bench: this.bench,
+    };
   }
 
   private notify(): void {
@@ -350,6 +395,91 @@ export class HudStore {
       version: this.tools.version + 1,
       tool,
       slots: Object.freeze(slots),
+    });
+    return true;
+  }
+
+  /**
+   * The research slice.
+   *
+   * Only four things about a card can move — its status, its milestone counter, its era, and
+   * which prerequisites it is still missing — because everything else on it is copy. So the
+   * comparison walks those and nothing else. Without it this slice would be rebuilt on every
+   * publish and re-render the whole panel 6.7 times a second to redraw thirteen identical
+   * cards, which is precisely the storm the version counters exist to prevent.
+   */
+  private setTech(next: TechFields): boolean {
+    const current = this.tech;
+    if (
+      current.ownedCount === next.ownedCount &&
+      current.era === next.era &&
+      current.frontierId === next.frontierId &&
+      current.cards.length === next.cards.length
+    ) {
+      let same = true;
+      for (let i = 0; i < next.cards.length; i++) {
+        const a = current.cards[i] as TechCard;
+        const b = next.cards[i]!;
+        if (
+          a.id !== b.id ||
+          a.status !== b.status ||
+          a.milestoneHave !== b.milestoneHave ||
+          a.missing.length !== b.missing.length
+        ) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return false;
+    }
+
+    this.tech = Object.freeze({
+      version: current.version + 1,
+      cards: Object.freeze(next.cards.map((card) => Object.freeze({ ...card }))),
+      ownedCount: next.ownedCount,
+      era: next.era,
+      frontierId: next.frontierId,
+    });
+    return true;
+  }
+
+  /**
+   * The bench slice: which machine the player is standing at, and what its dials cost.
+   *
+   * `machineId` flipping to 0 as the player walks away is a real change and must publish —
+   * that is how the panel closes itself. The condition readout is compared at whole permille,
+   * which is what the bar draws; a machine wearing down republishes about once a second rather
+   * than on every tick of work.
+   */
+  private setBench(next: BenchFields): boolean {
+    const current = this.bench;
+    if (
+      current.machineId === next.machineId &&
+      current.researched === next.researched &&
+      current.conditionPermille === next.conditionPermille &&
+      current.dials.length === next.dials.length
+    ) {
+      let same = true;
+      for (let i = 0; i < next.dials.length; i++) {
+        const a = current.dials[i] as BenchDial;
+        const b = next.dials[i]!;
+        if (a.level !== b.level || a.affordable !== b.affordable || a.costCents !== b.costCents) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return false;
+    }
+
+    this.bench = Object.freeze({
+      version: current.version + 1,
+      machineId: next.machineId,
+      kind: next.kind,
+      label: next.label,
+      conditionPermille: next.conditionPermille,
+      listPriceCents: next.listPriceCents,
+      researched: next.researched,
+      dials: Object.freeze(next.dials.map((dial) => Object.freeze({ ...dial }))),
     });
     return true;
   }

@@ -553,6 +553,923 @@
   color: #46392f;
 }
 
+/* --- research: the toggle ------------------------------------------------------- */
+
+/*
+ * The way in, and it sits directly under the Ticker on purpose. The Ticker already answers
+ * "how much have I got and how fast is it coming"; this answers "and what is it for". Putting
+ * them in the same corner makes the pair read as one thought instead of two panels.
+ *
+ * The badge is the thirty-second test's opening move (§8's v0.7 gate: "can a returning player
+ * see their next want within 30 seconds?"). A player who comes back after a week does not have
+ * to open anything to learn that two things are affordable — the corner already said so.
+ */
+.techToggle {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 268px;
+  padding: 8px 12px 9px;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  color: #cbb99b;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    5px 0,
+    calc(100% - 5px) 0,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    5px 100%,
+    0 calc(100% - 5px),
+    0 5px
+  );
+  transition: transform 70ms steps(2, end);
+}
+
+.techToggle:hover {
+  transform: translateY(-2px);
+  color: #efe2c6;
+}
+
+.techToggleName {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  flex: 1;
+}
+
+.techToggleKey {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: #6d5c4d;
+}
+
+/* Nothing affordable: a count, quietly. Something affordable: the gold, loudly. */
+.techToggleBadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6d5c4d;
+  padding: 2px 6px 3px;
+  background: #14100e;
+  box-shadow: inset 0 0 0 1px #46392f;
+}
+
+.techToggleReady {
+  color: #14100e;
+  background: linear-gradient(180deg, #f5d382 0%, #d9b475 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #8a6234;
+}
+.techToggleReady .techToggleKey {
+  color: #8a6234;
+}
+.techToggleReady .techToggleBadge {
+  color: #f5d382;
+  background: #5e1c1a;
+  box-shadow: inset 0 0 0 1px #14100e;
+}
+
+/* --- research: the panel -------------------------------------------------------- */
+
+.scrim {
+  pointer-events: auto;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 16, 14, 0.74);
+  z-index: 20;
+}
+
+.techPanel {
+  display: flex;
+  flex-direction: column;
+  width: min(1060px, 100%);
+  max-height: 100%;
+  padding: 0;
+  background: linear-gradient(180deg, #2b2119 0%, #1c1610 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 4px #46392f,
+    inset 0 6px 0 -4px #6d5c4d;
+  clip-path: polygon(
+    9px 0,
+    calc(100% - 9px) 0,
+    100% 9px,
+    100% calc(100% - 9px),
+    calc(100% - 9px) 100%,
+    9px 100%,
+    0 calc(100% - 9px),
+    0 9px
+  );
+}
+
+.techHead {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 16px 20px 12px;
+  flex: 0 0 auto;
+}
+
+.techTitle {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #efe2c6;
+}
+
+.techEra {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d9b475;
+}
+
+.techCount {
+  flex: 1;
+  text-align: right;
+  font-size: 11px;
+  color: #6d5c4d;
+  font-variant-numeric: tabular-nums;
+}
+
+.techMoney {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f5d382;
+  font-variant-numeric: tabular-nums;
+}
+
+.techClose {
+  pointer-events: auto;
+  cursor: pointer;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #cbb99b;
+  padding: 3px 9px 4px;
+  background: #14100e;
+  box-shadow: inset 0 0 0 2px #46392f;
+}
+.techClose:hover {
+  color: #efe2c6;
+  background: #5e1c1a;
+}
+
+.techScroll {
+  flex: 1 1 auto;
+  /*
+   * REQUIRED, not tidiness. A flex item's `min-height` defaults to `auto`, which resolves to
+   * its content height — so this refuses to shrink below the full height of three era bands and
+   * pushes the detail pane and the footer out through the bottom of the panel. `0` is what lets
+   * the panel honour its own `max-height` and gives the scrollbar something to do.
+   */
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 20px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: #46392f #14100e;
+}
+
+/* --- research: era bands -------------------------------------------------------- */
+
+.eraBand {
+  padding: 10px 0 4px;
+}
+
+.eraHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-left: 10px;
+  border-left: 3px solid #46392f;
+}
+
+/* The era you are actually in. One rail, gold — no glow, no badge, no second colour. */
+.eraBandCurrent .eraHead {
+  border-left-color: #d9b475;
+}
+
+.eraNumeral {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #6d5c4d;
+}
+.eraBandCurrent .eraNumeral {
+  color: #d9b475;
+}
+
+.eraName {
+  font-size: 13px;
+  font-weight: 700;
+  color: #cbb99b;
+}
+.eraBandCurrent .eraName {
+  color: #efe2c6;
+}
+
+.eraBlurb {
+  font-size: 11px;
+  color: #6d5c4d;
+}
+
+.branchRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.branchCol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.branchName {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #46392f;
+  padding-bottom: 2px;
+}
+
+/*
+ * An empty branch says so. Hydraulics is declared in the sim with nothing hanging off it —
+ * the machines it would unlock are not built — and hiding the column would quietly shrink the
+ * game by a quarter in the player's head. "Nothing here yet" is a promise; a missing column is
+ * a smaller world.
+ */
+.branchEmpty {
+  font-size: 10px;
+  color: #46392f;
+  padding: 10px 8px;
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(70, 57, 47, 0.18) 0px,
+    rgba(70, 57, 47, 0.18) 4px,
+    transparent 4px,
+    transparent 9px
+  );
+}
+
+/* --- research: a node ----------------------------------------------------------- */
+
+.node {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 7px 9px 8px;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  color: #9a8873;
+  background: linear-gradient(180deg, #251d16 0%, #1c1610 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #35291f;
+  clip-path: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+  transition: transform 70ms steps(2, end);
+}
+
+.node:hover {
+  transform: translateY(-2px);
+}
+
+.nodeTop {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.nodeTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #cbb99b;
+  flex: 1;
+  min-width: 0;
+}
+
+.nodePrice {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a6234;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The verb line. This is the whole point of the panel and it is on every card, not tucked in a
+ * tooltip: a tech node unlocks a THING YOU DO, and if the player has to click to find that out
+ * then the tree is still a list of prices (plan §1, §3).
+ */
+.nodeVerb {
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: #6d5c4d;
+}
+
+/* Researched. Green, and deliberately the quietest state on the board — it is done. */
+.nodeOwned {
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #35571f;
+}
+.nodeOwned .nodeTitle {
+  color: #74a340;
+}
+.nodeOwned .nodePrice {
+  color: #4e7c2e;
+}
+
+/*
+ * Affordable right now — THE FRONTIER, and the only thing on this screen wearing full gold.
+ * Everything else in the panel is tuned down so that a player who opens this and does nothing
+ * else still has their eye pulled to something they can buy this second.
+ */
+.nodeReady {
+  color: #14100e;
+  background: linear-gradient(180deg, #f5d382 0%, #d9b475 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #8a6234;
+}
+.nodeReady .nodeTitle,
+.nodeReady .nodePrice {
+  color: #14100e;
+}
+.nodeReady .nodeVerb {
+  color: #5e1c1a;
+}
+
+/* Legal, unaffordable. The price is the only red thing on the card. */
+.nodeShort .nodeTitle {
+  color: #cbb99b;
+}
+.nodeShort .nodePrice {
+  color: #d94f36;
+}
+
+/* A Charter waiting on its milestone rather than on money. */
+.nodePending {
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #8a6234;
+}
+.nodePending .nodePrice {
+  color: #f2a93b;
+}
+
+.nodeBlocked {
+  opacity: 0.62;
+}
+.nodeBlocked .nodeTitle {
+  color: #6d5c4d;
+}
+
+.nodeSelected {
+  box-shadow:
+    inset 0 0 0 2px #efe2c6,
+    inset 0 0 0 4px #14100e;
+}
+
+/* --- research: the Charter bands ------------------------------------------------ */
+
+/*
+ * A Charter is drawn as a full-width band across all four branches rather than as a card in a
+ * column, because that is what it IS: a line the whole lot crosses at once. Plan §3 calls the
+ * three of them a spine and the eras a table; a node sitting politely in the Commerce column
+ * would read as one more purchase.
+ *
+ * The red is a wax seal, not an alarm — hence the stamp block on the left and the gold it turns
+ * once signed. It is the one place in this HUD where red means "official".
+ */
+.charterBand {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin: 14px 0 4px;
+  padding: 10px 14px 11px;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #5e1c1a;
+  clip-path: polygon(
+    7px 0,
+    calc(100% - 7px) 0,
+    100% 7px,
+    100% calc(100% - 7px),
+    calc(100% - 7px) 100%,
+    7px 100%,
+    0 calc(100% - 7px),
+    0 7px
+  );
+}
+
+.charterSeal {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ef8f68;
+  background: linear-gradient(180deg, #9e2f27 0%, #5e1c1a 100%);
+  box-shadow: inset 0 0 0 2px #14100e;
+}
+
+.charterBody {
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * `display: block` on both, and it is load-bearing rather than tidy. A `<button>`'s content
+ * model is phrasing content, so these are spans rather than divs — and inline spans do not
+ * stack, which put the Charter's name and its promise on the same line reading
+ * "WORKSHOP CHARTEROpen the Workshop era".
+ */
+.charterName {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #efe2c6;
+}
+
+.charterVerb {
+  display: block;
+  font-size: 10.5px;
+  color: #9a8873;
+  margin-top: 1px;
+}
+
+/* The two halves of the gate, side by side, always. Money and the demonstrated milestone. */
+.charterGates {
+  display: flex;
+  gap: 18px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.charterGate {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 148px;
+}
+
+.charterGateLabel {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6d5c4d;
+}
+
+.charterGateValue {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #cbb99b;
+  font-variant-numeric: tabular-nums;
+}
+.charterGateMet {
+  color: #74a340;
+}
+.charterGateShort {
+  color: #ef8f68;
+}
+
+.charterTrack {
+  position: relative;
+  height: 5px;
+  background: #14100e;
+  box-shadow: inset 0 0 0 1px #46392f;
+  overflow: hidden;
+}
+
+.charterFill {
+  height: 100%;
+  background: repeating-linear-gradient(90deg, #d94f36 0px, #d94f36 3px, #9e2f27 3px, #9e2f27 4px);
+  transition: width 220ms linear;
+}
+.charterFillMet {
+  background: repeating-linear-gradient(90deg, #74a340 0px, #74a340 3px, #4e7c2e 3px, #4e7c2e 4px);
+}
+
+/* Signed. The seal goes gold and the band stops shouting. */
+.charterOwned {
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #8a6234;
+}
+.charterOwned .charterSeal {
+  color: #14100e;
+  background: linear-gradient(180deg, #f5d382 0%, #b58b4d 100%);
+}
+.charterOwned .charterName {
+  color: #d9b475;
+}
+
+.charterSelected {
+  box-shadow:
+    inset 0 0 0 2px #efe2c6,
+    inset 0 0 0 4px #14100e;
+}
+
+/* --- research: the detail pane -------------------------------------------------- */
+
+/*
+ * Pinned to the bottom of the panel rather than floating beside the tree, so the answer to
+ * "what does this actually do" is always in the same place. A detail pane that moves is a
+ * detail pane the player has to find twice.
+ */
+.techDetail {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 20px 14px;
+  background: linear-gradient(180deg, #1c1610 0%, #14100e 100%);
+  box-shadow: inset 0 2px 0 #46392f;
+}
+
+.detailBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.detailTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #efe2c6;
+}
+
+.detailVerb {
+  font-size: 12px;
+  font-weight: 700;
+  color: #d9b475;
+  margin-top: 2px;
+}
+
+.detailText {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #9a8873;
+  margin-top: 5px;
+  max-width: 74ch;
+}
+
+.detailNeeds {
+  font-size: 11px;
+  color: #ef8f68;
+  margin-top: 6px;
+}
+
+.detailEta {
+  font-size: 11px;
+  color: #9fdcef;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.detailBuy {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  min-width: 168px;
+}
+
+.buyButton {
+  pointer-events: auto;
+  cursor: pointer;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 14px 11px;
+  color: #6d5c4d;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    5px 0,
+    calc(100% - 5px) 0,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    5px 100%,
+    0 calc(100% - 5px),
+    0 5px
+  );
+  transition: transform 70ms steps(2, end);
+}
+
+.buyReady {
+  color: #14100e;
+  background: linear-gradient(180deg, #f5d382 0%, #d9b475 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #8a6234;
+}
+.buyReady:hover {
+  transform: translateY(-2px);
+}
+
+.buyButton:disabled {
+  cursor: default;
+  transform: none;
+}
+
+.buyNote {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6d5c4d;
+  text-align: center;
+}
+
+/*
+ * Same background as the detail pane above it, so the two read as one footer rather than as a
+ * caption that fell off the bottom. Stone_mid rather than stone_dark: this is the only place
+ * that tells the player how to close the panel, and the dev overlay's near-invisible hint
+ * colour is the wrong borrow for a line that has a job.
+ */
+.techHint {
+  flex: 0 0 auto;
+  padding: 0 20px 12px;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6d5c4d;
+  background: #14100e;
+}
+
+/* --- the upgrade bench ---------------------------------------------------------- */
+
+/*
+ * Anchored mid-right, which is the last edge this HUD had free: the Ticker owns the top left,
+ * the dev overlay the top right, the Clipboard the bottom right, the toolbelt the bottom
+ * centre, and the audio start gate the bottom left.
+ *
+ * It appears because the PLAYER WALKED UP TO A MACHINE — no menu, no picking a machine out of a
+ * list. Plan §5's posture is that anything a machine does automatically the player can also do
+ * standing next to it, and buying its dials is the same gesture: you are at the thing.
+ */
+.midRight {
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  align-items: flex-end;
+}
+
+.bench {
+  width: 274px;
+  padding: 11px 13px 12px;
+}
+
+.benchHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.benchName {
+  font-size: 13px;
+  font-weight: 700;
+  color: #efe2c6;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.benchCondition {
+  font-size: 10px;
+  color: #9a8873;
+  font-variant-numeric: tabular-nums;
+}
+.benchConditionLow {
+  color: #ef8f68;
+}
+
+.benchTrack {
+  height: 5px;
+  margin-top: 6px;
+  background: #14100e;
+  box-shadow: inset 0 0 0 1px #46392f;
+  overflow: hidden;
+}
+
+.benchFill {
+  height: 100%;
+  background: repeating-linear-gradient(90deg, #74a340 0px, #74a340 3px, #4e7c2e 3px, #4e7c2e 4px);
+}
+.benchFillLow {
+  background: repeating-linear-gradient(90deg, #d94f36 0px, #d94f36 3px, #9e2f27 3px, #9e2f27 4px);
+}
+
+.dial {
+  margin-top: 11px;
+}
+
+.dialHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialName {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #cbb99b;
+  flex: 1;
+}
+
+/* Three pips, filled left to right. A level you can count without reading a number. */
+.pips {
+  display: flex;
+  gap: 3px;
+}
+
+.pip {
+  width: 9px;
+  height: 9px;
+  background: #14100e;
+  box-shadow: inset 0 0 0 1px #46392f;
+}
+
+.pipOn {
+  background: linear-gradient(180deg, #f5d382 0%, #b58b4d 100%);
+  box-shadow: inset 0 0 0 1px #14100e;
+}
+
+.dialTrade {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #6d5c4d;
+  margin-top: 3px;
+}
+
+.dialDelta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dialNow {
+  color: #9a8873;
+}
+
+.dialArrow {
+  color: #46392f;
+}
+
+.dialNext {
+  color: #a3c65c;
+  font-weight: 700;
+}
+
+.dialBuy {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin-top: 5px;
+  padding: 5px 8px 6px;
+  border: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbb99b;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    3px 0,
+    calc(100% - 3px) 0,
+    100% 3px,
+    100% calc(100% - 3px),
+    calc(100% - 3px) 100%,
+    3px 100%,
+    0 calc(100% - 3px),
+    0 3px
+  );
+  font-variant-numeric: tabular-nums;
+  transition: transform 70ms steps(2, end);
+}
+
+.dialBuyReady:hover {
+  transform: translateY(-2px);
+  color: #14100e;
+  background: linear-gradient(180deg, #f5d382 0%, #d9b475 100%);
+}
+
+.dialBuy:disabled {
+  cursor: default;
+  color: #6d5c4d;
+  transform: none;
+}
+
+.dialBuyBroke {
+  color: #6d5c4d;
+}
+.dialBuyBroke .dialCost {
+  color: #d94f36;
+}
+
+.dialCost {
+  color: #d9b475;
+}
+
+/*
+ * The escalation, said out loud at the exact moment it becomes true. Plan §3 wants maxing one
+ * Fryer to be a real argument against buying a second one; an argument the player has to do
+ * arithmetic to notice is an argument they will not have.
+ */
+.dialCompete {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: #f2a93b;
+  margin-top: 3px;
+}
+
+.dialMaxed {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #4e7c2e;
+  margin-top: 5px;
+  padding: 4px 0 3px;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px #35571f;
+}
+
+.benchLocked {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #9a8873;
+  margin-top: 8px;
+}
+
+.benchDivider {
+  height: 2px;
+  margin: 10px 0 0;
+  background: #14100e;
+  box-shadow: 0 1px 0 #46392f;
+}
+
 /* --- small screens -------------------------------------------------------------- */
 
 /*
@@ -571,5 +1488,31 @@
   }
   .slotName {
     font-size: 11px;
+  }
+  .techToggle {
+    min-width: 0;
+  }
+  /* Two columns before one, so a branch is still read against its neighbours. */
+  .branchRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .techDetail {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .detailBuy {
+    min-width: 0;
+    width: 100%;
+  }
+  /*
+   * The bench is a control, so it moves rather than hiding — but mid-right collides with the
+   * centred toolbelt stack once the viewport is this narrow, so it goes back up to the top.
+   */
+  .midRight {
+    top: 14px;
+    transform: none;
+  }
+  .bench {
+    width: 238px;
   }
 }

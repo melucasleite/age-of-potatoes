@@ -13,13 +13,18 @@
 // swallows a click meant for a tile is a HUD that makes the game feel broken in a way the
 // player cannot name.
 
+import { useCallback, useEffect, useState } from 'react';
+
 import { Clipboard } from './Clipboard';
 import { s } from './styles';
 import { PerfOverlay } from './PerfOverlay';
 import { Pouch } from './Pouch';
+import { SaveNotices } from './SaveNotices';
 import { StatusRibbon } from './StatusRibbon';
+import { TechPanel, TechToggle } from './TechTree';
 import { Ticker } from './Ticker';
 import { Toolbelt } from './Toolbelt';
+import { UpgradeBench } from './UpgradeBench';
 import { useHudSlice } from './use-hud';
 
 /**
@@ -34,35 +39,90 @@ export default function HudRoot() {
   // empty toolbelt is the tell, and it costs nothing to check because the slice is already
   // subscribed. Showing a confident "$0.00" over a boot failure would be a small lie.
   const tools = useHudSlice('tools');
-  if (tools.slots.length === 0) return null;
+  const research = useResearchPanel();
+
+  // Still the tell for "no world" — but the save notices outlive it. A world that came back
+  // from its backup copy, or one whose browser is out of room, has something to say before the
+  // first tick publishes and would say it to an empty screen otherwise ([[041]]).
+  if (tools.slots.length === 0) return <SaveNotices />;
 
   return (
-    <div className={s.root}>
-      <div className={`${s.corner} ${s.topLeft}`}>
-        <Ticker />
-      </div>
+    <>
+      <SaveNotices />
+      <div className={s.root}>
+        <div className={`${s.corner} ${s.topLeft}`}>
+          <Ticker />
+          <TechToggle onOpen={research.open} />
+        </div>
 
-      {/*
+        {/*
+        The upgrade bench, anchored to the last free edge. It has no open/closed flag of its
+        own: it draws when the player is standing at a machine that takes dials and vanishes
+        when they walk away, because "bought at the machine" (plan §3) is a fact about where
+        the avatar is rather than a menu the player manages.
+      */}
+        <div className={`${s.corner} ${s.midRight}`}>
+          <UpgradeBench onOpenResearch={research.open} />
+        </div>
+
+        {/*
         Ribbon, pouch, toolbelt — one centred stack at the bottom edge, in that order.
         The stack is centred rather than tucked left for two reasons: the toolbelt is the
         one thing here the player actually aims at, and the lower-left corner belongs to
         the audio layer's click-to-start gate ([[014]]), which must not end up underneath it.
       */}
-      <div className={`${s.corner} ${s.bottomCentre}`}>
-        <StatusRibbon />
-        <Pouch />
-        <Toolbelt />
-      </div>
-
-      <div className={`${s.corner} ${s.bottomRight}`}>
-        <Clipboard />
-      </div>
-
-      {DEV ? (
-        <div className={`${s.corner} ${s.topRight}`}>
-          <PerfOverlay />
+        <div className={`${s.corner} ${s.bottomCentre}`}>
+          <StatusRibbon />
+          <Pouch />
+          <Toolbelt />
         </div>
-      ) : null}
-    </div>
+
+        <div className={`${s.corner} ${s.bottomRight}`}>
+          <Clipboard />
+        </div>
+
+        {DEV ? (
+          <div className={`${s.corner} ${s.topRight}`}>
+            <PerfOverlay />
+          </div>
+        ) : null}
+
+        {research.isOpen ? <TechPanel onClose={research.close} /> : null}
+      </div>
+    </>
   );
+}
+
+/**
+ * Whether the research panel is showing. UI STATE, and it stays that way.
+ *
+ * Camera pan, hover, tool mode, and menu state are explicitly not commands and never enter the
+ * world (§12) — a replay must not depend on which panels were open. So this is a `useState` in
+ * the HUD and nothing else knows about it.
+ *
+ * `T` is bound here rather than in `input/keyboard.ts` because the key toggles a DOM panel that
+ * the input system has no business knowing exists. It is chosen from what that layer leaves
+ * free: digits 1–6, B, R, C, +, −, Escape, F3, backtick, space and WASD are all spoken for, and
+ * an unhandled code falls through its switch untouched.
+ */
+function useResearchPanel(): { isOpen: boolean; open: () => void; close: () => void } {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const open = useCallback(() => setIsOpen(true), []);
+  const close = useCallback(() => setIsOpen(false), []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      // Auto-repeat is not a state edge — holding T must not strobe the panel.
+      if (event.repeat || event.code !== 'KeyT') return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      setIsOpen((was) => !was);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, []);
+
+  return { isOpen, open, close };
 }
