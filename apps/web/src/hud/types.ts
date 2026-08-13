@@ -55,6 +55,12 @@ export interface PouchItem {
   readonly count: number;
   /** List value of the stack, in cents. What the pouch is worth if you walk it to the bin. */
   readonly valueCents: number;
+  /**
+   * 1 when the bin will actually take it. Seeds are bought and never sold ([[051]]), and a
+   * price printed beside something you cannot sell is a lie the UI is telling — so the chip
+   * drops the figure rather than quietly showing what it would have been worth.
+   */
+  readonly sellable: number;
 }
 
 export interface PouchSlice {
@@ -241,6 +247,53 @@ export interface LotSlice {
   readonly sprinklers: number;
 }
 
+/**
+ * One line on the roadside stand's board.
+ *
+ * WHAT IS FOR SALE AND AT WHAT PRICE IS NOT DECIDED HERE. Every field below except the copy
+ * is read out of `ITEM_SPECS` — `purchasable` decides whether the row exists at all and
+ * `listPriceCents` is the price — because a second price table in the HUD is a table that
+ * will disagree with the till one day, and the day it does the player is the one who finds
+ * out. See `derive-shop.ts`.
+ */
+export interface ShopRow {
+  /** `ItemId`. */
+  readonly id: number;
+  readonly name: string;
+  /** One line of what it is for. Empty for an item the HUD has no copy for yet. */
+  readonly note: string;
+  readonly unitPriceCents: number;
+  /** How many are already in the pouch. */
+  readonly owned: number;
+  /**
+   * The tech that makes this seed's crop plantable, when the player has not researched it —
+   * a title, not an id. Empty when there is nothing in the way.
+   *
+   * The stand would sell them anyway; the sim gates PLANTING, not buying. Naming the node is
+   * what stops a purchase that cannot be planted and (once seeds are unsellable) cannot be
+   * undone — the same courtesy the research panel does with `missing`.
+   */
+  readonly needsTech: string;
+}
+
+/**
+ * The roadside stand, from the player's side of the counter.
+ *
+ * `atStand` is the whole reason this is a slice rather than a constant list: `applyBuyItem`
+ * refuses unless the farmer is within hand reach of the bin, so a board that did not know
+ * where the player was standing would offer buttons the sim throws away in silence.
+ */
+export interface ShopSlice {
+  readonly version: number;
+  readonly rows: readonly ShopRow[];
+  /** 1 when the farmer is standing close enough for the till to take the money. */
+  readonly atStand: number;
+  /** 1 when the lot has a stand at all. */
+  readonly standExists: number;
+  /** Which way to walk — "north-east" — quantised to eight points. Empty when at the stand. */
+  readonly heading: string;
+}
+
 export interface HudSnapshot {
   readonly economy: EconomySlice;
   readonly unlock: UnlockSlice;
@@ -250,6 +303,7 @@ export interface HudSnapshot {
   readonly tech: TechSlice;
   readonly bench: BenchSlice;
   readonly lot: LotSlice;
+  readonly shop: ShopSlice;
 }
 
 export type SliceName = keyof HudSnapshot;
@@ -341,6 +395,14 @@ export const ZERO_LOT: LotSlice = Object.freeze({
   sprinklers: 0,
 });
 
+export const ZERO_SHOP: ShopSlice = Object.freeze({
+  version: 0,
+  rows: Object.freeze([]),
+  atStand: 0,
+  standExists: 0,
+  heading: '',
+});
+
 /**
  * The server snapshot, frozen and shared.
  *
@@ -357,4 +419,5 @@ export const ZERO_SNAPSHOT: HudSnapshot = Object.freeze({
   tech: ZERO_TECH,
   bench: ZERO_BENCH,
   lot: ZERO_LOT,
+  shop: ZERO_SHOP,
 });

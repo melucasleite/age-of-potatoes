@@ -44,6 +44,8 @@ import {
 import type { MachineCounts, UnlockFields } from './derive';
 import { RiskWatch, createLotFields, deriveLot } from './derive-lot';
 import type { LotFields } from './derive-lot';
+import { createShopFields, deriveShop } from './derive-shop';
+import type { ShopFields } from './derive-shop';
 import { createBenchFields, createTechFields, deriveBench, deriveTech } from './derive-tech';
 import type { BenchFields, TechFields } from './derive-tech';
 import { RateMeter } from './rate';
@@ -58,6 +60,8 @@ import type {
   LotSlice,
   PouchItem,
   PouchSlice,
+  ShopRow,
+  ShopSlice,
   SliceName,
   TechCard,
   TechSlice,
@@ -72,6 +76,7 @@ import {
   ZERO_ECONOMY,
   ZERO_LOT,
   ZERO_POUCH,
+  ZERO_SHOP,
   ZERO_SNAPSHOT,
   ZERO_TECH,
   ZERO_TOOLS,
@@ -98,6 +103,7 @@ export class HudStore {
   private tech: TechSlice = ZERO_TECH;
   private bench: BenchSlice = ZERO_BENCH;
   private lot: LotSlice = ZERO_LOT;
+  private shop: ShopSlice = ZERO_SHOP;
   private snapshot: HudSnapshot = ZERO_SNAPSHOT;
 
   private owner: object | null = null;
@@ -109,6 +115,7 @@ export class HudStore {
   private readonly techScratch: TechFields = createTechFields();
   private readonly benchScratch: BenchFields = createBenchFields();
   private readonly lotScratch: LotFields = createLotFields();
+  private readonly shopScratch: ShopFields = createShopFields();
   private readonly riskWatch = new RiskWatch();
   private readonly unlockScratch: UnlockFields = {
     id: null,
@@ -146,6 +153,7 @@ export class HudStore {
     tech: () => this.snapshot.tech,
     bench: () => this.snapshot.bench,
     lot: () => this.snapshot.lot,
+    shop: () => this.snapshot.shop,
   };
 
   /**
@@ -162,6 +170,7 @@ export class HudStore {
     tech: () => ZERO_SNAPSHOT.tech,
     bench: () => ZERO_SNAPSHOT.bench,
     lot: () => ZERO_SNAPSHOT.lot,
+    shop: () => ZERO_SNAPSHOT.shop,
   };
 
   getSnapshot(): HudSnapshot {
@@ -210,6 +219,7 @@ export class HudStore {
     this.tech = ZERO_TECH;
     this.bench = ZERO_BENCH;
     this.lot = ZERO_LOT;
+    this.shop = ZERO_SHOP;
     this.snapshot = ZERO_SNAPSHOT;
     this.notify();
   }
@@ -244,6 +254,7 @@ export class HudStore {
     if (this.setTech(deriveTech(view, this.techScratch))) changed = true;
     if (this.setBench(deriveBench(view, this.benchScratch))) changed = true;
     if (this.setLot(deriveLot(view, this.riskWatch, this.lotScratch))) changed = true;
+    if (this.setShop(deriveShop(view, this.shopScratch))) changed = true;
 
     if (view.tick >= this.clipboardDueTick) {
       this.clipboardDueTick = view.tick + CLIPBOARD_PERIOD_TICKS;
@@ -314,6 +325,7 @@ export class HudStore {
       tech: this.tech,
       bench: this.bench,
       lot: this.lot,
+      shop: this.shop,
     };
   }
 
@@ -566,6 +578,52 @@ export class HudStore {
       starved: next.starved,
       blocked: next.blocked,
       sprinklers: next.sprinklers,
+    });
+    return true;
+  }
+
+  /**
+   * The roadside stand's board.
+   *
+   * The catalogue itself is static balance data, so what actually moves here is where the
+   * player is standing and what is already in the pouch. `atStand` is compared because it is
+   * what enables the buttons, and `heading` because it is the sentence that replaces them —
+   * both are quantised upstream (`deriveShop`) precisely so that a walking farmer does not
+   * rebuild this slice on every publish. Prices are compared too, cheaply: they cannot change
+   * inside a world today, and if a save ever restores under re-balanced data the board should
+   * redraw rather than keep the old number on screen.
+   */
+  private setShop(next: ShopFields): boolean {
+    const current = this.shop;
+    if (
+      current.atStand === next.atStand &&
+      current.standExists === next.standExists &&
+      current.heading === next.heading &&
+      current.rows.length === next.rows.length
+    ) {
+      let same = true;
+      for (let i = 0; i < next.rows.length; i++) {
+        const a = current.rows[i] as ShopRow;
+        const b = next.rows[i]!;
+        if (
+          a.id !== b.id ||
+          a.owned !== b.owned ||
+          a.unitPriceCents !== b.unitPriceCents ||
+          a.needsTech !== b.needsTech
+        ) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return false;
+    }
+
+    this.shop = Object.freeze({
+      version: current.version + 1,
+      rows: Object.freeze(next.rows.map((row) => Object.freeze({ ...row }))),
+      atStand: next.atStand,
+      standExists: next.standExists,
+      heading: next.heading,
     });
     return true;
   }

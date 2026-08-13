@@ -1248,6 +1248,235 @@
   background: #14100e;
 }
 
+/* --- the roadside stand --------------------------------------------------------- */
+
+/*
+ * Narrower than the research panel on purpose. Research is a map you read across — four
+ * branches, three eras, and the point is seeing them beside each other. The stand is a list
+ * of five things with a price each, and a list stretched to 1060px makes the player's eye
+ * travel the width of the screen between a name and the button that buys it.
+ *
+ * Everything else — the scrim, the head, the money, the ESC key, the footer hint — is the
+ * research panel's, class for class. Two modals in one game that are laid out differently
+ * read as two games.
+ */
+.shopPanel {
+  display: flex;
+  flex-direction: column;
+  width: min(660px, 100%);
+  max-height: 100%;
+  background: linear-gradient(180deg, #2b2119 0%, #1c1610 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 4px #46392f,
+    inset 0 6px 0 -4px #6d5c4d;
+  clip-path: polygon(
+    9px 0,
+    calc(100% - 9px) 0,
+    100% 9px,
+    100% calc(100% - 9px),
+    calc(100% - 9px) 100%,
+    9px 100%,
+    0 calc(100% - 9px),
+    0 9px
+  );
+}
+
+/* Takes the free space so the money and the ESC key sit hard right, the way they do on the
+   research panel's head — which is the same head, reused class for class. */
+.shopTag {
+  flex: 1;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d9b475;
+}
+
+/*
+ * Whether the till is open. Green when it is, amber when the answer is "walk over there" —
+ * amber rather than red because nothing is wrong, something is simply not true yet.
+ */
+.shopStatus {
+  flex: 0 0 auto;
+  padding: 8px 20px 9px;
+  font-size: 11.5px;
+  background: #1c1610;
+  box-shadow: inset 0 2px 0 #46392f;
+}
+
+.shopStatusOpen {
+  color: #a3c65c;
+}
+
+.shopStatusShut {
+  color: #f2a93b;
+}
+
+.shopList {
+  flex: 1 1 auto;
+  /* Same reason as `.techScroll`: `min-height: auto` would refuse to shrink and push the
+     footer out through the bottom of the panel. */
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 20px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: #46392f #14100e;
+}
+
+.shopRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px 11px;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    5px 0,
+    calc(100% - 5px) 0,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    5px 100%,
+    0 calc(100% - 5px),
+    0 5px
+  );
+}
+
+/* Sunk rather than faded: a locked row is still readable, because knowing what is coming is
+   the point of showing it at all. */
+.shopRowLocked {
+  background: linear-gradient(180deg, #211a13 0%, #1c1610 100%);
+}
+.shopRowLocked .shopName {
+  color: #9a8873;
+}
+.shopRowLocked .shopPrice {
+  color: #8a6234;
+}
+
+.shopRowBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.shopRowHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.shopName {
+  font-size: 13px;
+  font-weight: 700;
+  color: #efe2c6;
+}
+
+.shopPrice {
+  font-size: 11.5px;
+  color: #f5d382;
+  font-variant-numeric: tabular-nums;
+}
+
+.shopOwned {
+  margin-left: auto;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6d5c4d;
+}
+
+.shopNote {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #9a8873;
+  max-width: 58ch;
+}
+
+/* Two dead ends, two colours. A missing node is the research panel's warm red; a price you
+   cannot meet yet is quiet, because it fixes itself by playing. */
+.shopLocked {
+  margin-top: 5px;
+  font-size: 11px;
+  color: #ef8f68;
+}
+
+.shopShort {
+  margin-top: 5px;
+  font-size: 11px;
+  color: #6d5c4d;
+  font-variant-numeric: tabular-nums;
+}
+
+.shopBuys {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+}
+
+.shopBuy {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 78px;
+  padding: 8px 10px 9px;
+  border: 0;
+  font: inherit;
+  color: #6d5c4d;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    5px 0,
+    calc(100% - 5px) 0,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    5px 100%,
+    0 calc(100% - 5px),
+    0 5px
+  );
+  transition: transform 70ms steps(2, end);
+}
+
+/* The same gold as the research panel's one affordable button, and for the same reason: it
+   is the one thing on the row that is true right now. */
+.shopBuyReady {
+  color: #14100e;
+  background: linear-gradient(180deg, #f5d382 0%, #d9b475 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #8a6234;
+}
+.shopBuyReady:hover {
+  transform: translateY(-2px);
+}
+
+.shopBuy:disabled {
+  cursor: default;
+  transform: none;
+}
+
+.shopBuyCount {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.shopBuyCost {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* --- the upgrade bench ---------------------------------------------------------- */
 
 /*

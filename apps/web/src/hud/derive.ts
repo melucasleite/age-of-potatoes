@@ -17,7 +17,7 @@ import {
   itemSpec,
   machineSpec,
 } from '@snack/sim';
-import type { WorldView } from '@snack/sim';
+import type { ItemSpec, WorldView } from '@snack/sim';
 
 import { TOOL_INFO, TOOL_ORDER } from '@/game/input/tools';
 import type { ToolMode } from '@/game/input/tools';
@@ -205,16 +205,27 @@ const ITEM_LABELS: Readonly<Record<number, string>> = {
   [ItemId.BaggedChips]: 'chips',
 };
 
+/**
+ * The pouch, and whether the bin will take any of it.
+ *
+ * `sellable` IS READ, NEVER DECIDED HERE. Seeds are bought at the roadside stand and never
+ * sold back ([[051]]), and `ItemSpec` is the one place that says so — a list of "seed-ish"
+ * item ids maintained on this side would be a second opinion about balance data, which is
+ * the same mistake `derive-shop.ts` refuses to make about prices. The value is still computed
+ * for a stack the bin refuses; `Pouch.tsx` simply does not print it, because zero is a
+ * different claim from "this is not for sale".
+ */
 export function derivePouch(view: WorldView): PouchItem[] {
   const items: PouchItem[] = [];
   for (const slot of view.inventory) {
     if (slot.count <= 0) continue;
-    const spec = itemSpec(slot.item as ItemId);
+    const spec: ItemSpec | null = itemSpec(slot.item as ItemId);
     items.push({
       id: slot.item,
       label: ITEM_LABELS[slot.item] ?? 'stuff',
       count: slot.count,
       valueCents: spec === null ? 0 : spec.listPriceCents * slot.count,
+      sellable: spec !== null && !spec.sellable ? 0 : 1,
     });
   }
   return items;

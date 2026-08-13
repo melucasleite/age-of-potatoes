@@ -21,6 +21,7 @@ import { s } from './styles';
 import { PerfOverlay } from './PerfOverlay';
 import { Pouch } from './Pouch';
 import { SaveNotices } from './SaveNotices';
+import { ShopPanel, ShopToggle } from './Shop';
 import { StatusRibbon } from './StatusRibbon';
 import { TechPanel, TechToggle } from './TechTree';
 import { Ticker } from './Ticker';
@@ -41,7 +42,7 @@ export default function HudRoot() {
   // empty toolbelt is the tell, and it costs nothing to check because the slice is already
   // subscribed. Showing a confident "$0.00" over a boot failure would be a small lie.
   const tools = useHudSlice('tools');
-  const research = useResearchPanel();
+  const panels = usePanels();
 
   // Still the tell for "no world" — but the save notices outlive it. A world that came back
   // from its backup copy, or one whose browser is out of room, has something to say before the
@@ -52,9 +53,15 @@ export default function HudRoot() {
     <>
       <SaveNotices />
       <div className={s.root}>
+        {/*
+        Ticker, Research, the Stand — one column, in that order. The two buttons are the only
+        places money leaves the player's hands without them walking somewhere, so they read as
+        a pair hanging off the counter that says how much money there is ([[051]]).
+      */}
         <div className={`${s.corner} ${s.topLeft}`}>
           <Ticker />
-          <TechToggle onOpen={research.open} />
+          <TechToggle onOpen={panels.openResearch} />
+          <ShopToggle onOpen={panels.openShop} />
         </div>
 
         {/*
@@ -64,7 +71,7 @@ export default function HudRoot() {
         the avatar is rather than a menu the player manages.
       */}
         <div className={`${s.corner} ${s.midRight}`}>
-          <UpgradeBench onOpenResearch={research.open} />
+          <UpgradeBench onOpenResearch={panels.openResearch} />
         </div>
 
         {/*
@@ -105,36 +112,53 @@ export default function HudRoot() {
           </div>
         ) : null}
 
-        {research.isOpen ? <TechPanel onClose={research.close} /> : null}
+        {panels.open === 'research' ? <TechPanel onClose={panels.close} /> : null}
+        {panels.open === 'shop' ? <ShopPanel onClose={panels.close} /> : null}
       </div>
     </>
   );
 }
 
+type PanelName = 'research' | 'shop';
+
 /**
- * Whether the research panel is showing. UI STATE, and it stays that way.
+ * Which full-screen panel is showing, if any. UI STATE, and it stays that way.
  *
  * Camera pan, hover, tool mode, and menu state are explicitly not commands and never enter the
  * world (§12) — a replay must not depend on which panels were open. So this is a `useState` in
  * the HUD and nothing else knows about it.
  *
- * `T` is bound here rather than in `input/keyboard.ts` because the key toggles a DOM panel that
- * the input system has no business knowing exists. It is chosen from what that layer leaves
- * free: digits 1–6, B, R, C, +, −, Escape, F3, backtick, space and WASD are all spoken for, and
- * an unhandled code falls through its switch untouched.
+ * ONE AT A TIME, held as a name rather than as a flag per panel. Both panels draw a scrim over
+ * the whole game; two booleans would let the pair be true at once and stack one modal on top of
+ * another, which is a state nothing in the UI is designed to look right in. A single slot makes
+ * that unrepresentable instead of merely unlikely.
+ *
+ * The keys are bound here rather than in `input/keyboard.ts` because they toggle DOM panels
+ * that the input system has no business knowing exist. They are chosen from what that layer
+ * leaves free: digits 1–6, B, R, C, +, −, Escape, F3, backtick, space and WASD are all spoken
+ * for, and an unhandled code falls through its switch untouched. T for the tree, G for goods.
  */
-function useResearchPanel(): { isOpen: boolean; open: () => void; close: () => void } {
-  const [isOpen, setIsOpen] = useState(false);
+function usePanels(): {
+  open: PanelName | null;
+  openResearch: () => void;
+  openShop: () => void;
+  close: () => void;
+} {
+  const [open, setOpen] = useState<PanelName | null>(null);
 
-  const open = useCallback(() => setIsOpen(true), []);
-  const close = useCallback(() => setIsOpen(false), []);
+  const openResearch = useCallback(() => setOpen('research'), []);
+  const openShop = useCallback(() => setOpen('shop'), []);
+  const close = useCallback(() => setOpen(null), []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      // Auto-repeat is not a state edge — holding T must not strobe the panel.
-      if (event.repeat || event.code !== 'KeyT') return;
+      // Auto-repeat is not a state edge — holding the key must not strobe the panel.
+      if (event.repeat) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      setIsOpen((was) => !was);
+      const name: PanelName | null =
+        event.code === 'KeyT' ? 'research' : event.code === 'KeyG' ? 'shop' : null;
+      if (name === null) return;
+      setOpen((was) => (was === name ? null : name));
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -142,5 +166,5 @@ function useResearchPanel(): { isOpen: boolean; open: () => void; close: () => v
     };
   }, []);
 
-  return { isOpen, open, close };
+  return { open, openResearch, openShop, close };
 }

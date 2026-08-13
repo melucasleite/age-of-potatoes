@@ -32,9 +32,9 @@ import {
   TICKS_PER_SECOND,
   TechBranch,
   TechId,
-  UPGRADE_COST_PERCENT_BY_LEVEL,
   UPGRADE_MAX_LEVEL,
   UpgradeDial,
+  upgradeCostCents,
   acceptsUpgrades,
   distanceSquaredSubtiles,
   divFloor,
@@ -257,14 +257,20 @@ export function deriveTech(view: WorldView, out: TechFields): TechFields {
 
 // --- the bench -------------------------------------------------------------------------
 
-const HAND_REACH_SQUARED = HAND_REACH_SUBTILES * HAND_REACH_SUBTILES;
+export const HAND_REACH_SQUARED = HAND_REACH_SUBTILES * HAND_REACH_SUBTILES;
 
-/** Mirror of `machineCentreSubtiles`, against the view's copy of the footprint. */
-function centreXSub(machine: MachineView): number {
+/**
+ * Mirror of `machineCentreSubtiles`, against the view's copy of the footprint.
+ *
+ * Exported because the roadside stand asks the same question of a different machine
+ * (`derive-shop.ts`). One mirror of the sim's geometry in this package is a mirror that can
+ * be checked; two are two that can disagree.
+ */
+export function centreXSub(machine: MachineView): number {
   return tileCentreSubtiles(machine.tileX) + divFloor((machine.tilesWide - 1) * SUBTILE, 2);
 }
 
-function centreYSub(machine: MachineView): number {
+export function centreYSub(machine: MachineView): number {
   return tileCentreSubtiles(machine.tileY) + divFloor((machine.tilesHigh - 1) * SUBTILE, 2);
 }
 
@@ -317,7 +323,7 @@ function buildDial(
         ? machine.efficiencyLevel
         : machine.capacityLevel;
 
-  const costCents = upgradeCost(spec, level);
+  const costCents = upgradeCostCents(spec, level, dial as UpgradeDial);
   const copy = dialCopy(dial);
 
   let now = '';
@@ -367,13 +373,10 @@ function buildDial(
   };
 }
 
-/** `upgradeCostCents` without needing a `Machine`. Same table, same integer division. */
-function upgradeCost(spec: MachineSpec, level: number): number {
-  if (level >= UPGRADE_MAX_LEVEL) return -1;
-  const percent = UPGRADE_COST_PERCENT_BY_LEVEL[level];
-  if (percent === undefined) return -1;
-  return divFloor(spec.priceCents * percent, 100);
-}
+// The local copy of the upgrade-cost formula that used to sit here is GONE, on purpose. It
+// predated `upgradeCostCents` growing a per-dial multiplier, kept compiling after the sim
+// changed, and quoted Efficiency at two thirds of what the reducer actually charges — the
+// exact failure mode a second copy of one price always ends in. The bench now asks the sim.
 
 /**
  * The machine the player is standing at, or none.
