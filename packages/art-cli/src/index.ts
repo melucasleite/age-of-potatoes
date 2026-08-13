@@ -13,8 +13,9 @@ const USAGE = `snack-mogul art pipeline
       extra transport attempts after a timeout (default 1, same seed each time).
 
   yarn art pack [--max-page=<px>]
-      Post-process originals -> one atlas page + atlas.json + typed TS manifest.
-      Fails the build if any atlas group spills to a second page.
+      Post-process originals -> one atlas page + atlas.<hash>.png/.json + typed TS
+      manifest carrying their URLs. Stale atlases are removed. Fails the build if
+      any atlas group spills to a second page.
 
   yarn art review
       Emit art/review/index.html — a self-contained contact sheet.

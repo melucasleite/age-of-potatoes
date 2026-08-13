@@ -29,6 +29,13 @@ export async function cook(
   entry: AssetEntry,
   capabilities: ProviderCapabilities,
   palette: readonly string[] | null,
+  /**
+   * The colours this one asset may quantise into — `entry.paletteSubset` already resolved
+   * to hexes. Null means the whole master palette. Conformance is still measured against
+   * the master either way: a subset is a narrowing of the palette, never a departure from
+   * it, so a subsetted asset must still pass the same gate every other asset passes.
+   */
+  quantizeInto: readonly string[] | null = null,
 ): Promise<CookResult> {
   let image = await decode(original);
 
@@ -79,7 +86,7 @@ export async function cook(
   // upstream to guide generation — and not whether the output may skip being snapped to it.
   // On RD the snap is a 1-level move and visually a no-op; it is what makes the gate binary.
   if (palette) {
-    image = quantizeToPalette(image, palette);
+    image = quantizeToPalette(image, quantizeInto ?? palette);
   }
   const paletteReport = measureConformance(image, palette);
 

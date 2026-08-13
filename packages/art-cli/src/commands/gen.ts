@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { numberOption, usd } from '../args.js';
 import { loadManifest, resolveArtPath } from '../manifest.js';
-import { loadPalette } from '../post/palette.js';
+import { loadPaletteContext } from '../post/palette.js';
 import { getAdapter } from '../providers/index.js';
 import { DEFAULT_ATTEMPTS, GenerationLostError } from '../providers/retro-diffusion.js';
 import { ORIGINALS_DIR } from '../paths.js';
@@ -36,7 +36,12 @@ export async function gen(args: Args): Promise<number> {
   const only = args.options.get('only');
 
   const manifest = loadManifest();
-  const palette = manifest.palette ? loadPalette(resolveArtPath(manifest.palette)) : null;
+  const palettes = loadPaletteContext(manifest.palette ? resolveArtPath(manifest.palette) : null);
+  // The subset an asset declares is what goes upstream as `input_palette`. Steering
+  // generation toward the colours the asset is allowed to keep is free, and strictly
+  // better than generating unconstrained and snapping to them afterwards.
+  const paletteFor = (entry: AssetEntry): readonly string[] | null =>
+    palettes.subsetFor(entry) ?? palettes.colors;
   mkdirSync(ORIGINALS_DIR, { recursive: true });
 
   let pending: AssetEntry[] = manifest.assets;
@@ -95,7 +100,7 @@ export async function gen(args: Args): Promise<number> {
     const adapter = getAdapter(entry.provider);
     const result = await adapter.generate({
       entry,
-      palette,
+      palette: paletteFor(entry),
       dryRun: true,
       seed: seedFor(entry.id),
       attempts,
@@ -161,7 +166,7 @@ export async function gen(args: Args): Promise<number> {
     try {
       result = await adapter.generate({
         entry,
-        palette,
+        palette: paletteFor(entry),
         dryRun: false,
         seed: seedFor(entry.id),
         attempts,

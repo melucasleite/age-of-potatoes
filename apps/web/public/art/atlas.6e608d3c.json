@@ -506,10 +506,142 @@
       "anchorMode": "center",
       "group": "status"
     },
-    "terrain_grass": {
+    "tech_agronomy_cane": {
       "frame": {
         "x": 0,
         "y": 123,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "center",
+      "group": "tech"
+    },
+    "tech_agronomy_chili": {
+      "frame": {
+        "x": 33,
+        "y": 123,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "center",
+      "group": "tech"
+    },
+    "tech_agronomy_corn": {
+      "frame": {
+        "x": 66,
+        "y": 123,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "center",
+      "group": "tech"
+    },
+    "tech_agronomy_seed_hopper": {
+      "frame": {
+        "x": 99,
+        "y": 123,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "center",
+      "group": "tech"
+    },
+    "tech_fabrication_fryer": {
+      "frame": {
+        "x": 132,
+        "y": 123,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "center",
+      "group": "tech"
+    },
+    "tech_fabrication_wash_and_slice": {
+      "frame": {
+        "x": 165,
+        "y": 123,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "center",
+      "group": "tech"
+    },
+    "terrain_grass": {
+      "frame": {
+        "x": 0,
+        "y": 156,
         "w": 16,
         "h": 16
       },
@@ -531,7 +663,7 @@
     "terrain_soil": {
       "frame": {
         "x": 17,
-        "y": 123,
+        "y": 156,
         "w": 16,
         "h": 16
       },
@@ -553,7 +685,7 @@
     "terrain_soil_tilled": {
       "frame": {
         "x": 34,
-        "y": 123,
+        "y": 156,
         "w": 16,
         "h": 16
       },
@@ -597,7 +729,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.png",
+    "image": "atlas.6e608d3c.png",
     "format": "RGBA8888",
     "size": {
       "w": 512,
@@ -662,9 +794,17 @@
         "count": 1
       },
       {
-        "group": "terrain",
+        "group": "tech",
         "x": 0,
         "y": 123,
+        "width": 197,
+        "height": 32,
+        "count": 6
+      },
+      {
+        "group": "terrain",
+        "x": 0,
+        "y": 156,
         "width": 50,
         "height": 16,
         "count": 3

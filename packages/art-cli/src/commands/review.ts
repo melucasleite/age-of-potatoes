@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadManifest, resolveArtPath } from '../manifest.js';
 import { cook } from '../post/cook.js';
-import { loadPalette } from '../post/palette.js';
+import { loadPaletteContext } from '../post/palette.js';
 import { getAdapter } from '../providers/index.js';
-import { buildContactSheet } from '../review/contact-sheet.js';
+import { buildContactSheet, measureField } from '../review/contact-sheet.js';
 import { ORIGINALS_DIR, REVIEW_DIR } from '../paths.js';
 import type { SheetAsset } from '../review/contact-sheet.js';
 
@@ -29,7 +29,8 @@ function readSidecar(id: string): Sidecar {
  */
 export async function review(): Promise<number> {
   const manifest = loadManifest();
-  const palette = manifest.palette ? loadPalette(resolveArtPath(manifest.palette)) : null;
+  const palettes = loadPaletteContext(manifest.palette ? resolveArtPath(manifest.palette) : null);
+  const palette = palettes.colors;
   mkdirSync(REVIEW_DIR, { recursive: true });
 
   const assets: SheetAsset[] = [];
@@ -41,7 +42,13 @@ export async function review(): Promise<number> {
     }
 
     const capabilities = getAdapter(entry.provider).capabilities;
-    const result = await cook(readFileSync(original), entry, capabilities, palette);
+    const result = await cook(
+      readFileSync(original),
+      entry,
+      capabilities,
+      palette,
+      palettes.subsetFor(entry),
+    );
     const sidecar = readSidecar(entry.id);
 
     assets.push({
@@ -51,6 +58,9 @@ export async function review(): Promise<number> {
       model: sidecar.model ?? 'unknown model',
       bytes: result.png.length,
       palette: result.palette,
+      // A repeat panel is only meaningful for something that actually repeats. Everything
+      // else gets null and the card simply omits the section.
+      field: entry.tileX || entry.tileY ? measureField(result.image) : null,
     });
     console.log(`  sheet ${entry.id.padEnd(24)} ${result.grid.message}`);
   }

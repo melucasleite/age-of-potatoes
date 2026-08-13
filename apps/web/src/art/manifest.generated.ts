@@ -14,8 +14,10 @@ export interface AtlasFrame {
   readonly group: string;
 }
 
-export const ATLAS_IMAGE_URL = '/art/atlas.png';
-export const ATLAS_JSON_URL = '/art/atlas.json';
+// Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
+// worker can serve the previous one. Both names carry the same hash of the packed bytes.
+export const ATLAS_IMAGE_URL = '/art/atlas.6e608d3c.png';
+export const ATLAS_JSON_URL = '/art/atlas.6e608d3c.json';
 
 export const ATLAS_SIZE = { width: 512, height: 256 } as const;
 
@@ -204,9 +206,57 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'status',
   },
-  terrain_grass: {
+  tech_agronomy_cane: {
     x: 0,
     y: 123,
+    width: 32,
+    height: 32,
+    anchor: 'center',
+    group: 'tech',
+  },
+  tech_agronomy_chili: {
+    x: 33,
+    y: 123,
+    width: 32,
+    height: 32,
+    anchor: 'center',
+    group: 'tech',
+  },
+  tech_agronomy_corn: {
+    x: 66,
+    y: 123,
+    width: 32,
+    height: 32,
+    anchor: 'center',
+    group: 'tech',
+  },
+  tech_agronomy_seed_hopper: {
+    x: 99,
+    y: 123,
+    width: 32,
+    height: 32,
+    anchor: 'center',
+    group: 'tech',
+  },
+  tech_fabrication_fryer: {
+    x: 132,
+    y: 123,
+    width: 32,
+    height: 32,
+    anchor: 'center',
+    group: 'tech',
+  },
+  tech_fabrication_wash_and_slice: {
+    x: 165,
+    y: 123,
+    width: 32,
+    height: 32,
+    anchor: 'center',
+    group: 'tech',
+  },
+  terrain_grass: {
+    x: 0,
+    y: 156,
     width: 16,
     height: 16,
     anchor: 'top-left',
@@ -214,7 +264,7 @@ export const ATLAS_FRAMES = {
   },
   terrain_soil: {
     x: 17,
-    y: 123,
+    y: 156,
     width: 16,
     height: 16,
     anchor: 'top-left',
@@ -222,7 +272,7 @@ export const ATLAS_FRAMES = {
   },
   terrain_soil_tilled: {
     x: 34,
-    y: 123,
+    y: 156,
     width: 16,
     height: 16,
     anchor: 'top-left',
