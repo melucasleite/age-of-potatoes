@@ -26,6 +26,11 @@ export default async function PlayPage({
   const params = await searchParams;
   const raw = params['world'];
   const worldId = typeof raw === 'string' && raw.length > 0 ? raw : null;
+  // `?artsheet` is the dev contact sheet, and it predates the door. It cares about the atlas,
+  // not about any particular world — so it must not be stopped at a door that exists to ask
+  // "which world?". Without this, the flag is unreachable: the door strips nothing, but it
+  // also never lets a world-less URL through, and artsheet-without-a-world was the whole idea.
+  const artsheet = 'artsheet' in params;
 
   return (
     <main
@@ -36,7 +41,7 @@ export default async function PlayPage({
         overflow: 'hidden',
       }}
     >
-      <PlayClient worldId={worldId} />
+      <PlayClient worldId={worldId} bypassDoor={artsheet} />
     </main>
   );
 }

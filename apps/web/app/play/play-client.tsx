@@ -39,17 +39,25 @@ const LOADING_STYLE: React.CSSProperties = {
 export interface PlayClientProps {
   /** The lot to open, from `?world=`. Null means show the front door. */
   worldId: string | null;
+  /**
+   * Skip the door and boot without activating a world (`?artsheet` and friends). The boot
+   * path resolves the active world itself, and the screens behind this flag do not read the
+   * world at all — so asking "which world?" first would be a question with no consumer.
+   */
+  bypassDoor?: boolean;
 }
 
 /** `opening` while the registry is consulted, `open` once the lot is live, `missing` if it is not. */
 type Gate = 'opening' | 'open' | 'missing';
 
-export default function PlayClient({ worldId }: PlayClientProps) {
-  const [gate, setGate] = useState<Gate>(worldId === null ? 'missing' : 'opening');
+export default function PlayClient({ worldId, bypassDoor = false }: PlayClientProps) {
+  const [gate, setGate] = useState<Gate>(
+    worldId === null ? (bypassDoor ? 'open' : 'missing') : 'opening',
+  );
 
   useEffect(() => {
     if (worldId === null) {
-      setGate('missing');
+      setGate(bypassDoor ? 'open' : 'missing');
       return;
     }
     let cancelled = false;
@@ -63,7 +71,7 @@ export default function PlayClient({ worldId }: PlayClientProps) {
     return () => {
       cancelled = true;
     };
-  }, [worldId]);
+  }, [worldId, bypassDoor]);
 
   if (gate === 'missing') return <FrontDoor />;
   if (gate === 'opening') return <div style={LOADING_STYLE}>finding the lot…</div>;
