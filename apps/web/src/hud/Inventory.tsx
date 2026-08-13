@@ -9,6 +9,15 @@
 // a boxed Fryer has three dial levels, a condition, an invoice and a scrap price, and none of
 // that fits on a chip. So this is the pouch's long form, not a second inventory.
 //
+// IT IS A GRID OF PICTURES NOW, NOT A LIST OF SENTENCES ([[058]]). Lucas's words: "the inventory
+// should be a visual grid not a bunch of text." The change is not decoration. A list of rows
+// makes you READ your own bag — every stack costs a word before it costs a glance — and the
+// thing a player does with an inventory forty times an hour is look for one item in it. Sprites
+// are found by shape and colour in one saccade; names are found by scanning. So the grid answers
+// "what have I got", one cell per kind, and everything that needs a sentence moved into a pane
+// beside it that describes the ONE thing you pointed at. Two questions, two surfaces, and
+// neither one is now paying for the other's clutter.
+//
 // FOUR THINGS IT REFUSES TO DO, each of which would have been shorter to write:
 //
 //   IT DOES NOT PRICE ANYTHING. Every figure on a box comes off the view — `investedCents` and
@@ -20,8 +29,8 @@
 //   IT DOES NOT PICK WHICH BOX. `PlaceMachine` puts down the plainest box you own and
 //   `SellBoxedMachine` scraps the plainest box you own — one rule, decided in the sim, and
 //   neither command takes an index. A panel with a button per box would be offering the player
-//   a choice the world does not implement, so the row has ONE pair of buttons and the list
-//   underneath says which box they act on. The consequence is worth stating out loud, because it
+//   a choice the world does not implement, so the pane has ONE pair of buttons and the list
+//   above them says which box they act on. The consequence is worth stating out loud, because it
 //   is a kindness: THE MACHINE YOU SPENT MONEY ON IS THE LAST ONE YOU CAN LOSE BY ACCIDENT.
 //
 //   IT DOES NOT SELL GOODS. The bin takes goods, standing at the bin, at list ([[051]]); boxes
@@ -32,13 +41,14 @@
 //   machine goes down where the player clicks. Placement is a gesture on the world, and a panel
 //   that put a Fryer down for you would have to invent a tile to put it on.
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CONDITION_EFFECT_THRESHOLD, CONDITION_MAX, UPGRADE_MAX_LEVEL, permille } from '@snack/sim';
 import type { ItemId } from '@snack/sim';
 
 import type { ToolMode } from '@/game/input/tools';
 
+import { ItemIcon } from './ItemIcon';
 import { formatCents } from './format';
 import { hudStore } from './store';
 import { cx, s } from './styles';
@@ -50,6 +60,21 @@ import type { InventoryBox, InventoryRow } from './types';
  * reason: condition and permille happen to share a scale today, and a panel that assumed it
  * would start lying silently the day somebody rescaled one of them. */
 const ROUGH_PERMILLE = permille(CONDITION_EFFECT_THRESHOLD, CONDITION_MAX);
+
+/**
+ * How wide the grid is, in slots — and it is a CONSTANT rather than an `auto-fill`.
+ *
+ * A responsive grid would be one line of CSS and would make the arrow keys lie: Down means "the
+ * slot underneath this one", the handler works that out by adding this number, and a grid that
+ * reflowed to five columns at some window width would send the cursor somewhere the player is
+ * not looking. The DOM and the keyboard have to agree about the shape of the thing, so exactly
+ * one of them gets to decide it.
+ */
+const COLUMNS = 6;
+
+/** Sprite box sizes. Bigger in the pane, because that is the one you are actually looking at. */
+const SLOT_ICON = 48;
+const DETAIL_ICON = 64;
 
 /** Keeps focus on the canvas — see the long note in `Toolbelt.tsx` for why it is `mousedown`. */
 function keepFocus(event: React.MouseEvent): void {
@@ -97,6 +122,20 @@ export function InventoryPanel({ onClose }: { onClose: () => void }) {
   const economy = useHudSlice('economy');
   const pending = usePending();
 
+  // WHICH SLOT, HELD AS AN ITEM ID RATHER THAN AN INDEX. The rows are rebuilt from the world
+  // eight times a second and a stack that runs out disappears from the middle of them; an index
+  // would quietly re-point at whatever slid into that position, so the pane would change what it
+  // is describing while the player reads it. An id that is no longer carried simply falls back
+  // to the first slot, which is the honest answer to "you have none of those left".
+  const [selected, setSelected] = useState(-1);
+
+  const rows = inventory.rows;
+  const index = Math.max(
+    0,
+    rows.findIndex((row) => row.id === selected),
+  );
+  const active = rows[index] ?? null;
+
   const scrap = useCallback(
     (item: number) => {
       pending.hold(`scrap:${item}`);
@@ -119,15 +158,62 @@ export function InventoryPanel({ onClose }: { onClose: () => void }) {
     [onClose],
   );
 
+  // The key handler is bound once and reads the current grid through a ref. This panel
+  // re-renders on every publish; putting `rows` in the dependency array would tear the listener
+  // down and build it again eight times a second for a keyboard that has not changed.
+  const live = useRef<{ rows: readonly InventoryRow[]; index: number }>({ rows, index });
+  useEffect(() => {
+    live.current = { rows, index };
+  });
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      if (event.code === 'Escape') onClose();
+      if (event.code === 'Escape') {
+        // Deliberately NOT swallowed, unlike the keys below: Escape has meant "put the tool
+        // down" to the input layer since before this panel existed, and closing the bag has
+        // always done both. Changing that here would be a second feature in a stealth commit.
+        onClose();
+        return;
+      }
+
+      const step = STEPS[event.code];
+      const acting = event.code === 'Enter' || event.code === 'NumpadEnter';
+      if (step === undefined && !acting) return;
+
+      // CAPTURED AND SWALLOWED. Arrows are also the walk keys (`input/keyboard.ts`), and this
+      // listener is registered in the capture phase specifically so it can stop them reaching
+      // the window listener that walks the farmer. Without it, browsing the bag marches the
+      // player across a lot they cannot see behind a full-screen scrim. The build menu already
+      // makes exactly this courtesy — see its note about walking away from a menu you are
+      // reading. Only the keys this panel consumes are taken; everything else passes through.
+      event.preventDefault();
+      event.stopPropagation();
+
+      const grid = live.current;
+      const row = grid.rows[grid.index];
+      if (row === undefined) return;
+
+      if (step !== undefined) {
+        // One clamp for all four directions: Left at the start stays, Right at the end stays,
+        // Down off the bottom lands on the last slot. Wrapping would move the cursor somewhere
+        // the eye has to go hunting for.
+        const next = Math.min(Math.max(grid.index + step, 0), grid.rows.length - 1);
+        setSelected(grid.rows[next]?.id ?? -1);
+        return;
+      }
+
+      // ENTER PLACES; ENTER NEVER SCRAPS. Place is free and reversible — the machine goes back
+      // in the bag with one whack of the wrench — and scrapping is money you cannot get back at
+      // a price you did not read. A blind Enter on a keyboard-driven grid must not be able to
+      // sell a maxed Fryer, so the destructive verb stays a deliberate click.
+      if (row.boxedKind !== 0 && row.placeTool >= 0) place(row.placeTool);
     };
-    window.addEventListener('keydown', onKey);
+
+    window.addEventListener('keydown', onKey, true);
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, true);
     };
-  }, [onClose]);
+  }, [onClose, place]);
 
   return (
     <div
@@ -138,7 +224,7 @@ export function InventoryPanel({ onClose }: { onClose: () => void }) {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className={s.shopPanel} onMouseDown={(event) => event.stopPropagation()}>
+      <div className={cx(s.shopPanel, s.invPanel)} onMouseDown={(event) => event.stopPropagation()}>
         <div className={s.techHead}>
           <span className={s.techTitle}>The Bag</span>
           <span className={s.shopTag}>everything you are carrying</span>
@@ -156,33 +242,124 @@ export function InventoryPanel({ onClose }: { onClose: () => void }) {
             : 'Nothing boxed. A machine you take apart comes here whole, with its dials, and goes back down for free.'}
         </div>
 
-        <div className={s.shopList}>
-          {inventory.rows.length === 0 ? (
-            <div className={s.invEmpty}>Your pockets are empty.</div>
-          ) : (
-            inventory.rows.map((row) => (
-              <Row
-                key={row.id}
-                row={row}
-                pending={pending.isPending(`scrap:${row.id}`)}
-                onScrap={scrap}
-                onPlace={place}
-              />
-            ))
-          )}
-        </div>
+        {active === null ? (
+          <div className={s.invEmpty}>Your pockets are empty.</div>
+        ) : (
+          <div className={s.invBody}>
+            <div className={s.invGrid}>
+              {rows.map((row) => (
+                <Slot
+                  key={row.id}
+                  row={row}
+                  selected={row.id === active.id}
+                  onSelect={setSelected}
+                />
+              ))}
+            </div>
+
+            <Detail
+              row={active}
+              pending={pending.isPending(`scrap:${active.id}`)}
+              onScrap={scrap}
+              onPlace={place}
+            />
+          </div>
+        )}
 
         <div className={s.techHint}>
-          A box keeps its dials and its wear · placing one costs nothing · I or ESC closes
+          A box keeps its dials and its wear · arrows pick, Enter places · I or ESC closes
         </div>
       </div>
     </div>
   );
 }
 
-// --- one line in the bag -----------------------------------------------------------------
+/** Which way each key moves the cursor, in slots. `COLUMNS` is what makes Up and Down mean anything. */
+const STEPS: Readonly<Record<string, number>> = {
+  ArrowLeft: -1,
+  ArrowRight: 1,
+  ArrowUp: -COLUMNS,
+  ArrowDown: COLUMNS,
+};
 
-function Row({
+// --- one slot in the grid ----------------------------------------------------------------
+
+/**
+ * A kind of thing you are carrying: its picture, how many, and nothing else.
+ *
+ * THE CELL IS CLEAN ON PURPOSE and it is the whole design ([[058]]). Every fact that wanted to
+ * be here — the name, the price, the invoice, the two verbs — is one click away in the pane, and
+ * the reason is that a grid earns its keep by being SCANNABLE. Six sprites and six numbers are
+ * read at a glance; six sprites, six numbers and eighteen words are a list with pictures on it.
+ *
+ * A boxed machine gets two marks and no words: a warmer cell with a crate corner, so the eye
+ * finds a Fryer in a bag full of potatoes, and a strip of pips saying which of its dials have
+ * been turned up. Both are the same reasoning the row-based version used — machines "sit a shade
+ * warmer than goods" — carried over to a shape where colour is all there is room for.
+ */
+function Slot({
+  row,
+  selected,
+  onSelect,
+}: {
+  row: InventoryRow;
+  selected: boolean;
+  onSelect: (item: number) => void;
+}) {
+  const boxed = row.boxedKind !== 0;
+  const next = row.boxes[0];
+
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      className={cx(s.invSlot, boxed && s.invSlotBoxed, selected && s.invSlotOn)}
+      // The name is not printed in the cell, so it has to be reachable some other way for a
+      // player who cannot place a sprite — the pointer gets a tooltip, the screen reader gets
+      // the label, and the pane gets the long form.
+      title={`${row.name} — ${row.count}`}
+      aria-label={`${row.name}, ${row.count}`}
+      onMouseDown={keepFocus}
+      onClick={() => onSelect(row.id)}
+    >
+      <ItemIcon item={row.id} size={SLOT_ICON} />
+      {boxed ? <span className={s.invSlotCrate} /> : null}
+      <span className={s.invSlotCount}>{row.count}</span>
+      {boxed && next !== undefined ? <DialStrip box={next} /> : null}
+    </button>
+  );
+}
+
+/**
+ * Which dials the next box out has been turned up on. Not how far — that is the pane's line.
+ *
+ * Nothing is drawn for a machine with three dials at zero, which is the same rule the renderer's
+ * upgrade decals follow: level 0 has no frame by design. A strip that is always there is a strip
+ * nobody reads on the day it means something.
+ */
+function DialStrip({ box }: { box: InventoryBox }) {
+  const levels = [box.speedLevel, box.efficiencyLevel, box.capacityLevel];
+  if (levels[0] === 0 && levels[1] === 0 && levels[2] === 0) return null;
+
+  return (
+    <span className={s.invSlotPips}>
+      {levels.map((level, i) => (
+        <span key={i} className={cx(s.invSlotPip, level > 0 && s.invSlotPipOn)} />
+      ))}
+    </span>
+  );
+}
+
+// --- the pane beside it ------------------------------------------------------------------
+
+/**
+ * Everything about the one slot the player pointed at.
+ *
+ * This is where the old row's prose went, unchanged in substance: the same figures, off the same
+ * fields, with the same two buttons wired to the same two verbs. What moved is only WHEN it is
+ * on screen — once, for the thing you asked about, instead of once per stack forever.
+ */
+function Detail({
   row,
   pending,
   onScrap,
@@ -193,36 +370,50 @@ function Row({
   onScrap: (item: number) => void;
   onPlace: (tool: number) => void;
 }) {
-  if (row.boxedKind === 0) return <GoodsRow row={row} />;
-  return <BoxedRow row={row} pending={pending} onScrap={onScrap} onPlace={onPlace} />;
-}
+  const boxed = row.boxedKind !== 0;
 
-/**
- * A stack of goods.
- *
- * The value is dropped rather than zeroed when the bin refuses the stack, the same call
- * `Pouch.tsx` makes and for the same reason: "8 seeds · $4" is a price for a transaction that
- * cannot happen, sitting two rows above prices that can.
- */
-function GoodsRow({ row }: { row: InventoryRow }) {
   return (
-    <div className={s.shopRow}>
-      <div className={s.shopRowBody}>
-        <div className={s.shopRowHead}>
-          <span className={s.shopName}>{row.name}</span>
-          <span className={s.invCount}>×{row.count}</span>
-          {row.sellable === 1 ? (
-            <span className={s.shopPrice}>{formatCents(row.stackValueCents)} at the bin</span>
-          ) : (
-            <span className={s.invNotForSale}>the bin does not take these</span>
-          )}
-        </div>
+    <div className={s.invDetail}>
+      <div className={s.invDetailHead}>
+        <ItemIcon item={row.id} size={DETAIL_ICON} />
+        <span className={s.invDetailNames}>
+          <span className={s.invDetailName}>{row.name}</span>
+          <span className={s.invDetailCount}>
+            {boxed ? `${row.count} boxed` : `${row.count} in the bag`}
+          </span>
+        </span>
       </div>
+
+      {boxed ? (
+        <BoxedDetail row={row} pending={pending} onScrap={onScrap} onPlace={onPlace} />
+      ) : (
+        <GoodsDetail row={row} />
+      )}
     </div>
   );
 }
 
-function BoxedRow({
+/**
+ * A stack of goods: what it is worth, and only if the bin will take it.
+ *
+ * The value is dropped rather than zeroed when the bin refuses the stack, the same call
+ * `Pouch.tsx` makes and for the same reason: "8 seeds · $4" is a price for a transaction that
+ * cannot happen, and a price beside something unsellable reads as a promise.
+ */
+function GoodsDetail({ row }: { row: InventoryRow }) {
+  if (row.sellable !== 1) {
+    return <div className={s.invNotForSale}>the bin does not take these</div>;
+  }
+
+  return (
+    <div className={s.invValue}>
+      <span className={s.shopPrice}>{formatCents(row.stackValueCents)} at the bin</span>
+      <span className={s.invUnit}>{formatCents(row.unitPriceCents)} each</span>
+    </div>
+  );
+}
+
+function BoxedDetail({
   row,
   pending,
   onScrap,
@@ -237,30 +428,22 @@ function BoxedRow({
   const placeable = row.placeTool >= 0;
 
   return (
-    <div className={cx(s.shopRow, s.invBoxedRow)}>
-      <div className={s.shopRowBody}>
-        <div className={s.shopRowHead}>
-          <span className={s.shopName}>{row.name}</span>
-          <span className={s.invBoxedTag}>boxed</span>
-          <span className={s.invCount}>×{row.count}</span>
-        </div>
-
-        <div className={s.invBoxes}>
-          {row.boxes.map((box) => (
-            <Box key={box.index} box={box} showNextOut={row.boxes.length > 1} />
-          ))}
-        </div>
-
-        {placeable ? null : (
-          // Honest rather than hopeful: twenty machine kinds can be boxed and only some of them
-          // have a build cursor in the UI yet, so the row says which situation this is instead
-          // of arming a tool that would put down the wrong machine.
-          <div className={s.shopLocked}>
-            Nothing in the build menu places one of these yet — it is safe in the bag, and it still
-            scraps.
-          </div>
-        )}
+    <>
+      <div className={s.invBoxes}>
+        {row.boxes.map((box) => (
+          <Box key={box.index} box={box} showNextOut={row.boxes.length > 1} />
+        ))}
       </div>
+
+      {placeable ? null : (
+        // Honest rather than hopeful: twenty machine kinds can be boxed and only some of them
+        // have a build cursor in the UI yet, so the pane says which situation this is instead
+        // of arming a tool that would put down the wrong machine.
+        <div className={s.shopLocked}>
+          Nothing in the build menu places one of these yet — it is safe in the bag, and it still
+          scraps.
+        </div>
+      )}
 
       <div className={s.shopBuys}>
         <button
@@ -286,7 +469,7 @@ function BoxedRow({
           </span>
         </button>
       </div>
-    </div>
+    </>
   );
 }
 

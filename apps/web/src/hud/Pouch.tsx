@@ -15,9 +15,13 @@
 
 import { Fragment } from 'react';
 
+import { ItemIcon } from './ItemIcon';
 import { formatCentsWhole } from './format';
 import { s } from './styles';
 import { useHudSlice } from './use-hud';
+
+/** Two-times an item frame. The chip strip is always on screen, so it pays rent by the pixel. */
+const POUCH_ICON = 32;
 
 export function Pouch() {
   const pouch = useHudSlice('pouch');
@@ -36,6 +40,14 @@ export function Pouch() {
         <Fragment key={item.id}>
           {index === 0 ? null : <span className={s.pouchDivider} />}
           <span className={s.stack}>
+            {/*
+              The one place in the HUD a sprite is on screen without anybody opening anything
+              ([[058]]). The label stays: the pouch is four chips wide and the picture is what
+              makes it scannable, not what makes it comprehensible. `align-self` rather than a
+              change to `.stack` — the three text spans still share a baseline, and the icon
+              centres on the line rather than hanging off it.
+            */}
+            <ItemIcon item={item.id} size={POUCH_ICON} className={s.pouchIcon} />
             <span className={s.stackCount}>{item.count}</span>
             <span className={s.stackLabel}>{item.label}</span>
             {item.sellable === 1 ? (

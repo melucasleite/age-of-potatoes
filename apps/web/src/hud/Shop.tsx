@@ -37,6 +37,7 @@ import type { ItemId } from '@snack/sim';
 
 // `formatCents` everywhere and never `formatCentsWhole`: a potato seed lists at fifty cents,
 // and the whole-dollar formatter — correct for a $600 sprinkler — renders that as "$0".
+import { ItemIcon } from './ItemIcon';
 import { formatCents } from './format';
 import { hudStore } from './store';
 import { cx, s } from './styles';
@@ -51,6 +52,9 @@ function keepFocus(event: React.MouseEvent): void {
 
 /** The stack button. One is tedious; ten is the fistful the work item asks for. */
 const STACK = 10;
+
+/** Half the bag's slot sprite. A row is read left to right, not scanned, so it needs less. */
+const SHOP_ICON = 32;
 
 // --- the corner button -----------------------------------------------------------------
 
@@ -219,6 +223,14 @@ function Row({
 
   return (
     <div className={cx(s.shopRow, locked && s.shopRowLocked)}>
+      {/*
+        The same sprite the bag draws, at half the size ([[058]]). A garnish here rather than a
+        rework: the board's rows are already legible, and what the picture buys is that a seed
+        bought from this list and a seed found in the pouch are recognisably the same object.
+        `ItemIcon` handles a seed the atlas has no frame for, which is most of them.
+      */}
+      <ItemIcon item={row.id} size={SHOP_ICON} />
+
       <div className={s.shopRowBody}>
         <div className={s.shopRowHead}>
           <span className={s.shopName}>{row.name}</span>

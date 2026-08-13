@@ -47,6 +47,7 @@ export type StyleName =
   | 'owned'
   | 'pouch'
   | 'pouchEmpty'
+  | 'pouchIcon'
   | 'stack'
   | 'stackCount'
   | 'stackLabel'
@@ -162,15 +163,36 @@ export type StyleName =
   | 'shopBuyReady'
   | 'shopBuyCount'
   | 'shopBuyCost'
+  // --- item sprites ---
+  // One class for every sprite in the HUD, wherever it is drawn. The size and the atlas offset
+  // are inline styles on the element, because both are arithmetic (`item-art.ts`) rather than
+  // design — what belongs in the stylesheet is only how a pixel sprite is rendered at all.
+  | 'icon'
+  | 'iconBlank'
   // --- the bag ---
   // Panel, head, list, rows and buttons are the stand's, class for class — it is the same
   // modal showing a different list, and two lists laid out differently read as two games.
   // Only what a boxed machine adds is new below.
+  | 'invPanel'
   | 'invEmpty'
-  | 'invCount'
+  | 'invBody'
+  | 'invGrid'
+  | 'invSlot'
+  | 'invSlotOn'
+  | 'invSlotBoxed'
+  | 'invSlotCount'
+  | 'invSlotCrate'
+  | 'invSlotPips'
+  | 'invSlotPip'
+  | 'invSlotPipOn'
+  | 'invDetail'
+  | 'invDetailHead'
+  | 'invDetailNames'
+  | 'invDetailName'
+  | 'invDetailCount'
+  | 'invValue'
+  | 'invUnit'
   | 'invNotForSale'
-  | 'invBoxedRow'
-  | 'invBoxedTag'
   | 'invBoxes'
   | 'invBox'
   | 'invNextOut'

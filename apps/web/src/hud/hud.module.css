@@ -282,6 +282,12 @@
   gap: 5px;
 }
 
+/* The chip's sprite. `align-self` rather than a change to `.stack`, so the count, the label and
+   the value keep sharing a baseline and only the picture opts out of it. */
+.pouchIcon {
+  align-self: center;
+}
+
 .stackCount {
   font-size: 15px;
   font-weight: 700;
@@ -1477,14 +1483,66 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- item sprites --------------------------------------------------------------- */
+
+/*
+ * Every sprite in the HUD is one of these: a span with a slice of the atlas behind it. The
+ * offset, the scale and the size are inline, from `item-art.ts` — what is here is only the
+ * three rules that make a 16px drawing survive being blown up eight times.
+ *
+ * `pixelated` is the whole ball game. The browser's default is a smooth scale, which turns
+ * hand-placed pixels into mush and makes the HUD look like a different, softer game sitting on
+ * top of this one — the same failure the notched corners at the top of this file exist to avoid.
+ */
+.icon {
+  display: inline-block;
+  /* Never allowed to shrink. A flex row with a long note in it would squeeze the picture before
+     it wrapped the words, and two thirds of a potato is worse than none. */
+  flex: 0 0 auto;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+
+/*
+ * No frame in the atlas yet. NOT MAGENTA, and that is a rule rather than a taste ([[037]]):
+ * the renderer's magenta square is a debugging signal aimed at whoever is building the game,
+ * and the same square in front of a player says the software is broken. Items arrive in
+ * `data.ts` long before art arrives in the atlas, so this is an ordinary state — twenty-odd of
+ * them today — and it is dressed as an empty slot with a letter on it rather than as an alarm.
+ */
+.iconBlank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1c1610;
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  color: #6d5c4d;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 /* --- the bag -------------------------------------------------------------------- */
 
 /*
- * The bag borrows the stand's panel, head, list, row and buttons wholesale — same modal, same
- * width, same everything — because it IS the same surface showing a different list. What is
- * below is only the part a boxed machine adds: a strip of dials, a condition, and two figures
- * that a row of goods has no use for.
+ * The bag borrows the stand's panel, head, buttons and prices wholesale — same modal, same
+ * chrome — because it IS the same surface. What it does NOT borrow any more is the list: a bag
+ * is a grid of pictures and a pane ([[058]]), and the two live below.
  */
+
+/*
+ * The one measurement where the bag parts company with the stand.
+ *
+ * The stand is a column of five rows and is deliberately narrow ("a list stretched to 1060px
+ * makes the player's eye travel the width of the screen between a name and the button that buys
+ * it"). The bag is now two things side by side, and six columns of sprites plus a pane of
+ * details do not fit in 660px without one of them getting cramped. A hundred pixels, spent once.
+ */
+.invPanel {
+  width: min(760px, 100%);
+}
 
 .invEmpty {
   padding: 18px 4px;
@@ -1493,35 +1551,201 @@
   color: #6d5c4d;
 }
 
-.invCount {
-  font-size: 12px;
-  color: #cbb99b;
+/* Grid left, pane right. `min-height: 0` for the same reason `.shopList` needs it: a flex child
+   that refuses to shrink pushes the footer hint out through the bottom of the panel. */
+.invBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+  padding: 10px 20px 12px;
+}
+
+/*
+ * Six fixed columns, and the count is repeated in `Inventory.tsx` where the arrow keys use it.
+ * An `auto-fill` grid would be shorter and would make Down mean something different at a
+ * different window width — see the note on `COLUMNS`.
+ */
+.invGrid {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(6, 60px);
+  align-content: start;
+  gap: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: #46392f #14100e;
+}
+
+.invSlot {
+  position: relative;
+  pointer-events: auto;
+  cursor: pointer;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    5px 0,
+    calc(100% - 5px) 0,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    5px 100%,
+    0 calc(100% - 5px),
+    0 5px
+  );
+  transition: transform 70ms steps(2, end);
+}
+
+.invSlot:hover {
+  transform: translateY(-2px);
+}
+
+/* Machines sit a shade warmer than goods so the eye finds them in a bag full of potatoes —
+   the same rule the old row-based bag used, in the only currency a 60px cell has. */
+.invSlotBoxed {
+  background: linear-gradient(180deg, #31251a 0%, #241c14 100%);
+}
+
+/* The one slot the pane is describing. Gold, like every other "this is the thing you are about
+   to act on" in the HUD, and it must beat the boxed tint above — hence the later rule. */
+.invSlotOn {
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #f5d382;
+}
+
+/*
+ * A crate corner, drawn rather than lettered.
+ *
+ * The row-based bag wore the word "boxed" beside the name; there is no room for a word here and
+ * no name to put it beside. A small taped-carton mark in the corner says the same thing in the
+ * space available, and it is redundant with the warm tint on purpose — one of the two survives
+ * being colourblind.
+ */
+.invSlotCrate {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 9px;
+  height: 8px;
+  background: #d9b475;
+  box-shadow:
+    inset 0 0 0 1px #14100e,
+    inset 0 3px 0 -1px #8a6234;
+}
+
+.invSlotCount {
+  position: absolute;
+  /* Clear of the notched corner: the clip-path cuts 5px off the diagonal and a badge parked in
+     it loses its own corner, which reads as a rendering fault rather than as a bevel. */
+  right: 4px;
+  bottom: 3px;
+  padding: 0 3px 1px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #efe2c6;
+  font-variant-numeric: tabular-nums;
+  background: #14100e;
+  box-shadow: inset 0 0 0 1px #46392f;
+}
+
+/* Which dials are turned up on the box that comes out next. How FAR is the pane's business. */
+.invSlotPips {
+  position: absolute;
+  left: 5px;
+  bottom: 4px;
+  display: flex;
+  gap: 2px;
+}
+
+.invSlotPip {
+  width: 4px;
+  height: 4px;
+  background: #46392f;
+}
+
+.invSlotPipOn {
+  background: #a3c65c;
+}
+
+/* --- what the selected slot is ---------------------------------------------------- */
+
+/* Sunk into the panel rather than raised off it: the grid is the thing being used and the pane
+   is the thing being read, and two raised surfaces side by side compete for the same eye. */
+.invDetail {
+  /* Shrinks before the grid does. On a window too narrow for both, a pane with a wrapped line in
+     it is still readable; a grid whose sixth column is off the edge has lost a slot. */
+  flex: 0 1 300px;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 13px 13px;
+  background: #1c1610;
+  box-shadow: inset 0 0 0 2px #14100e;
+  scrollbar-width: thin;
+  scrollbar-color: #46392f #14100e;
+}
+
+.invDetailHead {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.invDetailNames {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.invDetailName {
+  font-size: 14px;
+  font-weight: 700;
+  color: #efe2c6;
+}
+
+.invDetailCount {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9a8873;
+}
+
+.invValue {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* The per-unit figure, under the stack's. Quieter, because the stack is what you are holding
+   and the unit price is only how it got there. */
+.invUnit {
+  font-size: 10.5px;
+  color: #6d5c4d;
   font-variant-numeric: tabular-nums;
 }
 
 /* Quiet, and never red. A seed the bin refuses is not a problem, it is simply not merchandise. */
 .invNotForSale {
-  margin-left: auto;
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #6d5c4d;
-}
-
-/* Machines sit a shade warmer than goods so the eye finds them in a bag full of potatoes. */
-.invBoxedRow {
-  align-items: flex-start;
-  background: linear-gradient(180deg, #31251a 0%, #241c14 100%);
-}
-
-.invBoxedTag {
-  font-size: 9.5px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #d9b475;
-  padding: 1px 5px 2px;
-  background: #14100e;
-  box-shadow: inset 0 0 0 1px #46392f;
 }
 
 .invBoxes {
@@ -1531,12 +1755,20 @@
   margin-top: 7px;
 }
 
-/* One line per box. Baseline-aligned so the pips, the percentage and the two prices read as a
-   row of facts rather than as a small table. */
+/*
+ * One box, as a row of facts rather than as a small table.
+ *
+ * It WRAPS now, which it did not need to when the bag was full-width rows: the pane is 300px and
+ * three dials, a condition and two prices do not fit on one line of it. Wrapping keeps the
+ * dials and the condition together on the first line — `.invCondition` still takes the free
+ * space — and lets the two money figures fall to the second, which is the pair that reads
+ * together anyway.
+ */
 .invBox {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 4px 9px;
   padding: 4px 8px 5px;
   background: #1c1610;
   box-shadow: inset 0 0 0 1px #46392f;
