@@ -1,0 +1,369 @@
+/*
+ * The front door ([[055]]).
+ *
+ * ITS OWN MODULE, NOT AN APPENDIX TO `hud.module.css`. The HUD is chrome that floats over a
+ * running world and never eats a click meant for the lot; this is a full screen with no world
+ * behind it at all, and every rule in that file about pointer-events and absolute corners is
+ * wrong here. Sharing a stylesheet would mean inheriting a set of assumptions that do not hold.
+ *
+ * Every colour is from art/palette/master.json, the same forty the cooked pixels are quantised
+ * to — the same discipline `hud.module.css` states at length, for the same reason: a UI painted
+ * off-palette reads as a different game sitting on top of this one.
+ *
+ *   ink #14100e · umber #2b2119 · stone_dark #46392f · stone_mid #6d5c4d
+ *   stone_light #9a8873 · bone #cbb99b · paper #efe2c6
+ *   gold #8a6234 #b58b4d #d9b475 #f5d382 · grass #4e7c2e #74a340
+ *   red #5e1c1a #9e2f27 #d94f36 · water #2c6a8d #4fa3d1
+ *
+ * Corners are notched rather than rounded, for the reason the HUD gives: a 6px radius on a
+ * 16px-tile pixel game is the fastest way to look bolted on from a component library.
+ */
+
+.door {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 20px 64px;
+  background: #141019;
+  color: #efe2c6;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.inner {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.wordmark {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: 0.22em;
+  color: #f5d382;
+  text-align: center;
+}
+
+.tagline {
+  margin: 0;
+  text-align: center;
+  color: #9a8873;
+  font-size: 12px;
+}
+
+/* --- the three doors ------------------------------------------------------------- */
+
+.primary {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  border: 2px solid #b58b4d;
+  background: #2b2119;
+  color: #f5d382;
+  font: inherit;
+  cursor: pointer;
+}
+.primary:hover {
+  background: #46392f;
+}
+/*
+ * The focus ring is deliberately loud. Continue is focused the moment the door opens and the
+ * whole promise of the screen is that a returning player presses one key without reading it —
+ * so where the key will land has to be visible from across the room.
+ */
+.primary:focus-visible,
+.secondary:focus-visible,
+.card:focus-visible,
+.rowButton:focus-visible,
+.danger:focus-visible,
+.nameInput:focus-visible {
+  outline: 2px solid #4fa3d1;
+  outline-offset: 2px;
+}
+
+.primaryLabel {
+  display: block;
+  font-size: 15px;
+  letter-spacing: 0.14em;
+}
+
+.primaryDetail {
+  display: block;
+  margin-top: 4px;
+  color: #cbb99b;
+  font-size: 12px;
+}
+
+.secondary {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 16px;
+  border: 2px solid #46392f;
+  background: transparent;
+  color: #efe2c6;
+  font: inherit;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+.secondary:hover {
+  border-color: #6d5c4d;
+  background: #2b2119;
+}
+
+.hint {
+  margin: 0;
+  color: #6d5c4d;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* --- the list ------------------------------------------------------------------- */
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2b2119;
+  color: #9a8873;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid #46392f;
+  background: #1d1712;
+  color: #efe2c6;
+  font: inherit;
+  cursor: pointer;
+}
+.card:hover {
+  border-color: #8a6234;
+  background: #2b2119;
+}
+
+/* The lot you are about to Continue into. Marked, not duplicated. */
+.cardNewest {
+  border-left: 3px solid #b58b4d;
+}
+
+/* A save this build must not open. Not an error — a fact about the tab. */
+.cardRefused {
+  border-color: #5e1c1a;
+  cursor: default;
+}
+.cardRefused:hover {
+  border-color: #9e2f27;
+  background: #1d1712;
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cardName {
+  color: #f5d382;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+}
+
+.cardWhen {
+  color: #6d5c4d;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.cardStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  color: #cbb99b;
+  font-size: 12px;
+}
+
+.cardMoney {
+  color: #d9b475;
+}
+
+.cardUnsaved {
+  color: #9a8873;
+  font-style: italic;
+}
+
+.cardCloud {
+  margin-top: 6px;
+  color: #2c6a8d;
+  font-size: 11px;
+}
+.cardCloudActive {
+  color: #4fa3d1;
+}
+
+.cardRefusal {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #5e1c1a;
+  color: #d94f36;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* --- per-card controls ----------------------------------------------------------- */
+
+.cardTools {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.rowButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #6d5c4d;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.rowButton:hover {
+  color: #cbb99b;
+}
+
+/*
+ * Written out rather than `composes: rowButton`. The two rules are identical but for the
+ * colour, and composition would say so more neatly — but `composes` is a CSS-Modules-only
+ * construct whose handling differs between bundlers, and this could not be verified against a
+ * real build in the session it was written in. Six duplicated declarations are cheaper than a
+ * delete button that renders as unstyled text.
+ */
+.danger {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #9e2f27;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.danger:hover {
+  color: #d94f36;
+}
+
+/*
+ * Step two of the delete. It replaces the card's tools in place rather than opening a modal:
+ * the confirmation has to be attached to the thing it is about, because a dialog that says
+ * "are you sure?" over a list of four lots is a dialog that gets the wrong one.
+ */
+.confirm {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #9e2f27;
+  background: #1a1210;
+}
+
+.confirmText {
+  margin: 0 0 8px;
+  color: #cbb99b;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.confirmRow {
+  display: flex;
+  gap: 14px;
+}
+
+.nameInput {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #6d5c4d;
+  background: #14100e;
+  color: #f5d382;
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+}
+
+/* --- the deleted shelf ----------------------------------------------------------- */
+
+.deletedRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px dashed #46392f;
+  color: #9a8873;
+  font-size: 12px;
+}
+
+.deletedWhen {
+  color: #6d5c4d;
+  font-size: 11px;
+}
+
+/* --- states ---------------------------------------------------------------------- */
+
+.empty {
+  padding: 14px 16px;
+  border: 1px dashed #46392f;
+  color: #9a8873;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.loading {
+  padding: 40px 0;
+  text-align: center;
+  color: #6d5c4d;
+}
+
+.note {
+  margin: 0;
+  color: #6d5c4d;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+@media (max-width: 560px) {
+  .door {
+    padding: 28px 14px 48px;
+  }
+  .wordmark {
+    font-size: 21px;
+  }
+  .cardHead {
+    flex-direction: column;
+    gap: 2px;
+  }
+}

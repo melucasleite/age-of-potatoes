@@ -26,15 +26,48 @@ if (boot.state === null) {
 const autosave = startAutosave(() => stateRef.current, { sinceTick: boot.state.tick });
 ```
 
-`bootWorld()` requests persistent storage, then loads the save or creates a fresh world. It
-never throws. `state === null` happens for exactly two reasons, and both mean _leave the disk
-alone_:
+`bootWorld()` requests persistent storage, then loads **the active world's** save or starts that
+world from its recorded seed. It never throws. `state === null` happens for exactly three
+reasons, and the first two mean _leave the disk alone_:
 
-| `outcome.reason` | What happened                                | What to do                                         |
-| ---------------- | -------------------------------------------- | -------------------------------------------------- |
-| `format-too-new` | A stale tab met a save from a newer deploy   | Tell the player to reload                          |
-| `unreadable`     | The save and its backup both failed to parse | Show the message; both records are quarantined     |
-| `unavailable`    | No IndexedDB (SSR, private mode, blocked)    | **Plays anyway**, with a fresh world and no saving |
+| `outcome.reason` | What happened                                | What to do                                          |
+| ---------------- | -------------------------------------------- | --------------------------------------------------- |
+| `format-too-new` | A stale tab met a save from a newer deploy   | Tell the player to reload                           |
+| `unreadable`     | The save and its backup both failed to parse | Show the message; both records are quarantined      |
+| `no-world`       | No lot is selected                           | Send them to the front door — do **not** invent one |
+| `unavailable`    | No IndexedDB (SSR, private mode, blocked)    | **Plays anyway**, with a fresh world and no saving  |
+
+## Worlds are plural
+
+`worlds.ts` holds the registry: one record per lot with its id, name, seed, timestamps and a
+summary for the front door's card, plus which one is active. **Which world is never an argument
+to `bootWorld`, `saveWorld` or `loadWorld`** — they resolve the active id themselves, which is
+how this landed without `GameCanvas`, `GameHost` or cloud sync learning that worlds became
+plural. The front door (`hud/FrontDoor.tsx`) sets the active id and then navigates.
+
+Records are keyed `w:<id>:current` / `:previous` / `:conflict`. `previous` is still not a save
+slot, per world or otherwise.
+
+**The pre-registry player is adopted, once.** The first read of the registry on a database that
+predates it finds the bare `current`/`previous`/`conflict` records, mints a world called
+"Lot #1", and re-keys them **inside one transaction** along with the registry write. If it
+aborts, nothing moved. `planLegacyAdoption` is a pure function so the whole decision is covered
+by `worlds.test.ts` without a browser — it is the one operation here that can lose a returning
+player's factory, and it runs exactly once, unattended.
+
+**Deleting is a tombstone.** `deleteWorld` sets `deletedAt` and touches no envelope. The records
+are dropped only by `sweepTombstones()` on a later boot, once the tombstone is older than
+`WORLD_TOMBSTONE_MS` — **fourteen days**. Until then `restoreDeletedWorld` brings it back whole.
+The sweep runs on boot rather than on a timer, so a browser nobody reopens deletes nothing,
+which is the right behaviour for a window whose purpose is second thoughts.
+
+**Cloud sync is the active world only.** There is one row per player per slot on the server, and
+mirroring several worlds into one row is a merge problem with no right answer. The front door
+says so on the cards. Per-world cloud slots are a follow-up; the seam is `activeConflictKey` in
+`cloudHandoff.ts` plus a slot name.
+
+**New Game never reuses a seed.** `freshSeed()` draws from `crypto`. Before the registry every
+new world was `createWorld(20260812)` — the same lot, weed for weed, for everyone.
 
 ## Autosave is counted in ticks
 
@@ -56,19 +89,25 @@ extended non-use** — which does not present to the player as a storage-policy 
 presents as _"my factory vanished."_ The call is one line, it may be granted silently based on
 engagement, and the result is logged either way.
 
-## Two records, not two slots
+## Two records per world, not two slots
 
-The `saves` store holds `current` and `previous` under fixed out-of-line keys. §6 locks one
-persistent world per player; `previous` is **not** a save slot and must never be surfaced as
-one. Every write copies `current` into `previous` inside the same transaction before
+The `saves` store holds a `current` and a `previous` **for each world**, under out-of-line keys
+built by `currentKeyFor`/`previousKeyFor`. `previous` is **not** a save slot and must never be
+surfaced as one. Every write copies `current` into `previous` inside the same transaction before
 overwriting. One extra `put` buys a survivable corrupt write.
+
+The quota ladder drops only the **active** world's backup. A player whose second lot is running
+out of room has not consented to their first lot losing its parachute.
 
 The stored value _is_ the envelope, with no wrapper object — legible in DevTools →
 Application → IndexedDB, and an upload rather than a redesign when cloud sync lands.
 
-`quarantine` is a fourth store rather than a third record, and it is not a slot either: it is
-where records that failed to load are kept, and nothing ever loads from it. `meta` is a fifth,
-holding host-side facts about the player's visits and never world state — see below.
+`quarantine` is its own store rather than another record, and it is not a slot either: it is
+where records that failed to load are kept, and nothing ever loads from it. `worlds` is another,
+holding the registry — names, timestamps and card summaries, every field of which §12 bans from
+`WorldState` outright, and all of it still readable when a world's own envelope will not parse.
+`meta` is another again, holding host-side facts about the player's visits and never world
+state — see below.
 
 ## The trace has its own store
 
@@ -79,7 +118,12 @@ must not be deleted as such.
 It is not in the save payload: it grows without bound, it is not save-compatibility surface,
 and rewriting the whole log on every autosave would make each save progressively more
 expensive. `drainTrace()` writes only the tail appended since the last save, in batches.
-`exportTrace()` flattens every batch in application order.
+`exportTrace(worldSeed)` flattens that world's batches in application order — **pass the seed**
+for anything that claims to be a replay, because the store now holds several worlds' batches
+interleaved by insertion order and a "replay" built from all of them is a replay of nothing.
+`clearTraceForWorld(seed)` drops one world's; plain `clearTrace()` drops every world's and has
+exactly one caller, the quota ladder, for which that is correct — being out of disk is not a
+per-world condition.
 
 ## A failed load never writes _over the save_
 
@@ -135,7 +179,11 @@ sentence the player is already reading on screen.
 ## The one wall clock, and why it is over here
 
 `session.ts` records **when the player was last actually present**, in its own `meta` object
-store, keyed `last-played`. The Welcome Back card ([[040]]) is its only consumer.
+store, keyed `last-played:<worldId>` — one visit per lot, since [[055]]. The Welcome Back card
+([[040]]) is its only consumer, and it needed no changes: it still calls `readLastSession()` with
+no arguments and still gets the right answer, because which world is meant was never the
+caller's to know. A player who plays Lot #2 daily must still be greeted on Lot #1 after a month,
+and must not be greeted on Lot #2 the next morning because the other lot moved a global clock.
 
 It lives in this directory because it cannot live in the other one. §6 says the sim has no wall
 clock and §12 bans `Date` from `packages/sim` outright — a timestamp inside `WorldState` would
@@ -184,6 +232,7 @@ first minute AGENTS.md says the whole project is in service of.
 | File            | What lives there                                            |
 | --------------- | ----------------------------------------------------------- |
 | `db.ts`         | The connection, the schema, the store names                 |
+| `worlds.ts`     | The world registry, the record keys, and the delete window  |
 | `saves.ts`      | `loadWorld`, `saveWorld`, `clearSavedWorld`, `readRawSaves` |
 | `trace.ts`      | Draining, reading, and exporting the input trace            |
 | `persist.ts`    | `navigator.storage.persist()` and the quota estimate        |

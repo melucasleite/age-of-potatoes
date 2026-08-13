@@ -15,18 +15,32 @@
 
 import type { SaveEnvelope } from '@snack/sim';
 
-import { CURRENT_KEY, SAVES_STORE, getDb, isStorageAvailable } from './db';
+import { SAVES_STORE, getDb, isStorageAvailable } from './db';
 import { logInfo, logWarn } from './log';
+import { activeWorldId, conflictKeyFor, currentKeyFor } from './worlds';
 
 /**
- * Where a displaced envelope goes.
+ * The pre-registry conflict key. Kept so the adoption migration in `worlds.ts` can move it.
  *
- * A THIRD RECORD, NOT A THIRD SAVE SLOT. §6 locks one persistent world per player, and this
- * must never be surfaced in UI as "your other world" — it is a parachute, in the same
- * spirit as `previous`, for the specific case where two devices disagree about which world
- * is current.
+ * A THIRD RECORD, NOT A THIRD SAVE SLOT — and now that a player genuinely can have a second
+ * world, that distinction stops being pedantic and starts being load-bearing. This is a
+ * parachute, in the same spirit as `previous`, for the specific case where two devices
+ * disagree about which world is current. It must never appear on the front door as a card.
  */
 export const CONFLICT_KEY = 'conflict';
+
+/**
+ * CLOUD SYNC IS THE ACTIVE WORLD ONLY, and that is this item's stated scope rather than an
+ * oversight. There is one row per player per slot on the server (`cloudSync.ts`), the slot is
+ * `default`, and mirroring several worlds into one row would be a merge problem with no right
+ * answer. So the world you are playing is the world that is mirrored; the front door says so on
+ * the cards. Per-world cloud slots are a follow-up, and the seam for them is this one function
+ * plus a slot name.
+ */
+async function activeConflictKey(): Promise<string | null> {
+  const id = await activeWorldId();
+  return id === null ? null : conflictKeyFor(id);
+}
 
 export type AdoptOutcome =
   /** The cloud envelope is now `current`; the displaced local one is under `conflict`. */
@@ -62,17 +76,25 @@ export async function adoptCloudEnvelope(
   if (!isStorageAvailable()) return 'unavailable';
 
   try {
+    const worldId = await activeWorldId();
+    // No active world means the player is standing at the front door with nothing selected.
+    // There is nothing for a cloud save to be current *for*, and writing one anyway would
+    // install a world into a lot that does not exist.
+    if (worldId === null) return 'unavailable';
+    const currentKey = currentKeyFor(worldId);
+    const conflictKey = conflictKeyFor(worldId);
+
     const db = await getDb();
     const tx = db.transaction(SAVES_STORE, 'readwrite');
     const store = tx.objectStore(SAVES_STORE);
 
     // Read inside the transaction: the decision and the write have to see the same disk, or
     // a save landing between them would be silently thrown away.
-    const existing = await store.get(CURRENT_KEY);
+    const existing = await store.get(currentKey);
     const moved = existing !== undefined && existing.tick !== options.expectedLocalTick;
 
     if (moved) {
-      await store.put(envelope, CONFLICT_KEY);
+      await store.put(envelope, conflictKey);
       await tx.done;
       logWarn(
         `A cloud save at tick ${String(envelope.tick)} is further along than this device, ` +
@@ -83,8 +105,8 @@ export async function adoptCloudEnvelope(
       return 'stashed';
     }
 
-    if (existing !== undefined) await store.put(existing, CONFLICT_KEY);
-    await store.put(envelope, CURRENT_KEY);
+    if (existing !== undefined) await store.put(existing, conflictKey);
+    await store.put(envelope, currentKey);
     await tx.done;
 
     logInfo(
@@ -100,12 +122,14 @@ export async function adoptCloudEnvelope(
   }
 }
 
-/** The envelope parked under `conflict`, if there is one. For the dev overlay and DevTools. */
+/** The active world's parked envelope, if there is one. For the dev overlay and DevTools. */
 export async function readConflictEnvelope(): Promise<SaveEnvelope | undefined> {
   if (!isStorageAvailable()) return undefined;
   try {
+    const key = await activeConflictKey();
+    if (key === null) return undefined;
     const db = await getDb();
-    return await db.get(SAVES_STORE, CONFLICT_KEY);
+    return await db.get(SAVES_STORE, key);
   } catch {
     return undefined;
   }

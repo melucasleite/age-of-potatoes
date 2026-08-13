@@ -12,10 +12,26 @@ import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 import type { SaveEnvelope } from '@snack/sim';
 
 export const DB_NAME = 'snack-mogul';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export const SAVES_STORE = 'saves';
 export const TRACES_STORE = 'traces';
+
+/**
+ * The world registry: which lots exist, what to put on their cards, and which one is live.
+ *
+ * A SEPARATE STORE, for the same reason `meta` and `quarantine` are. The registry is
+ * host-side bookkeeping — names, wall-clock timestamps, a summary for a card — and every
+ * field in it is something §12 bans from `WorldState` outright. Keeping it beside the saves
+ * rather than inside one also means it survives a save that will not parse: a world whose
+ * envelope is corrupt still has a card, still has a name, and still says what went wrong.
+ *
+ * ONE RECORD under `REGISTRY_KEY`, not one record per world. The whole list is read on every
+ * boot and written whenever a world is created, renamed, played, or deleted — a handful of
+ * small objects, rewritten a few times a session. A record per world would buy nothing except
+ * the chance for the list and its members to disagree.
+ */
+export const WORLDS_STORE = 'worlds';
 
 /**
  * Host-side facts about the player's visits. **Never world state.**
@@ -45,9 +61,17 @@ export const META_STORE = 'meta';
 export const QUARANTINE_STORE = 'quarantine';
 
 /**
- * §6 locks one persistent world per player, so `saves` holds exactly two records under fixed
- * keys rather than a slot list. `previous` is not a save slot and must never be surfaced as
- * one — it is the parachute for a corrupt write.
+ * The pre-registry record keys, kept because databases in the wild still hold them.
+ *
+ * These WERE the whole scheme: §6 was read as "one persistent world per player", so `saves`
+ * held exactly two records under fixed keys. Work item 055 supersedes that reading — the
+ * locked decision was about the ONLINE design (no seasons, no cohort resets), not about local
+ * save slots — and records are now keyed by world (`worlds.ts`). These two constants survive
+ * for exactly one purpose: the migration that adopts a pre-registry player's world as their
+ * first lot has to know where to find it.
+ *
+ * `previous` is STILL not a save slot and must never be surfaced as one, per world or
+ * otherwise. It is the parachute for a corrupt write.
  */
 export const CURRENT_KEY = 'current';
 export const PREVIOUS_KEY = 'previous';
@@ -112,11 +136,71 @@ export interface PlaySession {
   tick: number;
 }
 
+/**
+ * Everything the front door needs to draw a card without opening the save.
+ *
+ * Written from the LIVE world by `saveWorld`, not read back out of the envelope. The envelope's
+ * `payload` is typed `unknown` on purpose — a format-4 save handed to a format-7 build holds a
+ * shape this code has never seen — so reaching into it for a money figure would be the one kind
+ * of guess this directory does not make. The live `WorldState` always knows its own money.
+ *
+ * A summary is therefore as fresh as the last successful save, which is the honest thing for a
+ * card to be: it says what is on disk, which is what Continue is about to load.
+ */
+export interface WorldSummary {
+  /** `state.tick` at the last save. The in-game day is derived from it. */
+  tick: number;
+  /** Money in cents, or null for a world adopted from a pre-registry save (see `worlds.ts`). */
+  moneyCents: number | null;
+  /** The envelope format the world was last written at, so a card can refuse a future save. */
+  formatVersion: number;
+}
+
+/**
+ * One lot.
+ *
+ * Every timestamp here is wall clock, and every one of them is legal for the same reason the
+ * last-played record is: this is the storage layer, outside `WorldState`, outside `SavePayload`
+ * and outside `hashState()`. §12 bans `Date` from `packages/sim`, not from the code that draws
+ * a list of saves.
+ */
+export interface WorldRecord {
+  /** Stable, opaque, and permanent — the save records are keyed on it. Never reused. */
+  id: string;
+  /** The player's name for the lot. Defaults to "Lot #N"; renameable. */
+  name: string;
+  /** The uint32 `createWorld` was handed. Also how the reports database keys its ledger. */
+  seed: number;
+  createdAt: number;
+  /** Last time this world was actually played, for ordering the list and for Continue. */
+  lastPlayedAt: number;
+  summary: WorldSummary;
+  /**
+   * When the player deleted it, or null.
+   *
+   * A TOMBSTONE, NOT A DELETE. The record and its envelopes stay exactly where they are until
+   * a boot finds the tombstone older than the retention window — see `worlds.ts`. Deleting a
+   * world is the one irreversible thing a player can do to ten hours of their own work, and
+   * this directory does not do irreversible in one step.
+   */
+  deletedAt: number | null;
+}
+
+/** The whole registry, as one record. */
+export interface WorldRegistry {
+  /** Bumped only if this shape ever changes. Not the save format; not the DB version. */
+  version: number;
+  /** The world `bootWorld()` will load. Null on a fresh install, before New Game. */
+  activeId: string | null;
+  worlds: WorldRecord[];
+}
+
 interface SnackMogulDB extends DBSchema {
   [SAVES_STORE]: { key: string; value: SaveEnvelope };
   [TRACES_STORE]: { key: number; value: TraceBatch };
   [QUARANTINE_STORE]: { key: number; value: QuarantinedSave };
   [META_STORE]: { key: string; value: PlaySession };
+  [WORLDS_STORE]: { key: string; value: WorldRegistry };
 }
 
 let connection: Promise<IDBPDatabase<SnackMogulDB>> | null = null;
@@ -163,6 +247,17 @@ export function getDb(): Promise<IDBPDatabase<SnackMogulDB>> {
           // this is a lookup, not a log, and last week's visit is of no interest once this
           // week's has happened.
           db.createObjectStore(META_STORE);
+        }
+        if (oldVersion < 4) {
+          // Append-only once more, and this is the one that matters most: the store is
+          // CREATED here and left EMPTY. The registry is not written during the schema
+          // upgrade. Adopting a pre-registry player's `current`/`previous` records as their
+          // first lot is a data migration that has to read a save envelope, decide what to
+          // call the world, and re-key two records — all of it async, all of it able to fail
+          // survivably, and none of it safe inside an IndexedDB `upgrade` callback, where an
+          // await on anything but an IDB request kills the transaction. It runs on first read
+          // instead; see `migrateRegistry` in `worlds.ts`.
+          db.createObjectStore(WORLDS_STORE);
         }
       },
       terminated() {

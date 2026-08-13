@@ -19,10 +19,47 @@ export {
   QUARANTINE_STORE,
   SAVES_STORE,
   TRACES_STORE,
+  WORLDS_STORE,
   closeDb,
   isStorageAvailable,
 } from './db';
-export type { PlaySession, QuarantinedSave, TraceBatch } from './db';
+export type {
+  PlaySession,
+  QuarantinedSave,
+  TraceBatch,
+  WorldRecord,
+  WorldRegistry,
+  WorldSummary,
+} from './db';
+// The world registry ([[055]]). The front door is its only UI; everything else in the game
+// reaches it indirectly, through `bootWorld` and `saveWorld` resolving the active world.
+export {
+  REGISTRY_KEY,
+  WORLD_TOMBSTONE_MS,
+  activateWorld,
+  activeWorld,
+  activeWorldId,
+  conflictKeyFor,
+  createWorldRecord,
+  currentKeyFor,
+  deleteWorld,
+  deletedWorlds,
+  expiredTombstones,
+  findWorld,
+  freshSeed,
+  invalidateRegistry,
+  liveWorlds,
+  newestWorld,
+  nextWorldName,
+  planLegacyAdoption,
+  previousKeyFor,
+  readRegistry,
+  renameWorld,
+  restoreDeletedWorld,
+  sweepTombstones,
+  withWorld,
+} from './worlds';
+export type { LegacyAdoption, LegacyDisk } from './worlds';
 // The one wall clock in the game, kept deliberately outside the save payload and outside the
 // state hash — see `session.ts`. The HUD's Welcome Back card is the only consumer.
 export {
@@ -41,9 +78,31 @@ export { requestPersistentStorage } from './persist';
 export type { PersistenceResult } from './persist';
 export { CONFLICT_KEY, adoptCloudEnvelope, readConflictEnvelope } from './cloudHandoff';
 export type { AdoptOutcome } from './cloudHandoff';
-export { clearSavedWorld, loadWorld, readRawSaves, saveWorld } from './saves';
-export type { LoadOutcome, LoadedWorld, NoSavedWorld, RefusedWorld, SaveResult } from './saves';
-export { clearTrace, drainTrace, exportTrace, readTrace, tracePersistedCount } from './trace';
+export {
+  clearSavedWorld,
+  idbSaveStore,
+  loadWorld,
+  memorySaveStore,
+  readRawSaves,
+  saveWorld,
+} from './saves';
+export type {
+  LoadOutcome,
+  LoadedWorld,
+  NoSavedWorld,
+  RefusedWorld,
+  SaveRecordStore,
+  SaveResult,
+  SaveTarget,
+} from './saves';
+export {
+  clearTrace,
+  clearTraceForWorld,
+  drainTrace,
+  exportTrace,
+  readTrace,
+  tracePersistedCount,
+} from './trace';
 export { quarantineRecord, readQuarantine } from './quarantine';
 export type { QuarantineOutcome } from './quarantine';
 export { StorageFullError, isQuotaError } from './quota';
@@ -72,12 +131,21 @@ import { startCloudSyncIfConfigured } from '@/supabase/bootstrap';
 
 import { type PersistenceResult, requestPersistentStorage } from './persist';
 import { type LoadOutcome, loadWorld } from './saves';
-import { clearTrace } from './trace';
-import { logWarn } from './log';
+import { clearTraceForWorld } from './trace';
+import { logInfo, logWarn } from './log';
 import { NoticeId, publishNoticeOnce } from './notices';
+import type { WorldRecord } from './db';
+import { activeWorld, sweepTombstones } from './worlds';
 
 export interface BootOptions {
-  /** Seed for a brand-new world. Defaults to a fresh one from `crypto`. */
+  /**
+   * Seed for a brand-new world, overriding the active world's own.
+   *
+   * FOR TESTS AND FOR THE DEV OVERLAY. The ordinary path takes the seed off the registry
+   * record, which New Game rolled from `crypto` — see `freshSeed` in `worlds.ts`. There is no
+   * longer a default seed anywhere in this boot path, which is the point: every "new" world
+   * used to be `createWorld(20260812)` and therefore the same lot, weed for weed.
+   */
   seed?: number;
   /** Skip the persistence request. Only for tests. */
   skipPersistRequest?: boolean;
@@ -96,10 +164,23 @@ export interface BootResult {
   fresh: boolean;
   outcome: LoadOutcome;
   persistence: PersistenceResult;
+  /**
+   * The registry record for the world that was booted, or null when none was.
+   *
+   * The seed, the name and the card all come from here rather than from the save, because a
+   * world exists in the registry from the moment New Game mints it and does not reach the disk
+   * until the first autosave lands a minute later.
+   */
+  world: WorldRecord | null;
 }
 
 /**
- * The whole boot sequence: ask for persistent storage, then load the saved world or make one.
+ * The whole boot sequence: ask for persistent storage, then load the active world or start it.
+ *
+ * WHICH WORLD IS NOT AN ARGUMENT. It comes from the registry's active id, which the front door
+ * sets before it mounts anything. That is what let this change land without `GameCanvas`,
+ * `GameHost` or the cloud sync layer learning that worlds became plural — every one of them
+ * still asks for "the world" and still gets exactly one.
  *
  * The persistence request comes first and on every boot, not just the first — it may be
  * granted silently later on based on engagement, and asking again costs nothing.
@@ -109,27 +190,53 @@ export async function bootWorld(options: BootOptions = {}): Promise<BootResult> 
     ? { supported: false, persisted: false, alreadyGranted: false }
     : await requestPersistentStorage();
 
-  const outcome = await loadWorld();
+  // Collect anything the player deleted a fortnight ago. Fire and forget: it touches only
+  // records whose worlds are already gone from the list, it never throws, and boot must not
+  // wait on housekeeping.
+  void sweepTombstones();
+
+  const world = await activeWorld();
+  if (world === null) {
+    // No lot is selected. REFUSE rather than invent one — silently creating a world here is
+    // precisely the behaviour the front door exists to replace, and it is how a player who
+    // lost a world used to be handed an identical-looking replacement with no ceremony.
+    const message = 'No lot is selected. Pick one from the front door, or start a new one.';
+    logInfo(message);
+    return {
+      state: null,
+      fresh: false,
+      outcome: { status: 'refused', reason: 'no-world', message },
+      persistence,
+      world: null,
+    };
+  }
+
+  const outcome = await loadWorld({ worldId: world.id });
 
   if (outcome.status === 'loaded') {
     warnIfNotPersisted(persistence);
     void startCloudSyncIfConfigured({ localTickAtBoot: outcome.state.tick });
-    return { state: outcome.state, fresh: false, outcome, persistence };
+    return { state: outcome.state, fresh: false, outcome, persistence, world };
   }
 
   // A refusal we must not play over: the save is intact on disk and starting fresh would
   // hand the next autosave a licence to destroy it.
   if (outcome.status === 'refused' && outcome.reason !== 'unavailable') {
-    return { state: null, fresh: false, outcome, persistence };
+    return { state: null, fresh: false, outcome, persistence, world };
   }
 
-  const state = createWorld(options.seed ?? freshSeed());
+  // The registry's seed, not a fresh draw and never a fixed one. A world that was minted,
+  // played for thirty seconds and closed before its first autosave must come back as the SAME
+  // lot when the player returns to its card — the seed is what makes that true, and it has
+  // been written down since the moment New Game was pressed.
+  const state = createWorld(options.seed ?? world.seed);
 
   if (outcome.status === 'empty') {
-    // Leftover trace batches from a world that no longer exists are just noise in a bug
-    // report. Best-effort — a storage error here must not stop a new game.
+    // Leftover batches from a previous life of this seed are just noise in a bug report. Only
+    // this world's, now — wiping the whole store would take the other lots' logs with it.
+    // Best-effort: a storage error here must not stop a new game.
     try {
-      await clearTrace();
+      await clearTraceForWorld(state.worldSeed);
     } catch (error) {
       logWarn('Could not clear the old input trace.', error);
     }
@@ -140,7 +247,7 @@ export async function bootWorld(options: BootOptions = {}): Promise<BootResult> 
   // case, and it is the one that makes sync feel like sync rather than like backup.
   void startCloudSyncIfConfigured({ localTickAtBoot: null });
 
-  return { state, fresh: true, outcome, persistence };
+  return { state, fresh: true, outcome, persistence, world };
 }
 
 /**
@@ -171,19 +278,4 @@ function warnIfNotPersisted(persistence: PersistenceResult): void {
       'bookmarking or installing the game — is usually enough to convince it to keep your ' +
       'world for good.',
   });
-}
-
-/**
- * A seed for a new world, as a uint32.
- *
- * `Math.random` is fine on this side of the seam — host-side randomness is not sim
- * randomness, and this value becomes `worldSeed`, after which every roll in that world is
- * derived from it deterministically. `crypto` when it is there, because a world's seed is
- * permanent and worth a decent draw.
- */
-function freshSeed(): number {
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-    return crypto.getRandomValues(new Uint32Array(1))[0]!;
-  }
-  return Math.floor(Math.random() * 0x1_0000_0000) >>> 0;
 }

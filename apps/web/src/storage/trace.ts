@@ -19,9 +19,12 @@ import { type TraceBatch, TRACES_STORE, getDb } from './db';
 /**
  * How far into `state.trace` has already been written.
  *
- * Module-level because §6 locks one persistent world per player — there is never a second
- * world to keep a second cursor for. Reset by `resetTraceCursor()` on load and on a fresh
- * world, where `state.trace` starts empty again.
+ * STILL ONE CURSOR, even now that worlds are plural (work item 055) — because only one world
+ * is ever loaded in a page. Switching lots is a navigation that tears the page down, so the
+ * next world starts from a fresh module and a fresh cursor by construction. The `cursorSeed`
+ * guard below was already the belt to that braces: a drain for a seed the cursor does not
+ * recognise resets first, so even a hot-swap that nobody has written could not append this
+ * world's tail to that world's log.
  */
 let persistedCount = 0;
 let cursorSeed: number | null = null;
@@ -65,15 +68,22 @@ export async function drainTrace(state: WorldState): Promise<number> {
  * Every stored batch, in insertion order — which is application order, which is replay
  * order. Batches from earlier sessions come first; `fromIndex` restarts at 0 each session
  * because the in-memory trace does, so concatenating `entries` across batches is the replay.
+ *
+ * `worldSeed` filters to one world. Pass it for anything that claims to be a replay: with
+ * several lots on one machine the store holds several worlds' batches interleaved by
+ * insertion order, and a "replay" built from all of them is a replay of nothing.
  */
-export async function readTrace(): Promise<TraceBatch[]> {
+export async function readTrace(worldSeed?: number): Promise<TraceBatch[]> {
   const db = await getDb();
-  return db.getAll(TRACES_STORE);
+  const all = await db.getAll(TRACES_STORE);
+  return worldSeed === undefined ? all : all.filter((batch) => batch.worldSeed === worldSeed);
 }
 
 /** The whole trace flattened, for handing to a replay harness or pasting into a bug report. */
-export async function exportTrace(): Promise<{ tick: number; command: unknown }[]> {
-  const batches = await readTrace();
+export async function exportTrace(
+  worldSeed?: number,
+): Promise<{ tick: number; command: unknown }[]> {
+  const batches = await readTrace(worldSeed);
   const flat: { tick: number; command: unknown }[] = [];
   for (const batch of batches) {
     for (const entry of batch.entries) flat.push(entry);
@@ -81,10 +91,38 @@ export async function exportTrace(): Promise<{ tick: number; command: unknown }[
   return flat;
 }
 
-/** Wipe the log. Only for starting a genuinely new world. */
+/**
+ * Wipe the whole log, every world's.
+ *
+ * The quota ladder's first rung, and the one caller for which "every world's" is correct —
+ * being out of disk is not a per-world condition. Everything else should use
+ * `clearTraceForWorld`.
+ */
 export async function clearTrace(): Promise<void> {
   const db = await getDb();
   await db.clear(TRACES_STORE);
   persistedCount = 0;
   cursorSeed = null;
+}
+
+/**
+ * Wipe one world's batches and leave every other world's alone.
+ *
+ * A cursor rather than a key range: batches are auto-incremented, so `worldSeed` is a field
+ * inside the value and there is no index over it. There are a handful of batches per session
+ * and this runs when a world is being started or collected, never in the frame loop.
+ */
+export async function clearTraceForWorld(worldSeed: number): Promise<void> {
+  const db = await getDb();
+  const tx = db.transaction(TRACES_STORE, 'readwrite');
+  let cursor = await tx.objectStore(TRACES_STORE).openCursor();
+  while (cursor !== null) {
+    if (cursor.value.worldSeed === worldSeed) await cursor.delete();
+    cursor = await cursor.continue();
+  }
+  await tx.done;
+  if (cursorSeed === worldSeed) {
+    persistedCount = 0;
+    cursorSeed = null;
+  }
 }

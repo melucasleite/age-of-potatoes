@@ -20,11 +20,37 @@
 // The consequence worth stating out loud: a player who leaves the tab open and walks away
 // records their departure to within one poll interval, not to within one night.
 
+//
+// ONE RECORD PER WORLD, since work item 055. It used to be one record full stop, because the
+// save layer used to assume one world; now each lot has its own visit, keyed `last-played:<id>`
+// (`sessionKeyFor` in `worlds.ts`). This is not bookkeeping tidiness — the Welcome Back card
+// asks "how long since YOU were HERE", and a global timestamp answers a different question. A
+// player who plays Lot #2 daily and opens Lot #1 after a month must be greeted on Lot #1, and
+// must not be greeted on Lot #2 the following morning because the other lot moved the clock.
+
 import { META_STORE, type PlaySession, getDb, isStorageAvailable } from './db';
 import { logWarn } from './log';
+import { activeWorldId, sessionKeyFor } from './worlds';
 
-/** The single record's key. §6 locks one persistent world per player, so there is one visit. */
+/**
+ * The pre-registry key, re-exported under its old name because it is part of this directory's
+ * published surface. The adoption migration in `worlds.ts` moves this record onto the world it
+ * adopts; nothing reads the bare key afterwards.
+ */
 export const SESSION_KEY = 'last-played';
+
+/**
+ * Which world's visit to read or write, defaulting to the active one.
+ *
+ * Resolved from the registry rather than passed in from the HUD, and that is the whole reason
+ * the Welcome Back card needed no changes for multiple worlds: `useWelcomeBack` still calls
+ * `readLastSession()` with no arguments and still gets the right answer, because the answer
+ * was never the caller's to know.
+ */
+async function keyFor(worldId: string | undefined): Promise<string | null> {
+  const id = worldId ?? (await activeWorldId());
+  return id === null ? null : sessionKeyFor(id);
+}
 
 /** How often to look at the clock. Cheap: it reads one integer and usually returns. */
 export const PRESENCE_POLL_MS = 20_000;
@@ -58,11 +84,13 @@ export const PLAYED_ENOUGH_TICKS = 6_000;
  * caller that starts the clock first will read back the current session and compute a gap of
  * zero. `useWelcomeBack` in the HUD does these in order for exactly that reason.
  */
-export async function readLastSession(): Promise<PlaySession | null> {
+export async function readLastSession(worldId?: string): Promise<PlaySession | null> {
   if (!isStorageAvailable()) return null;
   try {
+    const key = await keyFor(worldId);
+    if (key === null) return null;
     const db = await getDb();
-    return (await db.get(META_STORE, SESSION_KEY)) ?? null;
+    return (await db.get(META_STORE, key)) ?? null;
   } catch (error) {
     logWarn('Could not read the last-played timestamp.', error);
     return null;
@@ -70,11 +98,13 @@ export async function readLastSession(): Promise<PlaySession | null> {
 }
 
 /** Record a visit at this instant. Best-effort: a failure here costs a card, not a world. */
-export async function recordSession(tick: number): Promise<void> {
+export async function recordSession(tick: number, worldId?: string): Promise<void> {
   if (!isStorageAvailable()) return;
   try {
+    const key = await keyFor(worldId);
+    if (key === null) return;
     const db = await getDb();
-    await db.put(META_STORE, { at: Date.now(), tick }, SESSION_KEY);
+    await db.put(META_STORE, { at: Date.now(), tick }, key);
   } catch (error) {
     logWarn('Could not record the last-played timestamp.', error);
   }
@@ -95,7 +125,7 @@ export interface PresenceHandle {
  */
 export function startPresenceClock(
   getTick: () => number | null,
-  options: { pollMs?: number } = {},
+  options: { pollMs?: number; worldId?: string } = {},
 ): PresenceHandle {
   const pollMs = options.pollMs ?? PRESENCE_POLL_MS;
 
@@ -109,7 +139,7 @@ export function startPresenceClock(
     // anyway is what would make an overnight tab look like an overnight session.
     if (lastWrittenTick !== null && tick === lastWrittenTick) return;
     lastWrittenTick = tick;
-    void recordSession(tick);
+    void recordSession(tick, options.worldId);
   };
 
   // Once immediately, so a session that ends in a crash thirty seconds in still leaves a

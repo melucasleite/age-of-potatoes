@@ -1,4 +1,11 @@
-// Reading and writing the one save.
+// Reading and writing a world's save.
+//
+// IT USED TO BE "THE ONE SAVE". Work item 055 made worlds plural, and the change here is
+// narrower than it sounds: the two record keys became three functions of a world id
+// (`worlds.ts`), and everything else — the rotation, the refusals, the quarantine copy, the
+// quota ladder — is untouched, because none of it ever cared what the records were called.
+// Which world is meant comes from the registry's active id rather than from an argument, so
+// `bootWorld`, `GameCanvas` and cloud sync all keep working without knowing worlds are plural.
 //
 // Three rules govern everything below, and all three exist because the failure mode is a
 // player losing a world they cared about:
@@ -29,19 +36,148 @@ import {
   serialize,
 } from '@snack/sim';
 
-import {
-  CURRENT_KEY,
-  PREVIOUS_KEY,
-  SAVES_STORE,
-  TRACES_STORE,
-  getDb,
-  isStorageAvailable,
-} from './db';
+import { SAVES_STORE, TRACES_STORE, getDb, isStorageAvailable } from './db';
 import { logError, logInfo, logWarn } from './log';
 import { NoticeId, dismissNotice, publishNotice } from './notices';
 import { quarantineRecord } from './quarantine';
 import { StorageFullError, withQuotaRetry } from './quota';
-import { clearTrace, drainTrace, resetTraceCursor } from './trace';
+import { clearTraceForWorld, drainTrace, resetTraceCursor } from './trace';
+import {
+  activeWorldId,
+  conflictKeyFor,
+  currentKeyFor,
+  previousKeyFor,
+  summaryOf,
+  touchWorld,
+  worldSeedOf,
+} from './worlds';
+
+/**
+ * The record operations, behind an interface.
+ *
+ * NOT AN ABSTRACTION FOR ITS OWN SAKE. Two worlds that quietly overwrite each other is the
+ * failure this whole item exists to avoid, and it is invisible from the outside — both worlds
+ * load, both look fine, and one of them is the other. That is exactly the kind of thing worth
+ * a test, and there is no IndexedDB in this workspace's test environment. So the rotation and
+ * the fallback read run against a swappable store, `memorySaveStore()` stands in for the disk,
+ * and `worlds.test.ts` exercises the REAL logic rather than a restatement of it.
+ *
+ * `rotate` is one method rather than a get and two puts because it must be one transaction —
+ * see rule 1 above. An interface that let a caller do it in pieces would let a caller do it
+ * wrong.
+ */
+export interface SaveRecordStore {
+  read(worldId: string): Promise<{ current?: SaveEnvelope; previous?: SaveEnvelope }>;
+  /** Copy `current` into `previous`, then write `envelope` as `current`. Atomic. */
+  rotate(worldId: string, envelope: SaveEnvelope): Promise<void>;
+  /** Drop the backup copy. True when there was one to drop. */
+  dropPrevious(worldId: string): Promise<boolean>;
+  /** Drop every record belonging to one world, including the cloud parking slot. */
+  clear(worldId: string): Promise<void>;
+}
+
+/** The real one. Every method is one IndexedDB transaction. */
+export const idbSaveStore: SaveRecordStore = {
+  async read(worldId) {
+    const db = await getDb();
+    const tx = db.transaction(SAVES_STORE, 'readonly');
+    const store = tx.objectStore(SAVES_STORE);
+    const current = await store.get(currentKeyFor(worldId));
+    const previous = await store.get(previousKeyFor(worldId));
+    await tx.done;
+    return { current, previous };
+  },
+
+  async rotate(worldId, envelope) {
+    const db = await getDb();
+    const tx = db.transaction(SAVES_STORE, 'readwrite');
+    const store = tx.objectStore(SAVES_STORE);
+    // Rotate before overwriting, inside the transaction, so a crash mid-write cannot leave
+    // both records damaged. Every await here is an IDB request, which is what keeps the
+    // transaction alive — do not await anything else between these lines.
+    const existing = await store.get(currentKeyFor(worldId));
+    if (existing !== undefined) await store.put(existing, previousKeyFor(worldId));
+    await store.put(envelope, currentKeyFor(worldId));
+    await tx.done;
+  },
+
+  async dropPrevious(worldId) {
+    const db = await getDb();
+    const tx = db.transaction(SAVES_STORE, 'readwrite');
+    const store = tx.objectStore(SAVES_STORE);
+    const previous = await store.get(previousKeyFor(worldId));
+    if (previous !== undefined) await store.delete(previousKeyFor(worldId));
+    await tx.done;
+    return previous !== undefined;
+  },
+
+  async clear(worldId) {
+    const db = await getDb();
+    const tx = db.transaction(SAVES_STORE, 'readwrite');
+    const store = tx.objectStore(SAVES_STORE);
+    await store.delete(currentKeyFor(worldId));
+    await store.delete(previousKeyFor(worldId));
+    await store.delete(conflictKeyFor(worldId));
+    await tx.done;
+  },
+};
+
+/**
+ * A store in a Map, for tests. Keyed by the same key functions the real one uses, so a routing
+ * mistake shows up here exactly as it would on disk.
+ */
+export function memorySaveStore(
+  seed: Iterable<[string, SaveEnvelope]> = [],
+): SaveRecordStore & { keys(): string[] } {
+  const records = new Map<string, SaveEnvelope>(seed);
+  return {
+    read(worldId) {
+      return Promise.resolve({
+        current: records.get(currentKeyFor(worldId)),
+        previous: records.get(previousKeyFor(worldId)),
+      });
+    },
+    rotate(worldId, envelope) {
+      const existing = records.get(currentKeyFor(worldId));
+      if (existing !== undefined) records.set(previousKeyFor(worldId), existing);
+      records.set(currentKeyFor(worldId), envelope);
+      return Promise.resolve();
+    },
+    dropPrevious(worldId) {
+      return Promise.resolve(records.delete(previousKeyFor(worldId)));
+    },
+    clear(worldId) {
+      records.delete(currentKeyFor(worldId));
+      records.delete(previousKeyFor(worldId));
+      records.delete(conflictKeyFor(worldId));
+      return Promise.resolve();
+    },
+    keys() {
+      return [...records.keys()].sort();
+    },
+  };
+}
+
+/** Which world's records to touch, and where they live. Defaults to the active world. */
+export interface SaveTarget {
+  worldId?: string;
+  store?: SaveRecordStore;
+}
+
+/**
+ * Resolve the target, or throw.
+ *
+ * Throwing is right here and nowhere else in this file: a save with no world to save into is a
+ * programming error, not a survivable disk condition. `loadWorld` catches it and turns it into
+ * a readable refusal, which is the shape every other failure in here already has.
+ */
+async function resolveWorld(target: SaveTarget): Promise<string> {
+  const id = target.worldId ?? (await activeWorldId());
+  if (id === null) {
+    throw new Error('snack-mogul: no world is active, so there is nothing to save or load.');
+  }
+  return id;
+}
 
 export interface LoadedWorld {
   status: 'loaded';
@@ -66,7 +202,13 @@ export interface NoSavedWorld {
 
 export interface RefusedWorld {
   status: 'refused';
-  reason: 'format-too-new' | 'unreadable' | 'unavailable';
+  /**
+   * `no-world` is work item 055's addition and the least alarming of the four: no lot is
+   * selected, so there is nothing to load. It exists so that boot can REFUSE rather than
+   * inventing a world — the old behaviour, where an empty database silently became a fixed-seed
+   * lot, is exactly what the front door replaces.
+   */
+  reason: 'format-too-new' | 'unreadable' | 'unavailable' | 'no-world';
   message: string;
   error?: unknown;
 }
@@ -99,25 +241,16 @@ export interface SaveResult {
  * a `StorageFullError` whose message is that same wording. Callers that autosave should log
  * and carry on rather than interrupting play; a failed save is not a reason to stop the game.
  */
-export async function saveWorld(state: WorldState): Promise<SaveResult> {
+export async function saveWorld(state: WorldState, target: SaveTarget = {}): Promise<SaveResult> {
   const envelope = serialize(state);
-  const db = await getDb();
+  const worldId = await resolveWorld(target);
+  const store = target.store ?? idbSaveStore;
 
-  const write = async (): Promise<void> => {
-    const tx = db.transaction(SAVES_STORE, 'readwrite');
-    const store = tx.objectStore(SAVES_STORE);
-    // Rotate before overwriting, inside the transaction, so a crash mid-write cannot leave
-    // both records damaged. Every await here is an IDB request, which is what keeps the
-    // transaction alive — do not await anything else between these lines.
-    const existing = await store.get(CURRENT_KEY);
-    if (existing !== undefined) await store.put(existing, PREVIOUS_KEY);
-    await store.put(envelope, CURRENT_KEY);
-    await tx.done;
-  };
+  const write = (): Promise<void> => store.rotate(worldId, envelope);
 
   let freed: string | null = null;
   try {
-    freed = (await withQuotaRetry(write, freeSpaceForSave)).freed;
+    freed = (await withQuotaRetry(write, () => freeSpaceForSave(worldId, store))).freed;
   } catch (error) {
     if (error instanceof StorageFullError) {
       // The one failure the player MUST hear about, because from their side of the screen a
@@ -162,6 +295,14 @@ export async function saveWorld(state: WorldState): Promise<SaveResult> {
     logWarn('The world saved, but the input trace did not.', error);
   }
 
+  // Refresh the card. AFTER the write, so the front door describes what is actually on disk —
+  // a card promising money the save does not contain is worse than a stale one. Best-effort by
+  // construction: `touchWorld` never throws, because a card is not worth a failed save.
+  await touchWorld(worldId, {
+    ...summaryOf(state),
+    formatVersion: envelope.formatVersion,
+  });
+
   return {
     tick: envelope.tick,
     bytes: JSON.stringify(envelope).length,
@@ -182,7 +323,12 @@ export async function saveWorld(state: WorldState): Promise<SaveResult> {
  * genuinely too big walks down the ladder one autosave at a time rather than dropping
  * everything the first time it hits a limit that might have been a transient one.
  */
-async function freeSpaceForSave(): Promise<string | null> {
+async function freeSpaceForSave(worldId: string, store: SaveRecordStore): Promise<string | null> {
+  // ONLY THIS WORLD'S BACKUP, never another world's. A player whose second lot is running out
+  // of room has not consented to their first lot losing its parachute, and a ladder that
+  // reached across worlds would mean the cost of a big factory is paid by a small one. The
+  // trace store below is the exception, and it is the right one: it is shared, it is explicitly
+  // the cheapest thing in the database to lose, and it is not a world.
   const db = await getDb();
 
   const traces = await db.count(TRACES_STORE);
@@ -200,16 +346,10 @@ async function freeSpaceForSave(): Promise<string | null> {
     return 'the input log it keeps for bug reports';
   }
 
-  const tx = db.transaction(SAVES_STORE, 'readwrite');
-  const store = tx.objectStore(SAVES_STORE);
-  const previous = await store.get(PREVIOUS_KEY);
-  if (previous !== undefined) {
-    await store.delete(PREVIOUS_KEY);
-    await tx.done;
+  if (await store.dropPrevious(worldId)) {
     logWarn('Storage was full, so the backup save was dropped to make room for the current one.');
     return 'the spare backup copy of your world';
   }
-  await tx.done;
 
   // Everything expendable is gone. What is left is the world itself and, if cloud sync parked
   // one, another device's world — neither of which this layer is allowed to delete.
@@ -222,8 +362,11 @@ async function freeSpaceForSave(): Promise<string | null> {
  * Never throws. Every failure is a `RefusedWorld` the caller can render, because "your
  * factory vanished" deserves an explanation rather than an unhandled rejection.
  */
-export async function loadWorld(): Promise<LoadOutcome> {
-  if (!isStorageAvailable()) {
+export async function loadWorld(target: SaveTarget = {}): Promise<LoadOutcome> {
+  // "Storage is unavailable" is a statement about the DEFAULT driver, so an explicitly supplied
+  // store answers the question by existing. Without this, every test would refuse before it
+  // reached a line worth testing.
+  if (target.store === undefined && !isStorageAvailable()) {
     const message = 'IndexedDB is not available, so this world cannot be saved or loaded.';
     logWarn(message);
     return { status: 'refused', reason: 'unavailable', message };
@@ -231,13 +374,12 @@ export async function loadWorld(): Promise<LoadOutcome> {
 
   let stored: SaveEnvelope | undefined;
   let fallback: SaveEnvelope | undefined;
+  let worldId: string;
   try {
-    const db = await getDb();
-    const tx = db.transaction(SAVES_STORE, 'readonly');
-    const store = tx.objectStore(SAVES_STORE);
-    stored = await store.get(CURRENT_KEY);
-    fallback = await store.get(PREVIOUS_KEY);
-    await tx.done;
+    worldId = await resolveWorld(target);
+    const records = await (target.store ?? idbSaveStore).read(worldId);
+    stored = records.current;
+    fallback = records.previous;
   } catch (error) {
     const message = 'Could not open the save database. Play continues, but nothing will save.';
     logError(message, error);
@@ -278,7 +420,14 @@ export async function loadWorld(): Promise<LoadOutcome> {
     // loads, the autosave clock starts and the ordinary rotation will begin overwriting the
     // evidence within a minute of active play. The original stays exactly where it is; this
     // is a copy into a store nothing else touches.
-    const filed = await quarantineRecord({ slot: source, record: primary, error });
+    // The slot label carries the world id now, so triage on a player with three lots can tell
+    // which one broke — and so the quarantine fingerprint cannot collide across worlds and
+    // silently decide that a second broken save is "already known".
+    const filed = await quarantineRecord({
+      slot: source === 'current' ? currentKeyFor(worldId) : previousKeyFor(worldId),
+      record: primary,
+      error,
+    });
 
     const hasBackup = source === 'current' && fallback !== undefined;
     if (hasBackup) {
@@ -289,7 +438,11 @@ export async function loadWorld(): Promise<LoadOutcome> {
         return recovered;
       } catch (fallbackError) {
         logError('The previous save is unreadable too.', fallbackError);
-        await quarantineRecord({ slot: PREVIOUS_KEY, record: fallback, error: fallbackError });
+        await quarantineRecord({
+          slot: previousKeyFor(worldId),
+          record: fallback,
+          error: fallbackError,
+        });
       }
     }
 
@@ -388,29 +541,30 @@ function finish(restored: RestoredWorld, source: 'current' | 'previous'): Loaded
 }
 
 /**
- * Delete the saved world and its trace.
+ * Delete one world's records and its trace.
  *
- * There is no UI for this and there should not be one: §6 locks one persistent world per
- * player, and a "new game" button next to a factory somebody spent ten hours on is a
- * footgun. It exists for DevTools and for tests.
+ * STILL NOT THE DELETE BUTTON. The front door's delete is `deleteWorld` in `worlds.ts`, which
+ * tombstones the registry entry and leaves every byte of the save where it is for two weeks;
+ * this is the collection that eventually follows, plus DevTools and tests. The distinction is
+ * the whole reason deleting a world is recoverable — one of these two functions is reversible
+ * and the other is not, and the player only ever presses the reversible one.
  */
-export async function clearSavedWorld(): Promise<void> {
-  const db = await getDb();
-  await db.clear(SAVES_STORE);
-  await clearTrace();
+export async function clearSavedWorld(target: SaveTarget = {}): Promise<void> {
+  const worldId = await resolveWorld(target);
+  // The seed before the records, because the seed is how the trace store knows whose batches
+  // are whose and the registry is the only thing that still remembers it once the save is gone.
+  const seed = await worldSeedOf(worldId);
+  await (target.store ?? idbSaveStore).clear(worldId);
+  if (seed !== null) await clearTraceForWorld(seed);
   logWarn('Cleared the saved world.');
 }
 
 /** The raw stored envelopes, unmigrated, for the dev overlay and for bug reports. */
-export async function readRawSaves(): Promise<{
+export async function readRawSaves(target: SaveTarget = {}): Promise<{
   current: SaveEnvelope | undefined;
   previous: SaveEnvelope | undefined;
 }> {
-  const db = await getDb();
-  const tx = db.transaction(SAVES_STORE, 'readonly');
-  const store = tx.objectStore(SAVES_STORE);
-  const current = await store.get(CURRENT_KEY);
-  const previous = await store.get(PREVIOUS_KEY);
-  await tx.done;
+  const worldId = await resolveWorld(target);
+  const { current, previous } = await (target.store ?? idbSaveStore).read(worldId);
   return { current, previous };
 }
