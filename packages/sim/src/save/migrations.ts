@@ -14,10 +14,11 @@
 // 2029. See `test/fixtures/saves/`.
 // ────────────────────────────────────────────────────────────────────────────────────────
 //
-// The chain is two steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
+// The chain is three steps long: format 1 (v0.1 — field, machines, inventory, stats) up to
 // format 2 (the factory — belts, grabbers, zones, tech unlocks, upgrade dials, and the
 // per-tile withering clock) up to format 3 (the liquid layer — reservoirs, pipes, one-ledger
-// networks, and the per-machine plumbing fields).
+// networks, and the per-machine plumbing fields) up to format 4 (the walk-to errand — one
+// pending `PlayerIntent` on the player, or none).
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -28,7 +29,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 3;
+export const CURRENT_FORMAT_VERSION = 4;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -192,12 +193,46 @@ const migrateFormat2To3: SaveMigration = (payload) => {
 };
 
 /**
+ * Format 3 → 4.
+ *
+ * NOBODY WAS MID-WALK WHEN A FORMAT-3 WORLD WAS WRITTEN, so `null` is the value that makes
+ * the loaded world identical to the one that was saved. The errand did not exist; inventing
+ * one for a returning player would be fiction, and it would be the *worst* kind — the farmer
+ * would set off across the field on their own the moment the world loaded, which is exactly
+ * the surprise `applySetMoveDirection` is arranged to prevent.
+ *
+ * This step reads no balance data at all, so unlike the two above it needs no frozen-constant
+ * block: `null` is `null` in every build this file will ever run in.
+ */
+const migrateFormat3To4: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-3 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  // `rows()` only handles arrays, and the player is a lone object — so it is guarded inline,
+  // to the same standard, rather than reached into and hoped about.
+  const playerRaw = p['player'];
+  if (typeof playerRaw !== 'object' || playerRaw === null || Array.isArray(playerRaw)) {
+    throw new SaveCorruptError('Cannot migrate: `payload.player` is not an object.');
+  }
+
+  return {
+    ...p,
+    player: { ...(playerRaw as Record<string, unknown>), intent: null },
+    version: 4,
+  };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
- * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one.
+ * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, which
+ * `MIGRATIONS[3]` then turns into a format-4 one.
  */
 export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   1: migrateFormat1To2,
   2: migrateFormat2To3,
+  3: migrateFormat3To4,
 };
 
 export interface MigrationOutcome {

@@ -1104,6 +1104,18 @@ export const HAND_REACH_SUBTILES_SQUARED = HAND_REACH_SUBTILES * HAND_REACH_SUBT
 /** 4 tiles/second, expressed per 100 ticks so the arithmetic stays exact (see tick.ts). */
 export const PLAYER_SPEED_SUBTILES_PER_100_TICKS = 5_120;
 
+/**
+ * How long a walk-to errand may live before the sim gives up on it, in ticks.
+ *
+ * THIRTY SECONDS IS NOT A BALANCE NUMBER, IT IS A DEADLOCK BREAKER. The longest honest walk
+ * in a 16×16 world is corner to corner — about 22.6 tiles, or 5.7 seconds at four tiles a
+ * second — so anything still walking at thirty is not walking, it is stuck: clamped against
+ * the world edge, or aimed at something it can never quite reach. An errand that cannot
+ * expire is a farmer who can never move again, which is a far worse bug than a click that
+ * quietly gave up, so the ceiling is generous and absolute rather than tuned.
+ */
+export const WALK_ERRAND_TIMEOUT_TICKS = 600;
+
 /** One net-worth sample per active minute; ten hours of history for the Peak Flow board. */
 export const NET_WORTH_SAMPLE_PERIOD_TICKS = 1_200;
 export const NET_WORTH_SAMPLE_LIMIT = 600;
@@ -1157,7 +1169,7 @@ function balanceDigest(): string {
   }
   h = fnv1aString(
     h,
-    `${MOISTURE_MAX}:${MOISTURE_DRAIN_PER_TICK}:${GROWTH_PER_WATERED_TICK}:${HAND_POUR_ML}:${SPRINKLER_POUR_ML}:${SPRINKLER_PERIOD_TICKS}:${SPRINKLER_RADIUS_TILES}:${CONDITION_MAX}:${CONDITION_EFFECT_THRESHOLD}:${STARTING_MONEY_CENTS}:${STARTING_SEEDS}:${PLAYER_SPEED_SUBTILES_PER_100_TICKS}`,
+    `${MOISTURE_MAX}:${MOISTURE_DRAIN_PER_TICK}:${GROWTH_PER_WATERED_TICK}:${HAND_POUR_ML}:${SPRINKLER_POUR_ML}:${SPRINKLER_PERIOD_TICKS}:${SPRINKLER_RADIUS_TILES}:${CONDITION_MAX}:${CONDITION_EFFECT_THRESHOLD}:${STARTING_MONEY_CENTS}:${STARTING_SEEDS}:${PLAYER_SPEED_SUBTILES_PER_100_TICKS}:${HAND_REACH_SUBTILES}:${WALK_ERRAND_TIMEOUT_TICKS}`,
   );
   h = fnv1aString(
     h,

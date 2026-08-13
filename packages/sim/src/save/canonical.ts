@@ -36,20 +36,41 @@ import {
   type Machine,
   type Pipe,
   type PipeNetwork,
+  type PlayerIntent,
   type PlayerState,
   type Reservoir,
   type TraceEntry,
   type WorldState,
   type Zone,
   Direction,
+  IntentAction,
 } from '../state';
 import type { ManualTouchCounts, WorldStats } from '../stats';
 import { SaveCorruptError } from './errors';
 
 // --- the payload shape ------------------------------------------------------------
 
+/**
+ * A pending errand, flattened to six integers.
+ *
+ * THE FIRST NULLABLE FIELD IN THE ENTIRE PAYLOAD, and it is nullable rather than
+ * sentinel-encoded because `PlayerIntent` is nullable in `WorldState` and the payload's job
+ * is to mirror the world, not to invent a second encoding of it. A `{action: 0}` row meaning
+ * "no errand" would be a second way to say `null` — and two encodings of the same fact is
+ * how a canonical form stops being canonical.
+ */
+export interface SavePlayerIntent {
+  action: number;
+  count: number;
+  issuedTick: number;
+  item: number;
+  tileX: number;
+  tileY: number;
+}
+
 export interface SavePlayer {
   facing: number;
+  intent: SavePlayerIntent | null;
   moveAccum: number;
   moveDir: number;
   xSub: number;
@@ -428,6 +449,20 @@ export function toPayload(state: WorldState): SavePayload {
     reservoirs,
     player: {
       facing: state.player.facing,
+      // An explicit copy, never an alias. This file's stated guarantee is that the payload
+      // shares no object with `state` and is therefore safe to build mid-tick — and the
+      // errand is the one field on the player that is an object rather than a number.
+      intent:
+        state.player.intent === null
+          ? null
+          : {
+              action: state.player.intent.action,
+              count: state.player.intent.count,
+              issuedTick: state.player.intent.issuedTick,
+              item: state.player.intent.item,
+              tileX: state.player.intent.tileX,
+              tileY: state.player.intent.tileY,
+            },
       moveAccum: state.player.moveAccum,
       moveDir: state.player.moveDir,
       xSub: state.player.xSub,
@@ -482,6 +517,19 @@ function record(value: unknown, path: string): Record<string, unknown> {
     fail(path, `expected an object, found ${describe(value)}`);
   }
   return value as Record<string, unknown>;
+}
+
+/**
+ * An object, or an explicit `null`. `undefined` is NOT accepted.
+ *
+ * A missing key falls through to `record()` and fails loudly as `undefined`, which is what
+ * we want: a format-4 payload always writes `intent`, so an absent one means the file is
+ * damaged or the migration did not run. Quietly reading a missing key as "no errand" would
+ * turn both of those into a world that looks fine.
+ */
+function recordOrNull(value: unknown, path: string): Record<string, unknown> | null {
+  if (value === null) return null;
+  return record(value, path);
 }
 
 function describe(value: unknown): string {
@@ -599,6 +647,18 @@ const DIRECTIONS: readonly number[] = [
   Direction.South,
   Direction.West,
 ];
+/** `None` is not a legal errand action: an errand to do nothing is what `null` is for. */
+const ERRAND_ACTIONS: readonly number[] = [
+  IntentAction.Water,
+  IntentAction.Plant,
+  IntentAction.Harvest,
+  IntentAction.Load,
+  IntentAction.Unload,
+  IntentAction.RefillHopper,
+  IntentAction.Repair,
+  IntentAction.WhackJam,
+  IntentAction.Sell,
+];
 
 /**
  * Rebuild a `WorldState` from a canonical payload, validating as it goes.
@@ -613,12 +673,30 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
   const p = record(value, 'payload');
 
   const playerRaw = record(p['player'], 'payload.player');
+  const intentRaw = recordOrNull(playerRaw['intent'], 'payload.player.intent');
+  const intent: PlayerIntent | null =
+    intentRaw === null
+      ? null
+      : {
+          action: idInt(
+            intentRaw,
+            'action',
+            'payload.player.intent',
+            ERRAND_ACTIONS,
+          ) as IntentAction,
+          tileX: int(intentRaw, 'tileX', 'payload.player.intent'),
+          tileY: int(intentRaw, 'tileY', 'payload.player.intent'),
+          item: int(intentRaw, 'item', 'payload.player.intent'),
+          count: int(intentRaw, 'count', 'payload.player.intent'),
+          issuedTick: int(intentRaw, 'issuedTick', 'payload.player.intent'),
+        };
   const player: PlayerState = {
     xSub: int(playerRaw, 'xSub', 'payload.player'),
     ySub: int(playerRaw, 'ySub', 'payload.player'),
     facing: idInt(playerRaw, 'facing', 'payload.player', DIRECTIONS) as Direction,
     moveDir: idInt(playerRaw, 'moveDir', 'payload.player', DIRECTIONS) as Direction,
     moveAccum: int(playerRaw, 'moveAccum', 'payload.player'),
+    intent,
   };
 
   const inventoryRaw = list(p, 'inventory', 'payload');

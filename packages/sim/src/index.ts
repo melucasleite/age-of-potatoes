@@ -127,6 +127,7 @@ export {
   UPGRADE_COST_PERCENT_BY_LEVEL,
   UPGRADE_MAX_LEVEL,
   UpgradeDial,
+  WALK_ERRAND_TIMEOUT_TICKS,
   WILT_GRACE_TICKS,
   WILT_WINDOW_TICKS,
   WORK_RATE_SCALE,
@@ -237,6 +238,8 @@ export type { TileRect, ZoneCounts } from './zones';
 export {
   CeremonyId,
   Direction,
+  INTENT_ACTIONS,
+  IntentAction,
   WORLD_STATE_VERSION,
   addItem,
   beltAt,
@@ -292,6 +295,7 @@ export type {
   Machine,
   Pipe,
   PipeNetwork,
+  PlayerIntent,
   PlayerState,
   Reservoir,
   TraceEntry,
@@ -331,6 +335,7 @@ export type {
   SetZonePriorityCommand,
   UnloadMachineCommand,
   UpgradeMachineCommand,
+  WalkAndActCommand,
   WaterTileCommand,
   WhackJamCommand,
 } from './commands';

@@ -61,6 +61,7 @@ import {
   type SetZonePriorityCommand,
   type UnloadMachineCommand,
   type UpgradeMachineCommand,
+  type WalkAndActCommand,
   type WaterTileCommand,
   type WhackJamCommand,
   appendTrace,
@@ -94,6 +95,7 @@ import {
   SPRINKLER_POUR_ML,
   SPRINKLER_PERIOD_TICKS,
   UPGRADE_MAX_LEVEL,
+  WALK_ERRAND_TIMEOUT_TICKS,
   WILT_GRACE_TICKS,
   WILT_WINDOW_TICKS,
   WORLD_TILES_HIGH,
@@ -123,6 +125,8 @@ import {
   type Machine,
   CeremonyId,
   Direction,
+  IntentAction,
+  type PlayerIntent,
   type WorldState,
   addItem,
   beltById,
@@ -243,6 +247,8 @@ function applyCommand(state: WorldState, command: Command): boolean {
   switch (command.type) {
     case 'SetMoveDirection':
       return applySetMoveDirection(state, command);
+    case 'WalkAndAct':
+      return applyWalkAndAct(state, command);
     case 'WaterTile':
       return applyWaterTile(state, command);
     case 'PlantTile':
@@ -331,12 +337,76 @@ function unlocked(state: WorldState, required: string | null): boolean {
   return hasTech(state.unlocked, required);
 }
 
+/**
+ * Hold a direction — and, in doing so, abandon any errand.
+ *
+ * MANUAL CONTROL ALWAYS WINS, AND THAT IS WHY THE LINE IS HERE RATHER THAN SOMEWHERE
+ * CLEVERER. Touching a movement key is the player saying "no, I will walk it myself", and a
+ * walk-to feature that argues with that — finishing its errand first, or resuming afterwards
+ * — is the exact thing that makes this convenience infuriating in other games. It is a
+ * grabbed steering wheel, so it takes effect on the same tick and asks nothing.
+ *
+ * Note that it fires on a real direction CHANGE, including the release that sends `None`:
+ * let go of the key and the errand you started mid-stride goes with it. That is the safe
+ * direction to err in — the player is never surprised by the farmer walking off on their own.
+ */
 function applySetMoveDirection(state: WorldState, command: SetMoveDirectionCommand): boolean {
   if (state.player.moveDir === command.dir) return false;
   state.player.moveDir = command.dir;
   if (command.dir !== Direction.None) {
     state.player.facing = command.dir;
   }
+  state.player.intent = null;
+  return true;
+}
+
+/**
+ * Take on an errand: walk to a tile, then do one thing there.
+ *
+ * Accepted only if the verb is one that could ever work at that tile — a plant errand aimed
+ * at an occupied tile, or a repair errand aimed at bare grass, is refused here and now rather
+ * than walked across the field and abandoned on arrival. What is deliberately NOT checked is
+ * anything that can legitimately change during the walk: seeds in the bag, money, buffer
+ * space. Those belong to the reducer that runs on arrival, and if it refuses, the errand ends
+ * exactly as an out-of-seeds click does today — quietly, having cost a walk.
+ *
+ * A second errand replaces the first. There is no queue (see `PlayerState.intent`).
+ */
+function applyWalkAndAct(state: WorldState, command: WalkAndActCommand): boolean {
+  if (command.action === IntentAction.None) return false;
+  // A HELD KEY REFUSES THE ERRAND, which is the other half of "manual control always wins".
+  // `applySetMoveDirection` covers the player who grabs the wheel DURING a walk; this covers
+  // the player who was already steering when they clicked, and without it that player is
+  // overruled by their own click while the key is still down. Refusing — rather than queueing
+  // the errand until they let go — is deliberate: a pending errand that fires on key release
+  // is the farmer walking off on their own, which is the surprise this whole feature is
+  // supposed to avoid. It also makes `advancePlayer`'s "no arbitration to do here" true.
+  if (state.player.moveDir !== Direction.None) return false;
+  // Integer payloads, checked once on the way in. Every other command only READS its payload,
+  // but this one stores it — a fractional tile would land in the world, the hash, and the save.
+  // `Number.isInteger`, not `Math.trunc(x) !== x`: the latter passes ±Infinity through, and an
+  // infinite count reaches world state and then refuses to serialize.
+  if (
+    !Number.isInteger(command.tileX) ||
+    !Number.isInteger(command.tileY) ||
+    !Number.isInteger(command.item) ||
+    !Number.isInteger(command.count)
+  ) {
+    return false;
+  }
+  if (!isInsideWorld(command.tileX, command.tileY)) return false;
+
+  const intent: PlayerIntent = {
+    action: command.action,
+    tileX: command.tileX,
+    tileY: command.tileY,
+    item: command.item,
+    count: command.count,
+    issuedTick: state.tick,
+  };
+  if (intentTargetSubtiles(state, intent) === null) return false;
+
+  state.player.intent = intent;
   return true;
 }
 
@@ -970,9 +1040,24 @@ function applySetZoneAutoReplant(state: WorldState, command: SetZoneAutoReplantC
 }
 
 // --- 2. player --------------------------------------------------------------------
+//
+// Two ways the farmer's legs can be driven, and never both at once: a held direction, or a
+// pending errand. The errand wins while it exists, and it only exists while the player has
+// not touched a movement key — `applySetMoveDirection` clears it on any change, so there is
+// no arbitration to do here beyond asking which one is live.
+//
+// This runs AFTER commands rather than before them, which is worth one sentence: it means a
+// `WalkAndAct` aimed at something already in reach fires on the very tick it arrives, instead
+// of waiting a tick to discover it had nowhere to walk. The documented system order is
+// unchanged — the errand is player movement, and player movement is step 2.
 
 function advancePlayer(state: WorldState): void {
   const player = state.player;
+  if (player.intent !== null) {
+    advanceErrand(state, player.intent);
+    return;
+  }
+
   if (player.moveDir === Direction.None) {
     player.moveAccum = 0;
     return;
@@ -992,6 +1077,199 @@ function advancePlayer(state: WorldState): void {
 
   player.xSub = clampInt(player.xSub, 0, WORLD_TILES_WIDE * SUBTILE - 1);
   player.ySub = clampInt(player.ySub, 0, WORLD_TILES_HIGH * SUBTILE - 1);
+}
+
+/**
+ * One tick of a walk-to errand: expire it, abandon it, finish it, or take a step.
+ *
+ * THE FOUR ENDINGS ARE ALL EXPLICIT, IN THIS ORDER, BECAUSE THE MISSING ONE IS ALWAYS THE BUG.
+ * An errand that only ever ended by arriving would strand the player the first time a tile was
+ * harvested out from under them, and a walk with no ceiling on it is a farmer who can never
+ * move again. Manual control is the fifth ending and it lives in `applySetMoveDirection`,
+ * where the interruption actually happens.
+ */
+function advanceErrand(state: WorldState, intent: PlayerIntent): void {
+  const player = state.player;
+
+  // 1. It timed out. Nothing about the world is wrong; this errand simply is not happening.
+  if (state.tick - intent.issuedTick >= WALK_ERRAND_TIMEOUT_TICKS) {
+    abandonErrand(player);
+    return;
+  }
+
+  // 2. It stopped making sense — the tile was harvested, the machine was picked up and moved.
+  const target = intentTargetSubtiles(state, intent);
+  if (target === null) {
+    abandonErrand(player);
+    return;
+  }
+
+  // 3. Close enough to touch it. Run the verb through EXACTLY the reducer a direct click would
+  // have reached — same validation, same refusals, same stats — and then let go of the errand
+  // whether it worked or not. Arriving to find the bag empty is an errand that is over.
+  //
+  // The arrival is NOT appended to the trace. One click was one command, and this is that one
+  // command still happening; recording it again would make a replay apply the verb twice.
+  if (
+    distanceSquaredSubtiles(player.xSub, player.ySub, target.xSub, target.ySub) <=
+    HAND_REACH_SUBTILES_SQUARED
+  ) {
+    const command = intentCommand(state, intent);
+    if (command !== null) applyCommand(state, command);
+    abandonErrand(player);
+    return;
+  }
+
+  // 4. Still walking.
+  //
+  // STRAIGHT AT IT, THROUGH ANYTHING IN THE WAY. Obstacle avoidance is deliberately deferred,
+  // not forgotten: there is nothing in this world solid enough to walk into — the player
+  // strolls over belts, pipes and machines alike — so A* would be pathing around obstacles
+  // that do not exist. When something finally blocks a footstep, this is the function that
+  // grows a path, and the errand's shape (a target and a verb) is already the right shape for
+  // one. Until then, a straight line is not a simplification; it is the correct answer.
+  player.moveAccum += PLAYER_SPEED_SUBTILES_PER_100_TICKS;
+  const budget = divFloor(player.moveAccum, 100);
+  player.moveAccum -= budget * 100;
+  if (budget === 0) return;
+
+  const dx = target.xSub - player.xSub;
+  const dy = target.ySub - player.ySub;
+
+  // `sqrt` is the one non-trivial float operation the determinism rules allow, because
+  // IEEE-754 requires it to be correctly rounded — every engine returns the same bits. The
+  // truncations either side keep it out of world state: what gets stored is always an integer
+  // number of subtiles, so the walk can be replayed a decade from now.
+  const distance = Math.trunc(Math.sqrt(dx * dx + dy * dy));
+  if (distance <= budget) {
+    // Unreachable while reach (384) exceeds a tick's budget (~52) — the check above would
+    // have fired first. Kept because it is the guard against dividing by a zero distance, and
+    // because the day someone tunes either number it stops being unreachable.
+    player.xSub = target.xSub;
+    player.ySub = target.ySub;
+  } else {
+    player.xSub += Math.trunc((dx * budget) / distance);
+    player.ySub += Math.trunc((dy * budget) / distance);
+  }
+
+  player.xSub = clampInt(player.xSub, 0, WORLD_TILES_WIDE * SUBTILE - 1);
+  player.ySub = clampInt(player.ySub, 0, WORLD_TILES_HIGH * SUBTILE - 1);
+
+  // Face the way you are going. The sprite has no idea an errand exists; it just wants a
+  // compass direction, and the dominant axis is the one a person would say they were walking.
+  if (dx * dx >= dy * dy) {
+    player.facing = dx >= 0 ? Direction.East : Direction.West;
+  } else {
+    player.facing = dy >= 0 ? Direction.South : Direction.North;
+  }
+}
+
+/** Drop the errand and the momentum with it. The player stands where they stopped. */
+function abandonErrand(player: WorldState['player']): void {
+  player.intent = null;
+  player.moveAccum = 0;
+}
+
+/**
+ * Where an errand is walking to, or `null` when it no longer means anything.
+ *
+ * This is the single validity rule, shared by the tick that issues the errand and every tick
+ * that continues it — so "can this still happen" cannot drift between the two. It answers
+ * questions about the SHAPE of the world only: does the tile exist, is the machine still
+ * standing there, is the tile still plantable. Whether the player can afford it, has the seed,
+ * or has room for the output is the arrival reducer's business, checked when it matters.
+ */
+function intentTargetSubtiles(
+  state: WorldState,
+  intent: PlayerIntent,
+): { xSub: number; ySub: number } | null {
+  if (!isInsideWorld(intent.tileX, intent.tileY)) return null;
+
+  switch (intent.action) {
+    case IntentAction.Water:
+    case IntentAction.Plant:
+    case IntentAction.Harvest: {
+      const tile = tileAt(state, intent.tileX, intent.tileY);
+      if (tile === null) return null;
+      // Planting a tile something else already planted, or harvesting one something else
+      // already pulled, is the errand going stale mid-walk. Let it go rather than marching
+      // the player over to stand there doing nothing.
+      if (intent.action === IntentAction.Plant && tile.crop !== CropId.None) return null;
+      if (intent.action === IntentAction.Harvest && !isTileReady(tile) && tile.compost <= 0) {
+        return null;
+      }
+      return {
+        xSub: tileCentreSubtiles(intent.tileX),
+        ySub: tileCentreSubtiles(intent.tileY),
+      };
+    }
+
+    case IntentAction.Load:
+    case IntentAction.Unload:
+    case IntentAction.RefillHopper:
+    case IntentAction.Repair:
+    case IntentAction.WhackJam:
+    case IntentAction.Sell: {
+      // Resolved from the tile every tick rather than pinned by id at issue time, and that is
+      // on purpose: pick-up-and-move is free and always will be (plan §4), so the machine you
+      // set off toward may not be there when you arrive. Aim at the FOOTPRINT CENTRE, which is
+      // where `withinReachOfMachine` measures from — walking to the corner tile of a 2×2 and
+      // finding yourself out of reach would be a maddening near-miss.
+      const machine = machineAt(state, intent.tileX, intent.tileY);
+      if (machine === null) return null;
+      if (intent.action === IntentAction.Sell && machine.kind !== MachineKind.SellBin) return null;
+      return machineCentreSubtiles(machine);
+    }
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * The direct command an arrived errand becomes.
+ *
+ * The whole point of routing through the ordinary `Command` shapes is that walking to a thing
+ * and clicking it while standing there are the SAME EVENT as far as the world is concerned —
+ * same reducer, same touch counters, same anti-softlock rules. There is no second
+ * implementation of planting here to fall out of step with the first.
+ */
+function intentCommand(state: WorldState, intent: PlayerIntent): Command | null {
+  switch (intent.action) {
+    case IntentAction.Water:
+      return { type: 'WaterTile', tileX: intent.tileX, tileY: intent.tileY };
+    case IntentAction.Plant:
+      return {
+        type: 'PlantTile',
+        tileX: intent.tileX,
+        tileY: intent.tileY,
+        crop: intent.item as CropId,
+      };
+    case IntentAction.Harvest:
+      return { type: 'HarvestTile', tileX: intent.tileX, tileY: intent.tileY };
+    case IntentAction.Sell:
+      return { type: 'SellItem', item: intent.item as ItemId, count: intent.count };
+    default:
+      break;
+  }
+
+  const machine = machineAt(state, intent.tileX, intent.tileY);
+  if (machine === null) return null;
+
+  switch (intent.action) {
+    case IntentAction.Load:
+      return { type: 'LoadMachine', machineId: machine.id, count: intent.count };
+    case IntentAction.Unload:
+      return { type: 'UnloadMachine', machineId: machine.id, count: intent.count };
+    case IntentAction.RefillHopper:
+      return { type: 'RefillHopper', machineId: machine.id };
+    case IntentAction.Repair:
+      return { type: 'RepairMachine', machineId: machine.id };
+    case IntentAction.WhackJam:
+      return { type: 'WhackJam', machineId: machine.id };
+    default:
+      return null;
+  }
 }
 
 // --- 3. water ---------------------------------------------------------------------

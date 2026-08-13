@@ -3,7 +3,7 @@
   "description": "Plan §17's canary: 1,000 ticks from a fixed seed and a fixed command list. Plant, water, walk west to the roadside stand, sell, walk back, water again. The same script test/sim.test.ts pins inline, so the two must always agree.",
   "seed": 1234,
   "ticks": 1000,
-  "expectedHash": "f2cea2a9",
+  "expectedHash": "ffebd557",
   "commands": [
     {
       "tick": 0,

@@ -27,7 +27,7 @@ import type {
   MachineKind,
   UpgradeDial,
 } from './data';
-import type { Direction, TraceEntry, WorldState } from './state';
+import type { Direction, IntentAction, TraceEntry, WorldState } from './state';
 import type { PaintMode, TileRect } from './zones';
 
 /** Hold a direction, or `Direction.None` to stop. */
@@ -265,8 +265,41 @@ export interface RemovePipeCommand {
   path: PipePathNode[];
 }
 
+// --- walking to an errand ---------------------------------------------------------------
+//
+// ONE CLICK IS ONE COMMAND, exactly as one drag is. Clicking a tile you cannot reach records
+// a single `WalkAndAct` and nothing else: the sim walks the farmer over the next hundred-odd
+// ticks and fires the verb on arrival, and none of those ticks appends anything. The
+// alternative — the client emitting `SetMoveDirection` until the player is close enough — is
+// the reason the note at the top of this file exists. It would put a direction change in the
+// trace every few ticks for every click, forever, and it would make how far the farmer walks
+// depend on how fast the browser happened to be running.
+
+/**
+ * Walk to a tile and perform one hand verb on arrival.
+ *
+ * The payload is FLAT: an action kind, a target tile, and two integers whose meaning the
+ * action decides. Nesting a whole `Command` in here would have been shorter to write and
+ * worse to live with — a recursive command is recursive in the trace, in the save, and in
+ * the hash.
+ *
+ * Issued by the input layer ONLY when the target is out of reach. An in-reach click still
+ * emits the direct command, so the common case gains nothing that can go wrong.
+ */
+export interface WalkAndActCommand {
+  type: 'WalkAndAct';
+  action: IntentAction;
+  tileX: number;
+  tileY: number;
+  /** `CropId` for Plant, `ItemId` for Sell, 0 for the verbs that need neither. */
+  item: number;
+  /** Stack size for Load, Unload, and Sell. 0 otherwise. */
+  count: number;
+}
+
 export type Command =
   | SetMoveDirectionCommand
+  | WalkAndActCommand
   | WaterTileCommand
   | PlantTileCommand
   | HarvestTileCommand

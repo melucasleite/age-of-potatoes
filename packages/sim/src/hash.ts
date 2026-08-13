@@ -101,6 +101,22 @@ export function hashStateUint32(state: WorldState): number {
   d.num(state.player.moveDir);
   d.num(state.player.moveAccum);
 
+  // A pending errand is world state like any other: two players who have both clicked a far
+  // tile but are half a field apart in the walk are in genuinely different worlds, and a
+  // digest that ignored the errand would call them identical. The presence flag comes first
+  // so "no errand" and "an errand to tile 0,0" can never encode to the same bytes.
+  const intent = state.player.intent;
+  d.text('player.intent');
+  d.bool(intent !== null);
+  if (intent !== null) {
+    d.num(intent.action);
+    d.num(intent.tileX);
+    d.num(intent.tileY);
+    d.num(intent.item);
+    d.num(intent.count);
+    d.num(intent.issuedTick);
+  }
+
   d.text('inventory');
   d.num(state.inventory.length);
   for (let i = 0; i < state.inventory.length; i++) {
@@ -335,6 +351,18 @@ export function findNonIntegerFields(state: WorldState): string[] {
   check('player.xSub', state.player.xSub);
   check('player.ySub', state.player.ySub);
   check('player.moveAccum', state.player.moveAccum);
+
+  // Hashed, so checked. `action` is left out on purpose: it is an id rather than a quantity,
+  // it is validated against `ERRAND_ACTIONS` on load, and a fractional one could only come
+  // from a command payload that `applyWalkAndAct` already truncation-checks on the way in.
+  const intent = state.player.intent;
+  if (intent !== null) {
+    check('player.intent.tileX', intent.tileX);
+    check('player.intent.tileY', intent.tileY);
+    check('player.intent.item', intent.item);
+    check('player.intent.count', intent.count);
+    check('player.intent.issuedTick', intent.issuedTick);
+  }
 
   for (let i = 0; i < state.inventory.length; i++) {
     check(`inventory[${i}].count`, state.inventory[i]!.count);

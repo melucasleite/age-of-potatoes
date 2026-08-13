@@ -86,6 +86,30 @@ Camera pan, camera zoom, hover, selection, and menu state are **not** commands a
 never become commands. Player movement is a **held direction**, never a position delta —
 otherwise input frequency leaks into world state and a 144 Hz monitor walks faster.
 
+**The walk-to errand is ONE command, and that is the whole reason it lives in here.** Clicking
+a tile out of `HAND_REACH_SUBTILES` records a single `WalkAndAct`; the sim then walks the
+farmer over the next hundred-odd ticks and fires the verb on arrival, appending nothing more.
+The obvious shortcut — the input layer emitting `SetMoveDirection` until the player is close
+enough, then the verb — was rejected twice over. It writes a direction change into the trace
+every few ticks for every click, forever, and it makes how far the farmer walks depend on how
+fast the browser happened to be running, which is the exact leak the held-direction rule above
+exists to plug. Modelled as world state, where the farmer ends up is a function of
+`seed + trace` like everything else.
+
+**One errand at a time; a new click replaces it rather than queueing behind it.** Click three
+tiles and do all three is a different feature with its own interface problems — what is the
+order, how do you cancel the second one, what does the marker show — and none of them are
+solved by letting `PlayerState.intent` become an array. Manual control always wins: touching a
+movement key clears the errand on the same tick, including the release to `Direction.None`,
+because a convenience feature that argues with a grabbed steering wheel is the thing that
+makes this infuriating in other games.
+
+**`WALK_ERRAND_TIMEOUT_TICKS` is a deadlock breaker, not a balance number.** Nothing in this
+world is solid enough to walk into, so today the errand always arrives long before the ceiling
+and no fixture can honestly reach it. It is there because an errand that can never complete is
+a farmer who can never move again, and the day something finally blocks a footstep is the day
+that stops being hypothetical.
+
 `state.trace` is an append-only log of every command that actually applied, in application
 order. **It is not dead anti-cheat code and must not be deleted as such.** Leaderboards are
 only lightly validated. The trace is here because seed + trace is a bug report that

@@ -13,6 +13,7 @@ looked like, and the code that wrote it will be long gone.
 | `format-1.json` | 1      | 2026-08-12, `v0.1.0` | Seed 20260812, tick 32096. A sell bin, a sprinkler mid-cooldown with 12 L in the barrel, and a Chip Kitchen caught part-way through a bag.                                                                                                                                                                                                                                                 |
 | `format-2.json` | 2      | 2026-08-12, `v0.2.0` | Seed 70707, tick 29100. The first save with a factory in it: seven machines, two belt segments with six items riding them, five grabber arms — three of them mid-swing holding a washed potato or a plain chip — a painted Grow Zone, and nine researched tech nodes.                                                                                                                      |
 | `format-3.json` | 3      | 2026-08-12, `v0.4.0` | Seed 51015, tick 21306. The first save with plumbing in it: a drawn-down pond, a Pump on its bank, a seventeen-tile pipe run, and a Tank, two piped heads and an Irrigation Hub caught **mid-throttle** — demand 1,600 ml against a supply of 500, every consumer amber, the round-robin offset at 40, the Hub's scan cursor at 62, and both first-activation ceremonies already recorded. |
+| `format-4.json` | 4      | 2026-08-12, `v0.3.0` | Seed 90210, tick 3300. The first save with an errand in it, caught **mid-walk**: the farmer is 27 ticks into a harvest errand aimed at tile 11,11, four potatoes and five seeds in the bag, three plots still in the ground, and `moveAccum` stopped at 40 hundredths of a subtile.                                                                                                        |
 
 `format-1.json` was produced by driving `step()` through a scripted play session — plant,
 water, harvest, walk, sell, buy the sprinkler, feed the kitchen — and calling `serialize()`
@@ -33,6 +34,14 @@ flagged amber. A pipe network at rest has a supply accumulator of zero, an idle 
 full tanks — it would round-trip perfectly while proving almost nothing. The interesting
 fields are the ones that only exist mid-flight: `supplyAccum`, `rrOffset`, `throttled`, and
 the Hub's `scanCursor`.
+
+`format-4.json` was recorded by replaying the `walk-errands` golden fixture to tick 3,300 and
+calling `serialize()`. The moment is the whole point of the file: a pending `PlayerIntent` is
+the only thing a format-4 payload has that a format-3 one does not, and it exists **only in
+flight**. A save taken between errands would carry `intent: null`, round-trip perfectly, and
+prove nothing at all — so this one is caught 27 ticks into a harvest walk, with part of the
+crop already picked and the rest still standing, and `moveAccum` mid-fraction so a reload that
+rounded the farmer's position would show up as drift rather than as nothing.
 
 ## When the test fails
 

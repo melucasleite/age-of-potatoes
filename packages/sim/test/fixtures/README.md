@@ -48,15 +48,25 @@ its name to `FIXTURE_NAMES` in `test/goldens.ts`, and generate its hash once.
 | `all-verbs.json`    | 8123     | 22,967 | The original eleven `Command` variants, over a long session: hand-farming, a Chip Kitchen, a sprinkler, repairs, and a jam worn in over 130 operations and then whacked out.                                                                                                                                                                                                                                                             |
 | `factory-line.json` | 70707    | 33,389 | A full era-1-to-era-2 run: hand-farms for cash, researches the fabrication branch and the Workshop Charter, builds `Washer → belt → belt → Slicer → Fryer → Seasoner → Bagger` with five grabber arms, paints and renames a Grow Zone, buys a Speed dial, and runs twenty potatoes all the way to twenty bags. Guards the whole factory: belt movement and hand-off, grabber swings, tech gating, upgrade arithmetic, and zone painting. |
 | `withering.json`    | 31337    | 60,212 | Six potatoes planted and abandoned. Ticks past the 30-active-minute grace, past the wilting window, through a Day-Old harvest, and on to the compost collapse. Guards the entire withering timeline and the rule that no path out of a crop tile pays zero.                                                                                                                                                                              |
+| `water-works.json`  | 51015    | 25,267 | The liquid layer end to end: a Pump on the pond bank, a seventeen-tile pipe run drag-routed around the field and a second one torn straight back up, then a Tank, two piped heads and an Irrigation Hub hung off the survivor — deliberately more demand than one pump can meet. Guards the one-ledger flow model, the round-robin throttle, and the geometric network ids.                                                              |
+| `walk-errands.json` | 90210    |  3,923 | Four corner plots planted, watered and harvested entirely by clicking out of reach, then sold at the bin the same way. Guards all four endings an errand has: arrival fires the verb through the ordinary reducer, a second click replaces a pending errand rather than queueing, a held direction abandons one mid-stride, and moving the sell bin out from under a repair errand strands it.                                           |
 
 `golden.test.ts` asserts that the set as a whole covers every `Command` variant, and
 `REQUIRED_COMMAND_COVERAGE` in `test/goldens.ts` is typed so that adding one more variant to
 the union fails `yarn typecheck` until a fixture exercises it. That is deliberately annoying:
 a verb no fixture applies is a verb the determinism gate does not guard.
 
-The two factory fixtures were authored by scripting a bot against `step()` and dumping the
-world's own `state.trace` — so every command in them is one that actually applied, not one
-that was attempted and silently rejected.
+The two factory fixtures and `walk-errands` were authored by scripting a bot against `step()`
+and dumping the world's own `state.trace` — so every command in them is one that actually
+applied, not one that was attempted and silently rejected.
+
+`walk-errands` is deliberately short. Its job is branch coverage rather than endurance: the
+long fixtures already prove the sim survives sixty thousand ticks, and what this one proves is
+that an errand can end four different ways. **The timeout is not among them, and cannot be.**
+`WALK_ERRAND_TIMEOUT_TICKS` is 600 ticks, which buys about 120 tiles of walking in a 16×16
+world — it is a deadlock breaker for a future in which something can block a footstep, not a
+number any honest fixture can reach today. A fixture contorted into triggering it would be
+testing the contortion.
 
 ## What is deliberately not here
 

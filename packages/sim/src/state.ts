@@ -66,8 +66,9 @@ import { SUBTILE, divFloor, tileCentreSubtiles } from './units';
  *     per-tile withering clock. Migrations are a chain of pure functions, never edits.
  * 3 — the liquid layer: reservoirs with a finite level, pipes, one-ledger networks, and the
  *     per-machine plumbing fields (network, flow, throttle, the Hub's scan cursor).
+ * 4 — the walk-to errand: one pending `PlayerIntent`, or none.
  */
-export const WORLD_STATE_VERSION = 3;
+export const WORLD_STATE_VERSION = 4;
 
 /**
  * A held direction, not a delta. Input tells the sim *which way the player is holding*,
@@ -117,6 +118,76 @@ export function oppositeDirection(dir: Direction): Direction {
   return Direction.None;
 }
 
+/**
+ * The hand verbs an errand can be carrying. A SMALL FLAT ENUM, NOT A NESTED `Command`.
+ *
+ * An intent that stored a whole command inside itself would put a recursive shape in the
+ * trace, in the save, and in the hash — three places that all want plain integers. The kind
+ * plus a target tile plus at most two numbers says everything these nine verbs need, and it
+ * stays readable when somebody is reading a raw trace at 2 a.m.
+ *
+ * These are exactly the verbs `tick.ts` gates on `HAND_REACH_SUBTILES`. A verb that is not
+ * reach-gated has nothing to walk toward and does not belong here.
+ */
+export const IntentAction = {
+  None: 0,
+  Water: 1,
+  Plant: 2,
+  Harvest: 3,
+  Load: 4,
+  Unload: 5,
+  RefillHopper: 6,
+  Repair: 7,
+  WhackJam: 8,
+  Sell: 9,
+} as const;
+
+export type IntentAction = (typeof IntentAction)[keyof typeof IntentAction];
+
+export const INTENT_ACTIONS: readonly IntentAction[] = [
+  IntentAction.None,
+  IntentAction.Water,
+  IntentAction.Plant,
+  IntentAction.Harvest,
+  IntentAction.Load,
+  IntentAction.Unload,
+  IntentAction.RefillHopper,
+  IntentAction.Repair,
+  IntentAction.WhackJam,
+  IntentAction.Sell,
+];
+
+/**
+ * A pending errand: go there, then do that.
+ *
+ * WHY THIS IS WORLD STATE AND NOT CLIENT STATE. The obvious shortcut is to have the input
+ * layer emit movement commands until the player is close enough and then emit the verb. That
+ * shortcut is wrong twice over (plan §12): movement is a HELD DIRECTION precisely so the
+ * trace stays small, and a client-driven walk would write a direction change into it every
+ * few ticks for every click, forever — and a walk whose length is decided by client timing is
+ * a walk whose length depends on framerate. Modelled here instead, an errand is one command,
+ * and where the farmer ends up is a function of `seed + trace` like everything else.
+ *
+ * Integers only, and `null` when there is no errand — which is almost always.
+ */
+export interface PlayerIntent {
+  /** What to do on arrival. Never `IntentAction.None` — that is what `null` is for. */
+  action: IntentAction;
+  /** The tile walked to. For a machine verb, a tile the machine's footprint covers. */
+  tileX: number;
+  tileY: number;
+  /** `CropId` for Plant, `ItemId` for Sell, 0 for the verbs that need neither. */
+  item: number;
+  /** Stack size for Load, Unload, and Sell. 0 for the verbs that move nothing countable. */
+  count: number;
+  /**
+   * The tick the errand was issued. THE ONLY THING THE TIMEOUT IS MEASURED FROM — an errand
+   * that can never complete is a farmer who can never move again, so every errand carries the
+   * clock that eventually kills it.
+   */
+  issuedTick: number;
+}
+
 export interface PlayerState {
   /** Position in subtiles. */
   xSub: number;
@@ -131,6 +202,15 @@ export interface PlayerState {
    * and the same technique every future rate that does not divide evenly will use.
    */
   moveAccum: number;
+  /**
+   * The one pending errand, or `null`.
+   *
+   * ONE AT A TIME, DELIBERATELY. A new click replaces the old errand rather than queueing
+   * behind it: click-three-tiles-do-all-three is a different feature with its own interface
+   * problems (what is the order, how do you cancel the second one, what does the marker show)
+   * and none of them are solved by letting this field become an array.
+   */
+  intent: PlayerIntent | null;
 }
 
 export interface InventorySlot {
@@ -472,6 +552,7 @@ export function createWorld(seed: number): WorldState {
       facing: Direction.North,
       moveDir: Direction.None,
       moveAccum: 0,
+      intent: null,
     },
     inventory: [],
     field: [],

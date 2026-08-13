@@ -52,6 +52,7 @@ export const FIXTURE_NAMES = [
   'factory-line',
   'withering',
   'water-works',
+  'walk-errands',
 ] as const;
 
 export type FixtureName = (typeof FIXTURE_NAMES)[number];
@@ -66,6 +67,7 @@ export type FixtureName = (typeof FIXTURE_NAMES)[number];
  */
 export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   SetMoveDirection: true,
+  WalkAndAct: true,
   WaterTile: true,
   PlantTile: true,
   HarvestTile: true,

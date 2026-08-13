@@ -271,6 +271,14 @@ export interface InventoryView {
 export interface StatsView {
   centiActiveHours: number;
   lifetimeNetEarningsCents: number;
+  /**
+   * The two halves `lifetimeNetEarningsCents` is the difference of. Gross receipts and
+   * everything spent, published separately so the shift report can say "took in X, spent Y"
+   * rather than only "cleared Z" — a net figure alone cannot tell a good day with high costs
+   * apart from a quiet one.
+   */
+  lifetimeEarnedCents: number;
+  lifetimeSpentCents: number;
   netWorthCents: number;
   peakNetWorthCents: number;
   bestTrailingFiveHourGainCents: number;
@@ -289,6 +297,29 @@ export interface PlayerView {
   facing: number;
   /** 1 while a direction is held. */
   moving: number;
+  /**
+   * The pending errand's verb as an `IntentAction`, or `IntentAction.None` (0) when there is
+   * no errand.
+   *
+   * THIS IS THE PRESENCE TEST — there is deliberately no separate flag. `None` is never a
+   * legal action on a live errand (`applyWalkAndAct` refuses it and the save's
+   * `ERRAND_ACTIONS` allowlist excludes it), so `intentAction !== 0` is exactly "an errand is
+   * pending". A redundant boolean beside it would be a second copy of the same fact, and two
+   * copies of one fact eventually disagree.
+   *
+   * The three fields below mean nothing when this is 0. They are still written every frame —
+   * this buffer is reused forever, and a marker left over from last frame's errand is the bug
+   * this design invites.
+   */
+  intentAction: number;
+  /** The tile walked to. For a machine verb, a tile the machine's footprint covers. */
+  intentTileX: number;
+  intentTileY: number;
+  /**
+   * The tick the errand was issued, so a marker can age toward `WALK_ERRAND_TIMEOUT_TICKS`.
+   * Compare against `view.tick`; the sim owns the deadline and the renderer only draws it.
+   */
+  intentIssuedTick: number;
 }
 
 export interface WorldView {
@@ -332,7 +363,16 @@ export function createWorldView(): WorldView {
     worldTilesWide: WORLD_TILES_WIDE,
     worldTilesHigh: WORLD_TILES_HIGH,
     moneyCents: 0,
-    player: { xSub: 0, ySub: 0, facing: 0, moving: 0 },
+    player: {
+      xSub: 0,
+      ySub: 0,
+      facing: 0,
+      moving: 0,
+      intentAction: 0,
+      intentTileX: 0,
+      intentTileY: 0,
+      intentIssuedTick: 0,
+    },
     field: {
       originX: FIELD_ORIGIN_X,
       originY: FIELD_ORIGIN_Y,
@@ -362,6 +402,8 @@ export function createWorldView(): WorldView {
     stats: {
       centiActiveHours: 0,
       lifetimeNetEarningsCents: 0,
+      lifetimeEarnedCents: 0,
+      lifetimeSpentCents: 0,
       netWorthCents: 0,
       peakNetWorthCents: 0,
       bestTrailingFiveHourGainCents: 0,
@@ -392,6 +434,15 @@ export function view(state: WorldState, out: WorldView = createWorldView()): Wor
   out.player.ySub = state.player.ySub;
   out.player.facing = state.player.facing;
   out.player.moving = state.player.moveDir === 0 ? 0 : 1;
+
+  // All four written unconditionally, on both branches. An early return or an `if` without an
+  // `else` would leave the last errand's marker hanging on the map after the errand ended,
+  // because this buffer is reused rather than reallocated.
+  const intent = state.player.intent;
+  out.player.intentAction = intent === null ? 0 : intent.action;
+  out.player.intentTileX = intent === null ? 0 : intent.tileX;
+  out.player.intentTileY = intent === null ? 0 : intent.tileY;
+  out.player.intentIssuedTick = intent === null ? 0 : intent.issuedTick;
 
   projectField(state, out);
   projectMachines(state, out);
@@ -991,6 +1042,8 @@ function projectStats(state: WorldState, out: WorldView): void {
   const s = out.stats;
   s.centiActiveHours = centiActiveHoursElapsed(stats);
   s.lifetimeNetEarningsCents = lifetimeNetEarningsCents(stats);
+  s.lifetimeEarnedCents = stats.lifetimeEarnedCents;
+  s.lifetimeSpentCents = stats.lifetimeSpentCents;
   s.netWorthCents = stats.netWorthCents;
   s.peakNetWorthCents = stats.peakNetWorthCents;
   s.bestTrailingFiveHourGainCents = bestTrailingGainCents(stats, TRAILING_WINDOW_MINUTES);

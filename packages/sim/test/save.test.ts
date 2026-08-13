@@ -17,6 +17,7 @@ import {
   CeremonyId,
   CropId,
   Direction,
+  IntentAction,
   ItemId,
   MachineKind,
   SIM_CODE_VERSION,
@@ -39,6 +40,7 @@ import {
 import fixture from './fixtures/saves/format-1.json';
 import fixture2 from './fixtures/saves/format-2.json';
 import fixture3 from './fixtures/saves/format-3.json';
+import fixture4 from './fixtures/saves/format-4.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -57,6 +59,20 @@ function playedWorld(): WorldState {
   state.moneyCents += 20_000;
   run([{ type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: 12, tileY: 11 }]);
   stepMany(state, 500);
+  return state;
+}
+
+/** The same world, stopped part-way through a walk-to errand. */
+function walkingWorld(): WorldState {
+  const state = playedWorld();
+  step(state, {
+    tick: state.tick,
+    commands: [
+      { type: 'WalkAndAct', action: IntentAction.Water, tileX: 4, tileY: 4, item: 0, count: 0 },
+    ],
+  });
+  stepMany(state, 20);
+  if (state.player.intent === null) throw new Error('Fixture world is not mid-errand.');
   return state;
 }
 
@@ -118,6 +134,46 @@ describe('the save round trip', () => {
     // Legible in a text editor without tooling, which is the entire argument for JSON.
     expect(text).toContain('"moisture"');
     expect(text).toContain('"moneyCents"');
+  });
+
+  // The errand is hashed, so a save that dropped it would restore a world that hashes
+  // differently from the one that was written — which is the definition of a broken save,
+  // and the reason `intent` is persisted rather than treated as transient input state.
+  it('carries a pending errand through the round trip', () => {
+    const state = walkingWorld();
+    const restored = restoreWorld(throughJson(serialize(state))).state;
+
+    expect(restored.player.intent).toEqual(state.player.intent);
+    expect(hashState(restored)).toBe(hashState(state));
+  });
+
+  it('keeps a round-tripped errand walking identically', () => {
+    const state = walkingWorld();
+    const restored = restoreWorld(throughJson(serialize(state))).state;
+
+    stepMany(state, 300);
+    stepMany(restored, 300);
+    expect(hashState(restored)).toBe(hashState(state));
+    // Both arrived and both let go of the errand, rather than both being stuck.
+    expect(restored.player.intent).toBeNull();
+  });
+
+  it('writes no errand as null rather than as a zeroed row', () => {
+    const payload = serialize(playedWorld()).payload as { player: { intent: unknown } };
+    expect(payload.player.intent).toBeNull();
+    // `null` and "an errand to tile 0,0 doing nothing" must not be the same bytes.
+    const restored = restoreWorld(throughJson(serialize(playedWorld()))).state;
+    expect(restored.player.intent).toBeNull();
+  });
+
+  it('does not alias the live errand into the payload', () => {
+    const state = walkingWorld();
+    const payload = serialize(state).payload as { player: { intent: { tileX: number } } };
+    // `serialize()` is documented as safe to call mid-tick, which is only true if the payload
+    // shares no object with the world. The errand is the player's one non-number field.
+    expect(payload.player.intent).not.toBe(state.player.intent);
+    payload.player.intent.tileX = 99;
+    expect(state.player.intent!.tileX).toBe(4);
   });
 
   it('leaves the trace out of the payload and out of the restored world', () => {
@@ -200,6 +256,34 @@ describe('reading a damaged save', () => {
     expect(() => restoreWorld(envelope)).toThrow(/payload\.field\[3\]\.moisture/);
   });
 
+  it('names a bad field inside the errand', () => {
+    const envelope = throughJson(serialize(walkingWorld())) as {
+      payload: { player: { intent: { tileX: number } } };
+    };
+    envelope.payload.player.intent.tileX = 1.5;
+    expect(() => restoreWorld(envelope)).toThrow(/payload\.player\.intent\.tileX/);
+  });
+
+  // `IntentAction.None` is not a legal errand action — an errand to do nothing is what
+  // `null` encodes — so a payload carrying one is damaged, not merely idle.
+  it('rejects an errand whose action is None', () => {
+    const envelope = throughJson(serialize(walkingWorld())) as {
+      payload: { player: { intent: { action: number } } };
+    };
+    envelope.payload.player.intent.action = IntentAction.None;
+    expect(() => restoreWorld(envelope)).toThrow(/not an id this build knows/);
+  });
+
+  it('rejects an errand that is missing rather than null', () => {
+    const envelope = throughJson(serialize(playedWorld())) as {
+      payload: { player: Record<string, unknown> };
+    };
+    delete envelope.payload.player['intent'];
+    // A format-4 payload always writes the key. Reading an absent one as "no errand" would
+    // turn a damaged file and a skipped migration into worlds that look fine.
+    expect(() => restoreWorld(envelope)).toThrow(/payload\.player\.intent/);
+  });
+
   it('rejects an id this build does not know', () => {
     const envelope = throughJson(serialize(playedWorld())) as {
       payload: { machines: { kind: number }[] };
@@ -219,13 +303,18 @@ describe('the permanent fixture set', () => {
   // real build and it must stay byte-identical forever; it is the only thing that will catch
   // a migration bug in 2029.
   //
-  // The expected DIGEST below is a different matter, and it has moved twice, both times on
-  // purpose. Format 2 added belts, grabbers, zones, tech unlocks, upgrade dials, and the
-  // per-tile withering clock; format 3 added reservoirs, pipes, one-ledger networks, and the
-  // per-machine plumbing fields — all of them hashed — so the world this file restores to
-  // legitimately hashes differently each time. That is the migration working, not the save
-  // breaking: the tick, the seed, the money, and every machine came back unchanged, which is
-  // what the assertions around it check.
+  // The expected DIGEST below is a different matter, and it has now moved three times, every
+  // time on purpose. Format 2 added belts, grabbers, zones, tech unlocks, upgrade dials, and
+  // the per-tile withering clock; format 3 added reservoirs, pipes, one-ledger networks, and
+  // the per-machine plumbing fields; format 4 added the player's pending errand — all of them
+  // hashed — so the world this file restores to legitimately hashes differently each time.
+  // That is the migration working, not the save breaking: the tick, the seed, the money, and
+  // every machine came back unchanged, which is what the assertions around it check.
+  //
+  // Format 4 is the cheapest of the three to reason about and the easiest to get wrong. It
+  // adds ONE nullable field, and `null` is the only value that leaves the loaded world
+  // behaving like the saved one — a returning player must not find the farmer setting off
+  // across the field on an errand they never issued.
   //
   // The rule this preserves: a red line here means "either a migration is missing, or the
   // format changed without one". If you are updating this hash, the commit had better also
@@ -234,11 +323,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture);
 
     expect(restored.migration.fromVersion).toBe(1);
-    expect(restored.migration.steps).toEqual([1, 2]);
+    expect(restored.migration.steps).toEqual([1, 2, 3]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('f7667e6b');
+    expect(hashState(restored.state)).toBe('69618d29');
   });
 
   it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
@@ -266,6 +355,10 @@ describe('the permanent fixture set', () => {
     expect(state.reservoirs[0]!.levelMl).toBe(state.reservoirs[0]!.capacityMl);
     expect(state.machines.every((machine) => machine.network === 0)).toBe(true);
     expect(state.machines.every((machine) => machine.scanCursor === 0)).toBe(true);
+
+    // And format 4's one field. Nobody was mid-walk when a v0.1 world was written, so `null`
+    // is the only answer that is not an invention.
+    expect(state.player.intent).toBeNull();
   });
 
   it('still contains the world it was recorded with', () => {
@@ -303,10 +396,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture2);
 
     expect(restored.migration.fromVersion).toBe(2);
-    expect(restored.migration.steps).toEqual([2]);
+    expect(restored.migration.steps).toEqual([2, 3]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('c6a41333');
+    expect(hashState(restored.state)).toBe('55e73df5');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -316,6 +409,7 @@ describe('the permanent fixture set', () => {
     expect(state.grabbers).toHaveLength(5);
     expect(state.zones).toHaveLength(1);
     expect(state.unlocked.length).toBeGreaterThan(0);
+    expect(state.player.intent).toBeNull();
 
     // Goods in transit are part of the world, not a cache to be rebuilt.
     const riding = state.belts.reduce((total, belt) => total + belt.items.length, 0);
@@ -343,13 +437,14 @@ describe('the permanent fixture set', () => {
   // network is over-demanded, every consumer is amber, the tank is empty, the pond is drawn
   // down, and the Hub is part-way through a scan. A pipe network at rest would round-trip
   // perfectly while proving almost nothing.
-  it('loads format-3.json at the current version with no migration', () => {
+  it('migrates format-3.json up to the current version', () => {
     const restored = restoreWorld(fixture3);
 
     expect(restored.migration.fromVersion).toBe(3);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([3]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(21_306);
-    expect(hashState(restored.state)).toBe('a51acfaf');
+    expect(hashState(restored.state)).toBe('645ae2d9');
   });
 
   it('brings the plumbing back exactly as it was left', () => {
@@ -361,6 +456,7 @@ describe('the permanent fixture set', () => {
     expect(state.reservoirs[0]!.levelMl).toBeLessThan(state.reservoirs[0]!.capacityMl);
     expect(state.pipes).toHaveLength(17);
     expect(state.networks).toHaveLength(1);
+    expect(state.player.intent).toBeNull();
 
     // Every pipe on the one network, and the network's id is its lowest world tile index.
     const network = state.networks[0]!;
@@ -389,5 +485,66 @@ describe('the permanent fixture set', () => {
     stepMany(a, 500);
     stepMany(b, 500);
     expect(hashState(a)).toBe(hashState(b));
+  });
+
+  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
+  // format-4 is the first save with an errand in it, caught deliberately MID-WALK: the farmer
+  // is 27 ticks into a harvest errand, part of the crop already in the bag and the rest still
+  // in the ground. An errand at rest is `null`, which round-trips perfectly while proving
+  // nothing — the pending intent is the only field a format-4 payload has that a format-3 one
+  // does not, so a fixture saved without one would test the migration and never the feature.
+  it('loads format-4.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture4);
+
+    expect(restored.migration.fromVersion).toBe(4);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(restored.state.tick).toBe(3300);
+    expect(restored.state.worldSeed).toBe(90210);
+    expect(hashState(restored.state)).toBe('a3599c88');
+  });
+
+  it('brings the errand back exactly as it was left', () => {
+    const state = restoreWorld(fixture4).state;
+
+    const intent = state.player.intent;
+    expect(intent).not.toBeNull();
+    expect(intent!.action).toBe(IntentAction.Harvest);
+    expect(intent!.tileX).toBe(11);
+    expect(intent!.tileY).toBe(11);
+    expect(intent!.issuedTick).toBe(3273);
+    // The deadline is measured from `issuedTick`, so an errand that came back with a
+    // refreshed clock would be a different errand wearing the same hat.
+    expect(state.tick - intent!.issuedTick).toBe(27);
+
+    // Mid-stride in the other sense too: the sub-subtile remainder is part of the world, and
+    // a walk that resumed from a rounded position would drift by a subtile per reload.
+    expect(state.player.moveAccum).toBeGreaterThan(0);
+    expect(state.player.moveDir).toBe(Direction.None);
+
+    // And the world around the errand: some of the crop picked, some still standing.
+    expect(state.inventory.some((slot) => slot.item === ItemId.RussetPotato)).toBe(true);
+    expect(state.field.some((tile) => tile.crop === CropId.RussetPotato)).toBe(true);
+  });
+
+  it('keeps a restored errand walking identically', () => {
+    const a = restoreWorld(fixture4).state;
+    const b = restoreWorld(fixture4).state;
+    stepMany(a, 500);
+    stepMany(b, 500);
+    expect(hashState(a)).toBe(hashState(b));
+  });
+
+  it('finishes the restored errand rather than dropping it', () => {
+    const state = restoreWorld(fixture4).state;
+    const before = state.field.filter((tile) => tile.crop === CropId.RussetPotato).length;
+
+    // Far enough to arrive, nowhere near `WALK_ERRAND_TIMEOUT_TICKS`. The errand must fire
+    // the verb it was carrying — a save that restored the intent but not its ability to
+    // complete would look correct in every assertion above and still strand the player.
+    stepMany(state, 60);
+
+    expect(state.player.intent).toBeNull();
+    expect(state.field.filter((tile) => tile.crop === CropId.RussetPotato).length).toBe(before - 1);
   });
 });

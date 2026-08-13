@@ -13,6 +13,7 @@ import {
   Direction,
   FIELD_ORIGIN_X,
   FIELD_ORIGIN_Y,
+  IntentAction,
   ItemId,
   MachineKind,
   createWorld,
@@ -76,7 +77,7 @@ describe('determinism', () => {
   it('pins the scripted run to a known hash', () => {
     // If this changes, either the sim changed on purpose or determinism broke by accident.
     // There is no third option, which is the entire point of the fixture.
-    expect(hashState(runScript(1234, 1000))).toBe('f2cea2a9');
+    expect(hashState(runScript(1234, 1000))).toBe('ffebd557');
   });
 
   it('gives different seeds different worlds', () => {
@@ -148,6 +149,107 @@ describe('the trace', () => {
     // Way out of reach, and there is no field tile there anyway.
     step(state, { tick: 0, commands: [{ type: 'WaterTile', tileX: 0, tileY: 0 }] });
     expect(state.trace).toHaveLength(0);
+  });
+
+  // ONE GESTURE, ONE ENTRY — the rule zones and pipe runs are each already pinned by, and the
+  // one a walk-to errand is most likely to break, because it is the only command that stays
+  // live for dozens of ticks and every one of those ticks is a chance to append something.
+  // It would break SILENTLY: the trace is excluded from the hash and from the save, so the
+  // golden fixtures cannot see it and nothing else in this suite would fail.
+  it('records a whole errand as exactly one entry, however long the walk', () => {
+    const state = createWorld(77);
+    const before = state.trace.length;
+    step(state, {
+      tick: state.tick,
+      commands: [
+        { type: 'WalkAndAct', action: IntentAction.Water, tileX: 4, tileY: 4, item: 0, count: 0 },
+      ],
+    });
+    expect(state.player.intent).not.toBeNull();
+
+    let walked = 0;
+    while (state.player.intent !== null && walked < 500) {
+      step(state, { tick: state.tick, commands: [] });
+      walked++;
+    }
+
+    // The walk has to be real, or this test passes for the wrong reason.
+    expect(walked).toBeGreaterThan(1);
+    expect(state.player.intent).toBeNull();
+    expect(state.trace.length - before).toBe(1);
+    expect(state.trace[state.trace.length - 1]!.command.type).toBe('WalkAndAct');
+  });
+});
+
+describe('walk-to errands', () => {
+  // THE OTHER HALF OF "MANUAL CONTROL ALWAYS WINS". `applySetMoveDirection` covers the player
+  // who grabs the wheel DURING a walk. This is the half that was missing: the player who was
+  // ALREADY holding a direction when they clicked. Their key sends no second command — there
+  // is nothing to change — so nothing was left to cancel the errand, and the click overruled
+  // the key they were still holding down.
+  it('refuses an errand while a movement key is held', () => {
+    const state = createWorld(77);
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'SetMoveDirection', dir: Direction.North }],
+    });
+
+    const before = state.trace.length;
+    step(state, {
+      tick: state.tick,
+      commands: [
+        { type: 'WalkAndAct', action: IntentAction.Water, tileX: 4, tileY: 4, item: 0, count: 0 },
+      ],
+    });
+
+    expect(state.player.intent).toBeNull();
+    // Refused, not queued — a pending errand that fired on key release would be the farmer
+    // walking off on their own, which is the surprise the whole feature exists to avoid.
+    expect(state.trace.length).toBe(before);
+    expect(state.player.moveDir).toBe(Direction.North);
+  });
+
+  it('takes the errand once the key is released', () => {
+    const state = createWorld(77);
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'SetMoveDirection', dir: Direction.North }],
+    });
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'SetMoveDirection', dir: Direction.None }],
+    });
+    step(state, {
+      tick: state.tick,
+      commands: [
+        { type: 'WalkAndAct', action: IntentAction.Water, tileX: 4, tileY: 4, item: 0, count: 0 },
+      ],
+    });
+
+    expect(state.player.intent).not.toBeNull();
+  });
+
+  // ±Infinity IS an integer as far as `Math.trunc(x) !== x` is concerned, and this guard is
+  // the only thing standing between a command payload and the save file. An infinite count
+  // reached world state and then made the world refuse to serialize.
+  it('refuses a non-finite payload rather than storing it in the world', () => {
+    const state = createWorld(77);
+    for (const bad of [Infinity, -Infinity, NaN, 1.5]) {
+      step(state, {
+        tick: state.tick,
+        commands: [
+          {
+            type: 'WalkAndAct',
+            action: IntentAction.Water,
+            tileX: 4,
+            tileY: 4,
+            item: 0,
+            count: bad,
+          },
+        ],
+      });
+      expect(state.player.intent).toBeNull();
+    }
   });
 });
 
@@ -241,5 +343,73 @@ describe('the view seam', () => {
     // Plain enough to survive the trip a Worker would put it through.
     expect(() => JSON.stringify(projected)).not.toThrow();
     expect(view(state, buffer)).toBe(buffer);
+  });
+
+  // The renderer draws a destination marker off these four integers, and the whole reason
+  // they are integers rather than a nullable object is that the projection buffer is
+  // allocated once and reused forever.
+  it('publishes no errand as a zero action', () => {
+    const state = createWorld(77);
+    const projected = view(state, createWorldView());
+
+    expect(state.player.intent).toBeNull();
+    expect(projected.player.intentAction).toBe(0);
+  });
+
+  it('publishes the errand target while one is pending', () => {
+    const state = createWorld(77);
+    step(state, {
+      tick: state.tick,
+      commands: [
+        { type: 'WalkAndAct', action: IntentAction.Water, tileX: 4, tileY: 4, item: 0, count: 0 },
+      ],
+    });
+
+    const projected = view(state, createWorldView());
+    expect(projected.player.intentAction).toBe(IntentAction.Water);
+    expect(projected.player.intentTileX).toBe(4);
+    expect(projected.player.intentTileY).toBe(4);
+    expect(projected.player.intentIssuedTick).toBe(state.player.intent!.issuedTick);
+  });
+
+  // THE BUG THIS BUFFER DESIGN INVITES, pinned: an errand that ended must not leave last
+  // frame's marker sitting on the map. It fails silently — the world is correct and only the
+  // picture is wrong — which is exactly the kind this file exists to catch.
+  it('clears the errand out of the reused buffer when it ends', () => {
+    const state = createWorld(77);
+    const buffer = createWorldView();
+    step(state, {
+      tick: state.tick,
+      commands: [
+        { type: 'WalkAndAct', action: IntentAction.Water, tileX: 4, tileY: 4, item: 0, count: 0 },
+      ],
+    });
+    expect(view(state, buffer).player.intentAction).toBe(IntentAction.Water);
+
+    // Manual control abandons it, and the very next projection must say so.
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'SetMoveDirection', dir: Direction.South }],
+    });
+    expect(state.player.intent).toBeNull();
+
+    const after = view(state, buffer);
+    expect(after.player.intentAction).toBe(0);
+    expect(after.player.intentTileX).toBe(0);
+    expect(after.player.intentTileY).toBe(0);
+    expect(after.player.intentIssuedTick).toBe(0);
+  });
+
+  it('projects the gross and spend halves of the lifetime ledger', () => {
+    const state = runScript(11, 300);
+    const projected = view(state, createWorldView());
+
+    expect(projected.stats.lifetimeEarnedCents).toBe(state.stats.lifetimeEarnedCents);
+    expect(projected.stats.lifetimeSpentCents).toBe(state.stats.lifetimeSpentCents);
+    // The net figure the HUD already showed is the difference of the two, so a report that
+    // prints all three cannot contradict itself.
+    expect(projected.stats.lifetimeNetEarningsCents).toBe(
+      projected.stats.lifetimeEarnedCents - projected.stats.lifetimeSpentCents,
+    );
   });
 });
