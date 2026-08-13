@@ -24,6 +24,7 @@ import {
   REPAIR_KIT_PRICE_CENTS,
   SIM_CODE_VERSION,
   SIM_VERSION,
+  SUBTILE,
   SaveCorruptError,
   SaveFormatTooNewError,
   BALANCE_HASH,
@@ -45,6 +46,7 @@ import fixture3 from './fixtures/saves/format-3.json';
 import fixture4 from './fixtures/saves/format-4.json';
 import fixture5 from './fixtures/saves/format-5.json';
 import fixture6 from './fixtures/saves/format-6.json';
+import fixture7 from './fixtures/saves/format-7.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -331,11 +333,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture);
 
     expect(restored.migration.fromVersion).toBe(1);
-    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5]);
+    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5, 6]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('d0053a79');
+    expect(hashState(restored.state)).toBe('d7a517ca');
   });
 
   it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
@@ -404,10 +406,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture2);
 
     expect(restored.migration.fromVersion).toBe(2);
-    expect(restored.migration.steps).toEqual([2, 3, 4, 5]);
+    expect(restored.migration.steps).toEqual([2, 3, 4, 5, 6]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('3176a44b');
+    expect(hashState(restored.state)).toBe('9dae4de4');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -449,10 +451,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture3);
 
     expect(restored.migration.fromVersion).toBe(3);
-    expect(restored.migration.steps).toEqual([3, 4, 5]);
+    expect(restored.migration.steps).toEqual([3, 4, 5, 6]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(21_306);
-    expect(hashState(restored.state)).toBe('3c8aed6d');
+    expect(hashState(restored.state)).toBe('4e04ef4e');
   });
 
   it('brings the plumbing back exactly as it was left', () => {
@@ -505,11 +507,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture4);
 
     expect(restored.migration.fromVersion).toBe(4);
-    expect(restored.migration.steps).toEqual([4, 5]);
+    expect(restored.migration.steps).toEqual([4, 5, 6]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(3300);
     expect(restored.state.worldSeed).toBe(90210);
-    expect(hashState(restored.state)).toBe('ba7d1b9a');
+    expect(hashState(restored.state)).toBe('45e9d3ab');
   });
 
   it('brings the errand back exactly as it was left', () => {
@@ -554,11 +556,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture5);
 
     expect(restored.migration.fromVersion).toBe(5);
-    expect(restored.migration.steps).toEqual([5]);
+    expect(restored.migration.steps).toEqual([5, 6]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(41_837);
     expect(restored.state.worldSeed).toBe(50505);
-    expect(hashState(restored.state)).toBe('f19ff6ac');
+    expect(hashState(restored.state)).toBe('54138811');
   });
 
   it('brings the browning basket and the maintenance tallies back as they were', () => {
@@ -600,15 +602,15 @@ describe('the permanent fixture set', () => {
   // last detail is the entire reason for the moment: a per-port throttle is the one fact a
   // machine-level flag cannot carry, and a save taken with the line at rest would round-trip
   // perfectly while proving nothing about typed ports at all.
-  it('migrates format-6.json at the current version with no migration', () => {
+  it('migrates format-6.json up to the current version', () => {
     const restored = restoreWorld(fixture6);
 
     expect(restored.migration.fromVersion).toBe(6);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([6]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(42_400);
     expect(restored.state.worldSeed).toBe(60606);
-    expect(hashState(restored.state)).toBe('402c48c0');
+    expect(hashState(restored.state)).toBe('28c319c2');
   });
 
   it('brings every typed port back with its own liquid, level, and amber flag', () => {
@@ -641,6 +643,73 @@ describe('the permanent fixture set', () => {
     expect(mixer.ports[0]!.ml).toBeGreaterThan(0);
     expect(mixer.ports[1]!.ml).toBeGreaterThan(0);
     expect(mixer.inputCounts[0]!).toBeGreaterThan(0);
+  });
+
+  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
+  // format-7 is the first save with boxed machines in it, and it is caught at a moment chosen
+  // for one fact: TWO BOXES OF ONE KIND AT TWO DIFFERENT INVOICES, sitting in a single slot.
+  // That is the whole reason a slot carries a list rather than a count — a bare Chip Kitchen
+  // and a Speed-2/Capacity-1 one are the same item id and wildly different machines — and a
+  // save holding one box, or two identical ones, would round-trip perfectly while proving
+  // nothing about it. There is a Washer left part-way through an operation beside them for the
+  // same reason every fixture here stops mid-something.
+  it('loads format-7.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture7);
+
+    expect(restored.migration.fromVersion).toBe(7);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(restored.state.tick).toBe(48_792);
+    expect(restored.state.worldSeed).toBe(24_680);
+    expect(hashState(restored.state)).toBe('ac92abd9');
+  });
+
+  it('brings both boxed machines back with their own dials, condition, and invoice', () => {
+    const state = restoreWorld(fixture7).state;
+
+    const slot = state.inventory.find((entry) => entry.item === ItemId.BoxedChipKitchen)!;
+    expect(slot.count).toBe(2);
+    expect(slot.boxes).toHaveLength(2);
+
+    // Least invested first, which is the order the world stores and the order both verbs
+    // consume in. A save that came back in the other order would be a different world.
+    expect(slot.boxes[0]!.investedCents).toBe(10_000);
+    expect(slot.boxes[0]!.speedLevel).toBe(0);
+    expect(slot.boxes[1]!.investedCents).toBe(28_000);
+    expect(slot.boxes[1]!.speedLevel).toBe(2);
+    expect(slot.boxes[1]!.capacityLevel).toBe(1);
+    // Condition travels with the box, so net worth does not jump when a worn machine is boxed.
+    expect(slot.boxes[1]!.condition).toBe(853);
+
+    // Every other slot in the world is an ordinary stack with no boxes on it at all.
+    for (const entry of state.inventory) {
+      if (entry.item === ItemId.BoxedChipKitchen) continue;
+      expect(entry.boxes).toEqual([]);
+    }
+
+    // And the grabber that was turned three times is still facing where it was left.
+    expect(state.grabbers[0]!.dir).toBe(Direction.West);
+  });
+
+  it('puts a restored box back down as the machine it was', () => {
+    // The dials are only worth persisting if they survive into a machine. This is that.
+    const state = restoreWorld(fixture7).state;
+    const bin = state.machines.find((machine) => machine.kind === MachineKind.SellBin)!;
+    state.player.xSub = bin.tileX * SUBTILE + SUBTILE / 2;
+    state.player.ySub = bin.tileY * SUBTILE + SUBTILE / 2;
+
+    const money = state.moneyCents;
+    step(state, {
+      tick: state.tick,
+      commands: [
+        { type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: bin.tileX, tileY: 14 },
+      ],
+    });
+
+    const placed = state.machines.find((machine) => machine.kind === MachineKind.ChipKitchen)!;
+    expect(state.moneyCents).toBe(money);
+    expect(placed.investedCents).toBe(10_000);
+    expect(state.inventory.find((entry) => entry.item === ItemId.BoxedChipKitchen)!.count).toBe(1);
   });
 
   it('keeps a restored soda line pouring identically', () => {

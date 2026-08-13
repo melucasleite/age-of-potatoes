@@ -183,7 +183,35 @@ hands off to whatever belt starts where its own ends.
 
 **Grabbers** are the only bridge between belts and machine buffers: an arm takes from the tile
 behind it and puts into the tile ahead. A blocked arm stands there holding the item, which is
-the readable version of "look downstream".
+the readable version of "look downstream". `RotateGrabber` turns a placed arm one step
+clockwise, reach-gated like every other verb you perform with your hands — one press, one trace
+entry, no target direction in the payload, because which way clockwise goes is the sim's rule
+and not the client's. **Nothing else in the world rotates.** A machine's ports are typed by
+LIQUID rather than by geometry, so no machine has a facing at all, and a belt's direction is the
+direction it was dragged.
+
+**Boxing is the rearranging verb; scrapping is the selling one.** `DeconstructMachine` takes a
+machine off the lot and puts it in the bag as one of twenty boxed-machine items — one per
+buildable kind — carrying its dials, its condition and its invoice, and `PlaceMachine` opens a
+box in preference to buying new, for free. It pays nothing, because moving a machine is free
+forever (plan §4) and the machine was already bought; a deconstruct that handed back cash would
+make demolishing a factory a business model. `SellBoxedMachine` is the one that pays, at **40%
+of `investedCents`, floored** — which is where plan §3's scrap rate and item 037's dangling
+criterion finally live somewhere they can be checked. The sell bin refuses boxes for the same
+one-column reason it refuses seeds: `ItemSpec.sellable` is data, and a box has no list price.
+
+A machine refuses to box while it is **jammed** or **actually running**. Running means it would
+advance work this tick — it has the ingredients and it has the room — rather than `progress > 0`,
+which is the resting state of every machine with a Speed dial on it and would have banned boxing
+exactly the machines the feature is for. Everything countable comes back to the player's hands.
+Liquid does not and cannot: there is no item id for a millilitre of anything, and net worth has
+never counted water.
+
+Boxes inside a slot are kept **sorted, least invested first**, so two players who boxed the same
+bare Fryer and the same maxed one in opposite orders hash identically — the same argument that
+keeps `unlocked` sorted and network ids geometric. That order also settles which box comes out
+next, for both verbs at once: you put down the plainest machine you own and you scrap the
+plainest machine you own, so the one you spent money on is the last one you can lose by accident.
 
 **Zones** are painted plans, not machines. Membership lives on the tile (`CropTile.zone`), so
 a tile belongs to at most one zone and painting over a neighbour reassigns rather than
@@ -373,9 +401,10 @@ non-empty result is a bug in units, not in the hash.
 ## Saves
 
 `serialize(state)` produces a plain-JSON `SaveEnvelope`; `restoreWorld(value)` parses,
-migrates, and deserializes one. The chain is at **format 6** — the soda line made a recipe a
-list, so a machine holds one count per recipe line instead of a single `inputCount`, and a
-converter carries typed liquid ports. `SIM_VERSION` is the code version fused with `BALANCE_HASH`,
+migrates, and deserializes one. The chain is at **format 7** — a machine can come off the lot
+as a boxed item, so an inventory slot carries the boxed machines in it beside its count.
+Format 6 was the soda line, which made a recipe a list, so a machine holds one count per recipe
+line instead of a single `inputCount` and a converter carries typed liquid ports. `SIM_VERSION` is the code version fused with `BALANCE_HASH`,
 because balance data is save-compatibility surface exactly as much as code is. The rules —
 released migrations are never edited, one real fixture is kept per released version forever —
 are in [`src/save/README.md`](src/save/README.md). The IndexedDB driver lives in

@@ -56,6 +56,7 @@ export const FIXTURE_NAMES = [
   'idle-wear',
   'maintenance',
   'soda-line',
+  'rotate-and-box',
 ] as const;
 
 export type FixtureName = (typeof FIXTURE_NAMES)[number];
@@ -84,12 +85,15 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   SellItem: true,
   BuyItem: true,
   MoveMachine: true,
+  DeconstructMachine: true,
+  SellBoxedMachine: true,
   UpgradeMachine: true,
   ResearchTech: true,
   PlaceBelt: true,
   RemoveBelt: true,
   PlaceGrabber: true,
   SetGrabberFilter: true,
+  RotateGrabber: true,
   RemoveGrabber: true,
   CreateZone: true,
   PaintZone: true,

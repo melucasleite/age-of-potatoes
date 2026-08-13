@@ -27,10 +27,20 @@
 // `WorldState` and inside the hash; recomputing them on load would produce a world that
 // hashes differently from the one that was saved, which is the definition of a broken save.
 
-import { BeltTier, CropId, GrabberTier, ItemId, LiquidId, MachineKind, machineSpec } from '../data';
+import {
+  BeltTier,
+  CropId,
+  GrabberTier,
+  ITEM_SPECS,
+  ItemId,
+  LiquidId,
+  MachineKind,
+  machineSpec,
+} from '../data';
 import type { RngState } from '../rng';
 import {
   type Belt,
+  type BoxedMachine,
   type CropTile,
   type Grabber,
   type Machine,
@@ -78,7 +88,18 @@ export interface SavePlayer {
   ySub: number;
 }
 
+/** One boxed machine in a slot. Keys alphabetical, like every other row in this file. */
+export interface SaveBoxedMachine {
+  capacityLevel: number;
+  condition: number;
+  efficiencyLevel: number;
+  investedCents: number;
+  speedLevel: number;
+}
+
 export interface SaveInventorySlot {
+  /** Sorted least-invested-first, and always either empty or `count` long. */
+  boxes: SaveBoxedMachine[];
   count: number;
   item: number;
 }
@@ -304,7 +325,18 @@ export function toPayload(state: WorldState): SavePayload {
   const inventory: SaveInventorySlot[] = [];
   for (let i = 0; i < state.inventory.length; i++) {
     const slot = state.inventory[i]!;
-    inventory.push({ count: slot.count, item: slot.item });
+    const boxes: SaveBoxedMachine[] = [];
+    for (let j = 0; j < slot.boxes.length; j++) {
+      const box = slot.boxes[j]!;
+      boxes.push({
+        capacityLevel: box.capacityLevel,
+        condition: box.condition,
+        efficiencyLevel: box.efficiencyLevel,
+        investedCents: box.investedCents,
+        speedLevel: box.speedLevel,
+      });
+    }
+    inventory.push({ boxes, count: slot.count, item: slot.item });
   }
 
   const machines: SaveMachine[] = [];
@@ -673,37 +705,20 @@ const CROP_IDS: readonly number[] = [
   CropId.Corn,
   CropId.ChiliPepper,
 ];
-const ITEM_IDS: readonly number[] = [
-  ItemId.PotatoSeed,
-  ItemId.RussetPotato,
-  ItemId.BaggedChips,
-  ItemId.WashedPotato,
-  ItemId.PotatoSlices,
-  ItemId.PlainChips,
-  ItemId.SeasonedChips,
-  ItemId.DayOldPotato,
-  ItemId.Compost,
-  ItemId.CaneSeed,
-  ItemId.SugarCane,
-  ItemId.DayOldCane,
-  ItemId.CornSeed,
-  ItemId.Corn,
-  ItemId.DayOldCorn,
-  ItemId.ChiliSeed,
-  ItemId.ChiliPepper,
-  ItemId.DayOldChili,
-  // Rustic Style and the repair kit were missing from this list, which made a save holding
-  // either of them refuse to load — a real world can hold both. Adding them is a fix, not a
-  // format change: the ids were always legal, this list simply did not say so.
-  ItemId.RusticStyleChips,
-  ItemId.RepairKit,
-  ItemId.KolaNut,
-  ItemId.KolaPowder,
-  ItemId.Bottle,
-  ItemId.Soda,
-  ItemId.SixPack,
-  ItemId.SnackCombo,
-];
+/**
+ * Every item id a save may legally hold — DERIVED FROM `ITEM_SPECS`, not typed out beside it.
+ *
+ * It used to be a hand-written list, and it was wrong twice: Rustic Style chips and the repair
+ * kit were both missing, so a real world holding either refused to load, and the ids had been
+ * legal the whole time. That is not a mistake anybody makes once. Twenty boxed-machine rows
+ * arriving at once would have been the third and fourth and fifth chances to make it, so the
+ * list now reads the table it was always supposed to agree with.
+ *
+ * The failure mode this trades into is the opposite one — an id RETIRED from `ITEM_SPECS` would
+ * start refusing old saves — and that is the safe direction: retiring an item is a deliberate
+ * act that shows up in a migration, while forgetting to append to a list is silent.
+ */
+const ITEM_IDS: readonly number[] = ITEM_SPECS.map((spec) => spec.id);
 /** A grabber's filter and its hand both accept 0 for "nothing", on top of the real ids. */
 const ITEM_IDS_OR_NONE: readonly number[] = [0, ...ITEM_IDS];
 const MACHINE_KINDS: readonly number[] = [
@@ -764,6 +779,8 @@ const ERRAND_ACTIONS: readonly number[] = [
   IntentAction.Repair,
   IntentAction.WhackJam,
   IntentAction.Sell,
+  IntentAction.Deconstruct,
+  IntentAction.Buy,
 ];
 
 /**
@@ -810,9 +827,23 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
   for (let i = 0; i < inventoryRaw.length; i++) {
     const path = `payload.inventory[${String(i)}]`;
     const slot = record(inventoryRaw[i], path);
+    const boxesRaw = list(slot, 'boxes', path);
+    const boxes: BoxedMachine[] = [];
+    for (let j = 0; j < boxesRaw.length; j++) {
+      const boxPath = `${path}.boxes[${String(j)}]`;
+      const box = record(boxesRaw[j], boxPath);
+      boxes.push({
+        speedLevel: int(box, 'speedLevel', boxPath),
+        efficiencyLevel: int(box, 'efficiencyLevel', boxPath),
+        capacityLevel: int(box, 'capacityLevel', boxPath),
+        condition: int(box, 'condition', boxPath),
+        investedCents: int(box, 'investedCents', boxPath),
+      });
+    }
     inventory.push({
       item: idInt(slot, 'item', path, ITEM_IDS) as ItemId,
       count: int(slot, 'count', path),
+      boxes,
     });
   }
 

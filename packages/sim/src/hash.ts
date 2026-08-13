@@ -123,6 +123,20 @@ export function hashStateUint32(state: WorldState): number {
     const slot = state.inventory[i]!;
     d.num(slot.item);
     d.num(slot.count);
+    // Boxed machines, in the slot's canonical order, length first — the same length-first rule
+    // every other collection here follows, so a slot holding one box and a slot holding none
+    // cannot encode to the same bytes. The list is EMPTY on every ordinary good and still
+    // counted, because "no boxes" is a fact about the world and skipping it would let a bare
+    // count and a count-with-boxes collide.
+    d.num(slot.boxes.length);
+    for (let j = 0; j < slot.boxes.length; j++) {
+      const box = slot.boxes[j]!;
+      d.num(box.speedLevel);
+      d.num(box.efficiencyLevel);
+      d.num(box.capacityLevel);
+      d.num(box.condition);
+      d.num(box.investedCents);
+    }
   }
 
   d.text('field');
@@ -382,7 +396,19 @@ export function findNonIntegerFields(state: WorldState): string[] {
   }
 
   for (let i = 0; i < state.inventory.length; i++) {
-    check(`inventory[${i}].count`, state.inventory[i]!.count);
+    const slot = state.inventory[i]!;
+    check(`inventory[${i}].count`, slot.count);
+    for (let j = 0; j < slot.boxes.length; j++) {
+      // A box carries cents and a condition, which are exactly the two kinds of number that go
+      // fractional when somebody divides without flooring. The dials are small integers and
+      // checked with them rather than reasoned about.
+      const box = slot.boxes[j]!;
+      check(`inventory[${i}].boxes[${j}].speedLevel`, box.speedLevel);
+      check(`inventory[${i}].boxes[${j}].efficiencyLevel`, box.efficiencyLevel);
+      check(`inventory[${i}].boxes[${j}].capacityLevel`, box.capacityLevel);
+      check(`inventory[${i}].boxes[${j}].condition`, box.condition);
+      check(`inventory[${i}].boxes[${j}].investedCents`, box.investedCents);
+    }
   }
 
   for (let i = 0; i < state.field.length; i++) {

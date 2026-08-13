@@ -72,8 +72,11 @@ import { SUBTILE, divFloor, tileCentreSubtiles } from './units';
  *     and repair-kit tallies.
  * 6 — the soda line: recipes became lists, so a machine holds one input count PER RECIPE LINE
  *     rather than one number, and a converter carries typed liquid ports of its own.
+ * 7 — deconstruct to inventory: a machine comes off the lot as a BOXED ITEM, so an inventory
+ *     slot carries a list of boxed machines beside its count — dials, condition, and invoice
+ *     each — and two new errand verbs (Deconstruct, Buy) can be pending on the player.
  */
-export const WORLD_STATE_VERSION = 6;
+export const WORLD_STATE_VERSION = 7;
 
 /**
  * A held direction, not a delta. Input tells the sim *which way the player is holding*,
@@ -124,6 +127,23 @@ export function oppositeDirection(dir: Direction): Direction {
 }
 
 /**
+ * One step clockwise: N → E → S → W → N. `None` stays `None`.
+ *
+ * WRITTEN OUT RATHER THAN COMPUTED. The compass values happen to be in clockwise order today,
+ * so `(dir % 4) + 1` would work — and it would keep working right up until somebody added a
+ * fifth value or renumbered one, at which point grabbers all over the world would quietly
+ * start facing somewhere else. These ids are save surface and permanent; the arithmetic that
+ * depends on their *order* is not, so it does not get to be implicit.
+ */
+export function rotateDirectionClockwise(dir: Direction): Direction {
+  if (dir === Direction.North) return Direction.East;
+  if (dir === Direction.East) return Direction.South;
+  if (dir === Direction.South) return Direction.West;
+  if (dir === Direction.West) return Direction.North;
+  return Direction.None;
+}
+
+/**
  * The hand verbs an errand can be carrying. A SMALL FLAT ENUM, NOT A NESTED `Command`.
  *
  * An intent that stored a whole command inside itself would put a recursive shape in the
@@ -145,6 +165,13 @@ export const IntentAction = {
   Repair: 7,
   WhackJam: 8,
   Sell: 9,
+  /** Walk over and box the machine. Wired exactly as `Repair` is — same target, same reach. */
+  Deconstruct: 10,
+  /**
+   * Walk to the stand and buy. The mirror of `Sell`, and it exists for the same reason: the
+   * shop panel could otherwise only tell the player to go and stand somewhere.
+   */
+  Buy: 11,
 } as const;
 
 export type IntentAction = (typeof IntentAction)[keyof typeof IntentAction];
@@ -160,6 +187,8 @@ export const INTENT_ACTIONS: readonly IntentAction[] = [
   IntentAction.Repair,
   IntentAction.WhackJam,
   IntentAction.Sell,
+  IntentAction.Deconstruct,
+  IntentAction.Buy,
 ];
 
 /**
@@ -181,9 +210,9 @@ export interface PlayerIntent {
   /** The tile walked to. For a machine verb, a tile the machine's footprint covers. */
   tileX: number;
   tileY: number;
-  /** `CropId` for Plant, `ItemId` for Sell, 0 for the verbs that need neither. */
+  /** `CropId` for Plant, `ItemId` for Sell and Buy, 0 for the verbs that need neither. */
   item: number;
-  /** Stack size for Load, Unload, and Sell. 0 for the verbs that move nothing countable. */
+  /** Stack size for Load, Unload, Sell, and Buy. 0 for verbs that move nothing countable. */
   count: number;
   /**
    * The tick the errand was issued. THE ONLY THING THE TIMEOUT IS MEASURED FROM — an errand
@@ -218,9 +247,55 @@ export interface PlayerState {
   intent: PlayerIntent | null;
 }
 
+/**
+ * One machine in a box: the three dials, its condition, and its invoice.
+ *
+ * IT DOES NOT SAY WHICH KIND IT IS, because the slot it lives in already does — a boxed Fryer
+ * is a `BoxedFryer` item, and a `kind` field here would be a second opinion about that. The
+ * one time the two could disagree is the one time it would matter.
+ *
+ * It carries CONDITION as well as the dials, which the request did not ask for and which
+ * closes a hole it would otherwise leave: net worth invoices a placed machine at
+ * `investedCents × condition ÷ CONDITION_MAX`, so a box that forgot condition would make
+ * boxing a worn Fryer *raise* the player's net worth. It also means the machine you put back
+ * down is the machine you picked up. There is no exploit in the other direction, because hand
+ * repair is free and unlimited (plan §1) — a free condition reset would be strictly slower
+ * than just holding the repair button.
+ *
+ * WHAT IT DELIBERATELY DOES NOT CARRY IS PROGRESS. Banked work-points are not an item and
+ * cannot be spilled, which is exactly why a running machine refuses to be boxed at all.
+ */
+export interface BoxedMachine {
+  speedLevel: number;
+  efficiencyLevel: number;
+  capacityLevel: number;
+  /** 0..CONDITION_MAX, as it stood when the machine came off the lot. */
+  condition: number;
+  /** Purchase price plus every upgrade bought. The 40% scrap payout is 40% of this. */
+  investedCents: number;
+}
+
 export interface InventorySlot {
   item: ItemId;
   count: number;
+  /**
+   * One entry per boxed machine in this slot, or EMPTY for every ordinary good — which is all
+   * of them but the twenty boxed-machine rows. `boxes.length` is always either 0 or `count`.
+   *
+   * A PARALLEL LIST ON THE SLOT RATHER THAN A SLOT PER MACHINE, because the alternative breaks
+   * an invariant the whole inventory rests on: `inventory` is sorted by item id with one slot
+   * per id, and `itemCount` stops scanning the moment it passes the id it wants. Two slots
+   * holding boxed Fryers with different dials would make the second one invisible.
+   *
+   * SORTED, LEAST INVESTED FIRST, and that is not cosmetic. Two players who boxed the same
+   * bare Fryer and the same maxed one in the opposite order are in the same world, and a
+   * digest that read insertion order would call them different — the same argument that keeps
+   * `unlocked` sorted and makes a pipe network's id geometric. It also settles, once and for
+   * both verbs, which box comes out next: `PlaceMachine` puts down the plainest one it has and
+   * `SellBoxedMachine` scraps the plainest one it has, so the machine you spent money on is
+   * the last one you can lose by accident.
+   */
+  boxes: BoxedMachine[];
 }
 
 export interface CropTile {
@@ -1202,24 +1277,46 @@ export function itemCount(state: WorldState, item: ItemId): number {
   return 0;
 }
 
+/** The slot holding an item, or `null`. Callers must not reorder what they are handed. */
+function slotFor(state: WorldState, item: ItemId): InventorySlot | null {
+  for (let i = 0; i < state.inventory.length; i++) {
+    const slot = state.inventory[i]!;
+    if (slot.item === item) return slot;
+    if (slot.item > item) return null;
+  }
+  return null;
+}
+
+/** The slot holding an item, created empty and in sort order if it is not there yet. */
+function ensureSlot(state: WorldState, item: ItemId): InventorySlot {
+  for (let i = 0; i < state.inventory.length; i++) {
+    const slot = state.inventory[i]!;
+    if (slot.item === item) return slot;
+    if (slot.item > item) {
+      const created: InventorySlot = { item, count: 0, boxes: [] };
+      state.inventory.splice(i, 0, created);
+      return created;
+    }
+  }
+  const created: InventorySlot = { item, count: 0, boxes: [] };
+  state.inventory.push(created);
+  return created;
+}
+
 /** Add items, keeping the inventory sorted ascending by item id. */
 export function addItem(state: WorldState, item: ItemId, count: number): void {
   if (count <= 0) return;
-  for (let i = 0; i < state.inventory.length; i++) {
-    const slot = state.inventory[i]!;
-    if (slot.item === item) {
-      slot.count += count;
-      return;
-    }
-    if (slot.item > item) {
-      state.inventory.splice(i, 0, { item, count });
-      return;
-    }
-  }
-  state.inventory.push({ item, count });
+  ensureSlot(state, item).count += count;
 }
 
-/** Remove items. Returns false and changes nothing if the player does not have them. */
+/**
+ * Remove items. Returns false and changes nothing if the player does not have them.
+ *
+ * A slot with boxes in it gives them up FROM THE FRONT, so `boxes.length === count` survives
+ * any caller — including one written years from now that has never heard of a boxed machine.
+ * Keeping that invariant here rather than at the call sites is the difference between a rule
+ * and a convention, and a convention is what a hash notices first.
+ */
 export function removeItem(state: WorldState, item: ItemId, count: number): boolean {
   if (count <= 0) return true;
   for (let i = 0; i < state.inventory.length; i++) {
@@ -1227,10 +1324,74 @@ export function removeItem(state: WorldState, item: ItemId, count: number): bool
     if (slot.item !== item) continue;
     if (slot.count < count) return false;
     slot.count -= count;
+    if (slot.boxes.length > 0) slot.boxes.splice(0, count);
     if (slot.count === 0) state.inventory.splice(i, 1);
     return true;
   }
   return false;
+}
+
+/**
+ * The canonical order boxes sit in inside a slot: least invested first, then the dials, then
+ * condition. A TOTAL ORDER WITH NO TIES THAT MATTER — two boxes that compare equal on all five
+ * numbers are interchangeable, so which one is "first" is not a fact anything can observe.
+ *
+ * Sorting rather than appending is what makes boxing order-independent: box a bare Fryer and a
+ * maxed one in either sequence and the world hashes the same, because it *is* the same world.
+ */
+function compareBoxes(a: BoxedMachine, b: BoxedMachine): number {
+  if (a.investedCents !== b.investedCents) return a.investedCents - b.investedCents;
+  if (a.speedLevel !== b.speedLevel) return a.speedLevel - b.speedLevel;
+  if (a.efficiencyLevel !== b.efficiencyLevel) return a.efficiencyLevel - b.efficiencyLevel;
+  if (a.capacityLevel !== b.capacityLevel) return a.capacityLevel - b.capacityLevel;
+  return a.condition - b.condition;
+}
+
+/** Put one boxed machine in the bag, in canonical order. */
+export function addBoxedMachine(state: WorldState, item: ItemId, box: BoxedMachine): void {
+  const slot = ensureSlot(state, item);
+  let insertAt = slot.boxes.length;
+  for (let i = 0; i < slot.boxes.length; i++) {
+    if (compareBoxes(box, slot.boxes[i]!) < 0) {
+      insertAt = i;
+      break;
+    }
+  }
+  slot.boxes.splice(insertAt, 0, box);
+  slot.count += 1;
+}
+
+/** What the next boxed machine of a kind would be, without taking it. `null` when there is none. */
+export function peekBoxedMachine(state: WorldState, item: ItemId): BoxedMachine | null {
+  const slot = slotFor(state, item);
+  if (slot === null) return null;
+  return slot.boxes[0] ?? null;
+}
+
+/**
+ * Take the next boxed machine of a kind out of the bag — the least invested one, which is the
+ * same one `peekBoxedMachine` promised. Returns `null` and changes nothing when there is none.
+ */
+export function takeBoxedMachine(state: WorldState, item: ItemId): BoxedMachine | null {
+  for (let i = 0; i < state.inventory.length; i++) {
+    const slot = state.inventory[i]!;
+    if (slot.item !== item) continue;
+    const box = slot.boxes.shift();
+    if (box === undefined) return null;
+    slot.count -= 1;
+    if (slot.count === 0) state.inventory.splice(i, 1);
+    return box;
+  }
+  return null;
+}
+
+/**
+ * What a boxed machine is worth on the books: its invoice scaled by the condition it was boxed
+ * at. THE SAME ARITHMETIC A PLACED MACHINE IS INVOICED AT below, deliberately — boxing a
+ * machine and putting it back down must not move the one number plan §6's boards are read off.
+ */
+export function boxedMachineValueCents(box: BoxedMachine): number {
+  return divFloor(box.investedCents * box.condition, CONDITION_MAX);
 }
 
 // --- money ------------------------------------------------------------------------
@@ -1250,7 +1411,14 @@ export function computeNetWorthCents(state: WorldState): number {
 
   for (let i = 0; i < state.inventory.length; i++) {
     const slot = state.inventory[i]!;
+    // A boxed machine is priced off its OWN invoice, never off a table — every boxed row lists
+    // at zero for exactly that reason (see `ITEM_SPECS`), so these two lines cannot double-count
+    // each other. A box in the bag is worth what the same machine standing on the lot is worth,
+    // which is what makes deconstruct-and-replace a no-op on net worth rather than a trade.
     total += listPriceCents(slot.item) * slot.count;
+    for (let j = 0; j < slot.boxes.length; j++) {
+      total += boxedMachineValueCents(slot.boxes[j]!);
+    }
   }
 
   for (let i = 0; i < state.machines.length; i++) {

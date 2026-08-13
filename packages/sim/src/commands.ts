@@ -148,6 +148,49 @@ export interface MoveMachineCommand {
   tileY: number;
 }
 
+/**
+ * Take a machine off the lot and put it in the bag as a boxed item.
+ *
+ * BOXING IS NOT SELLING, AND THAT IS THE WHOLE DESIGN. It pays nothing, because the machine
+ * was already paid for and moving one is free forever (plan §4) — a deconstruct that handed
+ * back cash would be a laundering route through a verb whose entire job is rearranging. The
+ * box keeps the dials and the condition, so putting it back down is free and gives you the
+ * machine you had. The 40% scrap value lives on `SellBoxedMachine`, one deliberate step
+ * later, which is where item 037's dangling "scrapping refunds 40% of the upgraded invoice"
+ * criterion finally lands.
+ *
+ * Refused while jammed and while the machine is actually running — a machine mid-batch is not
+ * a box — and refused for the sell bin, which is a gift the world starts with rather than a
+ * thing the player owns. Everything in its hoppers and its output buffer comes back to the
+ * player's hands; nothing vanishes (plan §4).
+ */
+export interface DeconstructMachineCommand {
+  type: 'DeconstructMachine';
+  machineId: number;
+}
+
+/**
+ * Sell one boxed machine out of the bag, for 40% of what was invested in it.
+ *
+ * A SEPARATE VERB FROM `SellItem`, NOT A SPECIAL CASE INSIDE IT. `SellItem` is the sell bin:
+ * it takes goods, at list, while you stand next to the stand, and `ItemSpec.sellable` is the
+ * one rule it refuses on. A boxed machine is none of those things — it is not a good, it is
+ * not priced at list, and it is scrapped from the inventory panel rather than carried to the
+ * bin — so `sellable` stays FALSE on every boxed row and the bin keeps refusing them. Folding
+ * two prices and two gates into one reducer to save a command shape is how `SellItem` would
+ * stop being readable.
+ *
+ * NO TARGET INDEX IN THE PAYLOAD. Boxes inside a slot are kept in a canonical order — least
+ * invested first — so "the next one out" is a fact about the world rather than about the
+ * order the panel happened to render, and it is the same box `PlaceMachine` would put down.
+ * One rule, both verbs.
+ */
+export interface SellBoxedMachineCommand {
+  type: 'SellBoxedMachine';
+  /** The boxed-machine `ItemId`. Which kind, not which one — the order decides that. */
+  item: ItemId;
+}
+
 /** Buy one level on one of a machine's three dials. Numbers only, never a new verb. */
 export interface UpgradeMachineCommand {
   type: 'UpgradeMachine';
@@ -194,6 +237,26 @@ export interface SetGrabberFilterCommand {
   type: 'SetGrabberFilter';
   grabberId: number;
   filter: number;
+}
+
+/**
+ * Turn a placed arm one step clockwise.
+ *
+ * ONE STEP, AND NO TARGET DIRECTION IN THE PAYLOAD. R is a nudge, not a picker: the player
+ * presses it until the arm points the right way, and each press is one entry in the trace
+ * that says exactly what the player did. A `dir` field would let the client compute the
+ * answer and send it, which is the same mistake as sending a movement delta — the client
+ * would own a rule the sim is supposed to own, and two clients could disagree about which
+ * way clockwise goes.
+ *
+ * There is no `RotateMachine` beside it because there is nothing to rotate: a machine's
+ * ports are typed by LIQUID rather than by geometry (`MachineSpec.ports`), so no machine in
+ * this game has a facing to turn. Belts are excluded on purpose too — a belt's direction is
+ * the direction it was dragged, and that is its whole grammar.
+ */
+export interface RotateGrabberCommand {
+  type: 'RotateGrabber';
+  grabberId: number;
 }
 
 export interface RemoveGrabberCommand {
@@ -316,9 +379,9 @@ export interface WalkAndActCommand {
   action: IntentAction;
   tileX: number;
   tileY: number;
-  /** `CropId` for Plant, `ItemId` for Sell, 0 for the verbs that need neither. */
+  /** `CropId` for Plant, `ItemId` for Sell and Buy, 0 for the verbs that need neither. */
   item: number;
-  /** Stack size for Load, Unload, and Sell. 0 otherwise. */
+  /** Stack size for Load, Unload, Sell, and Buy. 0 otherwise. */
   count: number;
 }
 
@@ -338,12 +401,15 @@ export type Command =
   | SellItemCommand
   | BuyItemCommand
   | MoveMachineCommand
+  | DeconstructMachineCommand
+  | SellBoxedMachineCommand
   | UpgradeMachineCommand
   | ResearchTechCommand
   | PlaceBeltCommand
   | RemoveBeltCommand
   | PlaceGrabberCommand
   | SetGrabberFilterCommand
+  | RotateGrabberCommand
   | RemoveGrabberCommand
   | CreateZoneCommand
   | PaintZoneCommand

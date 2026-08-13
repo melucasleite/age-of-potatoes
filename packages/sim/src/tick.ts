@@ -37,6 +37,7 @@ import {
   type BuyItemCommand,
   type Command,
   type CreateZoneCommand,
+  type DeconstructMachineCommand,
   type HarvestTileCommand,
   type LoadMachineCommand,
   type MoveMachineCommand,
@@ -53,6 +54,8 @@ import {
   type RenameZoneCommand,
   type RepairMachineCommand,
   type ResearchTechCommand,
+  type RotateGrabberCommand,
+  type SellBoxedMachineCommand,
   type SellItemCommand,
   type SetGrabberFilterCommand,
   type SetMoveDirectionCommand,
@@ -108,11 +111,14 @@ import {
   ZONE_PRIORITY_MAX,
   ZONE_PRIORITY_MIN,
   beltSpec,
+  boxedItemForMachine,
+  boxedMachineScrapCents,
   cropSpec,
   grabberSpec,
   isPurchasable,
   isSellable,
   listPriceCents,
+  machineKindForBoxedItem,
   machineSpec,
   wiltStageForAge,
 } from './data';
@@ -133,6 +139,7 @@ import {
   IntentAction,
   type PlayerIntent,
   type WorldState,
+  addBoxedMachine,
   addItem,
   beltById,
   clipZoneName,
@@ -150,14 +157,17 @@ import {
   machineCentreSubtiles,
   machineCoversTile,
   markCeremony,
+  peekBoxedMachine,
   plantCrop,
   removeItem,
+  rotateDirectionClockwise,
   spawnBelt,
   spawnGrabber,
   spawnMachine,
   spawnPipe,
   spawnZone,
   streamFor,
+  takeBoxedMachine,
   takeOneOutput,
   tileAt,
   tileOccupied,
@@ -283,6 +293,10 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applyBuyItem(state, command);
     case 'MoveMachine':
       return applyMoveMachine(state, command);
+    case 'DeconstructMachine':
+      return applyDeconstructMachine(state, command);
+    case 'SellBoxedMachine':
+      return applySellBoxedMachine(state, command);
     case 'UpgradeMachine':
       return applyUpgradeMachine(state, command);
     case 'ResearchTech':
@@ -295,6 +309,8 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applyPlaceGrabber(state, command);
     case 'SetGrabberFilter':
       return applySetGrabberFilter(state, command);
+    case 'RotateGrabber':
+      return applyRotateGrabber(state, command);
     case 'RemoveGrabber':
       return applyRemoveGrabber(state, command);
     case 'CreateZone':
@@ -545,11 +561,33 @@ function footprintFree(
   return true;
 }
 
+/**
+ * Put a machine down — out of the bag if there is one in it, off the shelf otherwise.
+ *
+ * THE BOX IS CHECKED FIRST AND IT IS FREE. A boxed machine was already paid for, and moving one
+ * around the lot has always been free (plan §4), so charging again for putting down the same
+ * Fryer you just picked up would make rearranging cost money in a game whose stated rule is that
+ * it does not. Buying new is the fallback rather than the other way round because a player with
+ * a box in the bag and the cash for a new one almost never means "spend the cash", and the one
+ * time they do, they can scrap the box for 40% and buy whatever they like.
+ *
+ * NOTHING IS CONSUMED UNTIL EVERY REFUSAL HAS PASSED. The order below matters: the box comes out
+ * of the bag only after the footprint, the tech gate and the plumbing rules have all said yes,
+ * because a refused placement that had already eaten the box would be a machine deleted by a
+ * misclick — and misplacement is never a fine (plan §4).
+ */
 function applyPlaceMachine(state: WorldState, command: PlaceMachineCommand): boolean {
   const spec = machineSpec(command.kind);
   if (spec === null) return false;
+  // The gate stands whether the machine is bought or unboxed. It costs nothing either way — a
+  // box can only exist for a machine the player already researched, and nothing un-researches —
+  // but the rule reading the same for both paths is worth more than the line it saves.
   if (!unlocked(state, spec.requiresTech)) return false;
-  if (state.moneyCents < spec.priceCents) return false;
+
+  const boxedItem = boxedItemForMachine(command.kind);
+  const box = boxedItem === null ? null : peekBoxedMachine(state, boxedItem);
+  if (box === null && state.moneyCents < spec.priceCents) return false;
+
   if (!footprintFree(state, command.tileX, command.tileY, spec.tilesWide, spec.tilesHigh, 0)) {
     return false;
   }
@@ -565,10 +603,143 @@ function applyPlaceMachine(state: WorldState, command: PlaceMachineCommand): boo
   const machine = spawnMachine(state, command.kind, command.tileX, command.tileY);
   if (machine === null) return false;
 
-  state.moneyCents -= spec.priceCents;
-  recordSpend(state.stats, spec.priceCents);
+  if (box === null) {
+    state.moneyCents -= spec.priceCents;
+    recordSpend(state.stats, spec.priceCents);
+  } else {
+    // The same box `peek` promised, taken now that the placement is certain to happen.
+    takeBoxedMachine(state, boxedItem as ItemId);
+    machine.speedLevel = box.speedLevel;
+    machine.efficiencyLevel = box.efficiencyLevel;
+    machine.capacityLevel = box.capacityLevel;
+    machine.condition = box.condition;
+    // The invoice travels too, so net worth, the scrap value, and the next dial's price all
+    // read the machine's real history rather than a fresh one's list price. A boxed machine
+    // that came back invoiced at list would hand the player free net worth for a round trip.
+    machine.investedCents = box.investedCents;
+    touch(state, 'handCarry');
+  }
   // On edit only, never per tick. A machine that landed beside a pipe run is now on it.
   if (spec.liquid !== 0) rebuildNetworks(state);
+  return true;
+}
+
+/**
+ * Take a machine off the lot and put it in the bag.
+ *
+ * IT PAYS NOTHING, AND THAT IS THE FEATURE. Boxing is the rearranging verb, not the selling
+ * one: the machine is already paid for, so it comes back as itself — dials, condition and
+ * invoice intact — and goes down again for free. The 40% is one deliberate step further on,
+ * at `SellBoxedMachine`, so a player can never scrap a factory by fumbling the demolish key.
+ *
+ * WHAT "MID-BATCH" MEANS HERE, precisely, because the obvious reading is wrong. It is NOT
+ * `progress > 0`: an upgraded machine finishes each operation with leftover work-points banked
+ * — `effectiveWorkRate` rarely divides `workPerOperation` evenly — so `progress > 0` is the
+ * resting state of every machine with a Speed dial on it, and refusing on it would ban boxing
+ * exactly the machines this feature exists for. Mid-batch is a machine that WOULD ADVANCE THIS
+ * TICK: it has the ingredients, it has the room, and it is turning. Stop it — take its output,
+ * cut its supply — and it boxes, the same demand-pull vocabulary the whole factory is taught in.
+ *
+ * Everything countable comes back to the player's hands: the output buffer through the one take
+ * path (burnt first, because that is the rule everywhere else), and every line of the recipe.
+ * LIQUID DOES NOT, and cannot: there is no item id for a millilitre of anything in this game and
+ * no price on one either, so a tank's contents go on the ground. Net worth has never counted
+ * water — "a tank full of it is a machine doing its job, not inventory" — so nothing the game
+ * measures is lost, and nothing it measures is gained.
+ */
+function applyDeconstructMachine(state: WorldState, command: DeconstructMachineCommand): boolean {
+  const machine = machineById(state, command.machineId);
+  if (machine === null || !withinReachOfMachine(state, machine)) return false;
+
+  const spec = machineSpec(machine.kind);
+  if (spec === null) return false;
+
+  // No box for the sell bin — see `ItemId`. It is the world's gift and the only way to trade;
+  // a lot with no bin on it is a save that cannot sell a potato.
+  const boxedItem = boxedItemForMachine(machine.kind);
+  if (boxedItem === null) return false;
+
+  if (machine.jammed) return false;
+  if (isMachineWorking(spec, machine)) return false;
+
+  for (;;) {
+    const item = takeOneOutput(machine, spec);
+    if (item === null) break;
+    addItem(state, item, 1);
+  }
+  for (let i = 0; i < spec.inputs.length; i++) {
+    const held = machine.inputCounts[i] ?? 0;
+    if (held > 0) addItem(state, spec.inputs[i]!.item, held);
+    machine.inputCounts[i] = 0;
+  }
+
+  addBoxedMachine(state, boxedItem, {
+    speedLevel: machine.speedLevel,
+    efficiencyLevel: machine.efficiencyLevel,
+    capacityLevel: machine.capacityLevel,
+    condition: machine.condition,
+    investedCents: machine.investedCents,
+  });
+
+  removeMachineById(state, machine.id);
+  // The same recompute `MoveMachine` runs, for the same reason and then some: a machine with a
+  // port has just LEFT its network, and a membership list that still names it is a ledger
+  // dividing supply among a consumer that is in somebody's bag. Stale membership is a
+  // determinism bug that hides for weeks, so it is a full rebuild on edit, never a patch.
+  if (spec.liquid !== 0 || spec.ports.length > 0) rebuildNetworks(state);
+  touch(state, 'handCarry');
+  return true;
+}
+
+/**
+ * Is this machine actually turning right now? See `applyDeconstructMachine` for why this is the
+ * mid-batch test rather than `progress > 0`.
+ *
+ * A machine with no work cycle at all — a sprinkler, a tank, a pump — is never mid-batch. It has
+ * no operation to be in the middle of, and `recipeSatisfied` on an empty recipe is vacuously
+ * true, which would otherwise make every one of them permanently un-boxable.
+ */
+function isMachineWorking(spec: MachineSpec, machine: Machine): boolean {
+  if (spec.workPerOperation <= 0) return false;
+  if (machine.condition <= 0) return false;
+  return recipeSatisfied(spec, machine) && outputHasRoom(spec, machine);
+}
+
+function removeMachineById(state: WorldState, id: number): void {
+  for (let i = 0; i < state.machines.length; i++) {
+    if (state.machines[i]!.id === id) {
+      state.machines.splice(i, 1);
+      return;
+    }
+  }
+}
+
+/**
+ * Scrap one boxed machine for 40% of what was invested in it.
+ *
+ * NOT LOCATION-GATED, and that is the one place this verb parts company with `SellItem`. The
+ * bin is a physical stand you carry goods to; this is paperwork done from the inventory panel,
+ * the same shape as `ResearchTech`, which also spends money from wherever the player happens to
+ * be standing. Item 054 states it directly: the bin does not accept boxed machines, and the
+ * panel is where they are sold.
+ *
+ * BOOKED AS A REFUND, NOT AS EARNINGS. The player spent 100% on that machine and got 40% back,
+ * so they are out 60% — which is exactly what `recordRefund` leaves on the ledger, because it
+ * reverses a spend rather than inventing income. Counting it as earnings would inflate the
+ * gross receipts every leaderboard board is read off, and putting it through `itemsSold` would
+ * let a player buy and scrap machines to walk a Charter milestone that is supposed to mean
+ * "you sold two hundred things you made".
+ */
+function applySellBoxedMachine(state: WorldState, command: SellBoxedMachineCommand): boolean {
+  if (machineKindForBoxedItem(command.item) === null) return false;
+
+  const box = takeBoxedMachine(state, command.item);
+  if (box === null) return false;
+
+  const payout = boxedMachineScrapCents(box.investedCents);
+  state.moneyCents += payout;
+  recordRefund(state.stats, payout);
+  touch(state, 'handCarry');
   return true;
 }
 
@@ -980,6 +1151,38 @@ function applySetGrabberFilter(state: WorldState, command: SetGrabberFilterComma
   return true;
 }
 
+/**
+ * Turn a placed arm one step clockwise.
+ *
+ * REACH-GATED, unlike `SetGrabberFilter` beside it, and the difference is not an oversight in
+ * either direction. Retuning a filter is paperwork — a dropdown on a panel that names an arm.
+ * Rotating one is the player reaching out and shoving it, the same physical verb as repairing
+ * or whacking a machine, and it is the verb item 052 asks for: *"fixes it with one keypress
+ * standing next to it"*. Standing next to it is half the sentence.
+ *
+ * It takes the tile rather than a footprint centre because a grabber is one tile and always
+ * will be — `Grabber` has no size, only a position.
+ *
+ * WHAT IT DOES NOT DO IS DROP WHAT THE ARM IS HOLDING. An arm mid-swing keeps its item and its
+ * cooldown and simply finishes the swing facing the new way, which is both the readable answer
+ * — you turned the arm, you did not empty its hand — and the one that cannot make an item
+ * vanish (plan §4).
+ */
+function applyRotateGrabber(state: WorldState, command: RotateGrabberCommand): boolean {
+  const grabber = grabberById(state, command.grabberId);
+  if (grabber === null) return false;
+  if (!withinReachOfTile(state, grabber.tileX, grabber.tileY)) return false;
+
+  const turned = rotateDirectionClockwise(grabber.dir);
+  // `None` is not a legal facing, so a grabber that somehow held one has nowhere to turn to.
+  // Refusing keeps the "every applied command changed the world" contract the trace rests on.
+  if (turned === Direction.None) return false;
+
+  grabber.dir = turned;
+  touch(state, 'handCarry');
+  return true;
+}
+
 function applyRemoveGrabber(state: WorldState, command: RemoveGrabberCommand): boolean {
   const grabber = grabberById(state, command.grabberId);
   if (grabber === null) return false;
@@ -1299,7 +1502,9 @@ function intentTargetSubtiles(
     case IntentAction.RefillHopper:
     case IntentAction.Repair:
     case IntentAction.WhackJam:
-    case IntentAction.Sell: {
+    case IntentAction.Deconstruct:
+    case IntentAction.Sell:
+    case IntentAction.Buy: {
       // Resolved from the tile every tick rather than pinned by id at issue time, and that is
       // on purpose: pick-up-and-move is free and always will be (plan §4), so the machine you
       // set off toward may not be there when you arrive. Aim at the FOOTPRINT CENTRE, which is
@@ -1307,7 +1512,10 @@ function intentTargetSubtiles(
       // finding yourself out of reach would be a maddening near-miss.
       const machine = machineAt(state, intent.tileX, intent.tileY);
       if (machine === null) return null;
+      // Both counter verbs want the stand and nothing else. Walking to a Fryer to buy seeds is
+      // an errand that was never going to work, so it is refused on issue rather than walked.
       if (intent.action === IntentAction.Sell && machine.kind !== MachineKind.SellBin) return null;
+      if (intent.action === IntentAction.Buy && machine.kind !== MachineKind.SellBin) return null;
       return machineCentreSubtiles(machine);
     }
 
@@ -1339,6 +1547,10 @@ function intentCommand(state: WorldState, intent: PlayerIntent): Command | null 
       return { type: 'HarvestTile', tileX: intent.tileX, tileY: intent.tileY };
     case IntentAction.Sell:
       return { type: 'SellItem', item: intent.item as ItemId, count: intent.count };
+    // Buy resolves without the machine for the same reason Sell does: `nearSellBin` inside the
+    // reducer is the gate, and it measures from the player rather than from the tile clicked.
+    case IntentAction.Buy:
+      return { type: 'BuyItem', item: intent.item as ItemId, count: intent.count };
     default:
       break;
   }
@@ -1357,6 +1569,8 @@ function intentCommand(state: WorldState, intent: PlayerIntent): Command | null 
       return { type: 'RepairMachine', machineId: machine.id };
     case IntentAction.WhackJam:
       return { type: 'WhackJam', machineId: machine.id };
+    case IntentAction.Deconstruct:
+      return { type: 'DeconstructMachine', machineId: machine.id };
     default:
       return null;
   }

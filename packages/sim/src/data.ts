@@ -91,6 +91,42 @@ export const ItemId = {
   SixPack: 25,
   /** Chips + soda. The item that makes running both lines beat running either one twice. */
   SnackCombo: 26,
+
+  // --- boxed machines ---------------------------------------------------------------
+  //
+  // A machine taken off the lot, in a box, in the player's bag. One row per buildable machine
+  // kind, in `MachineKind` order, and the mapping is `BOXED_MACHINE_ROWS` below.
+  //
+  // THESE ARE NOT RECIPE-GRAPH NODES. Plan §5 caps the graph at ~50 items and the count above
+  // is 26 items plus 5 liquids; these twenty do not move that number, because nothing eats one,
+  // nothing makes one, and no belt will ever carry one. They exist so that a boxed Fryer is a
+  // thing the inventory, the hash, and the save already know how to hold, rather than a
+  // parallel list of machines-that-are-not-on-the-lot with its own sorting and its own bugs.
+  //
+  // THE SELL BIN HAS NO BOX, deliberately, and it is the only kind that does not. It is a gift
+  // the world starts with, it costs nothing, and it is the only way to sell or buy anything —
+  // boxing it would be a single click that ends a save's economy, which is precisely the class
+  // of thing plan §1's anti-softlock floor exists to refuse.
+  BoxedChipKitchen: 27,
+  BoxedSprinkler: 28,
+  BoxedWasher: 29,
+  BoxedSlicer: 30,
+  BoxedFryer: 31,
+  BoxedSeasoner: 32,
+  BoxedBagger: 33,
+  BoxedPump: 34,
+  BoxedTank: 35,
+  BoxedPipedSprinkler: 36,
+  BoxedIrrigationHub: 37,
+  BoxedRecirculator: 38,
+  BoxedJuicer: 39,
+  BoxedKettle: 40,
+  BoxedGrinder: 41,
+  BoxedSyrupMixer: 42,
+  BoxedCarbonator: 43,
+  BoxedBottler: 44,
+  BoxedSixPacker: 45,
+  BoxedComboPacker: 46,
 } as const;
 
 export type ItemId = (typeof ItemId)[keyof typeof ItemId];
@@ -318,6 +354,16 @@ export function snackComboPriceCents(): number {
  * place that ratio is written. `test/sim.test.ts` asserts the table agrees with it, so the
  * literals here can never drift away from the rule.
  */
+/**
+ * The three columns every boxed-machine row shares, written once.
+ *
+ * Twenty rows that must agree on all three flags are twenty chances for one of them to be
+ * typed `sellable: true` in a hurry — and that one row would put a machine in the sell bin at
+ * a list price of nothing, which is a bug that pays out. Sharing the literal makes the rule a
+ * rule; the ids and slugs, which genuinely differ per row, are still written out per row.
+ */
+const BOXED = { listPriceCents: 0, purchasable: false, sellable: false } as const;
+
 export const ITEM_SPECS: readonly ItemSpec[] = [
   // Seeds: bought at the stand, never sold back. See `ItemSpec.sellable`.
   {
@@ -490,7 +536,115 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     purchasable: false,
     sellable: true,
   },
+
+  // --- boxed machines ---------------------------------------------------------------
+  //
+  // Every one of these is `listPriceCents: 0`, and that is a rule rather than a placeholder.
+  // A boxed machine is worth what was actually invested in THAT machine — a maxed Fryer and a
+  // bare one are the same row and wildly different money — so its value is arithmetic on its
+  // own `InventorySlot.boxes` entry, done once in `computeNetWorthCents` and once in
+  // `boxedMachineScrapCents`. A number in this column would be a second, wrong opinion that
+  // net worth would silently add on top. `test/factory.test.ts` pins the zero.
+  //
+  // `purchasable: false` — you cannot buy a used machine at the roadside stand; you buy a new
+  // one with `PlaceMachine`. `sellable: false` — item 051's grammar, unchanged: the sell bin
+  // takes goods, and a boxed machine is scrapped from the inventory panel with
+  // `SellBoxedMachine` at 40% of its invoice. The bin refusing them is the same one line of
+  // data doing the same job it already did for seeds.
+  { id: ItemId.BoxedChipKitchen, slug: 'boxed-chip-kitchen', ...BOXED },
+  { id: ItemId.BoxedSprinkler, slug: 'boxed-sprinkler', ...BOXED },
+  { id: ItemId.BoxedWasher, slug: 'boxed-washer', ...BOXED },
+  { id: ItemId.BoxedSlicer, slug: 'boxed-slicer', ...BOXED },
+  { id: ItemId.BoxedFryer, slug: 'boxed-fryer', ...BOXED },
+  { id: ItemId.BoxedSeasoner, slug: 'boxed-seasoner', ...BOXED },
+  { id: ItemId.BoxedBagger, slug: 'boxed-bagger', ...BOXED },
+  { id: ItemId.BoxedPump, slug: 'boxed-pump', ...BOXED },
+  { id: ItemId.BoxedTank, slug: 'boxed-tank', ...BOXED },
+  { id: ItemId.BoxedPipedSprinkler, slug: 'boxed-piped-sprinkler', ...BOXED },
+  { id: ItemId.BoxedIrrigationHub, slug: 'boxed-irrigation-hub', ...BOXED },
+  { id: ItemId.BoxedRecirculator, slug: 'boxed-recirculator', ...BOXED },
+  { id: ItemId.BoxedJuicer, slug: 'boxed-juicer', ...BOXED },
+  { id: ItemId.BoxedKettle, slug: 'boxed-kettle', ...BOXED },
+  { id: ItemId.BoxedGrinder, slug: 'boxed-grinder', ...BOXED },
+  { id: ItemId.BoxedSyrupMixer, slug: 'boxed-syrup-mixer', ...BOXED },
+  { id: ItemId.BoxedCarbonator, slug: 'boxed-carbonator', ...BOXED },
+  { id: ItemId.BoxedBottler, slug: 'boxed-bottler', ...BOXED },
+  { id: ItemId.BoxedSixPacker, slug: 'boxed-six-packer', ...BOXED },
+  { id: ItemId.BoxedComboPacker, slug: 'boxed-combo-packer', ...BOXED },
 ];
+
+/**
+ * Which machine kind is in which box, in `MachineKind` order.
+ *
+ * A TABLE RATHER THAN AN OFFSET. `item = kind + 25` happens to be true today and would keep
+ * being true right up until one machine kind is retired or one item id is spent elsewhere, at
+ * which point every box in every save would open onto the wrong machine. Both id spaces are
+ * permanent save surface; the arithmetic between them is not, so it is written down instead of
+ * inferred. `MachineKind.SellBin` is deliberately absent — see `ItemId`.
+ */
+export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly item: ItemId }[] =
+  [
+    { kind: MachineKind.ChipKitchen, item: ItemId.BoxedChipKitchen },
+    { kind: MachineKind.Sprinkler, item: ItemId.BoxedSprinkler },
+    { kind: MachineKind.Washer, item: ItemId.BoxedWasher },
+    { kind: MachineKind.Slicer, item: ItemId.BoxedSlicer },
+    { kind: MachineKind.Fryer, item: ItemId.BoxedFryer },
+    { kind: MachineKind.Seasoner, item: ItemId.BoxedSeasoner },
+    { kind: MachineKind.Bagger, item: ItemId.BoxedBagger },
+    { kind: MachineKind.Pump, item: ItemId.BoxedPump },
+    { kind: MachineKind.Tank, item: ItemId.BoxedTank },
+    { kind: MachineKind.PipedSprinkler, item: ItemId.BoxedPipedSprinkler },
+    { kind: MachineKind.IrrigationHub, item: ItemId.BoxedIrrigationHub },
+    { kind: MachineKind.Recirculator, item: ItemId.BoxedRecirculator },
+    { kind: MachineKind.Juicer, item: ItemId.BoxedJuicer },
+    { kind: MachineKind.Kettle, item: ItemId.BoxedKettle },
+    { kind: MachineKind.Grinder, item: ItemId.BoxedGrinder },
+    { kind: MachineKind.SyrupMixer, item: ItemId.BoxedSyrupMixer },
+    { kind: MachineKind.Carbonator, item: ItemId.BoxedCarbonator },
+    { kind: MachineKind.Bottler, item: ItemId.BoxedBottler },
+    { kind: MachineKind.SixPacker, item: ItemId.BoxedSixPacker },
+    { kind: MachineKind.ComboPacker, item: ItemId.BoxedComboPacker },
+  ];
+
+/** The boxed item a machine kind goes into, or `null` for a kind that has no box. */
+export function boxedItemForMachine(kind: MachineKind): ItemId | null {
+  for (let i = 0; i < BOXED_MACHINE_ROWS.length; i++) {
+    const row = BOXED_MACHINE_ROWS[i]!;
+    if (row.kind === kind) return row.item;
+  }
+  return null;
+}
+
+/** The machine kind inside a boxed item, or `null` for anything that is not one. */
+export function machineKindForBoxedItem(item: ItemId): MachineKind | null {
+  for (let i = 0; i < BOXED_MACHINE_ROWS.length; i++) {
+    const row = BOXED_MACHINE_ROWS[i]!;
+    if (row.item === item) return row.kind;
+  }
+  return null;
+}
+
+/** True for the twenty boxed-machine rows and nothing else. */
+export function isBoxedMachineItem(item: ItemId): boolean {
+  return machineKindForBoxedItem(item) !== null;
+}
+
+/**
+ * What scrapping a boxed machine pays: **40% of what was invested in it, floored to the cent**.
+ *
+ * PLAN §3'S 40% AND ITEM 037'S DANGLING CRITERION, finally somewhere it can be checked. The
+ * arithmetic is on the machine's own invoice — purchase price plus every dial bought since —
+ * rather than on a table, so an upgraded machine scraps for more than a bare one without a
+ * second number anywhere that could disagree. Condition is deliberately NOT in it: scrap value
+ * is what the parts fetch, and hand repair is free, so a worn machine you were going to scrap
+ * anyway is not also a worse trade.
+ */
+export const SCRAP_PAYOUT_NUMERATOR = 40;
+export const SCRAP_PAYOUT_DENOMINATOR = 100;
+
+export function boxedMachineScrapCents(investedCents: number): number {
+  return divFloor(investedCents * SCRAP_PAYOUT_NUMERATOR, SCRAP_PAYOUT_DENOMINATOR);
+}
 
 export function itemSpec(id: ItemId): ItemSpec | null {
   for (let i = 0; i < ITEM_SPECS.length; i++) {
@@ -2071,6 +2225,15 @@ function balanceDigest(): string {
     h,
     `${SODA_PRICE_CENTS}:${SIX_PACK_COUNT}:${SIX_PACK_PREMIUM_NUMERATOR}/${SIX_PACK_PREMIUM_DENOMINATOR}:${SNACK_COMBO_PREMIUM_NUMERATOR}/${SNACK_COMBO_PREMIUM_DENOMINATOR}`,
   );
+  // Boxing and scrapping. The RATIO rather than a payout table, for the same reason the bundle
+  // premiums above are ratios — a repriced machine moves what its box fetches, and the digest
+  // moves with it. The kind→item map is folded in too: which machine is in which box is the one
+  // fact a save cannot survive being wrong about.
+  h = fnv1aString(h, `${SCRAP_PAYOUT_NUMERATOR}/${SCRAP_PAYOUT_DENOMINATOR}`);
+  for (let i = 0; i < BOXED_MACHINE_ROWS.length; i++) {
+    const row = BOXED_MACHINE_ROWS[i]!;
+    h = fnv1aString(h, `${row.kind}>${row.item}`);
+  }
   return fnv1aToHex(h);
 }
 

@@ -14,6 +14,7 @@ import {
   type LiquidPortSpec,
   type Machine,
   type WorldState,
+  BOXED_MACHINE_ROWS,
   BeltTier,
   BuildRefusal,
   CONDITION_EFFECT_THRESHOLD,
@@ -42,8 +43,11 @@ import {
   WILT_GRACE_TICKS,
   WILT_WINDOW_TICKS,
   WiltStage,
+  addBoxedMachine,
   addItem,
   beltInsert,
+  boxedItemForMachine,
+  computeNetWorthCents,
   createWorld,
   divFloor,
   createWorldView,
@@ -53,14 +57,18 @@ import {
   effectiveWear,
   effectiveWorkRate,
   hashState,
+  isBoxedMachineItem,
   isSellable,
   itemCount,
+  itemSpec,
+  machineKindForBoxedItem,
   liquidPlacementRefusal,
   listPriceCents,
   machineSpec,
   nextOutputItem,
   pipePathRefusal,
   rebuildNetworks,
+  removeItem,
   rusticStylePriceCents,
   spawnBelt,
   spawnGrabber,
@@ -466,13 +474,45 @@ describe('the sell bin', () => {
     expect(isSellable(ItemId.PotatoSeed)).toBe(false);
   });
 
-  it('leaves every seed unsellable and everything else sellable', () => {
+  it('leaves every seed and every boxed machine unsellable, and everything else sellable', () => {
     // Pinned over the whole table rather than one item, and pinned as "seeds" rather than as
     // "the inverse of purchasable" — the two flags are different facts and a consumable that
     // is both buyable and sellable must stay possible.
+    //
+    // Boxed machines are the second thing the bin refuses, and for a different reason: a seed
+    // is refused because selling it can end a world, while a box is refused because the bin
+    // prices at list and a box has no list price. `SellBoxedMachine` scraps it at 40% of its
+    // own invoice instead. Both facts live in the same one column, which is the point of
+    // `ItemSpec.sellable` being data rather than a rule inferred from something else.
     for (const spec of ITEM_SPECS) {
-      const isSeed = spec.slug.endsWith('-seed');
-      expect(spec.sellable).toBe(!isSeed);
+      const refused = spec.slug.endsWith('-seed') || isBoxedMachineItem(spec.id);
+      expect(spec.sellable).toBe(!refused);
+    }
+  });
+
+  it('prices every boxed machine at zero, because a box is priced off its own invoice', () => {
+    // A non-zero list price here would be counted by `computeNetWorthCents` ON TOP of the
+    // per-box value it already adds, so every boxed machine would be worth itself plus a
+    // constant. The zero is load-bearing, not a placeholder.
+    for (const row of BOXED_MACHINE_ROWS) {
+      expect(listPriceCents(row.item)).toBe(0);
+    }
+  });
+
+  it('gives every buildable machine kind exactly one box, and the sell bin none', () => {
+    // The map is a table rather than an offset (see `BOXED_MACHINE_ROWS`), so nothing but a
+    // test stops it going out of step with `MACHINE_SPECS`. This is that test.
+    const boxed = new Set(BOXED_MACHINE_ROWS.map((row) => row.kind));
+    for (const spec of MACHINE_SPECS) {
+      expect(boxed.has(spec.kind)).toBe(spec.kind !== MachineKind.SellBin);
+    }
+    expect(boxed.size).toBe(MACHINE_SPECS.length - 1);
+
+    // And the slug says which machine it is, so a save opened in a text editor reads plainly.
+    for (const row of BOXED_MACHINE_ROWS) {
+      expect(itemSpec(row.item)?.slug).toBe(`boxed-${machineSpec(row.kind)?.slug ?? '?'}`);
+      expect(machineKindForBoxedItem(row.item)).toBe(row.kind);
+      expect(boxedItemForMachine(row.kind)).toBe(row.item);
     }
   });
 
@@ -1207,5 +1247,344 @@ describe('the anti-softlock floor', () => {
     run(state, [{ type: 'RemoveBelt', beltId: state.belts[0]!.id }]);
 
     expect(state.stats.lifetimeEarnedCents - state.stats.lifetimeSpentCents).toBe(netBefore);
+  });
+});
+
+// --- rotation (item 052) --------------------------------------------------------------
+
+describe('rotating a placed grabber', () => {
+  function armAt(state: WorldState, dir: Direction): number {
+    return spawnGrabber(state, GrabberTier.Mk1, 1, 1, dir, 0)!.id;
+  }
+
+  it('turns one step clockwise per press, all the way round', () => {
+    // N → E → S → W → N. Four presses is a full turn and the fourth must land back where it
+    // started, or "press R until it looks right" stops being a thing a player can do.
+    const state = createWorld(61);
+    standOn(state, 1, 1);
+    const id = armAt(state, Direction.North);
+
+    const seen: Direction[] = [];
+    for (let i = 0; i < 4; i++) {
+      run(state, [{ type: 'RotateGrabber', grabberId: id }]);
+      seen.push(state.grabbers[0]!.dir);
+    }
+    expect(seen).toEqual([Direction.East, Direction.South, Direction.West, Direction.North]);
+  });
+
+  it('is one trace entry per press, and refuses an unknown arm', () => {
+    const state = createWorld(62);
+    standOn(state, 1, 1);
+    const id = armAt(state, Direction.North);
+
+    const before = state.trace.length;
+    run(state, [{ type: 'RotateGrabber', grabberId: id }]);
+    expect(state.trace.length).toBe(before + 1);
+
+    run(state, [{ type: 'RotateGrabber', grabberId: id + 999 }]);
+    expect(state.trace.length).toBe(before + 1);
+  });
+
+  it('refuses out of reach, and changes the arm the moment it is in reach', () => {
+    // Item 052 asks for "one keypress standing next to it". Standing across the lot is not it.
+    const state = createWorld(63);
+    standOn(state, 12, 12);
+    const id = armAt(state, Direction.North);
+
+    run(state, [{ type: 'RotateGrabber', grabberId: id }]);
+    expect(state.grabbers[0]!.dir).toBe(Direction.North);
+
+    standOn(state, 1, 1);
+    run(state, [{ type: 'RotateGrabber', grabberId: id }]);
+    expect(state.grabbers[0]!.dir).toBe(Direction.East);
+  });
+
+  it('keeps what the arm is holding, because nothing ever vanishes', () => {
+    const state = createWorld(64);
+    standOn(state, 1, 1);
+    const id = armAt(state, Direction.North);
+    state.grabbers[0]!.held = ItemId.PlainChips;
+
+    run(state, [{ type: 'RotateGrabber', grabberId: id }]);
+    expect(state.grabbers[0]!.held).toBe(ItemId.PlainChips);
+  });
+});
+
+// --- deconstruct to inventory (item 054) ----------------------------------------------
+
+describe('boxing a machine', () => {
+  /** How many Chip Kitchens are standing. The world always has a sell bin besides. */
+  function kitchens(state: WorldState): number {
+    return state.machines.filter((machine) => machine.kind === MachineKind.ChipKitchen).length;
+  }
+
+  /** A kitchen the player is standing next to, with the given dials already bought. */
+  function kitchen(state: WorldState, speed: number, capacity: number): Machine {
+    const machine = spawnMachine(state, MachineKind.ChipKitchen, 1, 1)!;
+    machine.speedLevel = speed;
+    machine.capacityLevel = capacity;
+    machine.investedCents = machineSpec(MachineKind.ChipKitchen)!.priceCents + 18_000;
+    standOn(state, 1, 1);
+    return machine;
+  }
+
+  it('takes the machine off the lot and pays nothing for it', () => {
+    // Boxing is the rearranging verb. A deconstruct that paid out would make demolishing a
+    // factory a business model, which is exactly what item 054 rules out.
+    const state = createWorld(70);
+    const machine = kitchen(state, 2, 1);
+    const money = state.moneyCents;
+
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+
+    expect(kitchens(state)).toBe(0);
+    expect(state.moneyCents).toBe(money);
+    expect(itemCount(state, ItemId.BoxedChipKitchen)).toBe(1);
+  });
+
+  it('puts it back down for free, as the machine it was', () => {
+    const state = createWorld(71);
+    const machine = kitchen(state, 2, 1);
+    const invoice = machine.investedCents;
+    machine.condition = 640;
+
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+    const money = state.moneyCents;
+    run(state, [{ type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: 5, tileY: 1 }]);
+
+    const back = state.machines.find((m) => m.kind === MachineKind.ChipKitchen)!;
+    expect(state.moneyCents).toBe(money);
+    expect(back.speedLevel).toBe(2);
+    expect(back.capacityLevel).toBe(1);
+    expect(back.condition).toBe(640);
+    expect(back.investedCents).toBe(invoice);
+    expect(itemCount(state, ItemId.BoxedChipKitchen)).toBe(0);
+  });
+
+  it('leaves net worth exactly where it was, round trip', () => {
+    // The one number every leaderboard board is read off (plan §6). If boxing moved it, a
+    // player could farm net worth by picking machines up and putting them down.
+    const state = createWorld(72);
+    const machine = kitchen(state, 3, 0);
+    machine.condition = 517;
+    const before = computeNetWorthCents(state);
+
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+    expect(computeNetWorthCents(state)).toBe(before);
+
+    run(state, [{ type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: 5, tileY: 1 }]);
+    expect(computeNetWorthCents(state)).toBe(before);
+  });
+
+  it('spills the hoppers and the output buffer — nothing vanishes', () => {
+    const state = createWorld(73);
+    const machine = kitchen(state, 0, 0);
+    machine.inputCounts[0] = 7;
+    machine.outputCount = machineSpec(MachineKind.ChipKitchen)!.outputCapacity;
+    const bags = machine.outputCount;
+
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(7);
+    expect(itemCount(state, ItemId.BaggedChips)).toBe(bags);
+  });
+
+  it('refuses a jammed machine, and a machine that is actually running', () => {
+    const state = createWorld(74);
+    const machine = kitchen(state, 0, 0);
+
+    machine.jammed = true;
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+    expect(kitchens(state)).toBe(1);
+
+    // Fed, with room to put the result: it is turning, so it is not a box.
+    machine.jammed = false;
+    machine.inputCounts[0] = 4;
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+    expect(kitchens(state)).toBe(1);
+
+    // Starved: stopped, so it boxes.
+    machine.inputCounts[0] = 0;
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+    expect(kitchens(state)).toBe(0);
+  });
+
+  it('boxes an upgraded machine even though it is holding leftover work-points', () => {
+    // THE TRAP THIS RULE EXISTS TO AVOID. A Speed dial rarely divides the operation cost
+    // evenly, so an upgraded machine rests with `progress > 0` forever. Refusing on that
+    // would make the dial a permanent ban on boxing — and "an upgraded machine can be
+    // deconstructed" is the feature's first acceptance criterion.
+    const state = createWorld(75);
+    const machine = kitchen(state, 3, 0);
+    machine.progress = 117;
+
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+    expect(kitchens(state)).toBe(0);
+  });
+
+  it('refuses the sell bin, because a lot with no stand cannot trade', () => {
+    const state = createWorld(76);
+    const bin = state.machines.find((m) => m.kind === MachineKind.SellBin)!;
+    standOn(state, bin.tileX, bin.tileY);
+
+    run(state, [{ type: 'DeconstructMachine', machineId: bin.id }]);
+    expect(state.machines.some((m) => m.kind === MachineKind.SellBin)).toBe(true);
+  });
+
+  it('refuses out of reach, like every other machine verb', () => {
+    const state = createWorld(77);
+    const machine = kitchen(state, 0, 0);
+    standOn(state, 14, 14);
+
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+    expect(kitchens(state)).toBe(1);
+  });
+
+  it('drops a ported machine out of its network on the same tick it leaves', () => {
+    // A stale membership list is a ledger dividing supply among a machine that is in the
+    // player's bag. `MoveMachine` recomputes for the same reason; so must this.
+    const state = createWorld(78);
+    for (let y = 0; y < 3; y++) spawnPipe(state, 2, y, LiquidId.Water);
+    const tank = spawnMachine(state, MachineKind.Tank, 3, 1)!;
+    rebuildNetworks(state);
+    standOn(state, 3, 1);
+    expect(tank.network).not.toBe(0);
+
+    run(state, [{ type: 'DeconstructMachine', machineId: tank.id }]);
+    expect(state.machines.some((m) => m.kind === MachineKind.Tank)).toBe(false);
+    // The pipes survive; nothing on them still claims a machine that is not there.
+    expect(state.pipes).toHaveLength(3);
+  });
+});
+
+describe('scrapping a boxed machine', () => {
+  it('pays exactly 40% of the invoice, floored — item 037’s dangling criterion', () => {
+    const state = createWorld(80);
+    const machine = spawnMachine(state, MachineKind.ChipKitchen, 1, 1)!;
+    machine.investedCents = 28_333;
+    standOn(state, 1, 1);
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+
+    const money = state.moneyCents;
+    run(state, [{ type: 'SellBoxedMachine', item: ItemId.BoxedChipKitchen }]);
+
+    expect(state.moneyCents - money).toBe(divFloor(28_333 * 40, 100));
+    expect(itemCount(state, ItemId.BoxedChipKitchen)).toBe(0);
+  });
+
+  it('is booked as money back rather than as income', () => {
+    // Gross receipts and the items-sold counter both feed Charter milestones and leaderboard
+    // boards. Scrap is a partial reversal of a spend, so it lands on the spend side.
+    const state = createWorld(81);
+    const machine = spawnMachine(state, MachineKind.ChipKitchen, 1, 1)!;
+    standOn(state, 1, 1);
+    run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
+
+    const earned = state.stats.lifetimeEarnedCents;
+    const sold = state.stats.itemsSold;
+    run(state, [{ type: 'SellBoxedMachine', item: ItemId.BoxedChipKitchen }]);
+
+    expect(state.stats.lifetimeEarnedCents).toBe(earned);
+    expect(state.stats.itemsSold).toBe(sold);
+  });
+
+  it('is refused by the sell bin, which only takes goods', () => {
+    const state = createWorld(82);
+    addItem(state, ItemId.BoxedFryer, 1);
+    const bin = state.machines.find((m) => m.kind === MachineKind.SellBin)!;
+    standOn(state, bin.tileX, bin.tileY);
+
+    run(state, [{ type: 'SellItem', item: ItemId.BoxedFryer, count: 1 }]);
+    expect(itemCount(state, ItemId.BoxedFryer)).toBe(1);
+    expect(isSellable(ItemId.BoxedFryer)).toBe(false);
+  });
+
+  it('refuses an item that is not a boxed machine, and an empty bag', () => {
+    const state = createWorld(83);
+    const money = state.moneyCents;
+    run(state, [{ type: 'SellBoxedMachine', item: ItemId.RussetPotato }]);
+    run(state, [{ type: 'SellBoxedMachine', item: ItemId.BoxedFryer }]);
+    expect(state.moneyCents).toBe(money);
+  });
+});
+
+describe('a slot full of boxes', () => {
+  function boxSlot(state: WorldState): (typeof state.inventory)[number] {
+    return state.inventory.find((slot) => slot.item === ItemId.BoxedFryer)!;
+  }
+
+  function box(state: WorldState, invested: number, speed: number): void {
+    addBoxedMachine(state, ItemId.BoxedFryer, {
+      speedLevel: speed,
+      efficiencyLevel: 0,
+      capacityLevel: 0,
+      condition: CONDITION_MAX,
+      investedCents: invested,
+    });
+  }
+
+  it('hashes the same whichever order the machines were boxed in', () => {
+    // Two players who boxed the same bare Fryer and the same maxed one in opposite orders are
+    // in the same world. The canonical order inside the slot is what makes the digest agree.
+    const a = createWorld(90);
+    box(a, 40_000, 3);
+    box(a, 12_000, 0);
+
+    const b = createWorld(90);
+    box(b, 12_000, 0);
+    box(b, 40_000, 3);
+
+    expect(hashState(a)).toBe(hashState(b));
+    expect(boxSlot(a).boxes[0]!.investedCents).toBe(12_000);
+  });
+
+  it('hands out the least-invested box first, to both verbs', () => {
+    const state = createWorld(91);
+    state.unlocked = [TechId.Fryer, TechId.WashAndSlice];
+    box(state, 40_000, 3);
+    box(state, 12_000, 0);
+    standOn(state, 1, 1);
+
+    run(state, [{ type: 'PlaceMachine', kind: MachineKind.Fryer, tileX: 1, tileY: 1 }]);
+    expect(state.machines.find((m) => m.kind === MachineKind.Fryer)!.speedLevel).toBe(0);
+
+    const money = state.moneyCents;
+    run(state, [{ type: 'SellBoxedMachine', item: ItemId.BoxedFryer }]);
+    expect(state.moneyCents - money).toBe(divFloor(40_000 * 40, 100));
+    expect(itemCount(state, ItemId.BoxedFryer)).toBe(0);
+  });
+
+  it('keeps the box list exactly as long as the count', () => {
+    const state = createWorld(92);
+    box(state, 12_000, 0);
+    box(state, 40_000, 3);
+    expect(boxSlot(state).count).toBe(2);
+    expect(boxSlot(state).boxes).toHaveLength(2);
+
+    removeItem(state, ItemId.BoxedFryer, 1);
+    expect(boxSlot(state).count).toBe(1);
+    expect(boxSlot(state).boxes).toHaveLength(1);
+    // The generic remover takes from the front, same as the two verbs do.
+    expect(boxSlot(state).boxes[0]!.investedCents).toBe(40_000);
+  });
+
+  it('publishes every box to the HUD, with what each one would fetch', () => {
+    const state = createWorld(93);
+    box(state, 12_000, 0);
+    box(state, 40_000, 3);
+
+    const projected = view(state, createWorldView());
+    const row = projected.inventory.find((slot) => slot.item === ItemId.BoxedFryer)!;
+    expect(row.count).toBe(2);
+    expect(row.sellable).toBe(0);
+    expect(row.boxedMachineKind).toBe(MachineKind.Fryer);
+    expect(row.boxes.map((entry) => entry.investedCents)).toEqual([12_000, 40_000]);
+    expect(row.boxes.map((entry) => entry.scrapCents)).toEqual([4_800, 16_000]);
+    expect(row.boxes[1]!.speedLevel).toBe(3);
+
+    // An ordinary row carries neither, and the pooled buffer does not leak the last row's boxes.
+    const seeds = projected.inventory.find((slot) => slot.item === ItemId.PotatoSeed)!;
+    expect(seeds.boxedMachineKind).toBe(0);
+    expect(seeds.boxes).toEqual([]);
   });
 });

@@ -23,6 +23,7 @@ export type { SimVersionCheck } from './version';
 export {
   type SaveBelt,
   type SaveBeltItem,
+  type SaveBoxedMachine,
   type SaveCropTile,
   type SaveGrabber,
   type SaveInventorySlot,

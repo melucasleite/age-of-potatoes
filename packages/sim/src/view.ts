@@ -33,10 +33,12 @@ import {
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
   WiltStage,
+  boxedMachineScrapCents,
   cropSpec,
   grabberSpec,
   isNetworkConsumer,
   isSellable,
+  machineKindForBoxedItem,
   machineSpec,
   wiltStageForAge,
 } from './data';
@@ -314,17 +316,52 @@ export interface ZoneView {
   compost: number;
 }
 
+/**
+ * One boxed machine on an inventory row: what it will be when it goes back down, and what it
+ * fetches if it does not.
+ *
+ * PUBLISHED PER BOX RATHER THAN PER ROW because that is the fact — three boxed Fryers are three
+ * different machines at three different prices, and a row that reported "×3" and one set of
+ * dials would be lying about two of them.
+ *
+ * The array order is the world's canonical order, least invested first, which is also the order
+ * the two verbs consume in: `boxes[0]` is the box `PlaceMachine` will put down and the box
+ * `SellBoxedMachine` will scrap. A panel that wants to say "next out" reads index 0.
+ */
+export interface BoxedMachineView {
+  speedLevel: number;
+  efficiencyLevel: number;
+  capacityLevel: number;
+  /** 0..CONDITION_MAX, as it was when the machine was boxed. Restored on placement. */
+  condition: number;
+  /** Purchase price plus every dial bought. Restored on placement. */
+  investedCents: number;
+  /** What `SellBoxedMachine` pays for THIS box: 40% of the invoice, floored. */
+  scrapCents: number;
+}
+
 export interface InventoryView {
   item: number;
   count: number;
   /**
-   * 1 when the sell bin will take this, 0 when it will refuse it — seeds, today.
+   * 1 when the sell bin will take this, 0 when it will refuse it — seeds and boxed machines.
    *
    * PROJECTED RATHER THAN LOOKED UP, so the HUD greys the affordance off the same fact the
    * reducer refuses on. `isSellable()` is exported too and says the same thing; this is here so
    * a list of inventory rows can be rendered without a spec lookup per row per frame.
    */
   sellable: number;
+  /**
+   * The `MachineKind` in this box, or 0 when the row is an ordinary good.
+   *
+   * IT IS THE ROW'S TYPE TAG, not a decoration: non-zero means the row is boxed machines, which
+   * means `sellable` is 0 and the panel must offer `SellBoxedMachine` instead of `SellItem`, and
+   * means the "place" affordance should arm the build tool for this kind. One integer, for the
+   * same reason `sellable` is one integer — the alternative is a table lookup per row per frame.
+   */
+  boxedMachineKind: number;
+  /** One entry per boxed machine. Empty on every ordinary row. Reused between frames. */
+  boxes: BoxedMachineView[];
 }
 
 /** The numbers the HUD panel reads, already reduced. All integers, all cents or counts. */
@@ -1091,12 +1128,41 @@ function projectInventory(state: WorldState, out: WorldView): void {
     const slot = state.inventory[i]!;
     let iv = out.inventory[i];
     if (iv === undefined) {
-      iv = { item: 0, count: 0, sellable: 0 };
+      iv = { item: 0, count: 0, sellable: 0, boxedMachineKind: 0, boxes: [] };
       out.inventory.push(iv);
     }
     iv.item = slot.item;
     iv.count = slot.count;
     iv.sellable = isSellable(slot.item) ? 1 : 0;
+    iv.boxedMachineKind = machineKindForBoxedItem(slot.item) ?? 0;
+
+    // The nested list is pooled exactly as the row list above it is: grow into it, overwrite in
+    // place, then truncate. `view()` buffers are reused forever, and a box left over from last
+    // frame's row is the bug this design invites — the same note `PlayerView.intentAction`
+    // carries, one level further in.
+    const boxCount = slot.boxes.length;
+    for (let j = 0; j < boxCount; j++) {
+      const box = slot.boxes[j]!;
+      let bv = iv.boxes[j];
+      if (bv === undefined) {
+        bv = {
+          speedLevel: 0,
+          efficiencyLevel: 0,
+          capacityLevel: 0,
+          condition: 0,
+          investedCents: 0,
+          scrapCents: 0,
+        };
+        iv.boxes.push(bv);
+      }
+      bv.speedLevel = box.speedLevel;
+      bv.efficiencyLevel = box.efficiencyLevel;
+      bv.capacityLevel = box.capacityLevel;
+      bv.condition = box.condition;
+      bv.investedCents = box.investedCents;
+      bv.scrapCents = boxedMachineScrapCents(box.investedCents);
+    }
+    iv.boxes.length = boxCount;
   }
   out.inventory.length = count;
 }

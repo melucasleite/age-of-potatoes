@@ -21,7 +21,8 @@
 // pending `PlayerIntent` on the player, or none) up to format 5 (maintenance and overcooking
 // — a machine's blocked clock and burnt count, and the waste and repair-kit tallies) up to
 // format 6 (the soda line — one input count per recipe LINE instead of a single `inputCount`,
-// and typed liquid ports on a converter).
+// and typed liquid ports on a converter) up to format 7 (deconstruct to inventory — an
+// inventory slot carries the boxed machines in it, dials and condition and invoice each).
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -32,7 +33,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 6;
+export const CURRENT_FORMAT_VERSION = 7;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -357,6 +358,42 @@ const migrateFormat5To6: SaveMigration = (payload) => {
 };
 
 /**
+ * Format 6 → 7.
+ *
+ * Deconstruct-to-inventory. A machine can now come off the lot as a BOXED ITEM, so every
+ * inventory slot carries a list of the boxed machines in it — dials, condition and invoice each
+ * — beside its count.
+ *
+ * **Empty is the only honest value, and it is honest for a reason worth stating.** "Default to
+ * zero" is how a migration usually goes wrong, but here the empty list is not a guess about
+ * missing information: a format-6 world could not contain a boxed machine, because there was no
+ * verb that made one and no item id that held one. Every slot in every format-6 save is a stack
+ * of goods or seeds, and a stack of goods has no boxes. There is nothing to reconstruct.
+ *
+ * The two new errand verbs — Deconstruct and Buy — need no step at all. A pending `PlayerIntent`
+ * already round-trips as an integer `action`, and no format-6 payload can carry a 10 or an 11
+ * because neither existed to be issued; the load-time allowlist simply accepts two more values
+ * than it did.
+ *
+ * Like the three steps above it this one reads no balance data, so it needs no frozen-constant
+ * block: an empty list is an empty list in every build this file will ever run in.
+ */
+const migrateFormat6To7: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-6 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const inventory: Record<string, unknown>[] = [];
+  const oldInventory = rows(p, 'inventory');
+  for (let i = 0; i < oldInventory.length; i++) {
+    inventory.push({ ...oldInventory[i]!, boxes: [] });
+  }
+
+  return { ...p, inventory, version: 7 };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -367,6 +404,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   3: migrateFormat3To4,
   4: migrateFormat4To5,
   5: migrateFormat5To6,
+  6: migrateFormat6To7,
 };
 
 export interface MigrationOutcome {

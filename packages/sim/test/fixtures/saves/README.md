@@ -16,6 +16,7 @@ looked like, and the code that wrote it will be long gone.
 | `format-4.json` | 4      | 2026-08-12, `v0.3.0` | Seed 90210, tick 3300. The first save with an errand in it, caught **mid-walk**: the farmer is 27 ticks into a harvest errand aimed at tile 11,11, four potatoes and five seeds in the bag, three plots still in the ground, and `moveAccum` stopped at 40 hundredths of a subtile.                                                                                                                                                 |
 | `format-5.json` | 5      | 2026-08-12, `v0.6.0` | Seed 50505, tick 41837. The first save with maintenance and overcooking in it, caught deliberately **mid-brown**: a hand-built `Washer → Slicer → Fryer` line whose Fryer stands on a full basket of twenty chips, three of them already gone Rustic Style and the clock 250 ticks into a fourth, plus a Chip Kitchen run past the effect threshold and back to full by a single $8 repair kit, three inputs spoiled along the way. |
 | `format-6.json` | 6      | 2026-08-12, `v0.4.0` | Seed 60606, tick 42400. The first save with the soda line in it, caught deliberately **mid-pour**: five single-liquid networks all part-full, every machine part-way through an operation, a Syrup Mixer holding kola powder with liquid in both inlets, and the Bottler's soda-syrup inlet flagged amber while its carbonated-water inlet runs fine.                                                                               |
+| `format-7.json` | 7      | 2026-08-12, `v0.4.0` | Seed 24680, tick 48792. The first save with boxed machines in it, caught holding **two boxes of one item id at two different invoices**: a bare Chip Kitchen and a Speed-2/Capacity-1 one worn to 853 condition, in one slot, in canonical least-invested-first order. A Washer stands beside them part-way through an operation and a grabber faces west, three presses round from where it was placed.                            |
 
 `format-1.json` was produced by driving `step()` through a scripted play session — plant,
 water, harvest, walk, sell, buy the sprinkler, feed the kitchen — and calling `serialize()`
@@ -76,3 +77,16 @@ that, which is exactly why ports carry their own — and a save taken with the l
 round-trip perfectly while proving nothing about typed ports at all. Every machine is also
 mid-operation, so a `progress` that came back at zero would show up here rather than as a free
 restart nobody notices.
+
+`format-7.json` was recorded by replaying the `rotate-and-box` golden fixture to its last tick
+and calling `serialize()`. The moment is chosen for the one fact a format-6 payload cannot
+express: an inventory slot is no longer `{item, count}`, because a bare Chip Kitchen and a
+maxed one are the **same item id and different machines**, and the dials, condition and invoice
+that tell them apart live on the slot. A save holding one box would round-trip perfectly while
+proving nothing about the list; a save holding two identical boxes would prove nothing about the
+order they are kept in, which is what makes two worlds that boxed the same pair in opposite
+sequences hash the same. So this one holds two boxes that differ on all five numbers.
+
+It also carries the condition a machine was boxed at — 853, not 1000 — because that is the field
+that keeps net worth from jumping when a worn machine goes in a box, and a fixture recorded at
+full condition would not notice if it were quietly dropped.
