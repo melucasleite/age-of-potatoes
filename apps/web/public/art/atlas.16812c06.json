@@ -924,6 +924,28 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
+    "machine_delivery_cart": {
+      "frame": {
+        "x": 445,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
     "machine_fryer": {
       "frame": {
         "x": 148,
@@ -1058,7 +1080,7 @@
     },
     "machine_sprinkler": {
       "frame": {
-        "x": 412,
+        "x": 462,
         "y": 125,
         "w": 16,
         "h": 16
@@ -1100,9 +1122,31 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_washer": {
+    "machine_truck_depot": {
       "frame": {
         "x": 379,
+        "y": 125,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_washer": {
+      "frame": {
+        "x": 412,
         "y": 125,
         "w": 32,
         "h": 32
@@ -1518,6 +1562,28 @@
       "anchorMode": "top-left",
       "group": "font"
     },
+    "ui_pipe_nub": {
+      "frame": {
+        "x": 102,
+        "y": 175,
+        "w": 6,
+        "h": 6
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 6
+      },
+      "sourceSize": {
+        "w": 6,
+        "h": 6
+      },
+      "anchorMode": "center",
+      "group": "pipes"
+    },
     "zone_overlay": {
       "frame": {
         "x": 0,
@@ -1543,7 +1609,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.8a728c8e.png",
+    "image": "atlas.16812c06.png",
     "format": "RGBA8888",
     "size": {
       "w": 512,
@@ -1595,9 +1661,9 @@
         "group": "machines",
         "x": 0,
         "y": 125,
-        "width": 428,
+        "width": 478,
         "height": 32,
-        "count": 13
+        "count": 15
       },
       {
         "group": "overlay",
@@ -1611,9 +1677,9 @@
         "group": "pipes",
         "x": 0,
         "y": 175,
-        "width": 101,
+        "width": 108,
         "height": 16,
-        "count": 6
+        "count": 7
       },
       {
         "group": "player",

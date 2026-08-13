@@ -256,8 +256,69 @@ for (const [name, mask] of FRAMES) {
   }
 }
 
+// --- the collar, which is the same picture as the run ----------------------------------
+//
+// `ui_pipe_nub` is drawn where a real pipe touches a machine's edge, tinted with whatever
+// that pipe is carrying (`updatePorts`, apps/web/src/game/render/index.ts). It is authored
+// HERE rather than anywhere else because the only thing it must get right is the one thing
+// this file already computes: the run's cross-section. A collar a pixel narrower than the
+// pipe it collars puts a visible step at every port in the game, on every face.
+//
+// So it is not drawn at all — it IS the stub's hub, cropped to the run's width. Same shape
+// function, same erosion, same three shades, so it cannot drift from the frames it butts
+// against no matter how either of them changes later.
+//
+// The renderer draws it UNROTATED on all four faces from one texture, and centres it on the
+// tile centre the run is centred on. Two things follow, both asserted rather than assumed:
+// it must be its own quarter turn (concentric shading gives that, but a stray highlight
+// would be invisible on the face it was drawn for and wrong on the other three), and it
+// must be exactly THICKNESS across, or "centred" and "flush" stop meaning the same thing.
+const nub = render(0)
+  .slice(LOW, HIGH + 1)
+  .map((row) => row.slice(LOW, HIGH + 1));
+
+if (nub.length !== THICKNESS || nub.some((row) => row.length !== THICKNESS)) {
+  throw new Error(`ui_pipe_nub must be ${THICKNESS}x${THICKNESS} to sit flush on the run.`);
+}
+
+/** A collar is solid. A hole in it would show the machine through the plumbing. */
+for (let y = 0; y < THICKNESS; y++) {
+  for (let x = 0; x < THICKNESS; x++) {
+    if (nub[y][x] === null) throw new Error(`ui_pipe_nub has a transparent pixel at ${x},${y}.`);
+  }
+}
+
+/**
+ * The centre band, both ways, is the straight's own cross-section — which is what makes a
+ * collar meet a pipe flush instead of nearly. `SECTION` is a whole 16px column, mostly empty
+ * either side of the run, so the comparison is against the run itself. Both middle rows,
+ * because a 6px run has two.
+ */
+const RUN_SECTION = SECTION.slice(LOW, HIGH + 1);
+for (const offset of [THICKNESS / 2 - 1, THICKNESS / 2]) {
+  const row = nub[offset];
+  const column = nub.map((r) => r[offset]);
+  if (row.join('|') !== RUN_SECTION.join('|') || column.join('|') !== RUN_SECTION.join('|')) {
+    throw new Error(
+      `ui_pipe_nub band ${offset} is not the pipe's cross-section: ` +
+        `row ${row.join('|')}, column ${column.join('|')}, run ${RUN_SECTION.join('|')}.`,
+    );
+  }
+}
+
+/** One texture, four faces, no rotation at draw time — so the art has to be its own turn. */
+const turnedNub = rotateGrid(nub);
+for (let y = 0; y < THICKNESS; y++) {
+  for (let x = 0; x < THICKNESS; x++) {
+    if (turnedNub[y][x] !== nub[y][x]) {
+      throw new Error(`ui_pipe_nub is not rotation-invariant at ${x},${y} — it would be lit
+        differently on each face of a machine.`);
+    }
+  }
+}
+
 /** Nothing may be drawn off the master palette — every colour here is a swatch name. */
-for (const grid of drawn.values()) {
+for (const grid of [...drawn.values(), nub]) {
   for (const row of grid) {
     for (const role of row) {
       if (role !== null) hexOf(role);
@@ -268,12 +329,14 @@ for (const grid of drawn.values()) {
 // --- emit -----------------------------------------------------------------------------
 
 async function write(name, grid) {
-  const raw = Buffer.alloc(SIZE * SIZE * 4);
+  const height = grid.length;
+  const width = grid[0].length;
+  const raw = Buffer.alloc(width * height * 4);
   grid.forEach((row, y) => {
     row.forEach((role, x) => {
       if (!role) return;
       const hex = hexOf(role);
-      const at = (y * SIZE + x) * 4;
+      const at = (y * width + x) * 4;
       raw[at] = parseInt(hex.slice(1, 3), 16);
       raw[at + 1] = parseInt(hex.slice(3, 5), 16);
       raw[at + 2] = parseInt(hex.slice(5, 7), 16);
@@ -281,14 +344,15 @@ async function write(name, grid) {
     });
   });
 
-  const png = await sharp(raw, { raw: { width: SIZE, height: SIZE, channels: 4 } })
+  const png = await sharp(raw, { raw: { width, height, channels: 4 } })
     .png({ palette: false, compressionLevel: 9 })
     .toBuffer();
   writeFileSync(resolve(HERE, `../local/${name}.png`), png);
-  console.log(`Wrote art/local/${name}.png — ${SIZE}x${SIZE}, ${png.length} bytes.`);
+  console.log(`Wrote art/local/${name}.png — ${width}x${height}, ${png.length} bytes.`);
 }
 
 for (const [name] of FRAMES) await write(name, drawn.get(name));
+await write('ui_pipe_nub', nub);
 
 // The old three-frame set had a name the renderer never asks for. Leaving it on disk would
 // leave a plausible-looking pipe tile lying around for someone to pack by mistake.

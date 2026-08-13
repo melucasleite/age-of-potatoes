@@ -1,0 +1,24 @@
+{
+  "id": "machine_delivery_cart",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 318035194,
+  "prompt": "a bold simple pixel art hand cart seen from the side, one big red painted wooden box body filling the middle of the frame, two large solid dark round wheels under it, one thick handle bar sticking straight out to the left, warm timber trim along the top edge, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no spokes, no ropes, no horse, no load, no wires, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-13T15:53:01.838Z"
+}

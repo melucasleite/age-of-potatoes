@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.8a728c8e.png';
-export const ATLAS_JSON_URL = '/art/atlas.8a728c8e.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.16812c06.png';
+export const ATLAS_JSON_URL = '/art/atlas.16812c06.json';
 
 export const ATLAS_SIZE = { width: 512, height: 512 } as const;
 
@@ -358,6 +358,14 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
+  machine_delivery_cart: {
+    x: 445,
+    y: 125,
+    width: 16,
+    height: 16,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
   machine_fryer: {
     x: 148,
     y: 125,
@@ -407,7 +415,7 @@ export const ATLAS_FRAMES = {
     group: 'machines',
   },
   machine_sprinkler: {
-    x: 412,
+    x: 462,
     y: 125,
     width: 16,
     height: 16,
@@ -422,8 +430,16 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_washer: {
+  machine_truck_depot: {
     x: 379,
+    y: 125,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_washer: {
+    x: 412,
     y: 125,
     width: 32,
     height: 32,
@@ -573,6 +589,14 @@ export const ATLAS_FRAMES = {
     height: 40,
     anchor: 'top-left',
     group: 'font',
+  },
+  ui_pipe_nub: {
+    x: 102,
+    y: 175,
+    width: 6,
+    height: 6,
+    anchor: 'center',
+    group: 'pipes',
   },
   zone_overlay: {
     x: 0,

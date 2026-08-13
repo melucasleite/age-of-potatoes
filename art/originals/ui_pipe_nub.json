@@ -1,0 +1,24 @@
+{
+  "id": "ui_pipe_nub",
+  "provider": "local",
+  "model": "local:local/ui_pipe_nub.png",
+  "seed": null,
+  "prompt": "One 6x6 pipe collar, drawn where a real pipe meets a machine's edge and tinted at draw time with whatever that pipe is carrying. Authored from the master palette by art/tools/make-pipes.mjs, beside the six pipe frames, because the only thing it has to get right is the one thing that file already computes: the run's cross-section. It is not a redraw of the pipe — it IS the stub's hub cropped to the run's width, same erosion and same three shades, so it cannot drift from the frames it butts against. The renderer draws one texture unrotated on all four faces of a machine, so the script asserts the sprite is its own quarter turn, is solid, and is exactly as wide as the run is thick: a collar a pixel narrower than its pipe would put a visible step at every port in the game.",
+  "promptStyle": null,
+  "native": {
+    "width": 6,
+    "height": 6
+  },
+  "requested": {
+    "width": 6,
+    "height": 6
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "pipes",
+  "costUsd": 0,
+  "generatedAt": "2026-08-13T15:45:54.635Z"
+}
