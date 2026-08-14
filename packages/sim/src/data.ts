@@ -1335,6 +1335,17 @@ export const FERTILITY_MAX = 3;
 
 /** One pour from the can. */
 export const HAND_POUR_ML = 2000;
+/**
+ * The can holds eight pours (plan §3's ladder, restored by the 2026-08-13 ruling on item 009).
+ *
+ * §4's bold clause — "the watering can always fills at any shore at any level" — governs
+ * REFILL AVAILABILITY, not capacity: `RefillCan` never fails at a shore, at any water level,
+ * including a bone-dry pond. The capacity is what makes "refill the can" a beat of §2's
+ * Gardener circuit rather than a rule nobody meets. Watering on an empty can REFUSES as a
+ * gentle no-op — nothing is spent, nothing is punished, and the HUD reads
+ * `player.canCharges === 0` as its cue to point at the shore.
+ */
+export const CAN_CHARGES_MAX = 8;
 /** One sprinkler head servicing one tile. Wetting an already-wet tile still costs water. */
 export const SPRINKLER_POUR_ML = 1500;
 
@@ -1769,6 +1780,42 @@ export const WORK_RATE_SCALE = 100;
  * "Build a second Fryer" is meant to be every player's first ratio lesson — taught by a
  * visibly bored machine, never by a compost pile.
  */
+
+/*
+ * WEAR RATES ARE DERIVED, NOT GUESSED (item 034, plan §4). The tuning target is §4's
+ * post-critique figure: *"a busy mid-game factory wants attention every ~10 minutes, not
+ * every 60 seconds"*, where "wants attention" means the wrench lamp — condition crossing
+ * `CONDITION_EFFECT_THRESHOLD` (400), i.e. 600 condition spent from full.
+ *
+ * The arithmetic. Ten minutes at 20 Hz is 12,000 ticks, so a machine running flat out
+ * should spend its 600 condition over 12,000 ticks of work:
+ *
+ *   wearPerOperation = 600 × ticksPerOperation ÷ 12,000 = ticksPerOperation ÷ 20
+ *
+ * - 60-tick machines (Fryer, Composter): 60 ÷ 20 = **3** → 200 ops × 60 ticks = 12,000
+ *   ticks = 10.0 busy minutes from full to wrench-due. Exact.
+ * - 30-tick machines: 30 ÷ 20 = 1.5, and condition is an integer, so the half rounds by
+ *   duty: machines that heat, cut, grind, or pressurize (Slicer, Seasoner, Juicer, Kettle,
+ *   Grinder, Syrup Mixer, Carbonator, Bottler) round UP to **2** — 300 ops = 9,000 ticks =
+ *   7.5 busy minutes; machines that wash, fold, or pack (Washer, Bagger, Six-Packer, Combo
+ *   Packer) round DOWN to **1** — 15 busy minutes. A mid-game line is therefore paced by
+ *   its hot stages at 7.5–10 minutes, which is "roughly every ten" and nowhere near sixty
+ *   seconds, and a repair kit re-syncs the whole cell so the cadence holds.
+ * - The Chip Kitchen is the ONE deliberate departure: the time rule says 3, it carries
+ *   **5**. The monolith condenses the whole line's wear (1+2+3+2+1 = 9 per bag) into one
+ *   chassis and is §3's pre-belt training machine — it is *meant* to nag harder (≈6 busy
+ *   minutes flat out; in practice longer, because a hand-fed kitchen is idle while its
+ *   owner farms) than the line that replaces it.
+ * - The Sprinkler wears **1 per pour** (one op = one `SPRINKLER_PERIOD_TICKS` watering):
+ *   600 pours ≈ 50 active minutes to wrench-due. Farm infrastructure paces at a fifth of
+ *   factory gear on purpose — walking the farm is already a chore loop, and §4's example
+ *   of per-op fairness is Agri-Bot upkeep, not a second ten-minute clock over the crops.
+ * - Trees, plumbing, storage, docks, carts, junctions: **0**. No work cycle, or ruled
+ *   non-machinery where their spec says so.
+ *
+ * Wear is per OPERATION, never per second — plan §4 states that rule as absolute, and
+ * `advanceConverter` applies it only on a completed operation.
+ */
 export const MACHINE_SPECS: readonly MachineSpec[] = [
   {
     kind: MachineKind.SellBin,
@@ -1810,6 +1857,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputCapacity: 20,
     outputCapacity: 20,
     tankCapacityMl: 0,
+    /** Deliberately above the time rule's 3 — the monolith nags; see the wear derivation. */
     wearPerOperation: 5,
     inputs: [{ item: ItemId.RussetPotato, count: 1 }],
     outputItem: ItemId.BaggedChips,
@@ -2186,8 +2234,8 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputCapacity: 0,
     outputCapacity: 0,
     tankCapacityMl: 0,
-    /** The hottest thing on the soda side, and the only one there that wears like a Fryer. */
-    wearPerOperation: 3,
+    /** The hottest thing on the soda side, so its 1.5 rounds UP (see the wear derivation). */
+    wearPerOperation: 2,
     inputs: [],
     outputItem: null,
     overcookOutputItem: null,
@@ -2623,7 +2671,8 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputCapacity: 20,
     outputCapacity: 20,
     tankCapacityMl: 0,
-    wearPerOperation: 1,
+    /** A 60-tick op, so the time rule gives exactly 3 (see the wear derivation above). */
+    wearPerOperation: 3,
     inputs: [{ item: ItemId.Compost, count: COMPOST_PER_FERTILIZER }],
     outputItem: ItemId.Fertilizer,
     overcookOutputItem: null,
@@ -3449,7 +3498,7 @@ function balanceDigest(): string {
   }
   h = fnv1aString(
     h,
-    `${MOISTURE_MAX}:${MOISTURE_DRAIN_PER_TICK}:${GROWTH_PER_WATERED_TICK}:${HAND_POUR_ML}:${SPRINKLER_POUR_ML}:${SPRINKLER_PERIOD_TICKS}:${SPRINKLER_RADIUS_TILES}:${CONDITION_MAX}:${CONDITION_EFFECT_THRESHOLD}:${STARTING_MONEY_CENTS}:${STARTING_SEEDS}:${PLAYER_SPEED_SUBTILES_PER_100_TICKS}:${HAND_REACH_SUBTILES}:${WALK_ERRAND_TIMEOUT_TICKS}`,
+    `${MOISTURE_MAX}:${MOISTURE_DRAIN_PER_TICK}:${GROWTH_PER_WATERED_TICK}:${HAND_POUR_ML}:${CAN_CHARGES_MAX}:${SPRINKLER_POUR_ML}:${SPRINKLER_PERIOD_TICKS}:${SPRINKLER_RADIUS_TILES}:${CONDITION_MAX}:${CONDITION_EFFECT_THRESHOLD}:${STARTING_MONEY_CENTS}:${STARTING_SEEDS}:${PLAYER_SPEED_SUBTILES_PER_100_TICKS}:${HAND_REACH_SUBTILES}:${WALK_ERRAND_TIMEOUT_TICKS}`,
   );
   h = fnv1aString(
     h,

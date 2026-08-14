@@ -95,6 +95,10 @@ function viewWith(fields: {
   machines?: number;
 }): WorldView {
   const view = createWorldView();
+  // The sim's view buffer now always carries `stats.hours` (item 062), and `read()` adopts
+  // them the moment they exist. These tests pin the display-side fallback, which only runs
+  // while the projection provides none — so the buffer's empty array is stripped here.
+  (view as { stats: { hours?: unknown } }).stats.hours = undefined;
   view.tick = fields.tick;
   view.stats.lifetimeNetEarningsCents = fields.netCents ?? 0;
   view.stats.waterDrawnMl = fields.waterMl ?? 0;

@@ -2,8 +2,8 @@
   "name": "idle-wear",
   "description": "Hand-farms two rows of potatoes to afford a Chip Kitchen, places it, and then never touches it again for ten thousand ticks. Guards plan §4’s absolute rule that wear is per operation and never per second: the kitchen completes no operations, so it must still be at full condition at the end. A machine that aged on the clock would show up here as a changed hash and as a failed assertion in factory.test.ts.",
   "seed": 606060,
-  "ticks": 18950,
-  "expectedHash": "d2b7d6b5",
+  "ticks": 19004,
+  "expectedHash": "896c50ec",
   "commands": [
     {
       "tick": 0,
@@ -591,6 +591,152 @@
     {
       "tick": 4679,
       "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4713,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4714,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4715,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4716,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4717,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4718,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4719,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4720,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4721,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4722,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4723,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4724,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4725,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4726,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4727,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4728,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4729,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 4730,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 4731,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 4732,
+      "command": {
+        "type": "RefillCan"
+      }
+    },
+    {
+      "tick": 4733,
+      "command": {
         "type": "WalkAndAct",
         "action": 1,
         "tileX": 4,
@@ -600,7 +746,7 @@
       }
     },
     {
-      "tick": 4793,
+      "tick": 4847,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -611,7 +757,7 @@
       }
     },
     {
-      "tick": 4802,
+      "tick": 4856,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -622,7 +768,7 @@
       }
     },
     {
-      "tick": 4811,
+      "tick": 4865,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -633,7 +779,7 @@
       }
     },
     {
-      "tick": 4825,
+      "tick": 4879,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -644,7 +790,7 @@
       }
     },
     {
-      "tick": 4859,
+      "tick": 4913,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -655,7 +801,7 @@
       }
     },
     {
-      "tick": 4893,
+      "tick": 4947,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -666,7 +812,7 @@
       }
     },
     {
-      "tick": 4927,
+      "tick": 4981,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -677,7 +823,7 @@
       }
     },
     {
-      "tick": 6284,
+      "tick": 6338,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -688,7 +834,7 @@
       }
     },
     {
-      "tick": 6748,
+      "tick": 6802,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -699,7 +845,7 @@
       }
     },
     {
-      "tick": 6757,
+      "tick": 6811,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -710,7 +856,7 @@
       }
     },
     {
-      "tick": 6916,
+      "tick": 6970,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -721,7 +867,7 @@
       }
     },
     {
-      "tick": 6955,
+      "tick": 7009,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -732,7 +878,7 @@
       }
     },
     {
-      "tick": 6996,
+      "tick": 7050,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -743,7 +889,7 @@
       }
     },
     {
-      "tick": 7039,
+      "tick": 7093,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -754,7 +900,7 @@
       }
     },
     {
-      "tick": 7084,
+      "tick": 7138,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -765,7 +911,7 @@
       }
     },
     {
-      "tick": 7380,
+      "tick": 7434,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -776,7 +922,7 @@
       }
     },
     {
-      "tick": 7416,
+      "tick": 7470,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -787,7 +933,7 @@
       }
     },
     {
-      "tick": 7454,
+      "tick": 7508,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -798,7 +944,7 @@
       }
     },
     {
-      "tick": 7494,
+      "tick": 7548,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -809,7 +955,7 @@
       }
     },
     {
-      "tick": 7536,
+      "tick": 7590,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -820,7 +966,7 @@
       }
     },
     {
-      "tick": 7694,
+      "tick": 7748,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -831,7 +977,7 @@
       }
     },
     {
-      "tick": 7724,
+      "tick": 7778,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -842,7 +988,7 @@
       }
     },
     {
-      "tick": 7766,
+      "tick": 7820,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -853,7 +999,7 @@
       }
     },
     {
-      "tick": 7810,
+      "tick": 7864,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -864,7 +1010,7 @@
       }
     },
     {
-      "tick": 7856,
+      "tick": 7910,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -875,7 +1021,7 @@
       }
     },
     {
-      "tick": 7904,
+      "tick": 7958,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -886,7 +1032,7 @@
       }
     },
     {
-      "tick": 8090,
+      "tick": 8144,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -897,7 +1043,7 @@
       }
     },
     {
-      "tick": 8135,
+      "tick": 8189,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -908,7 +1054,7 @@
       }
     },
     {
-      "tick": 8182,
+      "tick": 8236,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -919,7 +1065,7 @@
       }
     },
     {
-      "tick": 8231,
+      "tick": 8285,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -930,7 +1076,7 @@
       }
     },
     {
-      "tick": 8282,
+      "tick": 8336,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -941,7 +1087,7 @@
       }
     },
     {
-      "tick": 8484,
+      "tick": 8538,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -952,7 +1098,7 @@
       }
     },
     {
-      "tick": 8533,
+      "tick": 8587,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -963,7 +1109,7 @@
       }
     },
     {
-      "tick": 8584,
+      "tick": 8638,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -974,7 +1120,7 @@
       }
     },
     {
-      "tick": 8637,
+      "tick": 8691,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -985,7 +1131,7 @@
       }
     },
     {
-      "tick": 8692,
+      "tick": 8746,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -996,7 +1142,7 @@
       }
     },
     {
-      "tick": 8749,
+      "tick": 8803,
       "command": {
         "type": "PlaceMachine",
         "kind": 2,

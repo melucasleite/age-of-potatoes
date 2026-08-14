@@ -2,8 +2,8 @@
   "name": "walk-errands",
   "description": "The walk-to errand end to end on one seed: four corner plots planted, watered and harvested entirely by clicking out of reach, then the crop sold at the bin the same way. Exercises all four endings an errand has — arrival fires the verb through the ordinary reducer, a second click replaces a pending errand rather than queueing behind it, a held direction abandons one mid-stride, and moving the sell bin out from under a repair errand strands it. Pins the errand as world state: the intent is hashed, so a walk that lands one subtile off changes this number.",
   "seed": 90210,
-  "ticks": 3923,
-  "expectedHash": "ba4d2f60",
+  "ticks": 4018,
+  "expectedHash": "ca5d98ac",
   "commands": [
     {
       "tick": 5,
@@ -205,6 +205,145 @@
     {
       "tick": 1773,
       "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 1795,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 1796,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 1797,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 1798,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 1799,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 1800,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 1801,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 1802,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 1803,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 1804,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 1805,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 1806,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 1807,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 1808,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 1809,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 1810,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 1811,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 1812,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 1813,
+      "command": {
+        "type": "RefillCan"
+      }
+    },
+    {
+      "tick": 1814,
+      "command": {
         "type": "WalkAndAct",
         "action": 1,
         "tileX": 11,
@@ -214,7 +353,7 @@
       }
     },
     {
-      "tick": 1923,
+      "tick": 1964,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -225,7 +364,7 @@
       }
     },
     {
-      "tick": 2073,
+      "tick": 2114,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -236,7 +375,7 @@
       }
     },
     {
-      "tick": 2223,
+      "tick": 2264,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -247,7 +386,7 @@
       }
     },
     {
-      "tick": 2373,
+      "tick": 2414,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -258,7 +397,7 @@
       }
     },
     {
-      "tick": 2523,
+      "tick": 2564,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -269,7 +408,7 @@
       }
     },
     {
-      "tick": 2673,
+      "tick": 2714,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -280,7 +419,7 @@
       }
     },
     {
-      "tick": 2823,
+      "tick": 2864,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -291,7 +430,160 @@
       }
     },
     {
-      "tick": 2973,
+      "tick": 3014,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3047,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3048,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3049,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3050,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3051,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3052,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3053,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3054,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3055,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3056,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3057,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3058,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3059,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3060,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3061,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3062,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3063,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3064,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 3
+      }
+    },
+    {
+      "tick": 3065,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 2
+      }
+    },
+    {
+      "tick": 3066,
+      "command": {
+        "type": "SetMoveDirection",
+        "dir": 0
+      }
+    },
+    {
+      "tick": 3067,
+      "command": {
+        "type": "RefillCan"
+      }
+    },
+    {
+      "tick": 3068,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -302,7 +594,7 @@
       }
     },
     {
-      "tick": 3123,
+      "tick": 3218,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -313,7 +605,7 @@
       }
     },
     {
-      "tick": 3273,
+      "tick": 3368,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -324,7 +616,7 @@
       }
     },
     {
-      "tick": 3423,
+      "tick": 3518,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -335,7 +627,7 @@
       }
     },
     {
-      "tick": 3573,
+      "tick": 3668,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -346,7 +638,7 @@
       }
     },
     {
-      "tick": 3723,
+      "tick": 3818,
       "command": {
         "type": "WalkAndAct",
         "action": 9,

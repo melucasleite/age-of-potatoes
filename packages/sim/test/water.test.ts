@@ -22,8 +22,11 @@ import {
   IRRIGATION_HUB_SCAN_PER_TICK,
   LiquidId,
   MOISTURE_DRY_THRESHOLD,
+  CAN_CHARGES_MAX,
   MOISTURE_MAX,
   MachineKind,
+  POND_ORIGIN_X,
+  POND_ORIGIN_Y,
   PIPE_MAX_PATH_TILES,
   PUMP_RATE_ML_PER_MINUTE,
   RESERVOIR_CAPACITY_ML,
@@ -211,23 +214,80 @@ describe('the watering can', () => {
     expect(tileAt(state, 6, 6)!.moisture).toBeGreaterThanOrEqual(MOISTURE_MAX - 1);
   });
 
-  it('counts its draw in full even when the pond cannot cover it', () => {
+  it('counts the refill draw in full even when the pond cannot cover it', () => {
+    // Since item 009's ruling the water leaves the pond at the REFILL, not the pour — one
+    // dip of what the can actually takes, through the one accounting path. An empty pond
+    // still fills the can (Shore mode never fails) and the draw is still counted in full.
     const state = createWorld(12);
     pond(state).levelMl = 0;
-    standOn(state, 6, 6);
-    run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
-    expect(state.stats.waterDrawnMl).toBe(HAND_POUR_ML);
+    state.player.canCharges = 0;
+    standOn(state, POND_ORIGIN_X, POND_ORIGIN_Y - 1);
+    run(state, [{ type: 'RefillCan' }]);
+    expect(state.player.canCharges).toBe(CAN_CHARGES_MAX);
+    expect(state.stats.waterDrawnMl).toBe(CAN_CHARGES_MAX * HAND_POUR_ML);
     // The pond gave nothing and owes nothing; what is in it is the tick's own recharge.
     expect(pond(state).levelMl).toBeLessThan(HAND_POUR_ML);
   });
 
-  it('works in a world with no reservoir at all', () => {
-    const state = createWorld(13);
-    state.reservoirs = [];
+  it('pours without booking water — the canful was already counted at the dip', () => {
+    const state = createWorld(12);
     standOn(state, 6, 6);
     run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
     expect(tileAt(state, 6, 6)!.moisture).toBeGreaterThanOrEqual(MOISTURE_MAX - 1);
-    expect(state.stats.waterDrawnMl).toBe(HAND_POUR_ML);
+    expect(state.stats.waterDrawnMl).toBe(0);
+    expect(state.player.canCharges).toBe(CAN_CHARGES_MAX - 1);
+  });
+
+  it('works in a world with no reservoir at all', () => {
+    // The anti-softlock clause does not depend on a pond existing: the pour still lands and
+    // the refill still succeeds anywhere, because a pondless world must not be a world
+    // where farming ends after eight pours.
+    const state = createWorld(13);
+    state.reservoirs = [];
+    standOn(state, 6, 6);
+    state.player.canCharges = 1;
+    run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
+    expect(tileAt(state, 6, 6)!.moisture).toBeGreaterThanOrEqual(MOISTURE_MAX - 1);
+    expect(state.player.canCharges).toBe(0);
+    run(state, [{ type: 'RefillCan' }]);
+    expect(state.player.canCharges).toBe(CAN_CHARGES_MAX);
+  });
+
+  it('spends one charge per pour and refuses the ninth as a gentle no-op', () => {
+    const state = createWorld(15);
+    standOn(state, 6, 6);
+    for (let i = 0; i < CAN_CHARGES_MAX; i++) {
+      run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
+    }
+    expect(state.player.canCharges).toBe(0);
+    const before = hashState(state);
+    const touches = state.stats.touches.handWater;
+    run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
+    // Refused: no charge spent below zero, no touch counted, nothing destroyed — the only
+    // thing that moved is the clock. (One empty tick separates the hashes, so compare the
+    // parts a refusal could have touched instead.)
+    expect(state.player.canCharges).toBe(0);
+    expect(state.stats.touches.handWater).toBe(touches);
+    expect(before).not.toBe('');
+  });
+
+  it('refuses a refill away from the shore, and a refill of a full can', () => {
+    const state = createWorld(16);
+    standOn(state, 6, 6); // The field, nowhere near the pond.
+    state.player.canCharges = 3;
+    run(state, [{ type: 'RefillCan' }]);
+    expect(state.player.canCharges).toBe(3);
+
+    standOn(state, POND_ORIGIN_X, POND_ORIGIN_Y - 1);
+    run(state, [{ type: 'RefillCan' }]);
+    expect(state.player.canCharges).toBe(CAN_CHARGES_MAX);
+    // Only the missing pours were drawn: topping up a part-full can takes part of a canful.
+    expect(state.stats.waterDrawnMl).toBe((CAN_CHARGES_MAX - 3) * HAND_POUR_ML);
+
+    const refills = state.stats.touches.hopperRefill;
+    run(state, [{ type: 'RefillCan' }]);
+    // Already full: refused rather than consumed, which is UseRepairKit's rule.
+    expect(state.stats.touches.hopperRefill).toBe(refills);
   });
 
   it('inspects a tile without changing anything about how it waters', () => {

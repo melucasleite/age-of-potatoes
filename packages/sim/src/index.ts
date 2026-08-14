@@ -19,6 +19,7 @@
 export {
   BEATS_PER_MINUTE,
   SUBTILE,
+  DAWN_TICK_IN_DAY,
   TICKS_PER_ACTIVE_HOUR,
   TICKS_PER_BEAT,
   TICKS_PER_IN_GAME_DAY,
@@ -27,6 +28,7 @@ export {
   TICK_MS,
   beatIndex,
   centiActiveHours,
+  dawnCount,
   inGameDays,
   cents,
   clampInt,
@@ -114,6 +116,7 @@ export {
   GRABBER_SPECS,
   GROWTH_PER_WATERED_TICK,
   GrabberTier,
+  CAN_CHARGES_MAX,
   HAND_POUR_ML,
   HAND_REACH_SUBTILES,
   IRRIGATION_HUB_RADIUS_TILES,
@@ -480,6 +483,7 @@ export type {
   PlaceMachineCommand,
   PlacePipeCommand,
   PlantTileCommand,
+  RefillCanCommand,
   RefillHopperCommand,
   RemoveBeltCommand,
   RemoveGrabberCommand,
@@ -509,21 +513,32 @@ export type { TickInput } from './tick';
 
 // --- stats ------------------------------------------------------------------------
 export {
+  HOUR_HISTORY_LIMIT,
+  advanceStatsClock,
   bestTrailingGainCents,
   centiActiveHoursElapsed,
   centsPerKilolitre,
   createManualTouchCounts,
   createStats,
+  hourIndexAt,
   lifetimeNetEarningsCents,
   pushNetWorthSample,
   recordEarnings,
   recordManualTouch,
   recordRefund,
+  recordSale,
   recordSpend,
   recordWaterDrawn,
   totalManualTouches,
 } from './stats';
-export type { ManualTouchCounts, ManualTouchKind, WorldStats } from './stats';
+export type {
+  ClosedHour,
+  HourMark,
+  ItemSales,
+  ManualTouchCounts,
+  ManualTouchKind,
+  WorldStats,
+} from './stats';
 
 // --- hashing ----------------------------------------------------------------------
 export {
@@ -592,7 +607,9 @@ export type {
   DepotView,
   FieldView,
   GrabberView,
+  HourBucketView,
   InventoryView,
+  ItemSaleView,
   LandView,
   MachinePortView,
   MachineView,

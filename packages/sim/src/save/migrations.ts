@@ -32,7 +32,9 @@
 // Corporate Charter's milestone is read off) up to format 11 (the farm — a spoil tick on every
 // perishable stack in the bag, soil and a moisture remainder and a fertility counter on every
 // tile, the zone a bot dock is bound to, the cart the player is towing, and a sorted list of
-// Agri-Bots).
+// Agri-Bots) up to format 12 (the eight-pour can and the receipt ledgers — the can's charge
+// counter on the player, and per-item sales, dawn-aligned hour buckets, the open hour's mark,
+// and the dawn counter on the stats).
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -43,7 +45,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 11;
+export const CURRENT_FORMAT_VERSION = 12;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -757,6 +759,95 @@ const migrateFormat10To11: SaveMigration = (payload) => {
 const FORMAT_11_LOAM = 1;
 
 /**
+ * The calendar and the can AS THEY WERE WHEN FORMAT 12 ARRIVED, frozen as literals for the
+ * same reason every other `FORMAT_N_*` constant is: a migration that imported
+ * `CAN_CHARGES_MAX` or `DAWN_TICK_IN_DAY` would write a different world the day either
+ * number moved.
+ */
+const FORMAT_12_CAN_CHARGES = 8;
+const FORMAT_12_TICKS_PER_DAY = 9_600;
+const FORMAT_12_DAWN_TICK_IN_DAY = 8_400;
+const FORMAT_12_TICKS_PER_HOUR = 72_000;
+
+/**
+ * Format 11 → 12.
+ *
+ * The eight-pour can (item 009's 2026-08-13 ruling) and the receipt ledgers (item 062), in
+ * one step because they land in one release.
+ *
+ * - **`player.canCharges: 8` — full, and that is a claim rather than generosity.** Under
+ *   format 11 the can was infinite; at the moment of loading, an infinite can and a full one
+ *   are indistinguishable, and full is the value that makes the loaded world behave like the
+ *   one that was saved for the first eight pours. (It is also the direction plan §1 errs in:
+ *   nobody returns from a reload to a chore.)
+ * - **`stats.salesByItem: []` and `stats.hours: []` — empty, honestly.** The world sold
+ *   things and worked hours that were never recorded, and a migration must not invent
+ *   history. The Dawn Report's best seller starts counting from the load; the display-side
+ *   ledger it replaces did exactly the same on every reload.
+ * - **`stats.hourMark` — opened AT the load tick, with the saved lifetime accumulators as its
+ *   starting line.** So the first bucket this world ever closes contains only what happened
+ *   after the load, which is the same telescoping truth every later bucket has.
+ * - **`stats.dawnsSeen` — computed from the saved tick** with the frozen calendar, so loading
+ *   is not mistaken for a dawn and nothing resets on the first tick.
+ *
+ * The hour index arithmetic is restated from `hourIndexAt` with frozen literals: hour 0 runs
+ * to the first dawn (tick 8,400), and every hour after is 72,000 ticks wide.
+ */
+const migrateFormat11To12: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-11 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const tickRaw = p['tick'];
+  const tick = typeof tickRaw === 'number' && Number.isInteger(tickRaw) ? tickRaw : 0;
+
+  const playerRaw = p['player'];
+  if (typeof playerRaw !== 'object' || playerRaw === null || Array.isArray(playerRaw)) {
+    throw new SaveCorruptError('Cannot migrate: `payload.player` is not an object.');
+  }
+
+  const statsRaw = p['stats'];
+  if (typeof statsRaw !== 'object' || statsRaw === null || Array.isArray(statsRaw)) {
+    throw new SaveCorruptError('Cannot migrate: `payload.stats` is not an object.');
+  }
+  const stats = statsRaw as Record<string, unknown>;
+
+  const lifetime = (key: string): number => {
+    const value = stats[key];
+    return typeof value === 'number' && Number.isInteger(value) ? value : 0;
+  };
+
+  const hour =
+    tick < FORMAT_12_DAWN_TICK_IN_DAY
+      ? 0
+      : Math.floor((tick - FORMAT_12_DAWN_TICK_IN_DAY) / FORMAT_12_TICKS_PER_HOUR) + 1;
+  const dawnsSeen = Math.floor((tick - FORMAT_12_DAWN_TICK_IN_DAY) / FORMAT_12_TICKS_PER_DAY) + 1;
+
+  return {
+    ...p,
+    player: { ...(playerRaw as Record<string, unknown>), canCharges: FORMAT_12_CAN_CHARGES },
+    stats: {
+      ...stats,
+      dawnsSeen: dawnsSeen < 0 ? 0 : dawnsSeen,
+      hourMark: {
+        earnedCents: lifetime('lifetimeEarnedCents'),
+        hour,
+        inputsWasted: lifetime('inputsWastedByMachine'),
+        itemsProduced: lifetime('itemsProducedByMachine'),
+        itemsSold: lifetime('itemsSold'),
+        spentCents: lifetime('lifetimeSpentCents'),
+        tick,
+        waterMl: lifetime('waterDrawnMl'),
+      },
+      hours: [],
+      salesByItem: [],
+    },
+    version: 12,
+  };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -772,6 +863,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   8: migrateFormat8To9,
   9: migrateFormat9To10,
   10: migrateFormat10To11,
+  11: migrateFormat11To12,
 };
 
 export interface MigrationOutcome {

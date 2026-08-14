@@ -69,14 +69,31 @@ export const TICKS_PER_MINUTE = 1_200;
  * Eight active minutes is 9,600 ticks, exactly, and the arithmetic is written here so that the
  * one place the design names a day is the one place the sim reads it from.
  *
- * NOTHING ELSE IN THE SIM KEEPS A CALENDAR. There is no dawn, no night, and no day counter in
- * `WorldState` — the Dawn Report is item 033's and it is not built. This constant exists because
- * the Corporate Charter's milestone is quoted in days (plan §3: *"one line untouched for 10
- * in-game days"*), and a milestone quoted in a unit the sim cannot express would have to be
- * re-quoted in ticks by whoever read it next, which is how two numbers that were meant to be the
- * same start to disagree.
+ * THE SIM'S WHOLE CALENDAR IS THIS CONSTANT AND `DAWN_TICK_IN_DAY` BELOW. There is no night
+ * mechanic and no day counter in `WorldState`. This constant exists because the Corporate
+ * Charter's milestone is quoted in days (plan §3: *"one line untouched for 10 in-game days"*),
+ * and a milestone quoted in a unit the sim cannot express would have to be re-quoted in ticks
+ * by whoever read it next, which is how two numbers that were meant to be the same start to
+ * disagree.
  */
 export const TICKS_PER_IN_GAME_DAY = 9_600;
+
+/**
+ * Ticks from the start of a clock-day to that day's dawn.
+ *
+ * A new world opens at 09:00 (the renderer's `DAY_START_PHASE`), and dawn is the 06:00
+ * twenty-one clock-hours later — exactly seven eighths of the day, 8,400 of 9,600 ticks. The
+ * value is restated in `apps/web/src/reports/day.ts`, whose `day.test.ts` asserts the two
+ * agree; it lives here as well because item 062 makes the daily reset of `salesByItem` a SIM
+ * fact — the Dawn Report's "today" column has to be hashed, and a hashed number cannot be
+ * derived from a constant the sim does not own.
+ */
+export const DAWN_TICK_IN_DAY = (TICKS_PER_IN_GAME_DAY * 21) / 24;
+
+/** How many dawns a world has seen by `tick`. 0 before the first. Mirrors `day.ts`. */
+export function dawnCount(tick: number): number {
+  return divFloor(tick - DAWN_TICK_IN_DAY, TICKS_PER_IN_GAME_DAY) + 1;
+}
 
 /** How many whole in-game days a span of ticks covers. Floors, like every other readout here. */
 export function inGameDays(ticks: number): number {

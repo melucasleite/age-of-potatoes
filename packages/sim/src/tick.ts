@@ -92,11 +92,13 @@ import {
   SCYTHE_SWATHE_TILES,
   TOW_SPEED_PENALTY_SUBTILES_PER_100_TICKS,
   COMPOST_PER_CROP,
+  CAN_CHARGES_MAX,
   CONDITION_EFFECT_THRESHOLD,
   CONDITION_MAX,
   CropId,
   GROWTH_PER_WATERED_TICK,
   HAND_POUR_ML,
+  HAND_REACH_SUBTILES,
   HAND_REACH_SUBTILES_SQUARED,
   IRRIGATION_HUB_SCAN_PER_TICK,
   ItemId,
@@ -227,13 +229,22 @@ import {
   tileOccupied,
   zoneById,
 } from './state';
-import { WaterDraw, nearestReservoir, rechargeReservoir, takeWater } from './water';
+import {
+  WaterDraw,
+  nearestPointOfReservoir,
+  nearestReservoir,
+  rechargeReservoir,
+  reservoirAdjacentToTile,
+  reservoirWithinReach,
+  takeWater,
+} from './water';
 import {
   type ManualTouchKind,
+  advanceStatsClock,
   pushNetWorthSample,
-  recordEarnings,
   recordManualTouch,
   recordRefund,
+  recordSale,
   recordSpend,
 } from './stats';
 import { TechId, hasTech, milestoneMet, insertUnlocked, prerequisitesMet, techNode } from './tech';
@@ -341,6 +352,8 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applyWalkAndAct(state, command);
     case 'WaterTile':
       return applyWaterTile(state, command);
+    case 'RefillCan':
+      return applyRefillCan(state);
     case 'PlantTile':
       return applyPlantTile(state, command);
     case 'HarvestTile':
@@ -547,35 +560,70 @@ function applyWalkAndAct(state: WorldState, command: WalkAndActCommand): boolean
 }
 
 /**
- * Pour the can on one tile.
+ * Pour the can on one tile. One pour is one charge of `CAN_CHARGES_MAX` (item 009, restored
+ * by the 2026-08-13 ruling: plan §4's bold clause — "the watering can always fills at any
+ * shore at any level" — governs the REFILL, which never fails; the can itself holds 8 pours,
+ * §3's ladder, and "refill the can" is a beat of §2's Gardener circuit).
  *
- * THE CAN IS SPECIAL AND THIS IS WHERE IT SAYS SO. Plan §4: "**The watering can always fills
- * at any shore at any level** — hand-scale farming can never be water-starved." So this draw
- * uses `WaterDraw.Shore`, which never fails and never returns short, even at a bone-dry pond
- * or in a world with no pond at all. It is an anti-softlock guarantee in plan §1's tradition,
- * not a balance number, and it must not be tuned away for tension.
+ * AN EMPTY CAN REFUSES, GENTLY. Nothing is spent, nothing is lost, nothing is punished — the
+ * pour simply does not happen, exactly as a plant with no seeds does not. The HUD reads
+ * `player.canCharges === 0` off the view as the reason and points at the shore.
  *
- * The draw is still COUNTED, in full, through the one accounting path — plan §6's Dry County
- * board measures the water the player used, and hand-watering is water the player used.
+ * THE WATER IS DRAWN AT THE REFILL, NOT AT THE POUR. `applyRefillCan` is where the can dips
+ * into a reservoir through `takeWater()` — one draw of what the can actually takes — so a
+ * pour here moves no reservoir and books no `waterDrawnMl`; that water was already counted
+ * when it entered the can. (The starting can's eight pours were filled at home and are the
+ * one canful the Dry County meter never sees.)
  *
  * Nothing else about the can changed: still free, still indestructible, still no cooldown and
- * no bonus (plan §1, and §7 ruling 8 bans "trusty tool" bonuses in the other direction). The
- * inspector readout the Mogul-era can gets is `inspectTile()` in `view.ts` — information,
- * never a mechanical advantage.
+ * no bonus (plan §1, and §7 ruling 8 bans "trusty tool" bonuses in the other direction), and
+ * pouring on an already-wet tile still clamps at no cost — you cannot overwater (§2).
  */
 function applyWaterTile(state: WorldState, command: WaterTileCommand): boolean {
   const tile = tileAt(state, command.tileX, command.tileY);
   if (tile === null) return false;
   if (!withinReachOfTile(state, command.tileX, command.tileY)) return false;
+  if (state.player.canCharges <= 0) return false;
 
   tile.moisture = MOISTURE_MAX;
-  takeWater(
-    state,
-    nearestReservoir(state, command.tileX, command.tileY),
-    HAND_POUR_ML,
-    WaterDraw.Shore,
-  );
+  state.player.canCharges -= 1;
   touch(state, 'handWater');
+  return true;
+}
+
+/**
+ * Dip the can at the shore: back to `CAN_CHARGES_MAX` pours, always.
+ *
+ * THE VERB §4'S BOLD CLAUSE IS ABOUT. The draw goes through `takeWater()` in `Shore` mode,
+ * which never fails and never returns short — at a full pond, a drawn-down one, or a bone-dry
+ * one, where the fiction is scooping the last puddle. The pond still floors at zero and the
+ * draw is still counted in full through the one accounting path, so plan §6's Dry County
+ * board measures the water the player actually took. Only the MISSING pours are drawn, so
+ * topping up a half-full can takes half a canful.
+ *
+ * Legal while water is within hand reach — the same reach every other hand verb measures,
+ * so the arm that can water a tile can dip the can, and a walk-to errand that stops "within
+ * reach" of the shoreline has arrived. In a world with no reservoir at all the refill
+ * succeeds anywhere, because §4's guarantee is about the can, not the pond, and a pondless
+ * world must not be a world where farming ends after eight pours. Refused rather than
+ * consumed when the can is already full, which is `UseRepairKit`'s rule: a no-op must not
+ * spend a trace entry pretending it did something.
+ */
+function applyRefillCan(state: WorldState): boolean {
+  if (state.player.canCharges >= CAN_CHARGES_MAX) return false;
+
+  const shore = reservoirWithinReach(
+    state,
+    state.player.xSub,
+    state.player.ySub,
+    HAND_REACH_SUBTILES,
+  );
+  if (shore === null && state.reservoirs.length > 0) return false;
+
+  const missing = CAN_CHARGES_MAX - state.player.canCharges;
+  takeWater(state, shore, missing * HAND_POUR_ML, WaterDraw.Shore);
+  state.player.canCharges = CAN_CHARGES_MAX;
+  touch(state, 'hopperRefill');
   return true;
 }
 
@@ -1397,8 +1445,9 @@ function applySellItem(state: WorldState, command: SellItemCommand): boolean {
 
   const gross = listPriceCents(command.item) * command.count;
   state.moneyCents += gross;
-  recordEarnings(state.stats, gross);
-  state.stats.itemsSold += command.count;
+  // `recordSale` owns the gross, the unit count, and the per-item row in one write, here and
+  // in `payForDelivery` — the two doors every sale in the game walks through (item 062).
+  recordSale(state.stats, command.item, command.count, gross);
   touch(state, 'handCarry');
   return true;
 }
@@ -2181,6 +2230,21 @@ function intentTargetSubtiles(
       };
     }
 
+    case IntentAction.RefillCan: {
+      // Any tile that touches water is a legal place to click. The WALK aims at the nearest
+      // point of the water itself rather than at the clicked tile: an errand arrives "within
+      // reach" of its target, and reach-of-a-bank-tile can still be a step short of
+      // reach-of-the-water — the farmer would stop, dip at nothing, and shrug. Aiming at the
+      // shoreline makes arrival and "can actually dip" the same fact.
+      const reservoir = reservoirAdjacentToTile(state, intent.tileX, intent.tileY);
+      if (reservoir === null) return null;
+      return nearestPointOfReservoir(
+        reservoir,
+        tileCentreSubtiles(intent.tileX),
+        tileCentreSubtiles(intent.tileY),
+      );
+    }
+
     case IntentAction.Load:
     case IntentAction.Unload:
     case IntentAction.RefillHopper:
@@ -2230,6 +2294,8 @@ function intentCommand(state: WorldState, intent: PlayerIntent): Command | null 
       };
     case IntentAction.Harvest:
       return { type: 'HarvestTile', tileX: intent.tileX, tileY: intent.tileY };
+    case IntentAction.RefillCan:
+      return { type: 'RefillCan' };
     case IntentAction.Fertilize:
       return { type: 'ApplyFertilizer', tileX: intent.tileX, tileY: intent.tileY };
     case IntentAction.Scythe:
@@ -2849,6 +2915,10 @@ function advanceStats(state: WorldState): void {
     pushNetWorthSample(stats, stats.netWorthCents);
     stats.nextNetWorthSampleTick = state.tick + NET_WORTH_SAMPLE_PERIOD_TICKS;
   }
+
+  // The hour ledger and the dawn snapshot (item 062). After the transactions of this tick and
+  // before the clock increments, so a boundary tick's money lands in the hour that owned it.
+  advanceStatsClock(stats, state.tick);
 }
 
 /** Every machine kind the sim knows how to run. Exported for the renderer's atlas keys. */

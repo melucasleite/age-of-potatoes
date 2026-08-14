@@ -85,7 +85,7 @@ import {
   view,
   wiltStageForAge,
 } from '../src/index';
-import { loadFixture, replay } from './goldens';
+import { type GoldenFixture, loadFixture, replay } from './goldens';
 
 function run(state: WorldState, commands: Command[]): void {
   step(state, { tick: state.tick, commands });
@@ -805,6 +805,119 @@ describe('wear and repair', () => {
     expect(machine.condition).toBe(CONDITION_MAX);
     expect(state.moneyCents).toBe(moneyBefore);
     expect(itemCount(state, ItemId.RepairKit)).toBe(0);
+  });
+});
+
+// --- fixture stories ----------------------------------------------------------------
+//
+// The golden hash pins that a fixture replays IDENTICALLY; it cannot pin that the fixture
+// still tells the story its description claims. That gap is not hypothetical: the 8-pour-can
+// amendment once left `maintenance.json` hash-stable with its one PlaceMachine deferred to
+// the second-to-last tick — every feed, whack, and kit use replaying against a machine that
+// did not exist yet. These tests replay the wear and junction fixtures WATCHING the world,
+// so a fixture whose story dies goes red even while its hash stays green.
+
+/** Replay a fixture like `goldens.replay`, but observing the world after every tick. */
+function replayWatching(fixture: GoldenFixture, onTick: (state: WorldState) => void): WorldState {
+  const state = createWorld(fixture.seed);
+  const byTick = new Map<number, Command[]>();
+  for (const entry of fixture.commands) {
+    const bucket = byTick.get(entry.tick);
+    if (bucket === undefined) byTick.set(entry.tick, [entry.command]);
+    else bucket.push(entry.command);
+  }
+  const none: Command[] = [];
+  for (let i = 0; i < fixture.ticks; i++) {
+    step(state, { tick: state.tick, commands: byTick.get(state.tick) ?? none });
+    onTick(state);
+  }
+  return state;
+}
+
+describe('fixture stories', () => {
+  it('worn-to-zero: work drives a kitchen to zero, it halts, and hands alone restore it', () => {
+    const fixture = loadFixture('worn-to-zero');
+    // Kit-free by construction — the fixture guards plan §1's "manual never rots", and a kit
+    // slipping into a later re-recording would quietly change what it proves.
+    expect(fixture.commands.some((e) => e.command.type === 'UseRepairKit')).toBe(false);
+
+    let minCondition = Infinity;
+    let haltedTicks = 0;
+    const state = replayWatching(fixture, (s) => {
+      const kitchen = s.machines.find((m) => m.kind === MachineKind.ChipKitchen);
+      if (kitchen === undefined) return;
+      if (kitchen.condition < minCondition) minCondition = kitchen.condition;
+      if (kitchen.condition <= 0) haltedTicks += 1;
+    });
+
+    const kitchen = state.machines.find((m) => m.kind === MachineKind.ChipKitchen)!;
+    expect(minCondition).toBe(0);
+    // It sat dead for a while — halted, costing nothing — rather than bouncing off zero.
+    expect(haltedTicks).toBeGreaterThan(100);
+    expect(kitchen.opCount).toBeGreaterThan(0);
+    expect(kitchen.condition).toBe(CONDITION_MAX);
+    expect(state.stats.repairKitsUsed).toBe(0);
+    expect(state.stats.touches.handRepair).toBeGreaterThan(0);
+  });
+
+  it('maintenance: work reaches the worn regime and one kit restores the cell', () => {
+    const fixture = loadFixture('maintenance');
+    let minCondition = Infinity;
+    const state = replayWatching(fixture, (s) => {
+      const kitchen = s.machines.find((m) => m.kind === MachineKind.ChipKitchen);
+      if (kitchen !== undefined && kitchen.condition < minCondition) {
+        minCondition = kitchen.condition;
+      }
+    });
+
+    // Below the effect threshold but never dead — a dead machine is worn-to-zero's story.
+    expect(minCondition).toBeLessThan(CONDITION_EFFECT_THRESHOLD);
+    expect(minCondition).toBeGreaterThan(0);
+    // The worn regime actually cost something, deterministically.
+    expect(state.stats.inputsWastedByMachine).toBeGreaterThanOrEqual(5);
+    expect(state.stats.touches.jamWhack).toBeGreaterThanOrEqual(3);
+    // One kit, bought at the till and consumed on the cell.
+    expect(state.stats.repairKitsUsed).toBe(1);
+    expect(state.stats.repairKitSpendCents).toBe(800);
+    // Restored to full and back at work — the tail wears it a little, which is the point.
+    const kitchen = state.machines.find((m) => m.kind === MachineKind.ChipKitchen)!;
+    expect(kitchen.condition).toBeGreaterThan(CONDITION_EFFECT_THRESHOLD);
+  });
+
+  it('junction-loop: one junction alternates outputs, the other inputs, and goods reach every belt', () => {
+    const fixture = loadFixture('junction-loop');
+    const inCursors = new Map<number, Set<number>>();
+    const outCursors = new Map<number, Set<number>>();
+    const beltsThatCarried = new Set<number>();
+    const state = replayWatching(fixture, (s) => {
+      for (const machine of s.machines) {
+        if (machine.kind !== MachineKind.BeltJunction) continue;
+        let ins = inCursors.get(machine.id);
+        if (ins === undefined) inCursors.set(machine.id, (ins = new Set()));
+        ins.add(machine.junctionInCursor);
+        let outs = outCursors.get(machine.id);
+        if (outs === undefined) outCursors.set(machine.id, (outs = new Set()));
+        outs.add(machine.junctionOutCursor);
+      }
+      for (const belt of s.belts) {
+        if (belt.items.length > 0) beltsThatCarried.add(belt.id);
+      }
+    });
+
+    const junctions = state.machines.filter((m) => m.kind === MachineKind.BeltJunction);
+    expect(junctions).toHaveLength(2);
+    // The splitter's out-cursor moved between faces; the merger's in-cursor did the same.
+    // Item 024's criterion is the ALTERNATION, not merely the existence of the tiles.
+    expect(junctions.some((j) => (outCursors.get(j.id)?.size ?? 0) >= 2)).toBe(true);
+    expect(junctions.some((j) => (inCursors.get(j.id)?.size ?? 0) >= 2)).toBe(true);
+    // Circulation reached every belt in the loop — both branches of the split included.
+    expect(state.belts.length).toBeGreaterThanOrEqual(6);
+    for (const belt of state.belts) {
+      expect(beltsThatCarried.has(belt.id)).toBe(true);
+    }
+    // And the goods are still going round at the end, not parked in a buffer.
+    const ridingNow = state.belts.reduce((sum, belt) => sum + belt.items.length, 0);
+    expect(ridingNow).toBeGreaterThan(0);
   });
 });
 

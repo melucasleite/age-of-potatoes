@@ -43,6 +43,18 @@ export interface WaterTileCommand {
   tileY: number;
 }
 
+/**
+ * Refill the watering can to `CAN_CHARGES_MAX` at a shore.
+ *
+ * Legal while the player's tile touches a reservoir (its own tile or an orthogonal
+ * neighbour), and it NEVER FAILS THERE, at any water level — §4's bold clause is about
+ * exactly this verb. Refused rather than consumed when the can is already full, which is
+ * `UseRepairKit`'s rule and for the same reason. Counts as a hopper-refill touch.
+ */
+export interface RefillCanCommand {
+  type: 'RefillCan';
+}
+
 /** Plant a seed from inventory. Counts as a hand-plant touch. */
 export interface PlantTileCommand {
   type: 'PlantTile';
@@ -610,6 +622,7 @@ export type Command =
   | SetMoveDirectionCommand
   | WalkAndActCommand
   | WaterTileCommand
+  | RefillCanCommand
   | PlantTileCommand
   | HarvestTileCommand
   | SwingScytheCommand

@@ -16,7 +16,7 @@
 import { BALANCE_HASH } from '../data';
 
 /** The hand-maintained code version. Bump it when sim *behaviour* changes. */
-export const SIM_CODE_VERSION = '0.4.0';
+export const SIM_CODE_VERSION = '0.5.0';
 
 /**
  * What a save writes into `envelope.simVersion`: code version, `+`, balance digest.

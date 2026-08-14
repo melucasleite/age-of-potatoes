@@ -17,6 +17,7 @@ import {
   ARMFUL_CAP_ITEMS,
   BELT_ITEM_SPACING_SUBTILES,
   type BeltTier,
+  CAN_CHARGES_MAX,
   CONDITION_MAX,
   CropId,
   type CropSpec,
@@ -111,8 +112,14 @@ import { SUBTILE, clampInt, divFloor, tileCentreSubtiles } from './units';
  *     world carries a sorted list of bots. Four items in one format bump because they land in one
  *     release — the chain's rule is one migration per RELEASED version, and 11 is not released
  *     until this ships.
+ * 12 — the eight-pour can and the receipt ledgers: the player carries the can's charge counter
+ *     (full on migration — the infinite can every older world held is, at the moment of loading,
+ *     indistinguishable from a full one), and `WorldStats` carries per-item lifetime sales with
+ *     dawn snapshots, dawn-aligned hour buckets with the open hour's starting line, and the dawn
+ *     counter the snapshots reset on. Old saves migrate with EMPTY accumulators — history that
+ *     was never recorded is not invented.
  */
-export const WORLD_STATE_VERSION = 11;
+export const WORLD_STATE_VERSION = 12;
 
 /**
  * A held direction, not a delta. Input tells the sim *which way the player is holding*,
@@ -214,6 +221,8 @@ export const IntentAction = {
   Scythe: 13,
   /** Walk over and take hold of a hand cart's handles. */
   HitchCart: 14,
+  /** Walk to a shore tile and refill the watering can. Wired exactly as `Water` is. */
+  RefillCan: 15,
 } as const;
 
 export type IntentAction = (typeof IntentAction)[keyof typeof IntentAction];
@@ -234,6 +243,7 @@ export const INTENT_ACTIONS: readonly IntentAction[] = [
   IntentAction.Fertilize,
   IntentAction.Scythe,
   IntentAction.HitchCart,
+  IntentAction.RefillCan,
 ];
 
 /**
@@ -303,6 +313,19 @@ export interface PlayerState {
    * existing, so a boxed or scrapped cart cannot leave the farmer dragging a ghost.
    */
   towedCartId: number;
+
+  /**
+   * Pours left in the watering can, 0..`CAN_CHARGES_MAX` (8 — plan §3's ladder, restored by
+   * the 2026-08-13 ruling on item 009).
+   *
+   * ON THE PLAYER BECAUSE THE CAN IS THE PLAYER'S HAND, not a machine: it has no position, no
+   * condition, and no id — one integer is its entire state. Watering spends one; `RefillCan`
+   * fills it at any shore, at any water level, and never fails (§4's bold clause governs the
+   * REFILL, not the capacity). Watering at zero REFUSES as a gentle no-op — the HUD reads
+   * `canCharges === 0` as "the can is empty, the shore is that way", and nothing is ever
+   * spent, lost, or punished by the refusal.
+   */
+  canCharges: number;
 }
 
 /**
@@ -1107,6 +1130,10 @@ export function createWorld(seed: number): WorldState {
       moveAccum: 0,
       intent: null,
       towedCartId: 0,
+      // The can starts full — a gift, like the stand and the pond. Its first eight pours are
+      // water from home, which is why they are not on the Dry County meter; every refill after
+      // them draws through `takeWater()` like everything else.
+      canCharges: CAN_CHARGES_MAX,
     },
     inventory: [],
     // The starter lot is free (plan §5). One parcel, at the origin, which is exactly the map

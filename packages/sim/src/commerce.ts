@@ -52,7 +52,7 @@ import {
   addItem,
   markCeremony,
 } from './state';
-import { recordEarnings } from './stats';
+import { recordSale } from './stats';
 
 // --- distance -----------------------------------------------------------------------
 
@@ -170,8 +170,9 @@ export function depotAccept(state: WorldState, depot: Machine, item: ItemId): bo
 /**
  * One payout, through the one accounting path.
  *
- * EVERY SALE IN THE GAME ENDS HERE OR IN `applySellItem`, and both do the same four things in
- * the same order: money, `recordEarnings`, `itemsSold`, and — for these two — `automatedGross`.
+ * EVERY SALE IN THE GAME ENDS HERE OR IN `applySellItem`, and both do the same things in
+ * the same order: money, then `recordSale` (which owns the gross, the unit count, and the
+ * per-item ledger in one write — item 062), and — for these two — `automatedGross`.
  * Plan §6 wants the Shift Report and every board reading one number, so a route that paid the
  * player without telling `stats` would show up as money that appeared from nowhere on a receipt
  * whose whole job is explaining where money came from.
@@ -183,8 +184,7 @@ export function depotAccept(state: WorldState, depot: Machine, item: ItemId): bo
 function payForDelivery(state: WorldState, item: ItemId, count: number): number {
   const gross = listPriceCents(item) * count;
   state.moneyCents += gross;
-  recordEarnings(state.stats, gross);
-  state.stats.itemsSold += count;
+  recordSale(state.stats, item, count, gross);
   state.stats.automatedGrossCents += gross;
   return gross;
 }

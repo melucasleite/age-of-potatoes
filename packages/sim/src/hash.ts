@@ -103,6 +103,9 @@ export function hashStateUint32(state: WorldState): number {
   // The cart in tow. A world where the farmer is dragging a barrow and one where they left it by
   // the shed are different worlds, and the difference is visible in how fast the next step is.
   d.num(state.player.towedCartId);
+  // The can's remaining pours. A farmer three pours from a walk to the shore and one fresh from
+  // it are in different worlds, and the difference is when the next refill happens.
+  d.num(state.player.canCharges);
 
   // A pending errand is world state like any other: two players who have both clicked a far
   // tile but are half a field apart in the walk are in genuinely different worlds, and a
@@ -456,6 +459,47 @@ export function hashStateUint32(state: WorldState): number {
   d.num(stats.touches.jamWhack);
   d.num(stats.touches.hopperRefill);
 
+  // The per-item sales ledger. Already sorted ascending by item id in `WorldStats`, so two
+  // worlds that sold the same goods in a different order digest identically — they are the
+  // same ledger. Length-first, like every collection here.
+  d.text('salesByItem');
+  d.num(stats.salesByItem.length);
+  for (let i = 0; i < stats.salesByItem.length; i++) {
+    const row = stats.salesByItem[i]!;
+    d.num(row.item);
+    d.num(row.units);
+    d.num(row.cents);
+    d.num(row.unitsAtDawn);
+    d.num(row.centsAtDawn);
+  }
+
+  // The hour ledger: every closed bucket, the open hour's starting line, and the dawn counter.
+  // These are what make the Shift Report's strip and the Dawn Report's "today" column facts
+  // about the world rather than a display-side reconstruction (item 062).
+  d.text('hours');
+  d.num(stats.hours.length);
+  for (let i = 0; i < stats.hours.length; i++) {
+    const bucket = stats.hours[i]!;
+    d.num(bucket.hour);
+    d.num(bucket.ticks);
+    d.num(bucket.grossCents);
+    d.num(bucket.spendCents);
+    d.num(bucket.waterMl);
+    d.num(bucket.itemsSold);
+    d.num(bucket.inputsWasted);
+    d.num(bucket.itemsProduced);
+  }
+  d.text('hourMark');
+  d.num(stats.hourMark.hour);
+  d.num(stats.hourMark.tick);
+  d.num(stats.hourMark.earnedCents);
+  d.num(stats.hourMark.spentCents);
+  d.num(stats.hourMark.waterMl);
+  d.num(stats.hourMark.itemsSold);
+  d.num(stats.hourMark.inputsWasted);
+  d.num(stats.hourMark.itemsProduced);
+  d.num(stats.dawnsSeen);
+
   return d.h >>> 0;
 }
 
@@ -641,6 +685,16 @@ export function findNonIntegerFields(state: WorldState): string[] {
   for (let i = 0; i < stats.netWorthSamples.length; i++) {
     check(`stats.netWorthSamples[${i}]`, stats.netWorthSamples[i]!);
   }
+  for (let i = 0; i < stats.salesByItem.length; i++) {
+    check(`stats.salesByItem[${i}].units`, stats.salesByItem[i]!.units);
+    check(`stats.salesByItem[${i}].cents`, stats.salesByItem[i]!.cents);
+  }
+  for (let i = 0; i < stats.hours.length; i++) {
+    check(`stats.hours[${i}].grossCents`, stats.hours[i]!.grossCents);
+    check(`stats.hours[${i}].spendCents`, stats.hours[i]!.spendCents);
+  }
+  check('stats.hourMark.earnedCents', stats.hourMark.earnedCents);
+  check('stats.hourMark.spentCents', stats.hourMark.spentCents);
 
   return bad;
 }

@@ -18,8 +18,8 @@
 //
 // Every field is an integer. Cents, millilitres, ticks, counts.
 
-import { NET_WORTH_SAMPLE_LIMIT } from './data';
-import { TICKS_PER_ACTIVE_HOUR, divFloor } from './units';
+import { type ItemId, NET_WORTH_SAMPLE_LIMIT } from './data';
+import { DAWN_TICK_IN_DAY, TICKS_PER_ACTIVE_HOUR, dawnCount, divFloor } from './units';
 
 /**
  * Plan §6's manual-touch taxonomy, in full. Hands-Free is unadjudicable without it, and a
@@ -38,6 +38,84 @@ export interface ManualTouchCounts {
   jamWhack: number;
   /** Refilling any hopper: seeds, kits, consumables, sprinkler barrels. */
   hopperRefill: number;
+}
+
+/**
+ * Lifetime sales of one item id, plus a snapshot of both accumulators taken at the most
+ * recent dawn.
+ *
+ * MONOTONE ACCUMULATORS AND SNAPSHOTS OF THEM, NEVER A SECOND COUNT. "Today's sales" is
+ * `units - unitsAtDawn`, computed at read time in the projection — a `dayUnits` that was
+ * incremented beside `units` would be the independent counting this file's discipline exists
+ * to rule out, and the two would drift the first time one code path forgot the other.
+ *
+ * Rows are SPARSE (an item never sold has no row) and SORTED ascending by `item`, which is
+ * what makes the list hashable: same sales, same bytes, regardless of sale order.
+ */
+export interface ItemSales {
+  item: ItemId;
+  /** Lifetime units sold. */
+  units: number;
+  /** Lifetime gross, in cents. A subset of `lifetimeEarnedCents`, never a second ledger. */
+  cents: number;
+  /** `units` as it stood at the most recent dawn. Today's count telescopes from it. */
+  unitsAtDawn: number;
+  centsAtDawn: number;
+}
+
+/**
+ * The open hour's starting line: the tick it opened on and every lifetime accumulator as it
+ * stood at that moment. A closed bucket is *now minus the mark* — differences of monotone
+ * accumulators, exactly the arithmetic `apps/web/src/reports/shift.ts` documents, moved to
+ * the only home where it can be hashed.
+ */
+export interface HourMark {
+  /** The dawn-aligned hour index the world is currently inside. See `hourIndexAt`. */
+  hour: number;
+  /** The tick the hour opened (or the world began). */
+  tick: number;
+  earnedCents: number;
+  spentCents: number;
+  waterMl: number;
+  itemsSold: number;
+  inputsWasted: number;
+  itemsProduced: number;
+}
+
+/** One closed hour, stored as the telescoped differences. Oldest first, capped. */
+export interface ClosedHour {
+  hour: number;
+  /** How long the hour really was: `TICKS_PER_ACTIVE_HOUR`, except the short dawn-birth hour 0. */
+  ticks: number;
+  grossCents: number;
+  spendCents: number;
+  waterMl: number;
+  itemsSold: number;
+  inputsWasted: number;
+  itemsProduced: number;
+}
+
+/**
+ * Closed hours retained. The same cap as the Shift Report's strip
+ * (`SHIFT_HISTORY_LIMIT` in `apps/web/src/reports/shift.ts`), for the same reason as
+ * `NET_WORTH_SAMPLE_LIMIT`: an unbounded array in a persisted payload is how a local-first
+ * game grows a 40 MB save one quiet afternoon at a time.
+ */
+export const HOUR_HISTORY_LIMIT = 24;
+
+/**
+ * Which hour bucket a tick falls in — DAWN-ALIGNED, per item 062.
+ *
+ * Hour boundaries sit at `DAWN_TICK_IN_DAY + k × TICKS_PER_ACTIVE_HOUR`, so every boundary
+ * after the first sits where a boundary would if the world had been born at dawn. Hour 0 is
+ * therefore SHORT — the 8,400 ticks between 09:00 and the first 06:00 — and every later hour
+ * is a full `TICKS_PER_ACTIVE_HOUR`. The Shift Report's adopt branch treats a bucket shorter
+ * than a full hour as "in progress", so the short birth hour never appears in its strip; it
+ * still exists in the hashed history, because the money it contains has to telescope.
+ */
+export function hourIndexAt(tick: number): number {
+  if (tick < DAWN_TICK_IN_DAY) return 0;
+  return divFloor(tick - DAWN_TICK_IN_DAY, TICKS_PER_ACTIVE_HOUR) + 1;
 }
 
 export interface WorldStats {
@@ -120,6 +198,27 @@ export interface WorldStats {
   longestUntouchedMachineTicks: number;
 
   touches: ManualTouchCounts;
+
+  /**
+   * Lifetime sales per item id, sparse and sorted ascending by `item` (item 062). Fed only by
+   * `recordSale`, which is the one door every sale in the game already walks through — a row
+   * here is always a subset of `lifetimeEarnedCents` and `itemsSold`, never a second ledger.
+   */
+  salesByItem: ItemSales[];
+
+  /** Closed dawn-aligned hours, oldest first, capped at `HOUR_HISTORY_LIMIT`. */
+  hours: ClosedHour[];
+
+  /** The open hour's starting line. See `HourMark`. */
+  hourMark: HourMark;
+
+  /**
+   * How many dawns this world had seen at the last daily reset of `salesByItem`'s snapshots.
+   * A monotone counter compared against `dawnCount(tick)` rather than an equality test on the
+   * dawn tick, for the same reason the Dawn Report fires on the change of that number: a
+   * counter cannot be missed.
+   */
+  dawnsSeen: number;
 }
 
 export function createManualTouchCounts(): ManualTouchCounts {
@@ -155,6 +254,24 @@ export function createStats(): WorldStats {
     longestHandsFreeTicks: 0,
     longestUntouchedMachineTicks: 0,
     touches: createManualTouchCounts(),
+    salesByItem: [],
+    hours: [],
+    hourMark: createHourMark(0, 0),
+    dawnsSeen: 0,
+  };
+}
+
+/** A fresh starting line for the hour that opens at `tick`, copied from `stats` if given. */
+export function createHourMark(hour: number, tick: number, stats?: WorldStats): HourMark {
+  return {
+    hour,
+    tick,
+    earnedCents: stats === undefined ? 0 : stats.lifetimeEarnedCents,
+    spentCents: stats === undefined ? 0 : stats.lifetimeSpentCents,
+    waterMl: stats === undefined ? 0 : stats.waterDrawnMl,
+    itemsSold: stats === undefined ? 0 : stats.itemsSold,
+    inputsWasted: stats === undefined ? 0 : stats.inputsWastedByMachine,
+    itemsProduced: stats === undefined ? 0 : stats.itemsProducedByMachine,
   };
 }
 
@@ -175,6 +292,77 @@ export function recordManualTouch(stats: WorldStats, kind: ManualTouchKind): voi
 
 export function recordEarnings(stats: WorldStats, amountCents: number): void {
   stats.lifetimeEarnedCents += amountCents;
+}
+
+/**
+ * Credit one sale: money already moved, this is the ledger. THE ONLY WRITER OF `salesByItem`,
+ * and it also owns `recordEarnings` and `itemsSold` for its callers — `applySellItem` and
+ * `payForDelivery` both route here, so the per-item rows, the gross, and the unit count can
+ * never move separately (item 062: incremented at the single point sales credit money).
+ */
+export function recordSale(
+  stats: WorldStats,
+  item: ItemId,
+  count: number,
+  grossCents: number,
+): void {
+  recordEarnings(stats, grossCents);
+  stats.itemsSold += count;
+
+  const rows = stats.salesByItem;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!;
+    if (row.item === item) {
+      row.units += count;
+      row.cents += grossCents;
+      return;
+    }
+    if (row.item > item) {
+      // Insert in ascending item order, so the hashed list is a function of what was sold and
+      // never of the order it sold in.
+      rows.splice(i, 0, { item, units: count, cents: grossCents, unitsAtDawn: 0, centsAtDawn: 0 });
+      return;
+    }
+  }
+  rows.push({ item, units: count, cents: grossCents, unitsAtDawn: 0, centsAtDawn: 0 });
+}
+
+/**
+ * The hour ledger's and the daily snapshot's one writer, run once per tick from
+ * `advanceStats` (before the world clock increments, so a boundary tick's activity lands in
+ * the hour that owned the tick).
+ *
+ * Closing an hour is *now minus the mark* — differences of the monotone lifetime
+ * accumulators, so the buckets telescope exactly however the cadence lands. Crossing a dawn
+ * snapshots `salesByItem`, which is what makes "sold today" a subtraction at read time.
+ */
+export function advanceStatsClock(stats: WorldStats, tick: number): void {
+  const hour = hourIndexAt(tick);
+  if (hour > stats.hourMark.hour) {
+    const mark = stats.hourMark;
+    stats.hours.push({
+      hour: mark.hour,
+      ticks: tick - mark.tick,
+      grossCents: stats.lifetimeEarnedCents - mark.earnedCents,
+      spendCents: stats.lifetimeSpentCents - mark.spentCents,
+      waterMl: stats.waterDrawnMl - mark.waterMl,
+      itemsSold: stats.itemsSold - mark.itemsSold,
+      inputsWasted: stats.inputsWastedByMachine - mark.inputsWasted,
+      itemsProduced: stats.itemsProducedByMachine - mark.itemsProduced,
+    });
+    while (stats.hours.length > HOUR_HISTORY_LIMIT) stats.hours.shift();
+    stats.hourMark = createHourMark(hour, tick, stats);
+  }
+
+  const dawns = dawnCount(tick);
+  if (dawns > stats.dawnsSeen) {
+    stats.dawnsSeen = dawns;
+    for (let i = 0; i < stats.salesByItem.length; i++) {
+      const row = stats.salesByItem[i]!;
+      row.unitsAtDawn = row.units;
+      row.centsAtDawn = row.cents;
+    }
+  }
 }
 
 export function recordSpend(stats: WorldStats, amountCents: number): void {

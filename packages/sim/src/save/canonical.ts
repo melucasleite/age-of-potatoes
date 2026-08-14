@@ -91,6 +91,8 @@ export interface SavePlayerIntent {
 }
 
 export interface SavePlayer {
+  /** Pours left in the can, 0..8. A half-empty can survives a reload half-empty. */
+  canCharges: number;
   facing: number;
   intent: SavePlayerIntent | null;
   moveAccum: number;
@@ -341,8 +343,44 @@ export interface SaveTouchCounts {
   jamWhack: number;
 }
 
+/** One row of the per-item sales ledger. Sorted ascending by `item`, like the live list. */
+export interface SaveItemSales {
+  cents: number;
+  centsAtDawn: number;
+  item: number;
+  units: number;
+  unitsAtDawn: number;
+}
+
+/** One closed dawn-aligned hour, as the telescoped differences the live list stores. */
+export interface SaveClosedHour {
+  grossCents: number;
+  hour: number;
+  inputsWasted: number;
+  itemsProduced: number;
+  itemsSold: number;
+  spendCents: number;
+  ticks: number;
+  waterMl: number;
+}
+
+/** The open hour's starting line. */
+export interface SaveHourMark {
+  earnedCents: number;
+  hour: number;
+  inputsWasted: number;
+  itemsProduced: number;
+  itemsSold: number;
+  spentCents: number;
+  tick: number;
+  waterMl: number;
+}
+
 export interface SaveStats {
   automatedGrossCents: number;
+  dawnsSeen: number;
+  hourMark: SaveHourMark;
+  hours: SaveClosedHour[];
   inputsWastedByMachine: number;
   itemsHarvestedByHand: number;
   itemsProducedByMachine: number;
@@ -358,6 +396,7 @@ export interface SaveStats {
   peakNetWorthCents: number;
   repairKitSpendCents: number;
   repairKitsUsed: number;
+  salesByItem: SaveItemSales[];
   ticksElapsed: number;
   ticksSinceManualTouch: number;
   touches: SaveTouchCounts;
@@ -676,6 +715,7 @@ export function toPayload(state: WorldState): SavePayload {
     pipes,
     reservoirs,
     player: {
+      canCharges: state.player.canCharges,
       facing: state.player.facing,
       // An explicit copy, never an alias. This file's stated guarantee is that the payload
       // shares no object with `state` and is therefore safe to build mid-tick — and the
@@ -699,6 +739,27 @@ export function toPayload(state: WorldState): SavePayload {
     },
     stats: {
       automatedGrossCents: stats.automatedGrossCents,
+      dawnsSeen: stats.dawnsSeen,
+      hourMark: {
+        earnedCents: stats.hourMark.earnedCents,
+        hour: stats.hourMark.hour,
+        inputsWasted: stats.hourMark.inputsWasted,
+        itemsProduced: stats.hourMark.itemsProduced,
+        itemsSold: stats.hourMark.itemsSold,
+        spentCents: stats.hourMark.spentCents,
+        tick: stats.hourMark.tick,
+        waterMl: stats.hourMark.waterMl,
+      },
+      hours: stats.hours.map((bucket) => ({
+        grossCents: bucket.grossCents,
+        hour: bucket.hour,
+        inputsWasted: bucket.inputsWasted,
+        itemsProduced: bucket.itemsProduced,
+        itemsSold: bucket.itemsSold,
+        spendCents: bucket.spendCents,
+        ticks: bucket.ticks,
+        waterMl: bucket.waterMl,
+      })),
       inputsWastedByMachine: stats.inputsWastedByMachine,
       itemsHarvestedByHand: stats.itemsHarvestedByHand,
       itemsProducedByMachine: stats.itemsProducedByMachine,
@@ -713,6 +774,13 @@ export function toPayload(state: WorldState): SavePayload {
       peakNetWorthCents: stats.peakNetWorthCents,
       repairKitSpendCents: stats.repairKitSpendCents,
       repairKitsUsed: stats.repairKitsUsed,
+      salesByItem: stats.salesByItem.map((row) => ({
+        cents: row.cents,
+        centsAtDawn: row.centsAtDawn,
+        item: row.item,
+        units: row.units,
+        unitsAtDawn: row.unitsAtDawn,
+      })),
       ticksElapsed: stats.ticksElapsed,
       ticksSinceManualTouch: stats.ticksSinceManualTouch,
       touches: {
@@ -986,6 +1054,7 @@ const ERRAND_ACTIONS: readonly number[] = [
   IntentAction.Fertilize,
   IntentAction.Scythe,
   IntentAction.HitchCart,
+  IntentAction.RefillCan,
 ];
 
 /**
@@ -1025,6 +1094,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     moveDir: idInt(playerRaw, 'moveDir', 'payload.player', DIRECTIONS) as Direction,
     moveAccum: int(playerRaw, 'moveAccum', 'payload.player'),
     towedCartId: int(playerRaw, 'towedCartId', 'payload.player'),
+    canCharges: int(playerRaw, 'canCharges', 'payload.player'),
     intent,
   };
 
@@ -1393,6 +1463,54 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     netWorthSamples.push(sample);
   }
 
+  const salesRaw = list(statsRaw, 'salesByItem', 'payload.stats');
+  const salesByItem: WorldStats['salesByItem'] = [];
+  for (let i = 0; i < salesRaw.length; i++) {
+    const path = `payload.stats.salesByItem[${String(i)}]`;
+    const row = record(salesRaw[i], path);
+    salesByItem.push({
+      item: idInt(row, 'item', path, ITEM_IDS) as ItemId,
+      units: int(row, 'units', path),
+      cents: int(row, 'cents', path),
+      unitsAtDawn: int(row, 'unitsAtDawn', path),
+      centsAtDawn: int(row, 'centsAtDawn', path),
+    });
+  }
+  // Sorted here rather than trusted, exactly as `ceremonies` and freshness stacks are: the
+  // ascending item order is a hashed invariant of the ledger.
+  salesByItem.sort((a, b) => a.item - b.item);
+
+  const hoursRaw = list(statsRaw, 'hours', 'payload.stats');
+  const hours: WorldStats['hours'] = [];
+  for (let i = 0; i < hoursRaw.length; i++) {
+    const path = `payload.stats.hours[${String(i)}]`;
+    const bucket = record(hoursRaw[i], path);
+    hours.push({
+      hour: int(bucket, 'hour', path),
+      ticks: int(bucket, 'ticks', path),
+      grossCents: int(bucket, 'grossCents', path),
+      spendCents: int(bucket, 'spendCents', path),
+      waterMl: int(bucket, 'waterMl', path),
+      itemsSold: int(bucket, 'itemsSold', path),
+      inputsWasted: int(bucket, 'inputsWasted', path),
+      itemsProduced: int(bucket, 'itemsProduced', path),
+    });
+  }
+  // Chronological is ascending hour index, so restoring the sort restores the invariant.
+  hours.sort((a, b) => a.hour - b.hour);
+
+  const hourMarkRaw = record(statsRaw['hourMark'], 'payload.stats.hourMark');
+  const hourMark: WorldStats['hourMark'] = {
+    hour: int(hourMarkRaw, 'hour', 'payload.stats.hourMark'),
+    tick: int(hourMarkRaw, 'tick', 'payload.stats.hourMark'),
+    earnedCents: int(hourMarkRaw, 'earnedCents', 'payload.stats.hourMark'),
+    spentCents: int(hourMarkRaw, 'spentCents', 'payload.stats.hourMark'),
+    waterMl: int(hourMarkRaw, 'waterMl', 'payload.stats.hourMark'),
+    itemsSold: int(hourMarkRaw, 'itemsSold', 'payload.stats.hourMark'),
+    inputsWasted: int(hourMarkRaw, 'inputsWasted', 'payload.stats.hourMark'),
+    itemsProduced: int(hourMarkRaw, 'itemsProduced', 'payload.stats.hourMark'),
+  };
+
   const stats: WorldStats = {
     ticksElapsed: int(statsRaw, 'ticksElapsed', 'payload.stats'),
     lifetimeEarnedCents: int(statsRaw, 'lifetimeEarnedCents', 'payload.stats'),
@@ -1413,6 +1531,10 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     longestHandsFreeTicks: int(statsRaw, 'longestHandsFreeTicks', 'payload.stats'),
     longestUntouchedMachineTicks: int(statsRaw, 'longestUntouchedMachineTicks', 'payload.stats'),
     touches,
+    salesByItem,
+    hours,
+    hourMark,
+    dawnsSeen: int(statsRaw, 'dawnsSeen', 'payload.stats'),
   };
 
   const restoredTrace: TraceEntry[] = [];

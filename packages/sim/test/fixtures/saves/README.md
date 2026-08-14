@@ -164,3 +164,14 @@ calling that tile clay afterwards would leave a crop whose target agrees with no
 freshness is **computed to be generous**: every perishable stack comes back with its full window
 ahead of it, measured from the tick the save was written, because the world that was saved had no
 clock at all and time does not pass when nobody is playing.
+
+| `format-12.json` | 12 | 2026-08-13, `v0.5.0` | Seed 812812, tick 11,000. The first save with the **eight-pour can** and the **receipt ledgers** in it, caught mid-morning of its second day: the can run EMPTY (the refusal state is the one worth pinning), a fresh crop watered and growing, one `salesByItem` row with its day snapshots taken at the first dawn, the short birth hour already closed in `hours`, and the open hour's mark counting from tick 8,400. |
+
+The 11 → 12 migration adds the can's charge counter to the player and the sales/hour ledgers
+to the stats, and translates almost nothing: the can arrives **full** (an infinite can and a
+full one are indistinguishable at the moment of loading), and the ledgers arrive **empty** —
+the world sold things and worked hours that were never recorded, and a migration must not
+invent history. The one computed value is `dawnsSeen`, derived from the saved tick with
+frozen calendar constants so that loading is never mistaken for a dawn. The open hour's mark
+is taken at the load tick with the saved lifetime accumulators as its starting line, so the
+first bucket a migrated world closes contains only what happened after the load.

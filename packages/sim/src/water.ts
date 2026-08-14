@@ -27,7 +27,7 @@
 import { RESERVOIR_LOW_PERMILLE, RESERVOIR_RECHARGE_ML_PER_MINUTE } from './data';
 import type { Reservoir, WorldState } from './state';
 import { recordWaterDrawn } from './stats';
-import { TICKS_PER_MINUTE, divFloor, permille } from './units';
+import { SUBTILE, TICKS_PER_MINUTE, clampInt, divFloor, permille } from './units';
 
 /**
  * How a draw is metered.
@@ -200,6 +200,51 @@ export function reservoirAdjacentToTile(
     const candidate = candidates[i];
     if (candidate === null || candidate === undefined) continue;
     if (best === null || candidate.id < best.id) best = candidate;
+  }
+  return best;
+}
+
+/** The point of a reservoir's footprint nearest to a position, in subtiles. */
+export function nearestPointOfReservoir(
+  reservoir: Reservoir,
+  xSub: number,
+  ySub: number,
+): { xSub: number; ySub: number } {
+  const minX = reservoir.tileX * SUBTILE;
+  const maxX = (reservoir.tileX + reservoir.tilesWide) * SUBTILE - 1;
+  const minY = reservoir.tileY * SUBTILE;
+  const maxY = (reservoir.tileY + reservoir.tilesHigh) * SUBTILE - 1;
+  return { xSub: clampInt(xSub, minX, maxX), ySub: clampInt(ySub, minY, maxY) };
+}
+
+/**
+ * The reservoir whose water is within `reachSub` subtiles of a position, or null.
+ *
+ * REACH-BASED, LIKE EVERY OTHER HAND VERB, and this is what "standing at the shore" means to
+ * `RefillCan`: the same arm that can water a tile can dip a can. A tile-adjacency test here
+ * would make the refill stricter than the pour, and the walk-to errand — which arrives
+ * "within reach" like every errand does — would stop a step short of a shore it could
+ * already touch. Lowest id breaks ties, keeping it a total order and therefore deterministic.
+ */
+export function reservoirWithinReach(
+  state: WorldState,
+  xSub: number,
+  ySub: number,
+  reachSub: number,
+): Reservoir | null {
+  let best: Reservoir | null = null;
+  let bestDistance = 0;
+  for (let i = 0; i < state.reservoirs.length; i++) {
+    const reservoir = state.reservoirs[i]!;
+    const point = nearestPointOfReservoir(reservoir, xSub, ySub);
+    const dx = point.xSub - xSub;
+    const dy = point.ySub - ySub;
+    const distance = dx * dx + dy * dy;
+    if (distance > reachSub * reachSub) continue;
+    if (best === null || distance < bestDistance) {
+      best = reservoir;
+      bestDistance = distance;
+    }
   }
   return best;
 }

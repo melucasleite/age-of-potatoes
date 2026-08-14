@@ -17,6 +17,7 @@
 
 import {
   ARMFUL_CAP_ITEMS,
+  CAN_CHARGES_MAX,
   CART_CAPACITY,
   CONDITION_EFFECT_THRESHOLD,
   CONDITION_MAX,
@@ -423,6 +424,41 @@ export interface InventoryView {
   spoilingCount: number;
 }
 
+/**
+ * Lifetime and today's sales of one item, for the Dawn Report's best seller.
+ *
+ * THE SHAPE IS `apps/web/src/reports/sim-contract.ts`'s `ItemSaleView`, VERBATIM — that file
+ * wrote this projection's contract down before the sim half existed, and the reports layer
+ * adopts it structurally the moment it appears. `dayCount` is `units - unitsAtDawn`,
+ * subtracted here so the card does not have to difference anything.
+ */
+export interface ItemSaleView {
+  item: number;
+  count: number;
+  grossCents: number;
+  /** Sales since the most recent dawn. */
+  dayCount: number;
+  dayGrossCents: number;
+}
+
+/**
+ * One dawn-aligned hour, as the Shift Report's strip reads it — `sim-contract.ts`'s
+ * `HourBucketView`, verbatim. Closed hours come first, oldest first; the LAST entry is the
+ * hour in progress, which the adopt branch recognises by `ticks < TICKS_PER_ACTIVE_HOUR`.
+ */
+export interface HourBucketView {
+  hour: number;
+  grossCents: number;
+  spendCents: number;
+  waterMl: number;
+  itemsSold: number;
+  ticks: number;
+  /** Permille of machine throughput wasted this hour, or -1 when nothing ran. */
+  wastePermille: number;
+  /** -1: spoilage is not measured per hour yet — the accumulator does not exist in `WorldStats`. */
+  spoilagePermille: number;
+}
+
 /** The numbers the HUD panel reads, already reduced. All integers, all cents or counts. */
 export interface StatsView {
   centiActiveHours: number;
@@ -455,6 +491,10 @@ export interface StatsView {
    * bar that wants the fraction between two days has the numerator it needs.
    */
   longestUntouchedMachineTicks: number;
+  /** Per-item sales, sparse, ascending by item id. Empty until something sells. */
+  salesByItem: ItemSaleView[];
+  /** Closed dawn-aligned hours oldest-first, then the hour in progress as the last entry. */
+  hours: HourBucketView[];
 }
 
 export interface PlayerView {
@@ -498,6 +538,15 @@ export interface PlayerView {
    */
   carriedCount: number;
   armfulCap: number;
+  /**
+   * Pours left in the can, and the capacity it is measured against — both numbers, for the
+   * same reason `carriedCount`/`armfulCap` are: the HUD says *3 / 8*, and `canCharges === 0`
+   * is the refusal reason a `WaterTile` that did nothing wants explained ("the can is empty —
+   * refill at the shore"). The refusal itself is a gentle no-op; this is how the view makes
+   * it explainable rather than silent.
+   */
+  canCharges: number;
+  canChargesMax: number;
 }
 
 /**
@@ -708,6 +757,8 @@ export function createWorldView(): WorldView {
       towedCartId: 0,
       carriedCount: 0,
       armfulCap: ARMFUL_CAP_ITEMS,
+      canCharges: 0,
+      canChargesMax: CAN_CHARGES_MAX,
     },
     field: {
       originX: FIELD_ORIGIN_X,
@@ -760,6 +811,8 @@ export function createWorldView(): WorldView {
       totalManualTouches: 0,
       longestHandsFreeTicks: 0,
       longestUntouchedMachineTicks: 0,
+      salesByItem: [],
+      hours: [],
     },
   };
 }
@@ -792,6 +845,8 @@ export function view(state: WorldState, out: WorldView = createWorldView()): Wor
   out.player.towedCartId = state.player.towedCartId;
   out.player.carriedCount = carriedCount(state);
   out.player.armfulCap = ARMFUL_CAP_ITEMS;
+  out.player.canCharges = state.player.canCharges;
+  out.player.canChargesMax = CAN_CHARGES_MAX;
 
   projectLand(state, out);
   projectField(state, out);
@@ -1195,8 +1250,8 @@ function projectBelts(state: WorldState, out: WorldView): void {
  * The stuck arm holding an item was always visible in the world — item 024 called that the
  * readable version of "look downstream" — but "visible if you know what you are looking at" is
  * not the same as a lamp, and a starved arm and a blocked one otherwise look identical from ten
- * tiles up. **The renderer does not draw this yet**: `render/grabbers.ts` has no lamp sprite and
- * that lane is not running this wave. The fact is published; drawing it is one handoff away.
+ * tiles up. `render/grabbers.ts` draws it as a fourth sprite riding the pedestal's top-right
+ * corner, through the same `lamps.ts` vocabulary every machine uses.
  */
 function grabberLamp(grabber: Grabber): LampState {
   if (grabber.cooldown > 0) return LampState.Running;
@@ -1638,6 +1693,96 @@ function projectStats(state: WorldState, out: WorldView): void {
   s.totalManualTouches = totalManualTouches(stats.touches);
   s.longestHandsFreeTicks = stats.longestHandsFreeTicks;
   s.longestUntouchedMachineTicks = stats.longestUntouchedMachineTicks;
+
+  // The per-item ledger, with "today" subtracted here so the Dawn Report's card reads two
+  // integers instead of doing arithmetic. Reused rows, truncated with `.length =`, like every
+  // other collection in this file.
+  const sales = stats.salesByItem;
+  for (let i = 0; i < sales.length; i++) {
+    const row = sales[i]!;
+    let v = s.salesByItem[i];
+    if (v === undefined) {
+      v = { item: 0, count: 0, grossCents: 0, dayCount: 0, dayGrossCents: 0 };
+      s.salesByItem[i] = v;
+    }
+    v.item = row.item;
+    v.count = row.units;
+    v.grossCents = row.cents;
+    v.dayCount = row.units - row.unitsAtDawn;
+    v.dayGrossCents = row.cents - row.centsAtDawn;
+  }
+  s.salesByItem.length = sales.length;
+
+  // The hour strip: every closed bucket, then the hour in progress as the last entry — which
+  // the Shift Report's adopt branch recognises by its short `ticks`. Waste is telescoped from
+  // the same two monotone accumulators the buckets carry; spoilage is not measured per hour
+  // yet, and -1 says so rather than pretending zero.
+  for (let i = 0; i < stats.hours.length; i++) {
+    const bucket = stats.hours[i]!;
+    writeHourBucket(
+      s.hours,
+      i,
+      bucket.hour,
+      bucket.ticks,
+      bucket.grossCents,
+      bucket.spendCents,
+      bucket.waterMl,
+      bucket.itemsSold,
+      bucket.inputsWasted,
+      bucket.itemsProduced,
+    );
+  }
+  const mark = stats.hourMark;
+  writeHourBucket(
+    s.hours,
+    stats.hours.length,
+    mark.hour,
+    state.tick - mark.tick,
+    stats.lifetimeEarnedCents - mark.earnedCents,
+    stats.lifetimeSpentCents - mark.spentCents,
+    stats.waterDrawnMl - mark.waterMl,
+    stats.itemsSold - mark.itemsSold,
+    stats.inputsWastedByMachine - mark.inputsWasted,
+    stats.itemsProducedByMachine - mark.itemsProduced,
+  );
+  s.hours.length = stats.hours.length + 1;
+}
+
+function writeHourBucket(
+  buffer: HourBucketView[],
+  index: number,
+  hour: number,
+  ticks: number,
+  grossCents: number,
+  spendCents: number,
+  waterMl: number,
+  itemsSold: number,
+  inputsWasted: number,
+  itemsProduced: number,
+): void {
+  let v = buffer[index];
+  if (v === undefined) {
+    v = {
+      hour: 0,
+      grossCents: 0,
+      spendCents: 0,
+      waterMl: 0,
+      itemsSold: 0,
+      ticks: 0,
+      wastePermille: -1,
+      spoilagePermille: -1,
+    };
+    buffer[index] = v;
+  }
+  v.hour = hour;
+  v.ticks = ticks;
+  v.grossCents = grossCents;
+  v.spendCents = spendCents;
+  v.waterMl = waterMl;
+  v.itemsSold = itemsSold;
+  const throughput = inputsWasted + itemsProduced;
+  v.wastePermille = throughput > 0 ? permille(inputsWasted, throughput) : -1;
+  v.spoilagePermille = -1;
 }
 
 /**
