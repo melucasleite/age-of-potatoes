@@ -224,7 +224,7 @@
       "frame": {
         "x": 195,
         "y": 34,
-        "w": 64,
+        "w": 80,
         "h": 16
       },
       "rotated": false,
@@ -232,11 +232,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 64,
+        "w": 80,
         "h": 16
       },
       "sourceSize": {
-        "w": 64,
+        "w": 80,
         "h": 16
       },
       "anchorMode": "top-left",
@@ -244,7 +244,7 @@
     },
     "crop_potato_strip": {
       "frame": {
-        "x": 260,
+        "x": 276,
         "y": 34,
         "w": 64,
         "h": 16
@@ -2379,7 +2379,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.90fec9cd.png",
+    "image": "atlas.6c454a88.png",
     "format": "RGBA8888",
     "size": {
       "w": 1024,
@@ -2407,7 +2407,7 @@
         "group": "crops",
         "x": 0,
         "y": 34,
-        "width": 324,
+        "width": 340,
         "height": 16,
         "count": 5
       },

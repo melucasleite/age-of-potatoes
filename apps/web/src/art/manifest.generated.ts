@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.90fec9cd.png';
-export const ATLAS_JSON_URL = '/art/atlas.90fec9cd.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.6c454a88.png';
+export const ATLAS_JSON_URL = '/art/atlas.6c454a88.json';
 
 export const ATLAS_SIZE = { width: 1024, height: 512 } as const;
 
@@ -105,13 +105,13 @@ export const ATLAS_FRAMES = {
   crop_gold_potato_strip: {
     x: 195,
     y: 34,
-    width: 64,
+    width: 80,
     height: 16,
     anchor: 'top-left',
     group: 'crops',
   },
   crop_potato_strip: {
-    x: 260,
+    x: 276,
     y: 34,
     width: 64,
     height: 16,

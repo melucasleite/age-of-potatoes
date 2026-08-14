@@ -2,15 +2,15 @@
   "id": "crop_gold_potato_strip",
   "provider": "retro-diffusion",
   "model": "rd_fast",
-  "seed": 1196232014,
-  "prompt": "a 4 frame sprite sheet, four equal square frames in one horizontal row, exactly four plants and no more, one potato plant centred in each of the four frames and touching the bottom of its frame. Frame 1 a tiny bare green sprout, frame 2 a short leafy green seedling, frame 3 a round leafy green bush, frame 4 a tall leafy green plant with a few small golden yellow flowers on top of it. The same green leafy potato plant growing across the four frames, matching colours and style, green leaves in every one of the four frames. Each frame is completely empty around its plant. Fully transparent background, no fifth plant, no extra plants, no two plants in one frame, no pot, no shadow, no paper, no labels, no signs, no cards, no frame borders, no grid lines, no text",
+  "seed": 726697556,
+  "prompt": "a 5 frame sprite sheet, five equal square frames in one horizontal row, exactly five plants and no more, one potato plant centred in each of the five frames and touching the bottom of its frame. Frame 1 a tiny bare green sprout, frame 2 a short leafy green seedling, frame 3 a round leafy green bush, frame 4 a tall leafy green plant with a few small golden yellow flowers on top of it, frame 5 the same plant withered and dead with drooping dull brown leaves and no flowers. The same leafy potato plant growing across the five frames, matching colours and style. Each frame is completely empty around its plant. Fully transparent background, no sixth plant, no extra plants, no two plants in one frame, no pot, no shadow, no paper, no labels, no signs, no cards, no frame borders, no grid lines, no text",
   "promptStyle": "rd_fast__default",
   "native": {
-    "width": 64,
+    "width": 80,
     "height": 16
   },
   "requested": {
-    "width": 256,
+    "width": 320,
     "height": 64
   },
   "removeBg": true,
@@ -19,6 +19,6 @@
   "palette": "palette/master.json",
   "anchor": "top-left",
   "atlasGroup": "crops",
-  "costUsd": 0.019,
-  "generatedAt": "2026-08-13T20:38:16.900Z"
+  "costUsd": 0.02,
+  "generatedAt": "2026-08-14T04:29:54.683Z"
 }
