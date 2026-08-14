@@ -76,11 +76,40 @@ export interface PouchItem {
 export interface PouchSlice {
   readonly version: number;
   readonly items: readonly PouchItem[];
+  /**
+   * Pours left in the watering can, against its capacity ([[009]] — the 8-pour can restored).
+   *
+   * ON THE POUCH because the can is a carried thing: the pouch is the one surface that shows
+   * what is in the player's hands without anything being opened, and the can's remaining
+   * pours are exactly that kind of fact. Both numbers, so the chip can say "3/8" — and
+   * `canCharges === 0` IS the refusal reason the HUD shows when a pour does nothing
+   * (the sim refuses an empty can as a silent no-op; the view carries state, not events).
+   */
+  readonly canCharges: number;
+  /** 0 before the first publish; the chip does not draw until it is real. */
+  readonly canChargesMax: number;
+  /**
+   * Which way the water is, eight-point quantised ("north-west"), or '' when the player is
+   * already within dipping reach — or when the world has no reservoir at all, where the
+   * refill works anywhere and there is nothing to point at. Same convention as
+   * `ShopSlice.heading`, for the same churn reason.
+   */
+  readonly shoreHeading: string;
 }
 
+/**
+ * One hotbar slot ([[061]]). Three shapes share it, told apart by two fields:
+ *
+ *   a tool          — `tool >= 0, item === -1`. One of the five hand verbs.
+ *   an item shortcut — `item > 0`. `tool` is the placement cursor its digit arms, or -1
+ *                      when the build has no cursor for it (the slot draws, disabled).
+ *   empty           — `tool === -1, item === -1`. A digit waiting for an assignment.
+ */
 export interface ToolSlot {
   readonly tool: number;
-  /** The number key that selects it. */
+  /** `ItemId` of an item shortcut, or -1 for a tool slot and for an empty one. */
+  readonly item: number;
+  /** The number key that selects it: 1–9, then 0 for the tenth slot. */
   readonly digit: number;
   readonly label: string;
   readonly hint: string;
@@ -241,6 +270,8 @@ export interface ZoneRow {
   readonly dry: number;
   readonly compost: number;
   readonly atRiskCents: number;
+  /** The slice of `atRiskCents` on crops within ~a minute of turning Day-Old ([[021]]). */
+  readonly imminentCents: number;
 }
 
 /**
@@ -266,6 +297,8 @@ export interface LotSlice {
   readonly wilting: number;
   readonly wilted: number;
   readonly atRiskCents: number;
+  /** Cents on crops within ~a minute of turning — the deadline the alert switches tense for. */
+  readonly imminentCents: number;
   /** Compost lying on the ground, waiting to be swept up. */
   readonly compost: number;
   readonly alert: LotAlert | null;
@@ -518,7 +551,13 @@ export const ZERO_UNLOCK: UnlockSlice = Object.freeze({
   etaSeconds: -1,
 });
 
-export const ZERO_POUCH: PouchSlice = Object.freeze({ version: 0, items: Object.freeze([]) });
+export const ZERO_POUCH: PouchSlice = Object.freeze({
+  version: 0,
+  items: Object.freeze([]),
+  canCharges: 0,
+  canChargesMax: 0,
+  shoreHeading: '',
+});
 
 export const ZERO_TOOLS: ToolSlice = Object.freeze({
   version: 0,
@@ -573,6 +612,7 @@ export const ZERO_LOT: LotSlice = Object.freeze({
   wilting: 0,
   wilted: 0,
   atRiskCents: 0,
+  imminentCents: 0,
   compost: 0,
   alert: null,
   machines: 0,

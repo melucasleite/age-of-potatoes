@@ -21,20 +21,27 @@
 
 import { Fragment } from 'react';
 
+import { ToolMode } from '@/game/input/tools';
+
 import { ItemIcon } from './ItemIcon';
 import { formatCentsWhole } from './format';
 import { formatFreshness, freshnessBand, isWarning } from './freshness';
 import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
-import type { PouchItem } from './types';
+import type { PouchItem, PouchSlice } from './types';
 
 /** Two-times an item frame. The chip strip is always on screen, so it pays rent by the pixel. */
 const POUCH_ICON = 32;
 
 export function Pouch() {
   const pouch = useHudSlice('pouch');
+  // The armed tool decides whether the can chip draws, and reading the tools slice here is
+  // cheaper than a second copy of the tool in the pouch slice — the two are already in the
+  // same snapshot, published by the same store.
+  const tools = useHudSlice('tools');
+  const canArmed = tools.tool === ToolMode.Water && pouch.canChargesMax > 0;
 
-  if (pouch.items.length === 0) {
+  if (pouch.items.length === 0 && !canArmed) {
     return (
       <div className={`${s.card} ${s.pouch}`}>
         <span className={s.pouchEmpty}>pockets empty</span>
@@ -44,6 +51,7 @@ export function Pouch() {
 
   return (
     <div className={`${s.card} ${s.pouch}`}>
+      {canArmed ? <CanChip pouch={pouch} divide={pouch.items.length > 0} /> : null}
       {pouch.items.map((item, index) => (
         <Fragment key={item.id}>
           {index === 0 ? null : <span className={s.pouchDivider} />}
@@ -67,6 +75,42 @@ export function Pouch() {
       ))}
     </div>
   );
+}
+
+/**
+ * The watering can's chip: pours left, against the eight it holds ([[009]]).
+ *
+ * DRAWN ONLY WHILE THE WATER TOOL IS ARMED — the can is the thing in your hand at that
+ * moment, and a permanent gauge would be one more number the eye learns to skip. While it IS
+ * armed the chip is always there, so "why did my pour do nothing" has a visible answer at
+ * the moment the question is asked: the sim refuses an empty can as a silent no-op (nothing
+ * spent, nothing lost), which means the STATE is the only tell the HUD can give.
+ *
+ * At zero it turns red and points at the water — gently, with a direction rather than a
+ * klaxon, because an empty can is not a failure. There is no fail state here (§4): the
+ * refill never fails at any shore at any level, so the chip's empty line is a promise, not
+ * a warning.
+ */
+function CanChip({ pouch, divide }: { pouch: PouchSlice; divide: boolean }) {
+  const empty = pouch.canCharges <= 0;
+  return (
+    <>
+      <span className={cx(s.canChip, empty && s.canChipEmpty)}>
+        {empty ? <span className={s.stackFreshMark} /> : null}
+        <span className={s.stackCount}>
+          {pouch.canCharges}/{pouch.canChargesMax}
+        </span>
+        <span className={s.stackLabel}>{empty ? emptyLine(pouch.shoreHeading) : 'can'}</span>
+      </span>
+      {divide ? <span className={s.pouchDivider} /> : null}
+    </>
+  );
+}
+
+/** "can empty — the water is north-west", or the reachable cases of the same sentence. */
+function emptyLine(shoreHeading: string): string {
+  if (shoreHeading === '') return 'can empty — click the water to refill';
+  return `can empty — the water is ${shoreHeading}`;
 }
 
 /**

@@ -31,8 +31,9 @@
 import { Direction } from '@snack/sim';
 
 import type { InputHost } from './context';
+import { digitToSlotIndex, hotbar, itemPlaceTool } from './hotbar';
 import type { InputSystem } from './system';
-import { TOOL_ORDER, ToolMode } from './tools';
+import { TOOL_INFO, ToolMode } from './tools';
 
 const DIRECTION_KEYS: Readonly<Record<string, Direction>> = {
   KeyW: Direction.North,
@@ -108,9 +109,11 @@ export class KeyboardInput {
     }
 
     // Everything below is UI state. None of it is a command and none of it is recorded.
-    const tool = numberKeyToTool(event.code);
-    if (tool !== null) {
-      this.host.setTool(tool);
+    // The menu-open check is for Digit0 alone: the menu swallows 1–9 in `handleMenuKey`,
+    // but 0 is not a menu jump, and arming a slot behind a modal would be a stealth click.
+    const digit = digitOf(event.code);
+    if (digit !== null) {
+      if (!this.system.menuOpen) this.armHotbarSlot(digit);
       return;
     }
 
@@ -187,6 +190,46 @@ export class KeyboardInput {
     return false;
   }
 
+  /**
+   * A digit, 1–9 or 0, outside the build menu: arm what the hotbar slot holds.
+   *
+   * An empty slot is a deliberate no-op — not a fall-through to some other meaning, because
+   * the digits belong to the bar now and a key that did something different depending on
+   * which slots were full would be a bar the fingers cannot learn.
+   *
+   * AN ITEM SHORTCUT CAN REFUSE, and the refusal is the belt's red price, not a surprise
+   * mid-click: with none of the item in the bag and not enough money to buy the machine
+   * outright, arming the cursor would offer a placement the sim is certain to throw away.
+   * With a box in the bag the placement is free (`PlaceMachine` opens the box first,
+   * [[054]]); with money it is a purchase; with neither, the press selects nothing. The
+   * check reads the latest projection — the same 150 ms-stale reading every price on the
+   * belt already runs on.
+   */
+  private armHotbarSlot(digit: number): void {
+    const entry = hotbar.entryAt(digitToSlotIndex(digit));
+    if (entry === null) return;
+    if (entry.kind === 'tool') {
+      this.host.setTool(entry.tool);
+      return;
+    }
+
+    const tool = itemPlaceTool(entry.item);
+    if (tool === -1) return;
+    const view = this.host.latestView();
+    if (view !== null) {
+      let bagged = 0;
+      for (const slot of view.inventory) {
+        if (slot.item === entry.item) {
+          bagged = slot.count;
+          break;
+        }
+      }
+      const cost = TOOL_INFO[tool].costCents;
+      if (bagged <= 0 && cost > 0 && view.moneyCents < cost) return;
+    }
+    this.host.setTool(tool);
+  }
+
   private readonly onKeyUp = (event: KeyboardEvent): void => {
     if (event.code === 'Space') {
       this.system.spaceHeld = false;
@@ -223,10 +266,4 @@ function digitOf(code: string): number | null {
   if (!code.startsWith('Digit')) return null;
   const digit = Number(code.slice(5));
   return Number.isInteger(digit) ? digit : null;
-}
-
-function numberKeyToTool(code: string): ToolMode | null {
-  const digit = digitOf(code);
-  if (digit === null) return null;
-  return TOOL_ORDER[digit - 1] ?? null;
 }

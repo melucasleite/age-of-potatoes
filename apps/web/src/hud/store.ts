@@ -34,14 +34,16 @@ import type { Command, WorldView } from '@snack/sim';
 import type { ToolMode } from '@/game/input/tools';
 
 import {
+  HarvestPace,
   censusMachines,
   createMachineCounts,
+  deriveCan,
   deriveClipboard,
   derivePouch,
   deriveTools,
   deriveUnlock,
 } from './derive';
-import type { MachineCounts, UnlockFields } from './derive';
+import type { CanFields, MachineCounts, UnlockFields } from './derive';
 import { createDockFields, deriveDock } from './derive-dock';
 import type { DockFields } from './derive-dock';
 import { createInventoryFields, deriveInventory } from './derive-inventory';
@@ -131,6 +133,7 @@ export class HudStore {
   private readonly shopScratch: ShopFields = createShopFields();
   private readonly inventoryScratch: InventoryFields = createInventoryFields();
   private readonly riskWatch = new RiskWatch();
+  private readonly harvestPace = new HarvestPace();
   private readonly unlockScratch: UnlockFields = {
     id: null,
     label: '',
@@ -222,6 +225,9 @@ export class HudStore {
     // could fire the sixty-second alert on the first publish, which is the exact
     // fire-immediately behaviour the delay exists to prevent.
     this.riskWatch.reset();
+    // Same rule for the whisper's hour clock: a fresh world does not inherit the last one's
+    // harvest baseline, or the first Clipboard read would difference two different farms.
+    this.harvestPace.reset();
     this.clipboardDueTick = -(2 ** 30);
     this.live.tick = 0;
     this.live.moneyCents = 0;
@@ -281,7 +287,7 @@ export class HudStore {
       this.unlockScratch,
     );
     if (this.setUnlock(unlock)) changed = true;
-    if (this.setPouch(derivePouch(view))) changed = true;
+    if (this.setPouch(derivePouch(view), deriveCan(view))) changed = true;
 
     // The bag is read BEFORE the toolbelt, and the order is load-bearing rather than tidy: a
     // placement tool for a machine the player has boxed costs nothing, so `setTools` needs this
@@ -299,7 +305,7 @@ export class HudStore {
 
     if (view.tick >= this.clipboardDueTick) {
       this.clipboardDueTick = view.tick + CLIPBOARD_PERIOD_TICKS;
-      if (this.setClipboard(deriveClipboard(view, this.counts))) changed = true;
+      if (this.setClipboard(deriveClipboard(view, this.counts, this.harvestPace))) changed = true;
     }
 
     // The live channel is updated unconditionally and notifies nobody. That is the point
@@ -336,6 +342,23 @@ export class HudStore {
    */
   selectTool(tool: ToolMode): void {
     this.selector?.(tool);
+  }
+
+  /**
+   * Re-derive the toolbelt slice after a HOTBAR LAYOUT change ([[061]]).
+   *
+   * The layout lives on the `hotbar` singleton — UI state in the input lane — so a drag
+   * that rearranges it changes nothing the ordinary publish path watches until the next
+   * world publish arrives, up to 150 ms later. A dropped icon that sits in the old slot for
+   * a beat before jumping reads as the drop having missed, so the mutating surface calls
+   * this immediately, exactly as `publishTool` exists for key presses. Money and the armed
+   * tool are read from what the store already holds; no world required.
+   */
+  refreshTools(): void {
+    if (this.owner === null) return;
+    if (!this.setTools(this.live.moneyCents, this.tools.tool as ToolMode)) return;
+    this.rebuildSnapshot();
+    this.notify();
   }
 
   /**
@@ -430,12 +453,17 @@ export class HudStore {
     return true;
   }
 
-  private setPouch(items: PouchItem[]): boolean {
-    const current = this.pouch.items;
-    if (current.length === items.length) {
+  private setPouch(items: PouchItem[], can: CanFields): boolean {
+    const current = this.pouch;
+    if (
+      current.items.length === items.length &&
+      current.canCharges === can.canCharges &&
+      current.canChargesMax === can.canChargesMax &&
+      current.shoreHeading === can.shoreHeading
+    ) {
       let same = true;
       for (let i = 0; i < items.length; i++) {
-        const a = current[i]!;
+        const a = current.items[i]!;
         const b = items[i]!;
         if (a.id !== b.id || a.count !== b.count) {
           same = false;
@@ -444,7 +472,13 @@ export class HudStore {
       }
       if (same) return false;
     }
-    this.pouch = Object.freeze({ version: this.pouch.version + 1, items: Object.freeze(items) });
+    this.pouch = Object.freeze({
+      version: current.version + 1,
+      items: Object.freeze(items),
+      canCharges: can.canCharges,
+      canChargesMax: can.canChargesMax,
+      shoreHeading: can.shoreHeading,
+    });
     return true;
   }
 
@@ -464,7 +498,15 @@ export class HudStore {
       for (let i = 0; i < slots.length; i++) {
         const a = current[i] as ToolSlot;
         const b = slots[i]!;
-        if (a.active !== b.active || a.affordable !== b.affordable || a.fromBox !== b.fromBox) {
+        // `tool` and `item` are compared because the layout itself can move now ([[061]]):
+        // a drag that swaps two slots changes neither affordability nor the active flag.
+        if (
+          a.tool !== b.tool ||
+          a.item !== b.item ||
+          a.active !== b.active ||
+          a.affordable !== b.affordable ||
+          a.fromBox !== b.fromBox
+        ) {
           same = false;
           break;
         }
@@ -644,6 +686,7 @@ export class HudStore {
       current.wilting === next.wilting &&
       current.wilted === next.wilted &&
       current.atRiskCents === next.atRiskCents &&
+      current.imminentCents === next.imminentCents &&
       current.compost === next.compost &&
       current.machines === next.machines &&
       current.running === next.running &&
@@ -682,6 +725,7 @@ export class HudStore {
       wilting: next.wilting,
       wilted: next.wilted,
       atRiskCents: next.atRiskCents,
+      imminentCents: next.imminentCents,
       compost: next.compost,
       alert: alert === null ? null : Object.freeze({ ...alert }),
       machines: next.machines,

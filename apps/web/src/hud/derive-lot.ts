@@ -40,6 +40,8 @@ import {
   LampState,
   MachineKind,
   TICKS_PER_SECOND,
+  WILT_GRACE_TICKS,
+  WILT_WINDOW_TICKS,
   WiltStage,
   cropSpec,
   dayOldPriceCents,
@@ -61,11 +63,25 @@ export const BLEED_THRESHOLD_TICKS = 60 * TICKS_PER_SECOND;
 /** What one tile's worth of compost fetches, if the crop is left to collapse into it. */
 const COMPOST_VALUE_CENTS = COMPOST_PER_CROP * listPriceCents(ItemId.Compost);
 
+/**
+ * The tick a matured crop turns Day-Old, on its own clock (`readyAge`). The one boundary the
+ * DEADLINE phrasing below counts down to — `wiltStageForAge`'s middle fence, restated from
+ * the same two exported constants so it cannot drift from the sim's.
+ */
+const TURNS_AT_AGE = WILT_GRACE_TICKS + WILT_WINDOW_TICKS;
+
 export interface LotFields {
   zones: ZoneRow[];
   wilting: number;
   wilted: number;
   atRiskCents: number;
+  /**
+   * The slice of `atRiskCents` on crops within ~60 seconds of TURNING Day-Old ([[021]]'s
+   * alert copy). When this is non-zero the alert stops describing a slow bleed and states
+   * the deadline — "$N of crops wilt in about a minute" — because a discount that lands in
+   * under a minute is a different sentence from one that has merely been possible for one.
+   */
+  imminentCents: number;
   compost: number;
   alert: LotAlert | null;
   machines: number;
@@ -83,6 +99,7 @@ export function createLotFields(): LotFields {
     wilting: 0,
     wilted: 0,
     atRiskCents: 0,
+    imminentCents: 0,
     compost: 0,
     alert: null,
     machines: 0,
@@ -138,6 +155,9 @@ export class RiskWatch {
 /** Per-zone risk accumulator, reused across publishes so the sweep allocates nothing. */
 const ZONE_RISK = new Map<number, number>();
 
+/** Its deadline twin: per-zone cents on crops within a minute of turning. */
+const ZONE_IMMINENT = new Map<number, number>();
+
 /**
  * One pass over the field and one over the machines.
  *
@@ -149,10 +169,12 @@ const ZONE_RISK = new Map<number, number>();
 export function deriveLot(view: WorldView, watch: RiskWatch, out: LotFields): LotFields {
   const field = view.field;
   ZONE_RISK.clear();
+  ZONE_IMMINENT.clear();
 
   let wilting = 0;
   let wilted = 0;
   let atRisk = 0;
+  let imminent = 0;
   let compost = 0;
 
   for (let i = 0; i < field.crop.length; i++) {
@@ -174,15 +196,24 @@ export function deriveLot(view: WorldView, watch: RiskWatch, out: LotFields): Lo
 
     atRisk += tileRisk;
 
+    // Within a minute of going Day-Old? `readyAge` is the crop's own clock; the fence is the
+    // sim's (`TURNS_AT_AGE`), and the window is the same sixty seconds every alert here runs
+    // on. Only a DROOPING crop has this deadline — a turned one is already paying it.
+    const turnsIn = stage === WiltStage.Wilting ? TURNS_AT_AGE - (field.readyAge[i] ?? 0) : -1;
+    const isImminent = turnsIn >= 0 && turnsIn <= BLEED_THRESHOLD_TICKS;
+    if (isImminent) imminent += tileRisk;
+
     const zoneId = field.zone[i] ?? 0;
     if (zoneId !== 0 && tileRisk > 0) {
       ZONE_RISK.set(zoneId, (ZONE_RISK.get(zoneId) ?? 0) + tileRisk);
+      if (isImminent) ZONE_IMMINENT.set(zoneId, (ZONE_IMMINENT.get(zoneId) ?? 0) + tileRisk);
     }
   }
 
   out.wilting = wilting;
   out.wilted = wilted;
   out.atRiskCents = atRisk;
+  out.imminentCents = imminent;
   out.compost = compost;
 
   out.zones.length = 0;
@@ -198,6 +229,7 @@ export function deriveLot(view: WorldView, watch: RiskWatch, out: LotFields): Lo
       dry: zone.dry,
       compost: zone.compost,
       atRiskCents: ZONE_RISK.get(zone.id) ?? 0,
+      imminentCents: ZONE_IMMINENT.get(zone.id) ?? 0,
     });
   }
 
@@ -254,6 +286,13 @@ function censusMachines(view: WorldView, out: LotFields): void {
  *
  * The money comes first in the sentence's weight and last in its word order, which is where
  * the eye lands. "$84 at risk" is the part a player who reads three words will read.
+ *
+ * TWO TENSES, ONE SLOT. With a real deadline inside the next minute the alert switches to
+ * [[021]]'s copy — "$N of crops wilt in about a minute" — and N is the imminent slice only,
+ * priced by the same under-claiming rule as everything else (the discount about to be eaten,
+ * never the crop). The sixty-second ARMING is unchanged either way: a drooping window is five
+ * minutes long, so by the time any crop is a minute from turning the bleed has been running
+ * for four — the deadline phrasing cannot fire early, only speak more plainly.
  */
 function buildAlert(lot: LotFields): LotAlert | null {
   if (lot.atRiskCents <= 0) return null;
@@ -269,10 +308,25 @@ function buildAlert(lot: LotFields): LotAlert | null {
   // rotting being told nothing because they never drew a rectangle.
   if (worst === null) {
     const count = lot.wilting + lot.wilted;
+    if (lot.imminentCents > 0) {
+      return {
+        id: 'wilt-lot',
+        text: deadlinePhrase(lot.imminentCents),
+        costCents: lot.imminentCents,
+      };
+    }
     return {
       id: 'wilt-lot',
       text: `${phrase(count, lot.wilting, lot.wilted)} — ${formatCentsWhole(lot.atRiskCents)} at risk`,
       costCents: lot.atRiskCents,
+    };
+  }
+
+  if (worst.imminentCents > 0) {
+    return {
+      id: `wilt-zone-${worst.id}`,
+      text: `${worst.name}: ${deadlinePhrase(worst.imminentCents)}`,
+      costCents: worst.imminentCents,
     };
   }
 
@@ -282,6 +336,11 @@ function buildAlert(lot: LotFields): LotAlert | null {
     text: `${worst.name}: ${phrase(count, worst.wilting, worst.wilted)} — ${formatCentsWhole(worst.atRiskCents)} at risk`,
     costCents: worst.atRiskCents,
   };
+}
+
+/** "$8 of crops wilt in about a minute" — the deadline tense, cash first ([[021]]). */
+function deadlinePhrase(imminentCents: number): string {
+  return `${formatCentsWhole(imminentCents)} of crops wilt in about a minute`;
 }
 
 /**

@@ -10,17 +10,26 @@
 // keeps anything built here.
 
 import {
+  BOT_CARRY_CAPACITY,
+  BOT_SPEED_SUBTILES_PER_100_TICKS,
+  BOT_WORK_TICKS,
+  HAND_REACH_SUBTILES,
   ItemId,
   LampState,
   MachineKind,
+  SUBTILE,
   TICKS_PER_SECOND,
   itemSpec,
   machineSpec,
 } from '@snack/sim';
 import type { ItemSpec, WorldView } from '@snack/sim';
 
-import { TOOL_INFO, TOOL_ORDER, toolMachineKind } from '@/game/input/tools';
-import type { ToolMode } from '@/game/input/tools';
+// Relative rather than the `@/` alias, like `derive-inventory.ts` and for its reason: vitest
+// runs with no config in this repo, and this module is now under test (`whisper.test.ts`,
+// `can.test.ts`) — an alias here is a module the tests cannot follow.
+import { hotbar, itemPlaceTool, slotIndexToDigit } from '../game/input/hotbar';
+import { TOOL_INFO, toolMachineKind } from '../game/input/tools';
+import type { ToolMode } from '../game/input/tools';
 
 import { countWord, formatCents, plural } from './format';
 import { freshnessBand } from './freshness';
@@ -241,9 +250,88 @@ export function derivePouch(view: WorldView): PouchItem[] {
   return items;
 }
 
-// --- the toolbelt ------------------------------------------------------------------
+// --- the watering can ----------------------------------------------------------------
+
+export interface CanFields {
+  canCharges: number;
+  canChargesMax: number;
+  shoreHeading: string;
+}
 
 /**
+ * The can's pours and which way the water is ([[009]]).
+ *
+ * Charges are READ, never counted here — `view.player.canCharges` is the sim's number, and
+ * `canCharges === 0` is the whole refusal story the HUD tells: a pour at zero is a silent
+ * no-op in the projection (no event, nothing spent), so the tell has to be state the chip can
+ * always draw, not a flash it would have to catch.
+ */
+export function deriveCan(view: WorldView): CanFields {
+  return {
+    canCharges: view.player.canCharges,
+    canChargesMax: view.player.canChargesMax,
+    shoreHeading: shoreHeadingFor(view),
+  };
+}
+
+/**
+ * Which way the nearest water is, eight-point quantised — `deriveShop`'s `headingTo`
+ * convention, measured to the nearest point of the reservoir's RECT rather than its centre,
+ * because that is where `applyRefillCan` measures reach and a pond is wide: the centre of a
+ * big pond can be north-east while its bank is due east at your feet.
+ *
+ * '' means "nothing to point at": already within dipping reach, or a world with no
+ * reservoir at all — where the refill legally works anywhere (§4's guarantee is about the
+ * can, not the pond) and an arrow would point at nothing.
+ */
+function shoreHeadingFor(view: WorldView): string {
+  const px = view.player.xSub;
+  const py = view.player.ySub;
+
+  let bestDx = 0;
+  let bestDy = 0;
+  let bestDist = -1;
+
+  for (const r of view.reservoirs) {
+    const x0 = r.tileX * SUBTILE;
+    const x1 = (r.tileX + r.tilesWide) * SUBTILE;
+    const y0 = r.tileY * SUBTILE;
+    const y1 = (r.tileY + r.tilesHigh) * SUBTILE;
+    const nx = Math.min(Math.max(px, x0), x1);
+    const ny = Math.min(Math.max(py, y0), y1);
+    const dx = nx - px;
+    const dy = ny - py;
+    const dist = dx * dx + dy * dy;
+    if (bestDist < 0 || dist < bestDist) {
+      bestDist = dist;
+      bestDx = dx;
+      bestDy = dy;
+    }
+  }
+
+  if (bestDist < 0) return '';
+  if (bestDist <= HAND_REACH_SUBTILES * HAND_REACH_SUBTILES) return '';
+
+  const ax = Math.abs(bestDx);
+  const ay = Math.abs(bestDy);
+  const northSouth = bestDy < 0 ? 'north' : 'south';
+  const eastWest = bestDx < 0 ? 'west' : 'east';
+  if (ax > ay * 2) return eastWest;
+  if (ay > ax * 2) return northSouth;
+  return `${northSouth}-${eastWest}`;
+}
+
+// --- the hotbar ----------------------------------------------------------------------
+
+/**
+ * The bar's slots, read off the `hotbar` singleton's layout ([[061]]).
+ *
+ * The LAYOUT lives in the input lane and this function only prices it: an item shortcut
+ * resolves to its placement cursor through the same chain the bag's Place button uses, and
+ * then gets exactly the affordability arithmetic a tool slot gets. `active` marks any slot
+ * whose resolved tool is the armed one — pressing 7 and clicking the bag's Place button for
+ * the same machine light the same slot, because they armed the same cursor.
+ *
  * @param boxedKinds `MachineKind`s the player is carrying at least one box of. A placement tool
  * for one of these costs nothing, because `PlaceMachine` opens the box before it reaches for
  * money ([[054]]) — so the slot must not quote a price, and must not grey itself out at $0.
@@ -253,14 +341,48 @@ export function deriveTools(
   active: ToolMode,
   boxedKinds: readonly number[],
 ): ToolSlot[] {
-  return TOOL_ORDER.map((tool, index) => {
+  return hotbar.slots.map((entry, index) => {
+    const digit = slotIndexToDigit(index);
+    if (entry === null) {
+      return {
+        tool: -1,
+        item: -1,
+        digit,
+        label: '',
+        hint: 'empty — drag something placeable from the bag',
+        costCents: 0,
+        affordable: 1,
+        active: 0,
+        fromBox: 0,
+      };
+    }
+
+    const item = entry.kind === 'item' ? entry.item : -1;
+    const tool = entry.kind === 'tool' ? entry.tool : itemPlaceTool(entry.item);
+    if (tool === -1) {
+      // An item shortcut this build has no cursor for — a layout saved by a newer build,
+      // honestly disabled rather than arming the wrong thing (the bag makes the same call).
+      return {
+        tool: -1,
+        item,
+        digit,
+        label: itemName(item),
+        hint: 'nothing in this build places one of these',
+        costCents: 0,
+        affordable: 0,
+        active: 0,
+        fromBox: 0,
+      };
+    }
+
     const info = TOOL_INFO[tool];
     const kind = toolMachineKind(tool);
     const fromBox = kind !== null && boxedKinds.includes(kind) ? 1 : 0;
     return {
       tool,
-      digit: index + 1,
-      label: info.label,
+      item,
+      digit,
+      label: item === -1 ? info.label : itemName(item),
       hint: info.hint,
       costCents: info.costCents,
       affordable: fromBox === 1 || info.costCents === 0 || moneyCents >= info.costCents ? 1 : 0,
@@ -294,7 +416,82 @@ const FIELD_SAMPLE = {
   bare: 0,
 };
 
-export function deriveClipboard(view: WorldView, counts: MachineCounts): ClipboardNote[] {
+/**
+ * Hand-harvests inside the CURRENT dawn-aligned hour — the "this hour" in §2's promotion
+ * whisper, measured rather than gestured at.
+ *
+ * The sim's hour ledger (`StatsView.hours`) does not split harvests by hand/machine, so the
+ * split is differenced HERE: baseline `itemsHarvestedByHand` at the moment the open hour
+ * changes, delta since. Owned by the store and reset on `claim()`, like `RiskWatch`, and for
+ * the same reason — "since the hour began" is the one question a stateless projection cannot
+ * answer. First observation mid-hour baselines at the current count, so the figure
+ * UNDER-claims for the first hour after a load; the house discipline for every cash and
+ * count figure in this HUD (see `derive-lot.ts`'s header) is to under-claim.
+ */
+export class HarvestPace {
+  private hourKey = Number.MIN_SAFE_INTEGER;
+  private baseline = 0;
+  private lastTick = -1;
+
+  reset(): void {
+    this.hourKey = Number.MIN_SAFE_INTEGER;
+    this.baseline = 0;
+    this.lastTick = -1;
+  }
+
+  /** Fold in one publish and answer the hand-harvest count since the open hour began. */
+  thisHour(view: WorldView): number {
+    // Time ran backwards: a save was loaded under the same store. Start over.
+    if (view.tick < this.lastTick) this.reset();
+    this.lastTick = view.tick;
+
+    const hours = view.stats.hours;
+    const open = hours.length === 0 ? null : hours[hours.length - 1]!;
+    const key = open === null ? -1 : open.hour;
+    const harvested = view.stats.itemsHarvestedByHand;
+
+    if (key !== this.hourKey) {
+      this.hourKey = key;
+      this.baseline = harvested;
+    }
+    // A baseline above the count means the world changed without the hour key moving —
+    // clamp rather than report a negative harvest.
+    if (harvested < this.baseline) this.baseline = harvested;
+    return harvested - this.baseline;
+  }
+}
+
+/**
+ * The Harvester Dock bot's pace, in ticks per crop, from its sim spec and nothing else.
+ *
+ * The constants are the sim's (`BOT_WORK_TICKS`, `BOT_SPEED_SUBTILES_PER_100_TICKS`,
+ * `BOT_CARRY_CAPACITY`); the two geometric assumptions are stated here because they are the
+ * only numbers that are not: plants one tile apart (a worked zone is contiguous), and a
+ * two-tile walk each way to unload every armful (the dock sits at the zone's edge). Roughly
+ * 24 ticks a crop — the whisper rounds THROUGH this figure, never states it.
+ */
+const BOT_TICKS_PER_TILE = (SUBTILE * 100) / BOT_SPEED_SUBTILES_PER_100_TICKS;
+const BOT_TICKS_PER_CROP =
+  BOT_WORK_TICKS +
+  BOT_TICKS_PER_TILE +
+  (BOT_WORK_TICKS + 4 * BOT_TICKS_PER_TILE) / BOT_CARRY_CAPACITY;
+
+/** "about 40 seconds" / "about 3 minutes" — how long the bot would take over `crops` pulls. */
+export function botCatchUpPhrase(crops: number): string {
+  const seconds = Math.ceil((crops * BOT_TICKS_PER_CROP) / TICKS_PER_SECOND);
+  if (seconds < 75) return `about ${countWord(Math.max(1, seconds))} seconds`;
+  const minutes = Math.round(seconds / 60);
+  return `about ${countWord(minutes)} ${plural(minutes, 'minute', 'minutes')}`;
+}
+
+/** Enough pulls for the comparison to be worth a line. Below this the hour is small talk. */
+const WHISPER_MIN_HARVESTS = 12;
+
+export function deriveClipboard(
+  view: WorldView,
+  counts: MachineCounts,
+  pace: HarvestPace,
+): ClipboardNote[] {
   const field = view.field;
   FIELD_SAMPLE.ripe = 0;
   FIELD_SAMPLE.dryPlanted = 0;
@@ -413,6 +610,20 @@ export function deriveClipboard(view: WorldView, counts: MachineCounts): Clipboa
   if (counts.starved > 0 && russets === 0) {
     add(56, 'starved', 'nudge', 'The kitchen is idle with nothing to fry.');
   }
+  // §2's promotion whisper, verbatim in spirit and computed in fact: hand output this hour
+  // against what the purchasable device would have done with the same crops, from its spec.
+  // An OBSERVATION — it states two facts and stops; the purchase is the player's inference.
+  // Silent once a dock is owned (the whisper's work is done) and silent on a small hour
+  // (comparing a machine to four potatoes is nagging, not observing).
+  const handPulls = pace.thisHour(view);
+  if (handPulls >= WHISPER_MIN_HARVESTS && !ownsHarvesterDock(view)) {
+    add(
+      55,
+      'bot-pace',
+      'nudge',
+      `You pulled ${countWord(handPulls)} crops by hand this hour. A Harvester Dock's bot would have caught them in ${botCatchUpPhrase(handPulls)}, and it never straightens its back.`,
+    );
+  }
   if (counts.sprinklers === 0 && stats.totalManualTouches >= 24) {
     add(
       54,
@@ -457,6 +668,13 @@ function countOf(view: WorldView, item: ItemId): number {
     if (slot.item === item) return slot.count;
   }
   return 0;
+}
+
+function ownsHarvesterDock(view: WorldView): boolean {
+  for (const machine of view.machines) {
+    if (machine.kind === MachineKind.HarvesterDock) return true;
+  }
+  return false;
 }
 
 /**

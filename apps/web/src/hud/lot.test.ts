@@ -24,6 +24,7 @@
 // see the agent logs on work items 021 and 040 for what was and was not checked for real.
 
 import { describe, expect, it } from 'vitest';
+import { WILT_GRACE_TICKS, WILT_WINDOW_TICKS } from '@snack/sim';
 import type { WorldView } from '@snack/sim';
 
 import { BLEED_THRESHOLD_TICKS, RiskWatch, createLotFields, deriveLot } from './derive-lot';
@@ -42,16 +43,33 @@ const FRESH = 0;
 const WILTING = 1;
 const WILTED = 2;
 
+/**
+ * Each stage's default crop-clock reading: freshly matured, JUST drooped (a full five-minute
+ * window from turning — deliberately outside the deadline phrasing), and just turned. Tests
+ * that care about the deadline pass explicit ages instead.
+ */
+function defaultAgeFor(stage: number): number {
+  if (stage === WILTING) return WILT_GRACE_TICKS;
+  if (stage === WILTED) return WILT_GRACE_TICKS + WILT_WINDOW_TICKS;
+  return 0;
+}
+
 /** A field of `stages.length` planted russets, one tile each, no zones unless given. */
 function viewWith(
   stages: number[],
-  options: { tick?: number; zone?: number[]; zones?: WorldView['zones'] } = {},
+  options: {
+    tick?: number;
+    zone?: number[];
+    zones?: WorldView['zones'];
+    readyAge?: number[];
+  } = {},
 ): WorldView {
   return {
     tick: options.tick ?? 0,
     field: {
       crop: stages.map(() => RUSSET),
       wilt: stages,
+      readyAge: options.readyAge ?? stages.map(defaultAgeFor),
       fertility: stages.map(() => 1),
       compost: stages.map(() => 0),
       zone: options.zone ?? stages.map(() => 0),
@@ -136,6 +154,107 @@ describe('the sixty-second delay', () => {
     // Time ran backwards: a save was loaded. The old run described a different field.
     const lot = deriveLot(viewWith([WILTING], { tick: 10 }), watch, fields);
     expect(lot.alert).toBeNull();
+  });
+});
+
+describe("the deadline tense ([[021]]'s copy)", () => {
+  /** A drooping crop one minute from turning — exactly on the deadline fence. */
+  const NEARLY_TURNED = WILT_GRACE_TICKS + WILT_WINDOW_TICKS - BLEED_THRESHOLD_TICKS;
+
+  it('keeps the bleed phrasing while the turn is still minutes away', () => {
+    const watch = new RiskWatch();
+    const fields = createLotFields();
+    deriveLot(viewWith([WILTING], { tick: 0 }), watch, fields);
+    const lot = deriveLot(viewWith([WILTING], { tick: BLEED_THRESHOLD_TICKS }), watch, fields);
+
+    expect(lot.imminentCents).toBe(0);
+    expect(lot.alert!.text).toContain('at risk');
+    expect(lot.alert!.text).not.toContain('about a minute');
+  });
+
+  it('switches to "$N of crops wilt in about a minute" inside the last minute', () => {
+    const watch = new RiskWatch();
+    const fields = createLotFields();
+    const args = { readyAge: [NEARLY_TURNED] };
+    deriveLot(viewWith([WILTING], { ...args, tick: 0 }), watch, fields);
+    const lot = deriveLot(
+      viewWith([WILTING], { ...args, tick: BLEED_THRESHOLD_TICKS }),
+      watch,
+      fields,
+    );
+
+    expect(lot.imminentCents).toBe(WILTING_RISK_CENTS);
+    expect(lot.alert).not.toBeNull();
+    expect(lot.alert!.text).toBe('$1 of crops wilt in about a minute');
+    expect(lot.alert!.costCents).toBe(WILTING_RISK_CENTS);
+  });
+
+  it('cannot fire before the sixty-second arming — the deadline only rephrases', () => {
+    const watch = new RiskWatch();
+    const fields = createLotFields();
+    // The crop is a minute from turning, but the bleed has only just been noticed.
+    const lot = deriveLot(
+      viewWith([WILTING], { readyAge: [NEARLY_TURNED], tick: 0 }),
+      watch,
+      fields,
+    );
+    expect(lot.imminentCents).toBe(WILTING_RISK_CENTS);
+    expect(lot.alert).toBeNull();
+  });
+
+  it('prices the deadline at the imminent slice only, not the whole field', () => {
+    const watch = new RiskWatch();
+    const fields = createLotFields();
+    // Two droopers: one a minute from turning, one with the full window ahead of it.
+    const args = { readyAge: [NEARLY_TURNED, WILT_GRACE_TICKS] };
+    deriveLot(viewWith([WILTING, WILTING], { ...args, tick: 0 }), watch, fields);
+    const lot = deriveLot(
+      viewWith([WILTING, WILTING], { ...args, tick: BLEED_THRESHOLD_TICKS }),
+      watch,
+      fields,
+    );
+
+    expect(lot.atRiskCents).toBe(WILTING_RISK_CENTS * 2);
+    expect(lot.imminentCents).toBe(WILTING_RISK_CENTS);
+    expect(lot.alert!.costCents).toBe(WILTING_RISK_CENTS);
+  });
+
+  it('a crop one tick outside the minute does not count as imminent', () => {
+    const lot = deriveLot(
+      viewWith([WILTING], { readyAge: [NEARLY_TURNED - 1] }),
+      new RiskWatch(),
+      createLotFields(),
+    );
+    expect(lot.imminentCents).toBe(0);
+  });
+
+  it('names the worst zone in the deadline tense too', () => {
+    const watch = new RiskWatch();
+    const fields = createLotFields();
+    const zones = [
+      {
+        id: 1,
+        name: 'North Field',
+        tiles: 1,
+        planted: 1,
+        mature: 0,
+        wilting: 1,
+        wilted: 0,
+        dry: 0,
+        compost: 0,
+      },
+    ] as unknown as WorldView['zones'];
+    const args = { zone: [1], zones, readyAge: [NEARLY_TURNED] };
+
+    deriveLot(viewWith([WILTING], { ...args, tick: 0 }), watch, fields);
+    const lot = deriveLot(
+      viewWith([WILTING], { ...args, tick: BLEED_THRESHOLD_TICKS }),
+      watch,
+      fields,
+    );
+
+    expect(lot.alert).not.toBeNull();
+    expect(lot.alert!.text).toBe('North Field: $1 of crops wilt in about a minute');
   });
 });
 

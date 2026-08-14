@@ -21,7 +21,7 @@ import { Clipboard } from './Clipboard';
 import { DockCard } from './DockCard';
 import { FieldCard } from './FieldCard';
 import { InventoryPanel, InventoryToggle } from './Inventory';
-import { s } from './styles';
+import { cx, s } from './styles';
 import { PerfOverlay } from './PerfOverlay';
 import { Pouch } from './Pouch';
 import { SaveNotices } from './SaveNotices';
@@ -95,7 +95,15 @@ export default function HudRoot() {
         one thing here the player actually aims at, and the lower-left corner belongs to
         the audio layer's click-to-start gate ([[014]]), which must not end up underneath it.
       */}
-        <div className={`${s.corner} ${s.bottomCentre}`}>
+        {/*
+        While the bag is open its scrim (z-index 20) covers the lot — but the toolbelt is
+        the DROP TARGET for the bag's drag-to-assign ([[061]]), so this one stack floats
+        above the scrim for exactly as long as that panel is up. The other panels leave the
+        stacking alone: nothing drags out of the research tree.
+      */}
+        <div
+          className={cx(s.corner, s.bottomCentre, panels.open === 'inventory' && s.bottomRaised)}
+        >
           <StatusRibbon />
           <Pouch />
           <Toolbelt />
@@ -151,8 +159,8 @@ type PanelName = 'research' | 'shop' | 'inventory';
  *
  * The keys are bound here rather than in `input/keyboard.ts` because they toggle DOM panels
  * that the input system has no business knowing exist. They are chosen from what that layer
- * leaves free: digits 1–6, B, R, C, +, −, Escape, F3, backtick, space and WASD are all spoken
- * for, and an unhandled code falls through its switch untouched. T for the tree, G for goods,
+ * leaves free: digits 1–9 and 0 (the hotbar, [[061]]), B, R, C, +, −, Escape, F3, backtick,
+ * space and WASD are all spoken for, and an unhandled code falls through its switch untouched. T for the tree, G for goods,
  * I for the bag — the one letter a player will try without being told.
  */
 function usePanels(): {

@@ -56,6 +56,7 @@ import type { ToolMode } from '@/game/input/tools';
 import { ItemIcon } from './ItemIcon';
 import { formatCents } from './format';
 import { freshnessBand, freshnessNote, isWarning } from './freshness';
+import { beginHotbarDrag } from './hotbar-drag';
 import { hudStore } from './store';
 import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
@@ -355,6 +356,14 @@ function Slot({
           : `${row.name}, ${row.count}`
       }
       onMouseDown={keepFocus}
+      // EVERY cell is draggable towards the hotbar, placeable or not — the refusal happens
+      // at the DROP, as a flash on the slot ([[061]]), because "you cannot shortcut a
+      // potato" is an answer worth giving where the player is looking, and a cell that
+      // simply would not pick up would read as a dead mouse button. Under the movement
+      // threshold this is inert and the ordinary select-click proceeds untouched.
+      onPointerDown={(event) =>
+        beginHotbarDrag(event, { type: 'item', item: row.id, placeTool: row.placeTool })
+      }
       onClick={() => onSelect(row.id)}
     >
       <ItemIcon item={row.id} size={SLOT_ICON} />

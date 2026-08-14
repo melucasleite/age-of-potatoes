@@ -5,20 +5,23 @@
 // does not know which tool is selected and must not: legality is decided from world state
 // alone, so a replay does not depend on which button was lit.
 //
-// TWO SEPARATE SURFACES, AND THE SPLIT IS DELIBERATE.
+// TWO SEPARATE SURFACES, AND THE SPLIT IS STILL DELIBERATE.
 //
-//   `TOOL_ORDER` is the six-slot toolbelt along the bottom of the HUD, bound to digits
-//   1–6. It is the *hand* — the verbs you use constantly. It has exactly six entries and
-//   should keep having exactly six: the HUD derives one button per entry and one digit
-//   per button, so a seventh entry silently costs a keyboard shortcut and a fifteenth
-//   would need a scrollbar.
+//   The HOTBAR (`hotbar.ts`, superseding the fixed six-slot `TOOL_ORDER` belt this header
+//   used to argue for — [[061]]) is ten assignable slots along the bottom of the HUD,
+//   bound to digits 1–9 and 0. It is the *hand*: the five hand verbs sit on it always and
+//   cannot be removed, and the player fills the rest by dragging placeable items out of
+//   the bag. What changed from the old argument is only WHO decides what is positional —
+//   the layout is the player's now, not this file's. What did not change: a slot is still
+//   one digit of muscle memory, and the bar still does not scroll.
 //
 //   `BUILD_CATALOGUE` (build-menu.ts) is everything you *buy*: zones, belts, arms, and
-//   the five chip-line machines. It lives behind `B`, is navigated with the arrow keys,
-//   and grows without bound because nothing about it is positional.
+//   every machine. It lives behind `B`, is navigated with the arrow keys, and grows
+//   without bound because nothing about it is positional. The hotbar adds shortcuts INTO
+//   this catalogue; it does not replace it.
 //
-// Adding the fifteen buildables to the toolbelt instead would have been fewer files and
-// the wrong shape. The toolbelt is muscle memory; the build menu is a shopping list.
+// The hotbar is muscle memory; the build menu is a shopping list. A shortcut the player
+// placed themselves is the one kind of belt entry that is both.
 
 import {
   BeltTier,
@@ -97,6 +100,25 @@ export const ToolMode = {
   BuyDeed: 20,
 
   /**
+   * Spend one repair kit on a spot, servicing every machine around it (`UseRepairKit`).
+   *
+   * A CURSOR FOR A CONSUMABLE, AND THE DECISION IS WORTH RECORDING. The kit is bought at the
+   * roadside stand (it is a good, not a machine), so it has no build-menu row; and it is not a
+   * mandatory hand tool, because a permanent digit for an item the player may own zero of would
+   * be a dead key on the bar. It reaches the hand the same way a boxed machine does ([[061]]):
+   * `itemPlaceTool()` resolves `ItemId.RepairKit` to this cursor, so dragging the kit out of
+   * the bag onto the hotbar gives it a digit, and pressing that digit arms this. The sim
+   * refuses a click that would waste the kit — no machine in range wants anything — so a
+   * misclick never eats the $8 (`applyUseRepairKit`'s own rule).
+   *
+   * OUT OF REACH DOES NOT WALK, unlike the hand verbs: the sim has no `IntentAction` for the
+   * kit, and inventing one is a sim-lane change (trace format, save allowlist). Until it
+   * exists, an out-of-reach click is refused by the reducer like any other — the same
+   * "refusing with the existing affordance is fine" ruling item 052 made for rotation.
+   */
+  UseRepairKit: 30,
+
+  /**
    * Take anything off the lot ([[054]], widened by [[060]]).
    *
    * ONE CURSOR FOR EVERY REMOVAL IN THE GAME. It began as "Box Up" and worked on machines
@@ -110,11 +132,10 @@ export const ToolMode = {
    * cash, and everything else is refunded on the spot. The money verb for a boxed machine is
    * still `SellBoxedMachine`, from the inventory panel, one deliberate step later.
    *
-   * IN THE BUILD PALETTE THOUGH IT BUYS NOTHING, and that is a considered exception to the
-   * header above rather than an oversight. The toolbelt is six slots of muscle memory and
-   * full; this is the inverse of the rows next to it — you arm it, you drag, the lot changes
-   * — so it belongs to the surface that edits the lot rather than to the one you reach for
-   * every ten seconds.
+   * IN THE BUILD PALETTE IT ALSO SITS, though it buys nothing — you arm it, you drag, the
+   * lot changes, so it belongs with the rows that edit the lot. Since [[061]] it is ALSO a
+   * mandatory hotbar tool (`HOTBAR_TOOLS`): "how do I get rid of this?" now has one answer
+   * and one digit, and a player cannot rearrange themselves out of owning it.
    */
   Deconstruct: 19,
 } as const;
@@ -122,8 +143,9 @@ export const ToolMode = {
 export type ToolMode = (typeof ToolMode)[keyof typeof ToolMode];
 
 /**
- * The toolbelt. SIX ENTRIES, bound to digits 1–6 — see the header before adding a
- * seventh. Buildables go in `BUILD_CATALOGUE`.
+ * The OLD fixed belt order, kept for exactly one reader: the hidden in-canvas fallback HUD
+ * (`render/hud.ts`), which never grew a hotbar because it draws nothing. The live surface
+ * is `hotbar.ts` — new tools go in `HOTBAR_TOOLS` there, not here.
  */
 export const TOOL_ORDER: readonly ToolMode[] = [
   ToolMode.Hand,
@@ -349,6 +371,15 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     label: 'Planter Dock',
     hint: 'clear 2x2 — fill the hopper and point it at a zone',
     costCents: machinePrice(MachineKind.PlanterDock),
+    gesture: 'click',
+  },
+
+  [ToolMode.UseRepairKit]: {
+    label: 'Repair Kit',
+    // The radius sentence, because the kit's whole price argument is the cell, not the machine:
+    // hand repair is free forever, and what $8 buys is every machine around one spot at once.
+    hint: 'click among your machines — one kit services everything around the spot',
+    costCents: 0,
     gesture: 'click',
   },
 

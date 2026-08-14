@@ -438,7 +438,25 @@ export function primaryCommand(
 
   switch (tool) {
     case ToolMode.Water:
+      // THE CAN REFILLS ON THE SAME TOOL, per [[009]]'s ruling: clicking the water with the
+      // watering can armed is a dip, not a pour. No separate refill tool exists and none
+      // should — the can is one object and the tile under the cursor says which verb it
+      // means. The sim re-checks everything (`applyRefillCan` never fails AT a shore, and
+      // refuses a full can rather than consuming the click).
+      if (reservoirAtTile(view, tile.tileX, tile.tileY)) return { type: 'RefillCan' };
+      // A world with NO water at all is the one place the refill is legal anywhere (§4's
+      // guarantee is about the can, not the pond) — and the one place the water-tile gate
+      // above could never fire. An empty can there dips on the next pour-click instead of
+      // dead-clicking forever; a can with pours left keeps pouring.
+      if (view.reservoirs.length === 0 && view.player.canCharges === 0) {
+        return { type: 'RefillCan' };
+      }
       return { type: 'WaterTile', tileX: tile.tileX, tileY: tile.tileY };
+    // The repair kit: one click spends one kit on a spot and services the cell around it.
+    // The command carries the tile, never a machine id — plan §4's "one trip services a
+    // cell" is the sim's shape, and this side only aims it.
+    case ToolMode.UseRepairKit:
+      return { type: 'UseRepairKit', tileX: tile.tileX, tileY: tile.tileY };
     case ToolMode.Plant:
       return { type: 'PlantTile', tileX: tile.tileX, tileY: tile.tileY, crop: V01_CROP };
     case ToolMode.Harvest:
@@ -520,6 +538,19 @@ export function reachAdjusted(view: WorldView, tile: HoverTile, direct: Command)
       );
     case 'HarvestTile':
       return tileErrand(view, direct, IntentAction.Harvest, direct.tileX, direct.tileY, 0, 0);
+
+    // The refill carries no tile of its own — "fill the can" is a fact about the player, not
+    // about a tile — so the errand is aimed at the WATER TILE THE PLAYER CLICKED. The sim
+    // re-aims the walk at the nearest point of that reservoir's shoreline
+    // (`intentTargetSubtiles`), so arrival and "can actually dip" are the same fact; this
+    // side only needs to know whether the click is already within arm's reach. The clicked
+    // tile IS part of the reservoir (see `primaryCommand`), so tile-reach implies water-reach.
+    case 'RefillCan':
+      // Pondless world: the refill is legal from anywhere and the walk-to errand would have
+      // no shoreline to aim at (`intentTargetSubtiles` returns null and the errand dies), so
+      // the direct command is both sufficient and the only one that works.
+      if (view.reservoirs.length === 0) return direct;
+      return tileErrand(view, direct, IntentAction.RefillCan, tile.tileX, tile.tileY, 0, 0);
 
     // The counts below are SNAPSHOTTED AT CLICK TIME and may be stale by the time the farmer
     // arrives — the machine can finish another batch mid-walk. That is safe rather than
@@ -769,6 +800,28 @@ function countOf(view: WorldView, item: ItemId): number {
     if (slot.item === item) return slot.count;
   }
   return 0;
+}
+
+/**
+ * Is this tile open water? Rect containment against the projected reservoirs — the water is
+ * the one terrain the tile query does not carry, and the reservoir list is tiny (one pond
+ * today). Deliberately the tile itself and not "adjacent to water": a click on the BANK still
+ * means "water this dirt", and a bank tile is exactly where a thirsty crop can be standing.
+ * Exported for the pointer tests.
+ */
+export function reservoirAtTile(view: WorldView, tileX: number, tileY: number): boolean {
+  for (let i = 0; i < view.reservoirs.length; i++) {
+    const r = view.reservoirs[i]!;
+    if (
+      tileX >= r.tileX &&
+      tileX < r.tileX + r.tilesWide &&
+      tileY >= r.tileY &&
+      tileY < r.tileY + r.tilesHigh
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function isJammed(machine: MachineView): boolean {

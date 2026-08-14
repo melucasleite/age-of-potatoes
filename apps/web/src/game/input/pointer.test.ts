@@ -324,3 +324,98 @@ describe('reachAdjusted — verbs that are not reach-gated', () => {
     expect(reachAdjusted(view, FAR, direct)).toBe(direct);
   });
 });
+
+describe('the watering can refills on the Water tool ([[009]])', () => {
+  /** A pond. Only the rect matters to the input layer; the levels are the sim's business. */
+  function withPond(
+    view: WorldView,
+    tileX: number,
+    tileY: number,
+    tilesWide = 2,
+    tilesHigh = 2,
+  ): WorldView {
+    view.reservoirs.push({
+      id: 1,
+      tileX,
+      tileY,
+      tilesWide,
+      tilesHigh,
+      levelMl: 0,
+      capacityMl: 1,
+      levelPermille: 0,
+      throttle: 0,
+    } as WorldView['reservoirs'][number]);
+    return view;
+  }
+
+  it('a Water click on open water is a dip, not a pour', () => {
+    const view = withPond(standingOn(4, 4), 4, 5);
+    expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Water, Direction.None)).toEqual({
+      type: 'RefillCan',
+    });
+  });
+
+  it('a Water click on the bank still waters the dirt — the bank is soil, not shore', () => {
+    const view = withPond(standingOn(4, 4), 6, 6);
+    expect(primaryCommand(view, { tileX: 5, tileY: 6 }, ToolMode.Water, Direction.None)).toEqual({
+      type: 'WaterTile',
+      tileX: 5,
+      tileY: 6,
+    });
+  });
+
+  it('an in-reach dip goes direct', () => {
+    const view = withPond(standingOn(4, 4), 4, 5);
+    const direct = primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Water, Direction.None)!;
+    expect(reachAdjusted(view, { tileX: 4, tileY: 5 }, direct)).toBe(direct);
+  });
+
+  it('an out-of-reach dip walks — a RefillCan errand aimed at the clicked water tile', () => {
+    const view = withPond(standingOn(1, 1), FAR.tileX, FAR.tileY);
+    const direct = primaryCommand(view, FAR, ToolMode.Water, Direction.None)!;
+    expect(direct.type).toBe('RefillCan');
+    expect(reachAdjusted(view, FAR, direct)).toEqual({
+      type: 'WalkAndAct',
+      action: IntentAction.RefillCan,
+      tileX: FAR.tileX,
+      tileY: FAR.tileY,
+      item: 0,
+      count: 0,
+    });
+  });
+
+  it('a pondless world dips on the pour click once the can is empty, from anywhere', () => {
+    const view = standingOn(1, 1);
+    view.player.canCharges = 0;
+    const direct = primaryCommand(view, FAR, ToolMode.Water, Direction.None)!;
+    expect(direct.type).toBe('RefillCan');
+    // No shoreline to walk to, and the sim accepts the dip from anywhere — direct, never an
+    // errand that would die aiming at water that does not exist.
+    expect(reachAdjusted(view, FAR, direct)).toBe(direct);
+  });
+
+  it('a pondless world with pours left keeps pouring', () => {
+    const view = standingOn(1, 1);
+    view.player.canCharges = 3;
+    expect(primaryCommand(view, { tileX: 2, tileY: 1 }, ToolMode.Water, Direction.None)).toEqual({
+      type: 'WaterTile',
+      tileX: 2,
+      tileY: 1,
+    });
+  });
+});
+
+describe('the repair kit cursor ([[009]] tool wiring)', () => {
+  it('one click is one UseRepairKit at the tile — a spot, never a machine id', () => {
+    const view = standingOn(4, 4);
+    expect(
+      primaryCommand(view, { tileX: 5, tileY: 4 }, ToolMode.UseRepairKit, Direction.None),
+    ).toEqual({ type: 'UseRepairKit', tileX: 5, tileY: 4 });
+  });
+
+  it('does not walk out of reach — the sim has no errand for it, so the command goes as-is', () => {
+    const view = standingOn(1, 1);
+    const direct = primaryCommand(view, FAR, ToolMode.UseRepairKit, Direction.None)!;
+    expect(reachAdjusted(view, FAR, direct)).toBe(direct);
+  });
+});
