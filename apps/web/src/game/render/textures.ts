@@ -13,6 +13,7 @@ import { BeltTier, CROP_SPECS, ITEM_SPECS, LampState, MACHINE_SPECS } from '@sna
 import { ATLAS_FRAMES, ATLAS_JSON_URL } from '@/art/manifest.generated';
 
 import { LAMP_FRAME, LAMP_PX, lampFrame } from './lamps';
+import { stripCells, stripHasWiltCell } from './strips';
 
 /** Frame ids are the sim's own slugs with dashes swapped for underscores. One vocabulary. */
 function frameSlug(slug: string): string {
@@ -244,27 +245,28 @@ for (const kind of BOT_KINDS) {
 }
 
 /**
- * How many square cells a strip holds — READ OFF THE PICTURE, not off the crop's stage count.
- *
- * The two agreed by arithmetic while every strip was 64×16 and every crop had four growth
- * stages, and that coincidence is exactly the kind that breaks silently: a five-frame 80×16
- * strip sliced into four would stretch each cell 25% wider and shift every stage but the
- * first, which reads as "the art came back wrong" rather than as a slicing bug.
- *
- * Cells are square by construction — a strip is N frames of the same tile size in a row — so
- * width ÷ height IS the count. `Math.round` rather than a floor, so a packer that ever shaves
- * a pixel off the page cannot silently drop the last frame.
+ * Stage count by crop id, for the wilted-frame question below. Read once from the same
+ * specs the STRIPS table was built from, so the two cannot disagree about what a crop is.
  */
-function stripCells(width: number, height: number): number {
-  if (width <= 0 || height <= 0) return 0;
-  return Math.max(1, Math.round(width / height));
-}
+const CROP_STAGE_COUNT = new Map<number, number>(
+  CROP_SPECS.map((spec) => [spec.id as number, spec.stageCount]),
+);
 
 export interface ArtSet {
   /** The texture for a frame name, or a magenta "missing" square. Never throws. */
   get(name: string): Texture;
   /** True when the frame came from the real atlas rather than a placeholder. */
   isReal(name: string): boolean;
+  /**
+   * The crop's REAL wilted frame, or `null` when its strip does not carry one.
+   *
+   * `null` rather than a clamped cell, deliberately: `get(cropStage(id, stageCount))` on a
+   * four-cell strip answers with the mature plant — a real texture, the wrong picture — so
+   * the caller could never tell art from clamp. This is the renderer's one honest way to
+   * ask "did the pipeline ever generate the dying plant?", and the field keeps its
+   * tint-and-sag fallback (item 021) exactly as long as the answer is no.
+   */
+  cropWiltFrame(crop: number): Texture | null;
   /** How many requested frames fell back to placeholders. Reported by the dev overlay. */
   readonly placeholderCount: number;
   destroy(): void;
@@ -324,21 +326,30 @@ export async function loadArt(renderer: Renderer): Promise<ArtSet> {
   // them in `owned` would hand the next host a destroyed spritesheet.
   const sliced = new Map<string, Texture>();
 
-  function fromStrip(name: string): Texture | null {
-    const cached = sliced.get(name);
-    if (cached !== undefined) return cached;
-
+  /**
+   * The whole strip a cell name slices from, or `null`. Split out of `fromStrip` so
+   * `cropWiltFrame` can inspect the picture's cell count WITHOUT taking a clamped cell —
+   * the clamp is exactly the behaviour it exists to see past.
+   */
+  function stripSource(name: string): Texture | null {
     const candidates = STRIPS[name];
     if (candidates === undefined || sheet === null) return null;
     // First candidate the atlas actually carries. See the note on `STRIPS`: the specific name
     // is asked for before the generic one, so a Gold Potato cannot silently grow Russet art.
-    let base: Texture | undefined;
     for (const source of candidates) {
       if (!atlasNames.has(source)) continue;
-      base = sheet.textures[source];
-      if (base !== undefined) break;
+      const base = sheet.textures[source];
+      if (base !== undefined) return base;
     }
-    if (base === undefined) return null;
+    return null;
+  }
+
+  function fromStrip(name: string): Texture | null {
+    const cached = sliced.get(name);
+    if (cached !== undefined) return cached;
+
+    const base = stripSource(name);
+    if (base === null) return null;
 
     // `crop_corn_3` → cell 2. The stage number is the frame name's own suffix, so a crop
     // that grows a fifth stage needs no table anywhere.
@@ -392,6 +403,20 @@ export async function loadArt(renderer: Renderer): Promise<ArtSet> {
       generated.set(name, made);
       placeholderCount += 1;
       return made;
+    },
+    cropWiltFrame(crop: number): Texture | null {
+      const stages = CROP_STAGE_COUNT.get(crop);
+      if (stages === undefined) return null;
+      // The spare name STRIPS registered one past the growth run — see the `<=` note there.
+      const name = ART.cropStage(crop, stages);
+      const base = stripSource(name);
+      if (base === null) return null;
+      // Only a strip that truly carries the extra cell answers; a four-cell strip would
+      // clamp to its mature frame, and "mature" is the one thing a wilted crop must not be.
+      if (!stripHasWiltCell(stripCells(base.frame.width, base.frame.height), stages)) {
+        return null;
+      }
+      return fromStrip(name);
     },
     isReal(name: string): boolean {
       return fromAtlas(name) !== null;

@@ -239,20 +239,39 @@ function updateField(
 
     const stage = Math.max(1, field.stage[i] ?? 1);
     crop.visible = true;
-    crop.texture = scene.art.get(ART.cropStage(cropId, stage));
 
-    // Wilt reads as COLOUR AND POSTURE, not as a badge. A drooping crop yellows and sags a
-    // pixel; a turned one goes grey-brown and sags two. Per-sprite tint is a batched vertex
-    // attribute in v8 — this costs nothing and breaks nothing, unlike the day/night pass,
-    // which is one filter on the root for exactly the opposite reason.
+    // A TURNED crop wears the strip's own wilted frame when the art pipeline has generated
+    // one — the fifth cell of the same strip the growth stages came from (§15's one-call
+    // rule, item 021), so the dying plant is unmistakably the living plant. `cropWiltFrame`
+    // answers `null` for a four-cell strip rather than clamping to the mature frame, and
+    // then the tint-and-sag fallback below carries the state exactly as before.
     const wilt = field.wilt[i] ?? WiltStage.Fresh;
+    const wiltFrame = wilt === WiltStage.Wilted ? scene.art.cropWiltFrame(cropId) : null;
+    crop.texture = wiltFrame ?? scene.art.get(ART.cropStage(cropId, stage));
+
+    // Wilt reads as COLOUR AND POSTURE, not as a badge. The DROOP WINDOW is always tint-and-
+    // sag — a drooping crop yellows and sags a pixel on its mature frame, which is the §5
+    // telegraph that warns before the turn and must stay readable whatever the atlas holds.
+    // A turned crop goes grey-brown and sags two ONLY while faking it; once the real wilted
+    // frame draws, the art speaks for itself and is left untinted and unshoved. Per-sprite
+    // tint is a batched vertex attribute in v8 — this costs nothing and breaks nothing,
+    // unlike the day/night pass, which is one filter on the root for exactly the opposite
+    // reason.
     const tileTop = (field.originY + Math.floor(i / field.tilesWide)) * TILE_PX;
     crop.tint =
-      wilt === WiltStage.Wilted ? 0x9a8c6a : wilt === WiltStage.Wilting ? 0xd8cf7a : 0xffffff;
+      wiltFrame !== null
+        ? 0xffffff
+        : wilt === WiltStage.Wilted
+          ? 0x9a8c6a
+          : wilt === WiltStage.Wilting
+            ? 0xd8cf7a
+            : 0xffffff;
     // `+ TILE_PX` because the crop sprite is anchored at its BASE (see `world.ts`): its y is
     // where the stem meets the soil, not where the leaves start.
     crop.y =
-      tileTop + TILE_PX + (wilt === WiltStage.Wilted ? 2 : wilt === WiltStage.Wilting ? 1 : 0);
+      tileTop +
+      TILE_PX +
+      (wiltFrame !== null ? 0 : wilt === WiltStage.Wilted ? 2 : wilt === WiltStage.Wilting ? 1 : 0);
 
     // The drink-bounce. A flat transform when the tile is not bouncing, so this is an
     // unconditional two-number write rather than a branch — and the crop's scale is owned
