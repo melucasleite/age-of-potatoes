@@ -49,8 +49,10 @@ export {
   freshSeed,
   invalidateRegistry,
   liveWorlds,
+  milestoneKeyFor,
   newestWorld,
   nextWorldName,
+  olderKeyFor,
   planLegacyAdoption,
   previousKeyFor,
   readRegistry,
@@ -79,6 +81,7 @@ export type { PersistenceResult } from './persist';
 export { CONFLICT_KEY, adoptCloudEnvelope, readConflictEnvelope } from './cloudHandoff';
 export type { AdoptOutcome } from './cloudHandoff';
 export {
+  MILESTONE_INTERVAL_TICKS,
   clearSavedWorld,
   idbSaveStore,
   loadWorld,
@@ -87,6 +90,7 @@ export {
   saveWorld,
 } from './saves';
 export type {
+  DroppableSlot,
   LoadOutcome,
   LoadedWorld,
   NoSavedWorld,
@@ -94,6 +98,8 @@ export type {
   SaveRecordStore,
   SaveResult,
   SaveTarget,
+  SlotName,
+  SlotRecords,
 } from './saves';
 export {
   clearTrace,

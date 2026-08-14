@@ -149,7 +149,8 @@ describe('saveWorld with a poisoned serializer', () => {
     const after = await store.read(id);
     expect(after.current?.tick).toBe(100);
     expect(after.previous).toBeUndefined();
-    expect(store.keys()).toEqual([`w:${id}:current`]);
+    // The good save plus the milestone its own write took — and nothing from the bad one.
+    expect(store.keys()).toEqual([`w:${id}:current`, `w:${id}:milestone`]);
   });
 
   it('never lets a bad save reach disk even when there is nothing to fall back to', async () => {

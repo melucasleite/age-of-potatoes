@@ -45,8 +45,8 @@ to `bootWorld`, `saveWorld` or `loadWorld`** — they resolve the active id them
 how this landed without `GameCanvas`, `GameHost` or cloud sync learning that worlds became
 plural. The front door (`hud/FrontDoor.tsx`) sets the active id and then navigates.
 
-Records are keyed `w:<id>:current` / `:previous` / `:conflict`. `previous` is still not a save
-slot, per world or otherwise.
+Records are keyed `w:<id>:current` / `:previous` / `:older` / `:milestone` / `:conflict`.
+None of the backups is a save slot the player picks from, per world or otherwise.
 
 **The pre-registry player is adopted, once.** The first read of the registry on a database that
 predates it finds the bare `current`/`previous`/`conflict` records, mints a world called
@@ -89,15 +89,29 @@ extended non-use** — which does not present to the player as a storage-policy 
 presents as _"my factory vanished."_ The call is one line, it may be granted silently based on
 engagement, and the result is logged either way.
 
-## Two records per world, not two slots
+## Four records per world, not four slots
 
-The `saves` store holds a `current` and a `previous` **for each world**, under out-of-line keys
-built by `currentKeyFor`/`previousKeyFor`. `previous` is **not** a save slot and must never be
-surfaced as one. Every write copies `current` into `previous` inside the same transaction before
-overwriting. One extra `put` buys a survivable corrupt write.
+The `saves` store holds, **for each world**: `current`, two rolling backups (`previous` and
+`older`), and a `milestone`, under out-of-line keys built by `currentKeyFor` and friends in
+`worlds.ts`. None of them is a save slot the player picks from and none must ever be surfaced
+as one. Every write pushes the rolling records down one — `previous` into `older`, `current`
+into `previous`, deepest first, inside the same transaction — before overwriting `current`.
+Two extra `put`s buy a corrupt write that has to happen **three times in a row** before it
+costs a world.
 
-The quota ladder drops only the **active** world's backup. A player whose second lot is running
-out of room has not consented to their first lot losing its parachute.
+The `milestone` is on its own cadence — rewritten at most every `MILESTONE_INTERVAL_TICKS`
+(ten minutes of active play) — because the rolling records are written a minute apart and are
+therefore three photographs of the same sixty seconds. The milestone is the copy from a
+usefully different moment; recovering from it costs up to ten minutes, and the notice says so.
+
+Every record's stamp is the envelope's own `tick`, so loading picks the **newest record by
+tick that parses, migrates and restores cleanly** — tick order, not key order, because a
+freshly written milestone is newer than `older`.
+
+The quota ladder drops only the **active** world's backups, oldest first (`older`, then
+`milestone`, then `previous` — the parachute for the very next torn write goes last). A player
+whose second lot is running out of room has not consented to their first lot losing its
+parachute.
 
 The stored value _is_ the envelope, with no wrapper object — legible in DevTools →
 Application → IndexedDB, and an upload rather than a redesign when cloud sync lands.

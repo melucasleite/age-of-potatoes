@@ -60,11 +60,26 @@ import {
   activeWorldId,
   conflictKeyFor,
   currentKeyFor,
+  milestoneKeyFor,
+  olderKeyFor,
   previousKeyFor,
   summaryOf,
   touchWorld,
   worldSeedOf,
 } from './worlds';
+
+/**
+ * Ticks of active play between milestone writes — 12,000 at 20 Hz is ten minutes, ten times
+ * the autosave cadence.
+ *
+ * WHY A MILESTONE SLOT EXISTS AT ALL. The three rolling slots are written a minute apart, so
+ * they are three photographs of the same sixty seconds — good odds against a torn write,
+ * poor odds against anything that was quietly wrong for five minutes before it was noticed.
+ * The milestone is the copy from a usefully different moment. It is a floor on the loss, not
+ * a second parachute: recovering from it costs up to ten minutes of play, which the notice
+ * says out loud.
+ */
+export const MILESTONE_INTERVAL_TICKS = 12_000;
 
 /**
  * The record operations, behind an interface.
@@ -80,14 +95,38 @@ import {
  * see rule 1 above. An interface that let a caller do it in pieces would let a caller do it
  * wrong.
  */
+/** The slots one world's saves rotate through, newest first in the order declared. */
+export interface SlotRecords {
+  current?: SaveEnvelope;
+  previous?: SaveEnvelope;
+  older?: SaveEnvelope;
+  milestone?: SaveEnvelope;
+}
+
+/** The slots the quota ladder and the tests may drop. `current` is never droppable. */
+export type DroppableSlot = 'previous' | 'older' | 'milestone';
+
 export interface SaveRecordStore {
-  read(worldId: string): Promise<{ current?: SaveEnvelope; previous?: SaveEnvelope }>;
-  /** Copy `current` into `previous`, then write `envelope` as `current`. Atomic. */
+  read(worldId: string): Promise<SlotRecords>;
+  /**
+   * Push the rolling slots down one — `previous` into `older`, `current` into `previous` —
+   * then write `envelope` as `current`. Atomic.
+   */
   rotate(worldId: string, envelope: SaveEnvelope): Promise<void>;
-  /** Drop the backup copy. True when there was one to drop. */
-  dropPrevious(worldId: string): Promise<boolean>;
+  /** The tick stamped on the milestone record, or null when there is none (or no stamp). */
+  milestoneTick(worldId: string): Promise<number | null>;
+  /** Write the milestone slot. Separate from `rotate` because its cadence is its own. */
+  writeMilestone(worldId: string, envelope: SaveEnvelope): Promise<void>;
+  /** Drop one backup slot. True when there was a record to drop. */
+  drop(worldId: string, slot: DroppableSlot): Promise<boolean>;
   /** Drop every record belonging to one world, including the cloud parking slot. */
   clear(worldId: string): Promise<void>;
+}
+
+function slotKeyFor(worldId: string, slot: DroppableSlot): string {
+  if (slot === 'previous') return previousKeyFor(worldId);
+  if (slot === 'older') return olderKeyFor(worldId);
+  return milestoneKeyFor(worldId);
 }
 
 /** The real one. Every method is one IndexedDB transaction. */
@@ -98,8 +137,10 @@ export const idbSaveStore: SaveRecordStore = {
     const store = tx.objectStore(SAVES_STORE);
     const current = await store.get(currentKeyFor(worldId));
     const previous = await store.get(previousKeyFor(worldId));
+    const older = await store.get(olderKeyFor(worldId));
+    const milestone = await store.get(milestoneKeyFor(worldId));
     await tx.done;
-    return { current, previous };
+    return { current, previous, older, milestone };
   },
 
   async rotate(worldId, envelope) {
@@ -107,22 +148,38 @@ export const idbSaveStore: SaveRecordStore = {
     const tx = db.transaction(SAVES_STORE, 'readwrite');
     const store = tx.objectStore(SAVES_STORE);
     // Rotate before overwriting, inside the transaction, so a crash mid-write cannot leave
-    // both records damaged. Every await here is an IDB request, which is what keeps the
-    // transaction alive — do not await anything else between these lines.
+    // both records damaged. Deepest slot first, so a torn transaction can only ever have
+    // moved a record DOWN, never lost one. Every await here is an IDB request, which is what
+    // keeps the transaction alive — do not await anything else between these lines.
+    const previous = await store.get(previousKeyFor(worldId));
+    if (previous !== undefined) await store.put(previous, olderKeyFor(worldId));
     const existing = await store.get(currentKeyFor(worldId));
     if (existing !== undefined) await store.put(existing, previousKeyFor(worldId));
     await store.put(envelope, currentKeyFor(worldId));
     await tx.done;
   },
 
-  async dropPrevious(worldId) {
+  async milestoneTick(worldId) {
     const db = await getDb();
+    const milestone = await db.get(SAVES_STORE, milestoneKeyFor(worldId));
+    const tick: unknown = milestone === undefined ? undefined : milestone.tick;
+    return typeof tick === 'number' && Number.isFinite(tick) ? tick : null;
+  },
+
+  async writeMilestone(worldId, envelope) {
+    const db = await getDb();
+    await db.put(SAVES_STORE, envelope, milestoneKeyFor(worldId));
+  },
+
+  async drop(worldId, slot) {
+    const db = await getDb();
+    const key = slotKeyFor(worldId, slot);
     const tx = db.transaction(SAVES_STORE, 'readwrite');
     const store = tx.objectStore(SAVES_STORE);
-    const previous = await store.get(previousKeyFor(worldId));
-    if (previous !== undefined) await store.delete(previousKeyFor(worldId));
+    const record = await store.get(key);
+    if (record !== undefined) await store.delete(key);
     await tx.done;
-    return previous !== undefined;
+    return record !== undefined;
   },
 
   async clear(worldId) {
@@ -131,6 +188,8 @@ export const idbSaveStore: SaveRecordStore = {
     const store = tx.objectStore(SAVES_STORE);
     await store.delete(currentKeyFor(worldId));
     await store.delete(previousKeyFor(worldId));
+    await store.delete(olderKeyFor(worldId));
+    await store.delete(milestoneKeyFor(worldId));
     await store.delete(conflictKeyFor(worldId));
     await tx.done;
   },
@@ -149,20 +208,35 @@ export function memorySaveStore(
       return Promise.resolve({
         current: records.get(currentKeyFor(worldId)),
         previous: records.get(previousKeyFor(worldId)),
+        older: records.get(olderKeyFor(worldId)),
+        milestone: records.get(milestoneKeyFor(worldId)),
       });
     },
     rotate(worldId, envelope) {
+      const previous = records.get(previousKeyFor(worldId));
+      if (previous !== undefined) records.set(olderKeyFor(worldId), previous);
       const existing = records.get(currentKeyFor(worldId));
       if (existing !== undefined) records.set(previousKeyFor(worldId), existing);
       records.set(currentKeyFor(worldId), envelope);
       return Promise.resolve();
     },
-    dropPrevious(worldId) {
-      return Promise.resolve(records.delete(previousKeyFor(worldId)));
+    milestoneTick(worldId) {
+      const milestone = records.get(milestoneKeyFor(worldId));
+      const tick: unknown = milestone === undefined ? undefined : milestone.tick;
+      return Promise.resolve(typeof tick === 'number' && Number.isFinite(tick) ? tick : null);
+    },
+    writeMilestone(worldId, envelope) {
+      records.set(milestoneKeyFor(worldId), envelope);
+      return Promise.resolve();
+    },
+    drop(worldId, slot) {
+      return Promise.resolve(records.delete(slotKeyFor(worldId, slot)));
     },
     clear(worldId) {
       records.delete(currentKeyFor(worldId));
       records.delete(previousKeyFor(worldId));
+      records.delete(olderKeyFor(worldId));
+      records.delete(milestoneKeyFor(worldId));
       records.delete(conflictKeyFor(worldId));
       return Promise.resolve();
     },
@@ -204,13 +278,16 @@ async function resolveWorld(target: SaveTarget): Promise<string> {
   return id;
 }
 
+/** The slot a world was loaded from. Anything but `current` means a fallback happened. */
+export type SlotName = 'current' | 'previous' | 'older' | 'milestone';
+
 export interface LoadedWorld {
   status: 'loaded';
   state: WorldState;
   /** The envelope after migration. */
   envelope: SaveEnvelope;
-  /** `previous` means the main record was unreadable and the parachute opened. */
-  source: 'current' | 'previous';
+  /** Anything but `current` means the newest record was unreadable and a parachute opened. */
+  source: SlotName;
   /** The format version on disk, before migration. Equal to the current one when none ran. */
   migratedFrom: number;
   /**
@@ -347,6 +424,15 @@ export async function saveWorld(state: WorldState, target: SaveTarget = {}): Pro
     formatVersion: envelope.formatVersion,
   });
 
+  // The milestone, on its own longer cadence. AFTER the rotation and best-effort, because the
+  // milestone is insurance on top of a save that has already landed — a failure here must not
+  // turn a successful save into a failed one, and it must not run the quota ladder either
+  // (dropping a backup to fit a backup is circular). SKIPPED ENTIRELY when this save only
+  // landed because the ladder freed something: spending the just-reclaimed room on a backup
+  // would re-create the squeeze on the very next save, possibly with the milestone as the
+  // thing that was freed.
+  if (freed === null) await writeMilestoneIfDue(worldId, envelope, store);
+
   return {
     tick: envelope.tick,
     // Not stringified a second time: the check above already did it, and the world is not worth
@@ -421,6 +507,50 @@ async function rejectSave(
 const rejectedWritesFiled = new Set<string>();
 
 /**
+ * The milestone tick each store last saw per world, so the ordinary autosave does not pay an
+ * IndexedDB read of a full envelope every minute just to learn a number that has not moved.
+ *
+ * KEYED BY STORE INSTANCE, not module-wide: tests hand `saveWorld` fresh memory stores for the
+ * same world id, and a module-level map would let one test's milestone suppress another's. A
+ * `WeakMap` means a discarded store takes its memo with it.
+ */
+const milestoneMemo = new WeakMap<SaveRecordStore, Map<string, number>>();
+
+async function writeMilestoneIfDue(
+  worldId: string,
+  envelope: SaveEnvelope,
+  store: SaveRecordStore,
+): Promise<void> {
+  try {
+    let memo = milestoneMemo.get(store);
+    if (memo === undefined) {
+      memo = new Map();
+      milestoneMemo.set(store, memo);
+    }
+    const last = memo.has(worldId) ? memo.get(worldId)! : await store.milestoneTick(worldId);
+
+    // Due when there is no milestone yet, when the interval has elapsed — or when the world's
+    // tick is BEHIND the stored milestone, which means the milestone on disk is from a
+    // timeline that failed to load (had it loaded, the ladder would have picked it — it was
+    // the newest record). A copy of it is in quarantine; the slot should track the world that
+    // is actually being played.
+    const due =
+      last === null || envelope.tick - last >= MILESTONE_INTERVAL_TICKS || envelope.tick < last;
+    if (!due) {
+      if (!memo.has(worldId)) memo.set(worldId, last);
+      return;
+    }
+
+    await store.writeMilestone(worldId, envelope);
+    memo.set(worldId, envelope.tick);
+  } catch (error) {
+    // The save itself landed; this is the backup of a backup. Say so to the developer and move
+    // on — the next due save will try again.
+    logWarn('The milestone backup could not be written. The main save is unaffected.', error);
+  }
+}
+
+/**
  * Give something up so the save can land. Returns what went, or null when nothing is left.
  *
  * The order is argued in `quota.ts`: the input trace first because it is a debugging asset and
@@ -433,29 +563,46 @@ const rejectedWritesFiled = new Set<string>();
  * everything the first time it hits a limit that might have been a transient one.
  */
 async function freeSpaceForSave(worldId: string, store: SaveRecordStore): Promise<string | null> {
-  // ONLY THIS WORLD'S BACKUP, never another world's. A player whose second lot is running out
+  // ONLY THIS WORLD'S BACKUPS, never another world's. A player whose second lot is running out
   // of room has not consented to their first lot losing its parachute, and a ladder that
   // reached across worlds would mean the cost of a big factory is paid by a small one. The
   // trace store below is the exception, and it is the right one: it is shared, it is explicitly
   // the cheapest thing in the database to lose, and it is not a world.
-  const db = await getDb();
-
-  const traces = await db.count(TRACES_STORE);
-  if (traces > 0) {
-    await db.clear(TRACES_STORE);
-    // NOTE: `clearTrace()` is not used here, and must not be — it resets the drain cursor to
-    // zero, which would make the very next save rewrite the entire in-memory trace and refill
-    // the space this just freed. Leaving the cursor where it is means the game stops writing
-    // trace it has already given up on. The consequence is honest and worth stating: after
-    // this runs, the stored trace is no longer a complete replay of the world.
-    logWarn(
-      'Storage was full, so the stored input trace was dropped to make room for the save. ' +
-        'The trace is no longer a complete replay for this world.',
-    );
-    return 'the input log it keeps for bug reports';
+  //
+  // Guarded rather than assumed, so a swappable store (tests, and any future non-IDB backend)
+  // can still walk the slot rungs below when there is no trace store to clear.
+  if (isStorageAvailable()) {
+    const db = await getDb();
+    const traces = await db.count(TRACES_STORE);
+    if (traces > 0) {
+      await db.clear(TRACES_STORE);
+      // NOTE: `clearTrace()` is not used here, and must not be — it resets the drain cursor to
+      // zero, which would make the very next save rewrite the entire in-memory trace and refill
+      // the space this just freed. Leaving the cursor where it is means the game stops writing
+      // trace it has already given up on. The consequence is honest and worth stating: after
+      // this runs, the stored trace is no longer a complete replay of the world.
+      logWarn(
+        'Storage was full, so the stored input trace was dropped to make room for the save. ' +
+          'The trace is no longer a complete replay for this world.',
+      );
+      return 'the input log it keeps for bug reports';
+    }
   }
 
-  if (await store.dropPrevious(worldId)) {
+  // The slots, oldest first — which is also cheapest-loss first, because an older copy is a
+  // copy more autosaves have already superseded. `previous` goes last of the three: it is the
+  // parachute for the very next torn write, so it is the most expensive backup to be without.
+  if (await store.drop(worldId, 'older')) {
+    logWarn('Storage was full, so the oldest rolling backup was dropped to make room.');
+    return 'the oldest of the rolling backup copies of your world';
+  }
+
+  if (await store.drop(worldId, 'milestone')) {
+    logWarn('Storage was full, so the milestone backup was dropped to make room.');
+    return 'the long-term backup copy of your world';
+  }
+
+  if (await store.drop(worldId, 'previous')) {
     logWarn('Storage was full, so the backup save was dropped to make room for the current one.');
     return 'the spare backup copy of your world';
   }
@@ -481,99 +628,116 @@ export async function loadWorld(target: SaveTarget = {}): Promise<LoadOutcome> {
     return { status: 'refused', reason: 'unavailable', message };
   }
 
-  let stored: SaveEnvelope | undefined;
-  let fallback: SaveEnvelope | undefined;
+  let records: SlotRecords;
   let worldId: string;
   try {
     worldId = await resolveWorld(target);
-    const records = await (target.store ?? idbSaveStore).read(worldId);
-    stored = records.current;
-    fallback = records.previous;
+    records = await (target.store ?? idbSaveStore).read(worldId);
   } catch (error) {
     const message = 'Could not open the save database. Play continues, but nothing will save.';
     logError(message, error);
     return { status: 'refused', reason: 'unavailable', message, error };
   }
 
-  // `previous` without a `current` should not happen, but if it does, reading it beats
-  // telling the player they have no world.
-  const primary = stored !== undefined ? stored : fallback;
-  const source: 'current' | 'previous' = stored !== undefined ? 'current' : 'previous';
+  // Every slot that holds anything, NEWEST FIRST BY TICK rather than by slot name. Slot order
+  // and tick order usually agree, but the milestone runs on its own cadence: the moment it is
+  // written it carries the same tick as `current` and a newer one than `older`, so "newest good
+  // slot wins" has to mean the tick on the record, not the name on the key. The sort is stable,
+  // so a tie keeps the declared slot priority.
+  const slotOrder: SlotName[] = ['current', 'previous', 'older', 'milestone'];
+  const candidates = slotOrder
+    .map((slot) => ({ slot, envelope: records[slot] }))
+    .filter(
+      (entry): entry is { slot: SlotName; envelope: SaveEnvelope } => entry.envelope !== undefined,
+    )
+    .sort((a, b) => tickOf(b.envelope) - tickOf(a.envelope));
 
-  if (primary === undefined) {
+  if (candidates.length === 0) {
     logInfo('No saved world found. Starting fresh.');
     return { status: 'empty' };
   }
 
-  try {
-    const loaded = finish(restoreWorld(primary), source);
-    if (source === 'previous') {
-      // `current` was not there at all. The overwhelmingly likely cause is a write that was
-      // interrupted between the rotate and the put — a killed tab, a crashed browser, a phone
-      // that decided the page had had its turn. This is the crash-recovery path, and it is
-      // the one the player is owed an explanation for.
-      logWarn('The main save was missing. Loaded the backup copy instead.');
-      publishNotice(recoveredNotice('missing', false));
-    }
-    return loaded;
-  } catch (error) {
-    if (error instanceof SaveFormatTooNewError) {
-      // Refuse, and write nothing. The player's world is fine; the tab is stale.
-      logError(error.message);
-      return { status: 'refused', reason: 'format-too-new', message: error.message, error };
-    }
+  let failures = 0;
+  let quarantinedAny = false;
+  let lastError: unknown;
 
-    logWarn('The saved world is unreadable. Trying the previous copy.', error);
-
-    // Set the bad record aside BEFORE loading the backup, because the moment the backup
-    // loads, the autosave clock starts and the ordinary rotation will begin overwriting the
-    // evidence within a minute of active play. The original stays exactly where it is; this
-    // is a copy into a store nothing else touches.
-    // The slot label carries the world id now, so triage on a player with three lots can tell
-    // which one broke — and so the quarantine fingerprint cannot collide across worlds and
-    // silently decide that a second broken save is "already known".
-    const filed = await quarantineRecord({
-      slot: source === 'current' ? currentKeyFor(worldId) : previousKeyFor(worldId),
-      record: primary,
-      error,
-    });
-
-    const hasBackup = source === 'current' && fallback !== undefined;
-    if (hasBackup) {
-      try {
-        const recovered = finish(restoreWorld(fallback), 'previous');
-        logWarn('Recovered from the previous save. Some progress was lost.');
-        publishNotice(recoveredNotice('unreadable', filed === 'quarantined'));
-        return recovered;
-      } catch (fallbackError) {
-        logError('The previous save is unreadable too.', fallbackError);
-        await quarantineRecord({
-          slot: previousKeyFor(worldId),
-          record: fallback,
-          error: fallbackError,
-        });
+  for (const { slot, envelope } of candidates) {
+    try {
+      const loaded = finish(restoreWorld(envelope), slot);
+      if (slot !== 'current') {
+        // Either `current` was never there (a write interrupted between the rotate and the
+        // put — a killed tab, a crashed browser, a phone that decided the page had had its
+        // turn), or it was there and would not read, in which case a copy has just been set
+        // aside. Both are the crash-recovery path, and both owe the player an explanation.
+        const kind = failures > 0 ? 'unreadable' : 'missing';
+        logWarn(`Recovered from the ${slot} save record. Some progress was lost.`);
+        publishNotice(recoveredNotice(kind, quarantinedAny, slot));
       }
-    }
+      return loaded;
+    } catch (error) {
+      if (error instanceof SaveFormatTooNewError) {
+        // Refuse, and write nothing — and do NOT fall through to an older slot. The player's
+        // world is fine; the tab is stale. Booting an older copy in a stale tab would start
+        // an autosave that rotates the future save down the ladder and, three saves later,
+        // off the end of it.
+        logError(error.message);
+        return { status: 'refused', reason: 'format-too-new', message: error.message, error };
+      }
 
-    // As bad as it gets here. The message says exactly what was done with the remains and —
-    // because §8's cut-forever list has no "start fresh" button on it — never offers to wipe
-    // anything.
-    //
-    // The two wordings are not decoration. Telling a player the backup also failed when there
-    // was no backup to fail is a small lie about their disk, and it is the kind that sends
-    // somebody looking for a second copy that never existed.
-    const message = hasBackup
-      ? 'Your saved world could not be read, and neither could the backup copy. Nothing has ' +
-        'been deleted or overwritten — both are still on disk exactly as they were found, and ' +
-        'copies have been set aside so they can be looked at. Reloading is worth a try; if it ' +
-        'keeps happening, this is worth reporting rather than starting over.'
+      failures += 1;
+      lastError = error;
+      logWarn(`The ${slot} save record is unreadable. Trying the next slot.`, error);
+
+      // Set the bad record aside BEFORE loading anything older, because the moment a fallback
+      // loads, the autosave clock starts and the ordinary rotation will begin overwriting the
+      // evidence within a minute of active play. The original stays exactly where it is; this
+      // is a copy into a store nothing else touches.
+      // The slot label carries the world id, so triage on a player with three lots can tell
+      // which one broke — and so the quarantine fingerprint cannot collide across worlds and
+      // silently decide that a second broken save is "already known".
+      const filed = await quarantineRecord({
+        slot: quarantineLabelFor(worldId, slot),
+        record: envelope,
+        error,
+      });
+      if (filed === 'quarantined') quarantinedAny = true;
+    }
+  }
+
+  // As bad as it gets here: every slot failed. The message says exactly what was done with the
+  // remains and — because §8's cut-forever list has no "start fresh" button on it — never
+  // offers to wipe anything.
+  //
+  // The two wordings are not decoration. Telling a player the backups also failed when there
+  // were no backups to fail is a small lie about their disk, and it is the kind that sends
+  // somebody looking for a second copy that never existed.
+  const message =
+    candidates.length > 1
+      ? 'Your saved world could not be read, and neither could any of its backup copies. ' +
+        'Nothing has been deleted or overwritten — all of them are still on disk exactly as ' +
+        'they were found, and copies have been set aside so they can be looked at. Reloading ' +
+        'is worth a try; if it keeps happening, this is worth reporting rather than starting ' +
+        'over.'
       : 'Your saved world could not be read, and there was no backup copy to fall back on. ' +
         'Nothing has been deleted or overwritten — it is still on disk exactly as it was ' +
         'found, and a copy has been set aside so it can be looked at. Reloading is worth a ' +
         'try; if it keeps happening, this is worth reporting rather than starting over.';
-    logError(message);
-    return { status: 'refused', reason: 'unreadable', message, error };
-  }
+  logError(message);
+  return { status: 'refused', reason: 'unreadable', message, error: lastError };
+}
+
+/** The stamped tick, or -1 for a record too broken to carry one — which sorts it last. */
+function tickOf(envelope: SaveEnvelope): number {
+  const tick: unknown = envelope.tick;
+  return typeof tick === 'number' && Number.isFinite(tick) ? tick : -1;
+}
+
+/** The on-disk key the record was read from, which is what triage wants to see. */
+function quarantineLabelFor(worldId: string, slot: SlotName): string {
+  if (slot === 'current') return currentKeyFor(worldId);
+  if (slot === 'previous') return previousKeyFor(worldId);
+  if (slot === 'older') return olderKeyFor(worldId);
+  return milestoneKeyFor(worldId);
 }
 
 /**
@@ -587,6 +751,7 @@ export async function loadWorld(target: SaveTarget = {}): Promise<LoadOutcome> {
 function recoveredNotice(
   kind: 'missing' | 'unreadable',
   quarantined: boolean,
+  slot: SlotName,
 ): {
   id: NoticeId;
   tone: 'info';
@@ -599,6 +764,16 @@ function recoveredNotice(
         'the browser closed partway through one.'
       : 'Your most recent save could not be read.';
 
+  // The bound is per slot and stated as time the player can check against their own memory,
+  // never as a tick count. Overstating is safer than understating — "up to" is a ceiling.
+  const cost =
+    slot === 'milestone'
+      ? 'the longer-term backup from a little earlier, so you may have lost up to about ten ' +
+        'minutes of play'
+      : slot === 'older'
+        ? 'an earlier backup, so you may have lost up to a few minutes of play'
+        : 'the backup from just before it, so you may have lost up to about a minute of play';
+
   const kept = quarantined
     ? ' The unreadable save has been set aside rather than deleted, in case it can be ' +
       'recovered later.'
@@ -608,13 +783,11 @@ function recoveredNotice(
     id: NoticeId.Recovered,
     tone: 'info',
     title: 'Picked up from your backup save.',
-    body:
-      `${opening} The game has loaded the backup from just before it, so you may have lost up ` +
-      `to about a minute of play. Everything else is exactly where you left it.${kept}`,
+    body: `${opening} The game has loaded ${cost}. Everything else is exactly where you left it.${kept}`,
   };
 }
 
-function finish(restored: RestoredWorld, source: 'current' | 'previous'): LoadedWorld {
+function finish(restored: RestoredWorld, source: SlotName): LoadedWorld {
   // The restored world's trace starts empty by design, so the drain cursor does too.
   resetTraceCursor(restored.state.worldSeed);
 
@@ -669,11 +842,7 @@ export async function clearSavedWorld(target: SaveTarget = {}): Promise<void> {
 }
 
 /** The raw stored envelopes, unmigrated, for the dev overlay and for bug reports. */
-export async function readRawSaves(target: SaveTarget = {}): Promise<{
-  current: SaveEnvelope | undefined;
-  previous: SaveEnvelope | undefined;
-}> {
+export async function readRawSaves(target: SaveTarget = {}): Promise<SlotRecords> {
   const worldId = await resolveWorld(target);
-  const { current, previous } = await (target.store ?? idbSaveStore).read(worldId);
-  return { current, previous };
+  return (target.store ?? idbSaveStore).read(worldId);
 }

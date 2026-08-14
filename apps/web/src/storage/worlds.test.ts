@@ -34,6 +34,7 @@ import {
   expiredTombstones,
   freshSeed,
   liveWorlds,
+  milestoneKeyFor,
   newestWorld,
   nextWorldName,
   planLegacyAdoption,
@@ -253,11 +254,14 @@ describe('two worlds on one machine', () => {
     // keyed by `worldSeed` (`reports/persist.ts`), so two lots cannot share a Shift Report.
     expect(loadedAlpha.state.worldSeed).not.toBe(loadedBeta.state.worldSeed);
 
-    // Four records, two per world, and no bare `current` anywhere near them.
+    // Six records, three per world — current, previous, and the milestone the first save
+    // writes — and no bare `current` anywhere near them.
     expect(store.keys()).toEqual([
       currentKeyFor('alpha'),
+      milestoneKeyFor('alpha'),
       previousKeyFor('alpha'),
       currentKeyFor('beta'),
+      milestoneKeyFor('beta'),
       previousKeyFor('beta'),
     ]);
   });

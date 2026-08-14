@@ -83,6 +83,29 @@ export function previousKeyFor(worldId: string): string {
   return `w:${worldId}:previous`;
 }
 
+/**
+ * The third rolling slot: what `previous` was one autosave ago.
+ *
+ * Work item 041's instruction 2 asks for "several rolling autosave slots", and three is the
+ * depth where the returns stop: `current` for the ordinary load, `previous` for the torn
+ * write, `older` for the write that tore twice. Each envelope carries the tick it was written
+ * at, because the envelope always has — `SaveEnvelope.tick` is the stamp.
+ */
+export function olderKeyFor(worldId: string): string {
+  return `w:${worldId}:older`;
+}
+
+/**
+ * The long-interval milestone slot.
+ *
+ * Rewritten at most every `MILESTONE_INTERVAL_TICKS` (ten minutes of active play), so when the
+ * rolling slots are all within a minute of each other — and therefore all within a minute of
+ * the same disaster — this one still holds a world from a usefully different moment.
+ */
+export function milestoneKeyFor(worldId: string): string {
+  return `w:${worldId}:milestone`;
+}
+
 export function conflictKeyFor(worldId: string): string {
   return `w:${worldId}:conflict`;
 }
@@ -610,6 +633,8 @@ export async function sweepTombstones(now: number = Date.now()): Promise<number>
     for (const world of expired) {
       await store.delete(currentKeyFor(world.id));
       await store.delete(previousKeyFor(world.id));
+      await store.delete(olderKeyFor(world.id));
+      await store.delete(milestoneKeyFor(world.id));
       await store.delete(conflictKeyFor(world.id));
     }
     await tx.done;
