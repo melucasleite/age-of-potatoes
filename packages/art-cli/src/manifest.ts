@@ -40,6 +40,23 @@ export interface AssetEntry {
   trim?: boolean;
   /** `provider: "local"` only — path to a hand-authored PNG, relative to art/. */
   source?: string;
+  /**
+   * Opt-in to Retro Diffusion's ANIMATION endpoint: the strip's native cell count. The plain
+   * endpoint cannot draw N plants on an N-cell pitch at strip resolution (measured, wave 8:
+   * 26 paid takes, one success — it draws at its own ~45-55px pitch whatever you ask), so
+   * strips that need exact cells generate as fixed-count animations instead, one frame per
+   * cell, returned as a PNG spritesheet.
+   *
+   * Requires: a `promptStyle` from `ANIMATION_FRAME_SIZES` (frame pixel sizes are fixed per
+   * style), `width === frames * height` (a strip is one row of square cells), and
+   * `trim: false` (the reason every strip needs it). RD only sells 4/6/8/10/12/16 frames;
+   * when `frames` is not one of those, the request over-asks to the next count and the strip
+   * deterministically keeps the first `frames - 1` frames plus the LAST one — the animation's
+   * end state is what the final cell is for. See `post/frames.ts`.
+   *
+   * Absent on an entry, nothing changes: the plain single-sprite path is untouched.
+   */
+  frames?: number;
 }
 
 export interface ArtManifest {
@@ -115,6 +132,27 @@ function parseEntry(raw: unknown, index: number): AssetEntry {
 
   if (provider === 'local' && !parsed.source) {
     fail(where, 'uses provider "local" but declares no "source" PNG path');
+  }
+
+  if (entry.frames !== undefined) {
+    const frames = entry.frames;
+    if (typeof frames !== 'number' || !Number.isInteger(frames) || frames < 2) {
+      fail(where, '"frames" must be an integer cell count of at least 2');
+    }
+    if (provider !== 'retro-diffusion') {
+      fail(where, '"frames" is the Retro Diffusion animation opt-in; it means nothing on local');
+    }
+    if (parsed.width !== frames * parsed.height) {
+      fail(
+        where,
+        `declares frames: ${frames} at ${parsed.width}x${parsed.height} — a strip is one row ` +
+          `of square cells, so width must be ${frames * parsed.height}`,
+      );
+    }
+    if (parsed.trim !== false) {
+      fail(where, 'declares "frames" without "trim": false — trimming slides cells off the grid');
+    }
+    parsed.frames = frames;
   }
 
   return parsed;

@@ -1,5 +1,7 @@
 import { binarizeAlpha } from './alpha.js';
 import { modalDownsample, verifyNativeGrid } from './downsample.js';
+import { planAnimation, reassembleStrip } from './frames.js';
+import { checkStripGeometry } from './geometry.js';
 import { measureConformance } from './palette.js';
 import { quantizeToPalette } from './quantize.js';
 import { decode, encode } from './raw.js';
@@ -38,6 +40,22 @@ export async function cook(
   quantizeInto: readonly string[] | null = null,
 ): Promise<CookResult> {
   let image = await decode(original);
+
+  // A `frames` entry's committed original is the provider's raw spritesheet — whatever grid
+  // layout RD chose. Reassemble it into the horizontal strip the rest of the pipeline
+  // expects (applying the deterministic discard rule), then gate its geometry: the gate ran
+  // once in `gen` to accept the take, and runs here on every pack so a committed original
+  // that stops satisfying its own manifest fails the build rather than shipping quietly.
+  if (entry.frames !== undefined) {
+    const plan = planAnimation(entry);
+    image = reassembleStrip(image, plan, entry.id);
+    const geometry = checkStripGeometry(image, plan.frames);
+    if (!geometry.ok) {
+      throw new Error(
+        `Asset "${entry.id}": committed strip fails the cell-geometry gate — ${geometry.message}`,
+      );
+    }
+  }
 
   let grid: GridReport;
   if (capabilities.nativePixelOutput) {

@@ -154,6 +154,55 @@ part: **a take you like is only safe once its PNG is on disk**, so `--reroll` ov
 original and a take worth keeping should be copied aside before the next roll. The recorded seed
 is provenance, not a restore point.
 
+## The animation path — how a strip with exact cells is actually bought
+
+Wave 8 proved the plain endpoint cannot draw N plants on an N-cell pitch at strip
+resolution: 26 paid takes across two models and five prompt strategies, one success — RD
+draws plants at its own ~45–55px pitch whatever the prompt asks (item 063 has the receipts).
+The hoped-for way out is RD's **animation** styles, which generate a **fixed frame count**
+on a real cell grid and return it as a PNG spritesheet via `return_spritesheet: true`.
+
+**Measured caveat before you spend (2026-08-14, item 063, $0.35):**
+`rd_animation__small_sprites` ($0.07, 32px) **ignores `frames_duration` entirely** and
+always returns a 5×4 twenty-cell RPG character sheet — walk cycles, a wave, a death pose.
+Two paid takes proved the prompt cannot override the format: even "not a character, no
+face, no arms, it never walks" came back as a plant _person_ who waves and then dies. The
+grid itself is immaculate (every cell clean on a real 32px pitch — the cell-geometry half
+of the problem genuinely is solved by the animation endpoint), but the format is the
+style's, not yours. `reassembleStrip` now rejects surplus-cell sheets outright, so a take
+like this fails the gate automatically instead of shipping four walk frames and a wave.
+The untested next candidate is `rd_animation__any_animation` (64px), which at **$0.25 a
+take** exceeds the $0.15 per-strip cap before its first retry — using it is a budget
+decision for a human, not a default. The four crop strips therefore still ship their
+committed 4-frame originals, and the renderer's tint-and-sag wilt fake stays.
+
+A manifest entry opts in by declaring `frames: N` — its native cell count — plus an
+animation `promptStyle` (frame pixel sizes are fixed per style; see `ANIMATION_FRAME_SIZES`
+in `post/frames.ts`) and `trim: false`. Entries without `frames` build byte-identical
+requests to what they always sent; the plain path is untouched.
+
+Three rules make the mode deterministic:
+
+1. **The over-ask.** RD only sells 4/6/8/10/12/16 frames (`frames_duration` — named like a
+   timing knob, actually the count). A 5-cell strip requests 6 frames and keeps the first
+   `frames − 1` plus the **last** — the animation's end state is what the final cell is
+   for (a grow-then-wither strip's cell 4 must be fully wilted, not the halfway sag drawn
+   en route). The kept indices are recorded in the sidecar.
+2. **The geometry gate.** Every take is reassembled and column-checked before it is
+   accepted: exactly one opaque cluster per cell, no cluster straddling a boundary
+   (`post/geometry.ts` — the wave-8 check that separated the one shippable strip from
+   twenty-five paid failures). A rejected take's PNG lands in `art/review/rejected/` as a
+   receipt, and the reroll uses a **fresh** seed — same-session determinism would buy the
+   identical failure again. The same gate runs in `cook` on every pack, so a committed
+   original that stops satisfying its manifest fails the build.
+3. **The cap.** A strip may not burn more than **$0.15** per run chasing a passing take —
+   at $0.07 an animation that is two takes and out, as a reported failure rather than a
+   ground-down balance.
+
+The committed original is the provider's **raw spritesheet**, whatever grid layout RD
+chose; the cook stage slices it (row-major, derived from the style's frame size),
+applies the discard rule, and decimates to native exactly as for any oversampled sprite.
+
 ## How the seam works
 
 Post-processing stages branch on **capability flags**, never on a provider's name. That is

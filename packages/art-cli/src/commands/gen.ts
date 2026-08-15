@@ -2,12 +2,16 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { numberOption, usd } from '../args.js';
 import { loadManifest, resolveArtPath } from '../manifest.js';
+import { planAnimation, reassembleStrip } from '../post/frames.js';
+import { checkStripGeometry } from '../post/geometry.js';
 import { loadPaletteContext } from '../post/palette.js';
+import { decode } from '../post/raw.js';
 import { getAdapter } from '../providers/index.js';
 import { DEFAULT_ATTEMPTS, GenerationLostError } from '../providers/retro-diffusion.js';
-import { ORIGINALS_DIR } from '../paths.js';
+import { ORIGINALS_DIR, REVIEW_DIR } from '../paths.js';
 import type { Args } from '../args.js';
 import type { AssetEntry } from '../manifest.js';
+import type { StripGeometryReport } from '../post/geometry.js';
 
 /**
  * Spend above this, in USD, requires --confirm. The RD account is small and a surprise
@@ -15,6 +19,16 @@ import type { AssetEntry } from '../manifest.js';
  * reason to find out the price by paying it.
  */
 const DEFAULT_MAX_SPEND = 0.1;
+
+/**
+ * Per-entry ceiling on what a `frames` strip may burn chasing a take that passes the
+ * geometry gate, in USD. Another take is bought only while the entry's spend so far plus
+ * that take would stay at or under this — at $0.07 an animation, that means two takes and
+ * out. The number is item 063's, set against wave 8's counter-example: 26 takes of grinding
+ * proved the plain endpoint wrong at ~$0.68, and the lesson was to abort and report, not
+ * persist. A capped failure is a finding; an uncapped one is a bill.
+ */
+const STRIP_RETRY_SPEND_CAP = 0.15;
 
 function sidecarPath(id: string): string {
   return resolve(ORIGINALS_DIR, `${id}.json`);
@@ -162,62 +176,128 @@ export async function gen(args: Args): Promise<number> {
 
   async function generateOne(entry: AssetEntry): Promise<void> {
     const adapter = getAdapter(entry.provider);
-    let result;
-    try {
-      result = await adapter.generate({
-        entry,
-        palette: paletteFor(entry),
-        dryRun: false,
-        seed: seedFor(entry.id),
-        attempts,
-      });
-    } catch (error) {
-      // One bad asset must not abandon the run. On a forty-asset batch, throwing here
-      // would discard every remaining generation AND the printed record of what the ones
-      // already bought had cost — which is the number the operator most needs when a run
-      // goes wrong. Collect, report at the end, exit non-zero.
-      const billed = error instanceof GenerationLostError && error.billed;
-      const message = error instanceof Error ? error.message : String(error);
-      failures.push({ id: entry.id, message, billed });
-      console.error(`  FAIL  ${entry.id.padEnd(24)} ${message.split('\n')[0]}`);
+    const animation = entry.frames !== undefined ? planAnimation(entry) : null;
+    let entrySpent = 0;
+    let takeSeed = seedFor(entry.id);
+
+    for (let take = 1; ; take++) {
+      let result;
+      try {
+        result = await adapter.generate({
+          entry,
+          palette: paletteFor(entry),
+          dryRun: false,
+          seed: takeSeed,
+          attempts,
+        });
+      } catch (error) {
+        // One bad asset must not abandon the run. On a forty-asset batch, throwing here
+        // would discard every remaining generation AND the printed record of what the ones
+        // already bought had cost — which is the number the operator most needs when a run
+        // goes wrong. Collect, report at the end, exit non-zero.
+        const billed = error instanceof GenerationLostError && error.billed;
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push({ id: entry.id, message, billed });
+        console.error(`  FAIL  ${entry.id.padEnd(24)} ${message.split('\n')[0]}`);
+        return;
+      }
+      const image = result.images[0];
+      if (!image) throw new Error(`Provider returned no image for "${entry.id}".`);
+
+      entrySpent += result.cost;
+      spent += result.cost;
+      if (result.remainingBalance !== null) balance = result.remainingBalance;
+
+      // The geometry gate, for strips only: reject a take whose cells are wrong BEFORE
+      // paying for more. Transport retries above reuse the seed (same picture, already
+      // billed); a geometry reject rolls a FRESH seed, because the picture itself is the
+      // problem and same-session determinism would buy the identical failure again.
+      let geometry: StripGeometryReport | null = null;
+      if (animation) {
+        try {
+          geometry = checkStripGeometry(
+            reassembleStrip(await decode(image), animation, entry.id),
+            animation.frames,
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          geometry = { ok: false, clusters: [], message };
+        }
+
+        if (!geometry.ok) {
+          // The take was paid for either way — keep the receipt where a human can look.
+          const rejectedDir = resolve(REVIEW_DIR, 'rejected');
+          mkdirSync(rejectedDir, { recursive: true });
+          const receipt = `${entry.id}.take${take}.seed${result.seed ?? 'none'}`;
+          writeFileSync(resolve(rejectedDir, `${receipt}.png`), image);
+          console.warn(
+            `  gate  ${entry.id.padEnd(24)} take ${take} rejected: ${geometry.message}\n` +
+              `        receipt in art/review/rejected/${receipt}.png`,
+          );
+
+          if (entrySpent + result.cost > STRIP_RETRY_SPEND_CAP) {
+            failures.push({
+              id: entry.id,
+              message:
+                `geometry gate rejected ${take} take(s) for ${usd(entrySpent)}; another take ` +
+                `would pass the ${usd(STRIP_RETRY_SPEND_CAP)} per-strip cap. Aborted — see ` +
+                `art/review/rejected/ for the paid takes. Last: ${geometry.message}`,
+              billed: false,
+            });
+            return;
+          }
+          takeSeed = Math.floor(Math.random() * 2 ** 31);
+          continue;
+        }
+      }
+
+      writeFileSync(originalPath(entry.id), image);
+      writeFileSync(
+        sidecarPath(entry.id),
+        `${JSON.stringify(
+          {
+            id: entry.id,
+            provider: adapter.name,
+            model: result.model,
+            seed: result.seed,
+            prompt: result.prompt,
+            promptStyle: result.promptStyle,
+            native: { width: entry.width, height: entry.height },
+            requested: result.requested,
+            ...(animation
+              ? {
+                  animation: {
+                    frames: animation.frames,
+                    framesRequested: animation.framesRequested,
+                    frameSize: animation.frameSize,
+                    keptFrames: [...animation.keep],
+                    discardRule: 'first frames-1 requested frames, plus the last',
+                    takes: take,
+                    geometry: geometry?.message ?? null,
+                  },
+                }
+              : {}),
+            removeBg: entry.removeBg ?? true,
+            tileX: entry.tileX ?? false,
+            tileY: entry.tileY ?? false,
+            palette: manifest.palette ?? null,
+            anchor: entry.anchor,
+            atlasGroup: entry.atlasGroup,
+            costUsd: entrySpent,
+            generatedAt: new Date().toISOString(),
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      console.log(
+        `  wrote ${entry.id.padEnd(24)} ${(image.length / 1024).toFixed(1).padStart(6)} KB  ` +
+          `seed ${String(result.seed ?? '-').padEnd(12)} ${usd(entrySpent)}` +
+          (take > 1 ? ` over ${take} takes` : ''),
+      );
       return;
     }
-    const image = result.images[0];
-    if (!image) throw new Error(`Provider returned no image for "${entry.id}".`);
-
-    writeFileSync(originalPath(entry.id), image);
-    writeFileSync(
-      sidecarPath(entry.id),
-      `${JSON.stringify(
-        {
-          id: entry.id,
-          provider: adapter.name,
-          model: result.model,
-          seed: result.seed,
-          prompt: result.prompt,
-          promptStyle: result.promptStyle,
-          native: { width: entry.width, height: entry.height },
-          requested: result.requested,
-          removeBg: entry.removeBg ?? true,
-          tileX: entry.tileX ?? false,
-          tileY: entry.tileY ?? false,
-          palette: manifest.palette ?? null,
-          anchor: entry.anchor,
-          atlasGroup: entry.atlasGroup,
-          costUsd: result.cost,
-          generatedAt: new Date().toISOString(),
-        },
-        null,
-        2,
-      )}\n`,
-    );
-
-    spent += result.cost;
-    if (result.remainingBalance !== null) balance = result.remainingBalance;
-    console.log(
-      `  wrote ${entry.id.padEnd(24)} ${(image.length / 1024).toFixed(1).padStart(6)} KB  ` +
-        `seed ${String(result.seed ?? '-').padEnd(12)} ${usd(result.cost)}`,
-    );
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, () => worker()));

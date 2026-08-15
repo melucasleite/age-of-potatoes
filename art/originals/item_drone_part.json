@@ -1,0 +1,24 @@
+{
+  "id": "item_drone_part",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 701185783,
+  "prompt": "a single manufactured machine part, one fat solid brass gear cog with thick blunt teeth and one bright silver grey hexagonal bolt head filling its centre, clearly a mechanical spare part, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no wires, no springs, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-15T02:27:09.510Z"
+}

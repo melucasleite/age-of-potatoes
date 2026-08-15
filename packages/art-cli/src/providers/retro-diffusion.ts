@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import { requireSecret } from '../env.js';
+import { planAnimation } from '../post/frames.js';
 import { GENERATION_TIMEOUT_MS, HttpTransportError, QUOTE_TIMEOUT_MS, postJson } from './http.js';
 import { assertNativeSize } from './types.js';
 import type {
@@ -145,7 +146,15 @@ export function createRetroDiffusionAdapter(): ProviderAdapter {
         );
       }
 
-      const plan = planSize(entry.width, entry.height);
+      // The animation opt-in (`frames`). A strip entry does not ask for its native strip
+      // size — it asks the ANIMATION endpoint for a fixed-count animation at the style's
+      // fixed frame size, returned as a PNG spritesheet. The plain path below is untouched:
+      // an entry without `frames` builds byte-identical requests to what it always sent.
+      const animation = entry.frames !== undefined ? planAnimation(entry) : null;
+
+      const plan = animation
+        ? { width: animation.frameSize, height: animation.frameSize, factor: animation.factor }
+        : planSize(entry.width, entry.height);
       if (plan.width > MAX_DIMENSION || plan.height > MAX_DIMENSION) {
         throw new Error(
           `Asset "${entry.id}" is ${entry.width}x${entry.height}, which has to be requested at ` +
@@ -176,8 +185,13 @@ export function createRetroDiffusionAdapter(): ProviderAdapter {
         remove_bg: entry.removeBg ?? true,
         tile_x: entry.tileX ?? false,
         tile_y: entry.tileY ?? false,
-        return_spritesheet: false,
+        // On the animation path this is the whole point: true returns a PNG spritesheet on a
+        // real cell grid instead of a GIF. On the plain path it stays false, as ever.
+        return_spritesheet: animation !== null,
       };
+      // `frames_duration` reads like a timing knob; it is the frame count, and it only sells
+      // 4/6/8/10/12/16. The over-ask and the discard rule both live in planAnimation.
+      if (animation) body.frames_duration = animation.framesRequested;
       if (dryRun) body.check_cost = true;
       if (palette && palette.length > 0) body.input_palette = await encodePalette(palette);
 

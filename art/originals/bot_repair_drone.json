@@ -1,0 +1,24 @@
+{
+  "id": "bot_repair_drone",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1554606982,
+  "prompt": "a tiny pixel art flying repair drone hovering, one fat rounded bright red metal body shaped like a chunky capsule, two short stubby grey rotor arms sticking out of the top corners each ending in one small pale spinning rotor disc, one big round pale glass eye on the front, one small silver grey spanner hanging from its underside, chunky readable silhouette, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no legs, no wheels, no shadow, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "bots",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-15T02:27:09.260Z"
+}

@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.6c454a88.png';
-export const ATLAS_JSON_URL = '/art/atlas.6c454a88.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.4db09a8c.png';
+export const ATLAS_JSON_URL = '/art/atlas.4db09a8c.json';
 
 export const ATLAS_SIZE = { width: 1024, height: 512 } as const;
 
@@ -76,6 +76,14 @@ export const ATLAS_FRAMES = {
     width: 32,
     height: 16,
     anchor: 'top-left',
+    group: 'bots',
+  },
+  bot_repair_drone: {
+    x: 132,
+    y: 17,
+    width: 16,
+    height: 16,
+    anchor: 'center',
     group: 'bots',
   },
   crop_cane_strip: {
@@ -230,7 +238,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_fertilizer: {
+  item_drone_part: {
     x: 68,
     y: 125,
     width: 16,
@@ -238,7 +246,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_gold_potato: {
+  item_fertilizer: {
     x: 85,
     y: 125,
     width: 16,
@@ -246,7 +254,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_gold_potato_seed: {
+  item_gold_potato: {
     x: 102,
     y: 125,
     width: 16,
@@ -254,7 +262,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_kola_nut: {
+  item_gold_potato_seed: {
     x: 119,
     y: 125,
     width: 16,
@@ -262,7 +270,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_kola_powder: {
+  item_kola_nut: {
     x: 136,
     y: 125,
     width: 16,
@@ -270,7 +278,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_lemon: {
+  item_kola_powder: {
     x: 153,
     y: 125,
     width: 16,
@@ -278,7 +286,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_orange: {
+  item_lemon: {
     x: 170,
     y: 125,
     width: 16,
@@ -286,7 +294,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_plain_chips: {
+  item_orange: {
     x: 187,
     y: 125,
     width: 16,
@@ -294,7 +302,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_potato: {
+  item_plain_chips: {
     x: 204,
     y: 125,
     width: 16,
@@ -302,7 +310,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_potato_slices: {
+  item_potato: {
     x: 221,
     y: 125,
     width: 16,
@@ -310,7 +318,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_push_scythe: {
+  item_potato_slices: {
     x: 238,
     y: 125,
     width: 16,
@@ -318,7 +326,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_repair_kit: {
+  item_push_scythe: {
     x: 255,
     y: 125,
     width: 16,
@@ -326,7 +334,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_rustic_style_chips: {
+  item_repair_kit: {
     x: 272,
     y: 125,
     width: 16,
@@ -334,7 +342,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_seasoned_chips: {
+  item_rustic_style_chips: {
     x: 289,
     y: 125,
     width: 16,
@@ -342,7 +350,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_six_pack: {
+  item_seasoned_chips: {
     x: 306,
     y: 125,
     width: 16,
@@ -350,7 +358,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_snack_combo: {
+  item_six_pack: {
     x: 323,
     y: 125,
     width: 16,
@@ -358,7 +366,7 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_soda: {
+  item_snack_combo: {
     x: 340,
     y: 125,
     width: 16,
@@ -366,8 +374,16 @@ export const ATLAS_FRAMES = {
     anchor: 'center',
     group: 'items',
   },
-  item_washed_potato: {
+  item_soda: {
     x: 357,
+    y: 125,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  item_washed_potato: {
+    x: 374,
     y: 125,
     width: 16,
     height: 16,
@@ -471,7 +487,7 @@ export const ATLAS_FRAMES = {
     group: 'machines',
   },
   machine_delivery_cart: {
-    x: 742,
+    x: 775,
     y: 142,
     width: 16,
     height: 16,
@@ -495,7 +511,7 @@ export const ATLAS_FRAMES = {
     group: 'machines',
   },
   machine_hand_cart: {
-    x: 759,
+    x: 792,
     y: 142,
     width: 16,
     height: 16,
@@ -542,7 +558,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_orange_tree: {
+  machine_maintenance_station: {
     x: 412,
     y: 142,
     width: 32,
@@ -550,7 +566,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_planter_dock: {
+  machine_orange_tree: {
     x: 445,
     y: 142,
     width: 32,
@@ -558,7 +574,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_pump: {
+  machine_planter_dock: {
     x: 478,
     y: 142,
     width: 32,
@@ -566,7 +582,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_root_cellar: {
+  machine_pump: {
     x: 511,
     y: 142,
     width: 32,
@@ -574,7 +590,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_seasoner: {
+  machine_root_cellar: {
     x: 544,
     y: 142,
     width: 32,
@@ -582,7 +598,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_slicer: {
+  machine_seasoner: {
     x: 577,
     y: 142,
     width: 32,
@@ -590,15 +606,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_sprinkler: {
-    x: 776,
-    y: 142,
-    width: 16,
-    height: 16,
-    anchor: 'bottom-center',
-    group: 'machines',
-  },
-  machine_syrup_mixer: {
+  machine_slicer: {
     x: 610,
     y: 142,
     width: 32,
@@ -606,7 +614,15 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_tank: {
+  machine_sprinkler: {
+    x: 809,
+    y: 142,
+    width: 16,
+    height: 16,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_syrup_mixer: {
     x: 643,
     y: 142,
     width: 32,
@@ -614,7 +630,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_truck_depot: {
+  machine_tank: {
     x: 676,
     y: 142,
     width: 32,
@@ -622,8 +638,16 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_washer: {
+  machine_truck_depot: {
     x: 709,
+    y: 142,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_washer: {
+    x: 742,
     y: 142,
     width: 32,
     height: 32,
