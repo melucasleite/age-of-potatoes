@@ -34,7 +34,7 @@ import { TILE_PX } from './pixel';
 
 import { Sprite } from 'pixi.js';
 
-import { ItemId, WiltStage } from '@snack/sim';
+import { ItemId, WiltStage, worldTileKey } from '@snack/sim';
 import type { FieldView } from '@snack/sim';
 
 import type { ItemPage } from './belt-items';
@@ -90,7 +90,7 @@ export class FarmFx {
   private readonly page: ItemPage;
   private readonly pops: Pop[] = [];
 
-  /** Per-tile bounce clocks. Index is the field's row-major tile index. */
+  /** Per-tile bounce clocks. Index is the field's CURRENT collection index. */
   private readonly bounceLife: number[] = [];
   private readonly bounceTotal: number[] = [];
 
@@ -100,6 +100,14 @@ export class FarmFx {
   private readonly prevCompost: number[] = [];
   private readonly prevWilt: number[] = [];
   private readonly prevPoured: number[] = [];
+  /**
+   * The world tile key each index held last frame ([[066]]). Farmland is a collection now
+   * and a till SHIFTS EVERY INDEX AFTER IT — diffed positionally across that frame, tile 12's
+   * pour would land on tile 13's plant and a potato could launch out of bare dirt. When the
+   * keys move, `realign` re-files every remembered value under its tile's new index and
+   * primes tiles this differ has never seen, so a till fires exactly nothing.
+   */
+  private readonly keys: number[] = [];
   private primed = false;
 
   /** Scratch, reused every frame so the getter allocates nothing. */
@@ -157,6 +165,8 @@ export class FarmFx {
       this.primed = true;
       return;
     }
+
+    this.realign(field);
 
     for (let i = 0; i < count; i++) {
       const ready = field.ready[i] ?? 0;
@@ -298,9 +308,90 @@ export class FarmFx {
 
   // --- internals -----------------------------------------------------------------------
 
+  /**
+   * Re-file the remembered field under the collection's CURRENT indexing.
+   *
+   * Runs only on a frame where the keys moved — a till or an un-till — which is a hand
+   * gesture, not a loop. Values follow their TILE: a bounce mid-wobble on tile (5,7) keeps
+   * wobbling on tile (5,7) whatever index it wakes up at, a position this differ has never
+   * seen is primed from the projection so it fires nothing, and a position that stopped
+   * being farmland takes its memory with it.
+   */
+  private realign(field: FieldView): void {
+    const count = field.crop.length;
+
+    let same = count === this.keys.length;
+    if (same) {
+      for (let i = 0; i < count; i++) {
+        if (this.keys[i] !== worldTileKey(field.tileX[i] ?? 0, field.tileY[i] ?? 0)) {
+          same = false;
+          break;
+        }
+      }
+    }
+    if (same) return;
+
+    interface Held {
+      ready: number;
+      crop: number;
+      compost: number;
+      wilt: number;
+      poured: number;
+      bounceLife: number;
+      bounceTotal: number;
+    }
+    const remembered = new Map<number, Held>();
+    for (let i = 0; i < this.keys.length; i++) {
+      remembered.set(this.keys[i]!, {
+        ready: this.prevReady[i] ?? 0,
+        crop: this.prevCrop[i] ?? 0,
+        compost: this.prevCompost[i] ?? 0,
+        wilt: this.prevWilt[i] ?? WiltStage.Fresh,
+        poured: this.prevPoured[i] ?? 0,
+        bounceLife: this.bounceLife[i] ?? 0,
+        bounceTotal: this.bounceTotal[i] ?? BOUNCE_MS,
+      });
+    }
+
+    for (let i = 0; i < count; i++) {
+      const key = worldTileKey(field.tileX[i] ?? 0, field.tileY[i] ?? 0);
+      const held = remembered.get(key);
+      if (held === undefined) {
+        // Fresh dirt: primed exactly as the first frame primes, so the till emits nothing.
+        this.prevReady[i] = field.ready[i] ?? 0;
+        this.prevCrop[i] = field.crop[i] ?? 0;
+        this.prevCompost[i] = field.compost[i] ?? 0;
+        this.prevWilt[i] = field.wilt[i] ?? WiltStage.Fresh;
+        this.prevPoured[i] = field.lastPouredTick[i] ?? 0;
+        this.bounceLife[i] = 0;
+        this.bounceTotal[i] = BOUNCE_MS;
+      } else {
+        this.prevReady[i] = held.ready;
+        this.prevCrop[i] = held.crop;
+        this.prevCompost[i] = held.compost;
+        this.prevWilt[i] = held.wilt;
+        this.prevPoured[i] = held.poured;
+        this.bounceLife[i] = held.bounceLife;
+        this.bounceTotal[i] = held.bounceTotal;
+      }
+      this.keys[i] = key;
+    }
+
+    this.keys.length = count;
+    this.prevReady.length = count;
+    this.prevCrop.length = count;
+    this.prevCompost.length = count;
+    this.prevWilt.length = count;
+    this.prevPoured.length = count;
+    this.bounceLife.length = count;
+    this.bounceTotal.length = count;
+  }
+
   private spawnPop(field: FieldView, index: number, wilt: number): void {
-    const tileX = field.originX + (index % field.tilesWide);
-    const tileY = field.originY + Math.floor(index / field.tilesWide);
+    // Per-entry coordinates ARE the addressing scheme ([[066]]); the bounding-box
+    // arithmetic this replaces is wrong the moment the field is non-rectangular.
+    const tileX = field.tileX[index] ?? 0;
+    const tileY = field.tileY[index] ?? 0;
 
     for (const pop of this.pops) {
       if (pop.life > 0) continue;
@@ -333,7 +424,9 @@ export class FarmFx {
       this.prevCompost[i] = field.compost[i] ?? 0;
       this.prevWilt[i] = field.wilt[i] ?? WiltStage.Fresh;
       this.prevPoured[i] = field.lastPouredTick[i] ?? 0;
+      this.keys[i] = worldTileKey(field.tileX[i] ?? 0, field.tileY[i] ?? 0);
     }
+    this.keys.length = count;
   }
 }
 

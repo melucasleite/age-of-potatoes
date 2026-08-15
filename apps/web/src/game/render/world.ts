@@ -4,16 +4,16 @@
 // `./pixel` first — see the comment block there.
 import { dayPhase, TILE_PX } from './pixel';
 
-import { ColorMatrixFilter, Container, Rectangle, Sprite } from 'pixi.js';
+import { ColorMatrixFilter, Container, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { Application } from 'pixi.js';
 
 import {
-  FIELD_ORIGIN_X,
   FIELD_ORIGIN_Y,
   FIELD_TILES_HIGH,
   FIELD_TILES_WIDE,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
+  worldTileKey,
 } from '@snack/sim';
 
 import { BeltItemLayer, buildItemPage } from './belt-items';
@@ -24,6 +24,7 @@ import { BotLayer } from './bots';
 import type { Camera } from './camera';
 import { Ceremony } from './ceremony';
 import { FarmFx } from './farm-fx';
+import { FieldTiles } from './field-tiles';
 import { installUiFont } from './font';
 import { GrabberLayer } from './grabbers';
 import { Hud } from './hud';
@@ -107,13 +108,28 @@ export interface WorldScene {
   readonly terrain: TerrainBaker;
   readonly dayNight: ColorMatrixFilter;
 
-  /** One per field tile, in the field's row-major order. */
-  readonly soil: Sprite[];
-  readonly crops: Sprite[];
-  readonly readyMarks: Sprite[];
-  readonly compost: Sprite[];
+  /**
+   * The farmland's sprite pools, one set per farm tile in the COLLECTION'S order ([[066]]).
+   * `fieldTiles.sync` runs first thing every frame; the parallel arrays inside are valid
+   * for exactly as long as the projection's own are — until the next till.
+   */
+  readonly fieldTiles: FieldTiles;
+  /**
+   * Every farm tile's world key, maintained by `fieldTiles.sync`, read by the ground bake.
+   * Renderer-local and write-once-per-till; never a reference into the projection.
+   */
+  readonly farmland: Set<number>;
   readonly machines: Map<number, MachineVisual>;
   readonly player: Sprite;
+  /**
+   * The armed tool in the avatar's hands ([[065]]) — twice, and only ever one visible.
+   * `heldToolFront` is attached AFTER the player and draws over him for south/east/west;
+   * `heldToolBack` is attached BEFORE and draws behind him for the walking-up pose. Two
+   * sprites instead of re-attaching one, because reordering a RenderLayer mid-frame to
+   * move one icon would also reshuffle the player against every bot on the layer.
+   */
+  readonly heldToolBack: Sprite;
+  readonly heldToolFront: Sprite;
   readonly hover: Sprite;
   /** Where a pending walk-to errand is headed. Hidden whenever there is no errand. */
   readonly destination: Sprite;
@@ -156,17 +172,21 @@ export interface WorldScene {
   filterOn: boolean;
 }
 
-/** The static ground layout of the v0.1 lot. Baked once; never changes in v0.1. */
-function groundNameAt(tileX: number, tileY: number): string {
-  const inField =
-    tileX >= FIELD_ORIGIN_X &&
-    tileY >= FIELD_ORIGIN_Y &&
-    tileX < FIELD_ORIGIN_X + FIELD_TILES_WIDE &&
-    tileY < FIELD_ORIGIN_Y + FIELD_TILES_HIGH;
-  if (inField) return ART.groundField;
+/**
+ * The ground at a world tile — LIVE, no longer a static layout ([[066]]).
+ *
+ * Farmland is wherever the player's till says it is, read off the `farmland` key set that
+ * `fieldTiles.sync` maintains from the projection each frame; the tiles whose answer here
+ * changed are marked dirty by the same sync, which is what makes a till rebake to dirt and
+ * an un-till rebake to grass with no one polling. The yard strip and the grass speckle are
+ * still fixed decoration, still deterministic per position, so a re-bake is pixel-identical
+ * to the bake it replaced everywhere the dirt did not move.
+ */
+function groundNameAt(farmland: ReadonlySet<number>, tileX: number, tileY: number): string {
+  if (farmland.has(worldTileKey(tileX, tileY))) return ART.groundField;
 
-  // The yard: a dirt strip south of the field where the stand sits and where machines
-  // can legally be placed (the sim refuses to build on field tiles).
+  // The yard: a dirt strip south of the STARTING field where the stand sits. Cosmetic and
+  // frozen — the constants name where the v0.1 lot put its furniture, not where farmland is.
   const yardTop = FIELD_ORIGIN_Y + FIELD_TILES_HIGH;
   if (tileY >= yardTop && tileY <= yardTop + 1) return ART.groundLot;
   if (tileX >= 1 && tileX <= 3 && tileY >= yardTop - 2) return ART.groundLot;
@@ -218,8 +238,13 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   const zoneOverlay = new ZoneOverlay(art);
   const landOverlay = new LandOverlay(art);
 
+  // Owned by the scene, written by `fieldTiles.sync`, read by the ground bake below. Empty
+  // until the first projection arrives — and the first bake only runs inside `render()`,
+  // after the first sync, so the opening frame already knows where the dirt is.
+  const farmland = new Set<number>();
+
   const source: TerrainSource = {
-    ground: (tileX, tileY) => art.get(groundNameAt(tileX, tileY)),
+    ground: (tileX, tileY) => art.get(groundNameAt(farmland, tileX, tileY)),
     // LAND OUTRANKS ZONES, and the two can never actually meet: zone paint exists only on
     // field tiles and the field is inside the starting parcel, which every world owns. The
     // order is written down anyway, because "these two cannot collide" is exactly the kind of
@@ -237,63 +262,43 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     layers.zonePaint.attach(sprite);
   }
 
-  const soil: Sprite[] = [];
-  const crops: Sprite[] = [];
-  const readyMarks: Sprite[] = [];
-  const compost: Sprite[] = [];
-  const wetTexture = art.get(ART.soilWet);
-  const compostTexture = art.get(ART.uiCompost);
+  // The farmland pools, dressed to the projection's collection by `fieldTiles.sync` on the
+  // first frame and re-dressed on every till. The long-standing anchor and layer decisions
+  // (wet soil as an alpha ramp, base-anchored crops, compost as ground litter, ready marks
+  // on the world-UI layer) moved into `field-tiles.ts` with the loop that applies them.
+  const fieldTiles = new FieldTiles(art, {
+    ground: (sprite) => {
+      contentRoot.addChild(sprite);
+      layers.groundEntities.attach(sprite);
+    },
+    crop: (sprite) => {
+      contentRoot.addChild(sprite);
+      layers.groundEntities.attach(sprite);
+    },
+    ui: (sprite) => {
+      contentRoot.addChild(sprite);
+      layers.worldUi.attach(sprite);
+    },
+  });
 
-  for (let i = 0; i < FIELD_TILE_COUNT; i++) {
-    const tileX = FIELD_ORIGIN_X + (i % FIELD_TILES_WIDE);
-    const tileY = FIELD_ORIGIN_Y + Math.floor(i / FIELD_TILES_WIDE);
+  // The held tool's BEHIND sprite goes on the player layer first, so the avatar draws over
+  // it while walking up; the FRONT one right after the player. See `WorldScene`'s note.
+  const heldToolBack = new Sprite(Texture.EMPTY);
+  heldToolBack.anchor.set(0.5, 0.5);
+  heldToolBack.visible = false;
+  contentRoot.addChild(heldToolBack);
+  layers.player.attach(heldToolBack);
 
-    // Moisture is an ALPHA RAMP on a pre-darkened soil sprite, not a tint and not a
-    // re-bake: the ground bake must stay static or the whole chunk design is pointless.
-    const wet = new Sprite(wetTexture);
-    wet.position.set(tileX * TILE_PX, tileY * TILE_PX);
-    wet.alpha = 0;
-    contentRoot.addChild(wet);
-    layers.groundEntities.attach(wet);
-    soil.push(wet);
-
-    // ANCHORED AT ITS BASE, not its top-left. The drink-bounce is a squash-stretch, and a
-    // squash about a sprite's corner slides the plant sideways out of its own tile; about
-    // its middle it shrinks like a deflating balloon. About the base it presses into the
-    // soil and springs back, which is the only one of the three that reads as drinking.
-    // The rect drawn at rest is identical to the top-left version — this moves nothing
-    // until something scales it.
-    const crop = new Sprite(art.get(ART.cropStage(1, 1)));
-    crop.anchor.set(0.5, 1);
-    crop.position.set(tileX * TILE_PX + TILE_PX / 2, tileY * TILE_PX + TILE_PX);
-    crop.visible = false;
-    contentRoot.addChild(crop);
-    layers.groundEntities.attach(crop);
-    crops.push(crop);
-
-    // Compost sits UNDER the crop layer's ready marks and over the soil: it is litter on
-    // the ground, not a plant, and plan §4's "nothing ever vanishes" only reads if you can
-    // see the thing that did not vanish.
-    const heap = new Sprite(compostTexture);
-    heap.position.set(tileX * TILE_PX, tileY * TILE_PX);
-    heap.visible = false;
-    contentRoot.addChild(heap);
-    layers.groundEntities.attach(heap);
-    compost.push(heap);
-
-    const mark = new Sprite(art.get(ART.uiReady));
-    mark.anchor.set(0.5, 1);
-    mark.position.set(tileX * TILE_PX + TILE_PX / 2, tileY * TILE_PX);
-    mark.visible = false;
-    contentRoot.addChild(mark);
-    layers.worldUi.attach(mark);
-    readyMarks.push(mark);
-  }
-
-  const player = new Sprite(art.get(ART.playerSouth));
+  const player = new Sprite(art.get(ART.playerWalk('south', 1)));
   player.anchor.set(0.5, 1);
   contentRoot.addChild(player);
   layers.player.attach(player);
+
+  const heldToolFront = new Sprite(Texture.EMPTY);
+  heldToolFront.anchor.set(0.5, 0.5);
+  heldToolFront.visible = false;
+  contentRoot.addChild(heldToolFront);
+  layers.player.attach(heldToolFront);
 
   const hover = new Sprite(art.get(ART.uiHover));
   hover.visible = false;
@@ -407,12 +412,12 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     layers,
     terrain,
     dayNight,
-    soil,
-    crops,
-    readyMarks,
-    compost,
+    fieldTiles,
+    farmland,
     machines: new Map(),
     player,
+    heldToolBack,
+    heldToolFront,
     hover,
     destination,
     droplets,
@@ -480,6 +485,7 @@ export function destroyWorldScene(scene: WorldScene): void {
   // torn-down scene that still answers keystrokes is a leak with a visible symptom.
   scene.ceremony.destroy();
   scene.farmFx.destroy();
+  scene.fieldTiles.destroy();
   // The particle container before the item page: the page owns the shared texture source
   // every particle points at, and freeing it first hands the container dead frames.
   scene.beltItems.destroy();

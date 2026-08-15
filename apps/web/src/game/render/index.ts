@@ -14,6 +14,7 @@ import { TILE_PX } from './pixel';
 import { Sprite, Texture } from 'pixi.js';
 import {
   Direction,
+  ItemId,
   LampState,
   MachineKind,
   SUBTILE,
@@ -25,6 +26,7 @@ import {
 import type { GrabberView, MachineView, WorldView } from '@snack/sim';
 
 import { TOOL_INFO, ToolMode, toolMachineKind } from '../input/tools';
+import { armedTool } from '../input/armed-tool';
 import { beltItemsVisibleAt } from '../input/lod';
 import type { HoverTile } from '../input/context';
 import { grabberAtView, tileAtView, tileWithinReach } from '../input/picking';
@@ -36,6 +38,7 @@ import { junctionMask, junctionQuarterTurns } from './junction';
 import { LAMP_PX, lampAlpha, lampTint } from './lamps';
 import { liquidName, liquidTint, portHintTint } from './liquids';
 import { pipeAtTile } from './pipes';
+import { walkStep } from './strips';
 import { ART } from './textures';
 import type { DecalDial } from './textures';
 import { applyDayNight, WORLD_HEIGHT_PX, WORLD_WIDTH_PX } from './world';
@@ -48,6 +51,21 @@ export interface RenderUiState {
 
 /** Reused so the per-frame camera blend allocates nothing. Renderer-local, write-only. */
 const cameraTarget = { x: 0, y: 0 };
+
+/** Subtiles per footfall — the same stride the bots plant (`bots.ts`). A tile is 256. */
+const PLAYER_STRIDE_SUB = 64;
+
+/** How far above the feet the held tool rides, in source px. Hand height on a 16px pawn. */
+const HELD_TOOL_RAISE_PX = 6;
+
+/** How far to the leading side the held tool sits, in source px. */
+const HELD_TOOL_SIDE_PX = 5;
+
+/**
+ * The held icon's scale against its 16px frame. Half size: the icon is drawn full-size in
+ * the hotbar slot and SMALL in the hand — same manifest entry, two consumers, per [[065]].
+ */
+const HELD_TOOL_SCALE = 0.5;
 
 /**
  * Fold one simulated tick into the renderer's interpolation state.
@@ -86,8 +104,12 @@ export function render(
 ): void {
   if (!scene.primed) recordTick(scene, view);
 
-  // 1. Terrain. The zone diff runs FIRST so a tile painted this frame is queued before the
-  //    drain, and lands one frame later rather than one frame plus one paint later.
+  // 1. Terrain. THE FARMLAND SYNC RUNS BEFORE EVERYTHING ([[066]]): it re-dresses the field
+  //    sprite pools to the projection's collection and updates the key set the ground bake
+  //    reads, marking the flipped tiles dirty — so a till queued this frame bakes to dirt in
+  //    the same drain that would have baked it to grass. Then the zone diff, so a tile
+  //    painted this frame is queued before the drain, and lands one frame later rather than
+  //    one frame plus one paint later.
   //    Nothing re-bakes on a frame with no edits — the dev overlay's "chunks baked" reads 0
   //    in steady state, and a number that stays non-zero is a bug.
   //
@@ -96,6 +118,9 @@ export function render(
   //    So it re-bakes the whole map rather than diffing tiles — the wash and the fence line
   //    both move, on both sides of a boundary sixteen tiles long, and `drainDirty` spreads the
   //    cost over the next few frames anyway.
+  scene.fieldTiles.sync(view.field, scene.farmland, (tileX, tileY) =>
+    scene.terrain.markTileDirty(tileX, tileY),
+  );
   if (scene.landOverlay.sync(view)) scene.terrain.markAllDirty();
   scene.zoneOverlay.sync(view, (tileX, tileY) => scene.terrain.markTileDirty(tileX, tileY));
   scene.terrain.drainDirty();
@@ -108,8 +133,30 @@ export function render(
 
   // Sprites snap to whole SOURCE pixels. Without this the world root sits on an exact
   // device pixel and the player still shimmers, because the sprite inside it does not.
-  scene.player.position.set(Math.round(playerWorldX), Math.round(playerWorldY) + TILE_PX / 2);
-  scene.player.texture = scene.art.get(facingTexture(view.player.facing));
+  const playerDrawX = Math.round(playerWorldX);
+  const playerDrawY = Math.round(playerWorldY) + TILE_PX / 2;
+  scene.player.position.set(playerDrawX, playerDrawY);
+
+  // THE WALK CYCLE ([[065]]), on the bots' own cadence: which foot is forward is derived
+  // from distance walked — `walkStep` in `strips.ts` — off the SIM'S published position and
+  // `moving` flag, never off raw input, so a replayed world walks identically. Standing
+  // pins to cell 1. The side strip is authored FACING EAST (the player's convention — the
+  // bots' is the opposite; see `ART.playerWalk`), so WEST is the mirrored facing, flipped
+  // about the base anchor's centre line.
+  const step = walkStep(
+    view.player.moving === 1,
+    view.player.xSub,
+    view.player.ySub,
+    PLAYER_STRIDE_SUB,
+  );
+  scene.player.texture = scene.art.get(ART.playerWalk(playerPose(view.player.facing), step));
+  scene.player.scale.x = view.player.facing === Direction.West ? -1 : 1;
+
+  // The armed tool, in hand ([[065]]), read off input's `armedTool` singleton — the
+  // published contract, `viewLod`'s pattern — never off hotbar internals. Input writes it
+  // on every arming edge, so switching slots switches the held sprite the same frame the
+  // cursor changes, and nothing here is ever a command or a hash input (§12).
+  updateHeldTool(scene, view.player.facing, playerDrawX, playerDrawY);
 
   // 3. Camera follows the interpolated position, then clamps and snaps.
   //
@@ -204,28 +251,34 @@ function updateField(
   // drink-bounce — INCLUDING for a pour on a saturated tile, which the old moisture-rise
   // inference was blind to. One diff, both effects; see `farm-fx.ts` for why it is a
   // differ, and for why it can never write anything back.
+  //
+  // EVERYTHING IN THIS LOOP ADDRESSES BY `tileX[i]`/`tileY[i]` ([[066]]): farmland is a
+  // collection, the sprite pools were re-dressed to it by `fieldTiles.sync` at the top of
+  // the frame, and any `originX + i % tilesWide` arithmetic is wrong the moment a till has
+  // ever landed — the bounding box survives for framing only.
   scene.farmFx.observe(field, (i) =>
-    spawnDroplets(scene, i, field.originX, field.originY, field.tilesWide),
+    spawnDroplets(scene, field.tileX[i] ?? 0, field.tileY[i] ?? 0),
   );
 
-  for (let i = 0; i < scene.soil.length; i++) {
+  const tiles = scene.fieldTiles;
+  for (let i = 0; i < field.count; i++) {
     const moisture = field.moisturePermille[i] ?? 0;
 
     // Damp soil is a dark overlay faded in by alpha. Watering a tile darkens it visibly
     // and immediately, which is the entire feedback loop the v0.1 design gate rests on.
-    const wet = scene.soil[i]!;
+    const wet = tiles.soil[i]!;
     wet.alpha = (moisture / 1000) * 0.72;
 
     // Compost is litter, not a plant: it shows whether or not anything is growing here,
     // because the tile it is lying on is usually the tile whose crop just collapsed.
-    const heap = scene.compost[i]!;
+    const heap = tiles.compost[i]!;
     heap.visible = (field.compost[i] ?? 0) > 0;
 
-    const crop = scene.crops[i]!;
+    const crop = tiles.crops[i]!;
     const cropId = field.crop[i] ?? 0;
     if (cropId === 0) {
       crop.visible = false;
-      scene.readyMarks[i]!.visible = false;
+      tiles.readyMarks[i]!.visible = false;
       continue;
     }
 
@@ -249,7 +302,7 @@ function updateField(
     // tint is a batched vertex attribute in v8 — this costs nothing and breaks nothing,
     // unlike the day/night pass, which is one filter on the root for exactly the opposite
     // reason.
-    const tileTop = (field.originY + Math.floor(i / field.tilesWide)) * TILE_PX;
+    const tileTop = (field.tileY[i] ?? 0) * TILE_PX;
     crop.tint =
       wiltFrame !== null
         ? 0xffffff
@@ -272,7 +325,7 @@ function updateField(
     crop.scale.set(bounce.scaleX, bounce.scaleY);
 
     const ready = field.ready[i] === 1;
-    const mark = scene.readyMarks[i]!;
+    const mark = tiles.readyMarks[i]!;
     mark.visible = ready;
     if (ready) {
       // A small bob, offset per tile so a ripe field shimmers rather than pulsing in
@@ -295,15 +348,7 @@ function updateField(
   scene.farmFx.update(deltaMs, playerWorldX, playerWorldY);
 }
 
-function spawnDroplets(
-  scene: WorldScene,
-  index: number,
-  originX: number,
-  originY: number,
-  tilesWide: number,
-): void {
-  const tileX = originX + (index % tilesWide);
-  const tileY = originY + Math.floor(index / tilesWide);
+function spawnDroplets(scene: WorldScene, tileX: number, tileY: number): void {
   let spawned = 0;
   for (const droplet of scene.droplets) {
     if (droplet.life > 0) continue;
@@ -848,17 +893,60 @@ function destroyMachineVisual(visual: MachineVisual): void {
   visual.decals.length = 0;
 }
 
-function facingTexture(facing: number): string {
+/**
+ * Which drawn pose a facing uses — the same three-poses-and-a-mirror rule as `bots.ts`,
+ * with the player's own handedness: the side pose is authored facing EAST, so WEST is the
+ * facing the caller mirrors. A direction this build has never heard of faces the camera.
+ */
+function playerPose(facing: number): 'north' | 'south' | 'side' {
   switch (facing) {
     case Direction.North:
-      return ART.playerNorth;
+      return 'north';
     case Direction.East:
-      return ART.playerEast;
     case Direction.West:
-      return ART.playerWest;
+      return 'side';
     default:
-      return ART.playerSouth;
+      return 'south';
   }
+}
+
+/**
+ * The armed tool, riding the avatar's hand ([[065]]).
+ *
+ * THE SOURCE IS INPUT'S `armedTool` SINGLETON (`input/armed-tool.ts`) — the published
+ * contract on the `viewLod` precedent, whose `heldFrame` comes from the SAME table the
+ * hotbar slot art reads. That is what makes "what you see on the bar is what your
+ * character is holding" true by construction; input's hotbar test pins the two surfaces
+ * together. The one render-side addition is the repair kit: input's table covers only the
+ * mandatory verbs because an item shortcut already draws AS ITS ITEM — so the hand does
+ * exactly that, holding the kit's own bag icon while the kit cursor is armed (the vault's
+ * held set is can/seeds/harvest/teardown/KIT).
+ *
+ * ONE OF TWO SPRITES SHOWS, never both: the front one (attached after the player) for
+ * south/east/west, the back one (attached before) while walking up — the tool is in the
+ * farmer's hands, and his hands are on the far side of him when he faces away. An empty
+ * answer — the Hand, every build cursor — hides both: an empty hand IS the "nothing
+ * armed" tell. The icon mirrors with the pose so it stays in the leading hand.
+ */
+function updateHeldTool(scene: WorldScene, facing: number, drawX: number, drawY: number): void {
+  const frame =
+    armedTool.tool === ToolMode.UseRepairKit ? ART.item(ItemId.RepairKit) : armedTool.heldFrame;
+  if (frame === '') {
+    scene.heldToolBack.visible = false;
+    scene.heldToolFront.visible = false;
+    return;
+  }
+
+  const behind = facing === Direction.North;
+  const shown = behind ? scene.heldToolBack : scene.heldToolFront;
+  const hidden = behind ? scene.heldToolFront : scene.heldToolBack;
+  hidden.visible = false;
+
+  shown.texture = scene.art.get(frame);
+  const side = facing === Direction.West ? -1 : 1;
+  shown.scale.set(HELD_TOOL_SCALE * side, HELD_TOOL_SCALE);
+  shown.position.set(drawX + HELD_TOOL_SIDE_PX * side, drawY - HELD_TOOL_RAISE_PX);
+  shown.visible = true;
 }
 
 // --- hover and status ------------------------------------------------------------------
@@ -936,7 +1024,7 @@ export function statusFor(view: WorldView, ui: RenderUiState): string {
   // The errand outranks the tile readout: while the farmer is walking, what he is doing is
   // the more useful sentence than what happens to be under a stationary cursor.
   if (view.player.intentAction !== 0) return 'walking over — press a key to stop';
-  if (ui.hover === null) return 'wasd to walk  ·  click far away to walk there  ·  1-6 tools';
+  if (ui.hover === null) return 'wasd to walk  ·  click far away to walk there  ·  1-9, 0 tools';
 
   const query = tileAtView(view, ui.hover.tileX, ui.hover.tileY);
   if (!query.insideWorld) return 'outside the lot';

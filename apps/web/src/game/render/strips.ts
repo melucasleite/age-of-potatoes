@@ -25,6 +25,32 @@ export function stripCells(width: number, height: number): number {
 }
 
 /**
+ * Which half of a two-frame stride a character is on, from distance walked.
+ *
+ * THE CADENCE IS DISTANCE, NOT A CLOCK — the rule `render/bots.ts` established and the
+ * player now shares. `(xSub + ySub) / strideSub` plants a foot every `strideSub` subtiles
+ * and stops dead the moment the character does, with no state and nothing to reset when a
+ * save is loaded mid-stride. A wall-clock cycle would keep marching on the spot.
+ *
+ * Returns 0 or 1 — the caller adds 1 to get the strip's 1-based cell.
+ */
+export function stridePhase(xSub: number, ySub: number, strideSub: number): number {
+  if (strideSub <= 0) return 0;
+  return Math.floor((xSub + ySub) / strideSub) & 1;
+}
+
+/**
+ * The 1-based strip cell a walking (or standing) character shows.
+ *
+ * Standing pins to cell 1 rather than freezing on whichever foot the walk stopped on: a
+ * pawn parked mid-stride reads as broken, which is a sentence this game's visual grammar
+ * reserves for machines that actually are.
+ */
+export function walkStep(moving: boolean, xSub: number, ySub: number, strideSub: number): number {
+  return moving ? stridePhase(xSub, ySub, strideSub) + 1 : 1;
+}
+
+/**
  * Whether a strip genuinely carries a wilted frame, or only clamps politely.
  *
  * A crop's growth frames are `stageCount - 1` cells (stage 5 is "ready", drawn with the

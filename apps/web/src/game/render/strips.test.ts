@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { stripCells, stripHasWiltCell } from './strips';
+import { stridePhase, stripCells, stripHasWiltCell, walkStep } from './strips';
 
 describe('stripCells', () => {
   it('reads four cells off a 64×16 strip — every committed crop strip today', () => {
@@ -57,5 +57,49 @@ describe('stripHasWiltCell', () => {
   it('refuses degenerate stage counts', () => {
     expect(stripHasWiltCell(5, 0)).toBe(false);
     expect(stripHasWiltCell(5, -1)).toBe(false);
+  });
+});
+
+// The walk cadence ([[065]]): distance-driven, so it stops when the walker does. The
+// numbers below are the real ones — SUBTILE is 256 and the stride is 64, four footfalls
+// per tile, the values `bots.ts` shipped with and the player now shares.
+const STRIDE = 64;
+
+describe('stridePhase', () => {
+  it('swaps feet every stride of distance walked', () => {
+    expect(stridePhase(0, 0, STRIDE)).toBe(0);
+    expect(stridePhase(63, 0, STRIDE)).toBe(0);
+    expect(stridePhase(64, 0, STRIDE)).toBe(1);
+    expect(stridePhase(127, 0, STRIDE)).toBe(1);
+    expect(stridePhase(128, 0, STRIDE)).toBe(0);
+  });
+
+  it('accumulates distance across both axes, so a diagonal walk still steps', () => {
+    expect(stridePhase(32, 32, STRIDE)).toBe(1);
+    expect(stridePhase(64, 64, STRIDE)).toBe(0);
+  });
+
+  it('is a pure function of position — the same spot is always the same foot', () => {
+    // No clock and no state: a save loaded mid-stride resumes on the same foot for free,
+    // and a replay walks frame-identically.
+    expect(stridePhase(500, 300, STRIDE)).toBe(stridePhase(500, 300, STRIDE));
+  });
+
+  it('answers the stand phase for a degenerate stride', () => {
+    expect(stridePhase(100, 100, 0)).toBe(0);
+  });
+});
+
+describe('walkStep', () => {
+  it('cycles cells 1 and 2 while moving', () => {
+    expect(walkStep(true, 0, 0, STRIDE)).toBe(1);
+    expect(walkStep(true, 64, 0, STRIDE)).toBe(2);
+  });
+
+  it('freezes on the stand cell when still, whatever foot the walk stopped on', () => {
+    // Standing at a position whose stride phase is 1 still shows cell 1: a pawn parked
+    // mid-stride reads as broken, and `moving` is the sim's own flag, not an inference.
+    expect(walkStep(false, 64, 0, STRIDE)).toBe(1);
+    expect(walkStep(false, 96, 32, STRIDE)).toBe(1);
   });
 });

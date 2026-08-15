@@ -62,6 +62,7 @@ import type { WorldView } from '@snack/sim';
 
 import type { ItemPage } from './belt-items';
 import type { WorldRect } from './camera';
+import { stridePhase } from './strips';
 import { ART } from './textures';
 import type { ArtSet } from './textures';
 
@@ -208,7 +209,7 @@ export class BotLayer {
       } else {
         // A standing bot holds step 1 rather than freezing on whichever foot it happened to
         // stop on: a robot parked mid-stride looks broken, and `phase` already knows.
-        const step = walking(bot.phase) ? stridePhase(bot) + 1 : 1;
+        const step = walking(bot.phase) ? stridePhase(bot.xSub, bot.ySub, STRIDE_SUB) + 1 : 1;
         const kind = KIND_SLUG[bot.kind] ?? 'harvester';
         visual.body.texture = this.art.get(ART.bot(kind, poseFor(bot.facing), step));
         // East is the side pose mirrored. Anchored at 0.5 across, so the flip is about the
@@ -273,11 +274,6 @@ export class BotLayer {
       currYSub: bot.ySub,
     };
   }
-}
-
-/** Which half of the stride the bot is on, from distance walked. See the header. */
-function stridePhase(bot: BotView): number {
-  return Math.floor((bot.xSub + bot.ySub) / STRIDE_SUB) & 1;
 }
 
 function walking(phase: number): boolean {

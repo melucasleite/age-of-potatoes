@@ -45,6 +45,9 @@ function field(overrides: Partial<FieldView> = {}): FieldView {
     originY: 0,
     tilesWide: WIDE,
     tilesHigh: HIGH,
+    count: COUNT,
+    tileX: new Array<number>(COUNT).fill(0),
+    tileY: new Array<number>(COUNT).fill(0),
     crop: new Array<number>(COUNT).fill(0),
     stage: new Array<number>(COUNT).fill(0),
     moisturePermille: new Array<number>(COUNT).fill(0),
@@ -201,6 +204,86 @@ describe('harvest pop', () => {
     // Every pop must expire. One tween left running per harvest is the leak this pool
     // exists to prevent, and a ripe 8x8 field is sixty-four of them.
     advance(fx, 1200);
+    expect(fx.flying).toBe(0);
+  });
+});
+
+// ── THE COLLECTION MOVES ([[066]]) ─────────────────────────────────────────────────────
+// Farmland is a keyed collection now and a till SHIFTS EVERY INDEX AFTER IT. The differ
+// re-files its memory by world tile key on the frame the keys move; these pin the two ways
+// a positional diff would have lied — a phantom pop out of shifted indexes, and a real
+// harvest lost in the shuffle.
+describe('re-keying on a till', () => {
+  /** A field of distinct positions, so keys actually distinguish the tiles. */
+  function keyedField(xs: number[], ys: number[], overrides: Partial<FieldView> = {}): FieldView {
+    const n = xs.length;
+    return field({
+      count: n,
+      tileX: xs,
+      tileY: ys,
+      crop: new Array<number>(n).fill(0),
+      stage: new Array<number>(n).fill(0),
+      moisturePermille: new Array<number>(n).fill(0),
+      ready: new Array<number>(n).fill(0),
+      dry: new Array<number>(n).fill(0),
+      fertility: new Array<number>(n).fill(0),
+      soil: new Array<number>(n).fill(1),
+      wilt: new Array<number>(n).fill(0),
+      readyAge: new Array<number>(n).fill(0),
+      compost: new Array<number>(n).fill(0),
+      zone: new Array<number>(n).fill(0),
+      lastPouredTick: new Array<number>(n).fill(0),
+      ...overrides,
+    });
+  }
+
+  it('does not fire a phantom harvest when a till shifts every index', () => {
+    const fx = makeFx();
+    // A ripe crop on (5,5), and a bare tile on (6,5).
+    fx.observe(keyedField([5, 6], [5, 5], { crop: [1, 0], ready: [1, 0] }));
+
+    // A till at (4,5) inserts at index 0: the ripe crop moves to index 1, positionally the
+    // slot that used to be bare. Diffed by index this is "ready vanished at 0" — a phantom
+    // pop out of fresh dirt. Diffed by key it is nothing at all.
+    fx.observe(keyedField([4, 5, 6], [5, 5, 5], { crop: [0, 1, 0], ready: [0, 1, 0] }));
+    expect(fx.flying).toBe(0);
+  });
+
+  it('still sees a real harvest that lands on the same frame as the till', () => {
+    const fx = makeFx();
+    fx.observe(keyedField([5, 6], [5, 5], { crop: [1, 0], ready: [1, 0] }));
+
+    // The same index shuffle, AND the crop on (5,5) genuinely harvested. One potato.
+    fx.observe(keyedField([4, 5, 6], [5, 5, 5]));
+    expect(fx.flying).toBe(1);
+  });
+
+  it('keeps pour memory with its tile across the shuffle', () => {
+    const fx = makeFx();
+    const poured: number[] = [];
+    fx.observe(keyedField([5, 6], [5, 5], { lastPouredTick: [40, 0] }));
+
+    // After the till, (5,5) sits at index 1 with the same old pour tick: silence. The NEXT
+    // pour on it still lands, reported at its new index.
+    fx.observe(keyedField([4, 5, 6], [5, 5, 5], { lastPouredTick: [0, 40, 0] }), (i) =>
+      poured.push(i),
+    );
+    expect(poured).toEqual([]);
+
+    fx.observe(keyedField([4, 5, 6], [5, 5, 5], { lastPouredTick: [0, 90, 0] }), (i) =>
+      poured.push(i),
+    );
+    expect(poured).toEqual([1]);
+  });
+
+  it('treats an un-tilled position returning later as fresh dirt, not as memory', () => {
+    const fx = makeFx();
+    fx.observe(keyedField([5], [5], { crop: [1], ready: [1] }));
+
+    // Un-till everything, then re-till the same spot bare. "Was ripe, is gone" spans the
+    // gap positionally AND by key — but the memory left with the farmland, so no pop.
+    fx.observe(keyedField([], []));
+    fx.observe(keyedField([5], [5]));
     expect(fx.flying).toBe(0);
   });
 });

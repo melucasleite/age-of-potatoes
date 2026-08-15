@@ -94,6 +94,17 @@ export const ART = {
   playerSouth: 'player_south',
   playerWest: 'player_west',
   /**
+   * The farmer, by pose and by which foot is forward — the player's own walk cycle ([[065]]),
+   * built exactly as the bots' names are: strip cells registered in `STRIPS`, suffix is the
+   * step. THREE POSES, NOT FOUR — one side pose mirrored at draw time (`index.ts`). NOTE THE
+   * CONVENTION IS THE PLAYER'S OWN: `player_walk_side` is authored FACING RIGHT (east — the
+   * manifest prompt says so), so WEST is the mirrored facing here, where the bots' side
+   * strips face left and mirror for east. `north` asks for `player_walk_up` FIRST and falls
+   * back to the side strip while the art lane's run is pending; the moment the atlas
+   * carries the up strip it wins by candidate order with no code change.
+   */
+  playerWalk: (pose: 'north' | 'south' | 'side', step: number) => `player_walk_${pose}_${step}`,
+  /**
    * An Agri-Bot, by kind, by facing, and by which foot is forward ([[038]]).
    *
    * THE NAME IS BUILT TO MEET THE ART THAT ALREADY EXISTS. The pipeline generated
@@ -248,6 +259,18 @@ for (const kind of BOT_KINDS) {
     STRIPS[ART.bot(kind, 'west', step)] = [`bot_${kind}_walk_side`];
     STRIPS[ART.bot(kind, 'north', step)] = [`bot_${kind}_walk_side`];
   }
+}
+
+/**
+ * The player's walk strips ([[065]]) — the same two-cell shape the bots use, from the frames
+ * the atlas has carried unsliced since v0.1. `north` lists `player_walk_up` FIRST: the strip
+ * does not exist yet (the art lane's handoff above), so today the side strip answers, and the
+ * day the up strip lands in the atlas it wins by candidate order with no edit here.
+ */
+for (let step = 1; step <= 2; step++) {
+  STRIPS[ART.playerWalk('south', step)] = ['player_walk_down'];
+  STRIPS[ART.playerWalk('side', step)] = ['player_walk_side'];
+  STRIPS[ART.playerWalk('north', step)] = ['player_walk_up', 'player_walk_side'];
 }
 
 /**
@@ -593,8 +616,108 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   [ART.playerEast]: { paint: pawn('east') },
   [ART.playerWest]: { paint: pawn('west') },
 
+  // The walk-cycle cells ([[065]]), for a build with no atlas at all. With the atlas loaded
+  // every one of these is shadowed by a real strip — north included, which currently answers
+  // with the SIDE strip via its candidate list (the bots' precedent: real art at the wrong
+  // angle beats a procedural pawn among real frames). These grey-box cells keep the walk
+  // cycle alive when the atlas itself is missing, back view and alternating feet intact.
+  // The side cells face EAST, matching the authored strip's own convention above.
+  [ART.playerWalk('south', 1)]: { paint: pawnWalk('south', 1) },
+  [ART.playerWalk('south', 2)]: { paint: pawnWalk('south', 2) },
+  [ART.playerWalk('side', 1)]: { paint: pawnWalk('east', 1) },
+  [ART.playerWalk('side', 2)]: { paint: pawnWalk('east', 2) },
+  [ART.playerWalk('north', 1)]: { paint: pawnWalk('north', 1) },
+  [ART.playerWalk('north', 2)]: { paint: pawnWalk('north', 2) },
+
   // The bots are registered below with the machines and the crops — two kinds × three facings
   // × two steps is a loop, not twelve hand-written entries. See `registerBotPlaceholders`.
+
+  // --- tool icons ([[065]]) ----------------------------------------------------------
+  //
+  // One 16px icon per hand tool, named by INPUT'S `toolIconFrame` table (`input/tools.ts`)
+  // — which names are in turn the art pipeline's own ids (`art/manifest.json` already
+  // declares every `tool_*` frame; the generation run is pending). Same consumption deal
+  // as machine art: when the packed atlas ships a frame under the same name it wins with
+  // no edit here. Drawn in the item-icon vocabulary (the bag's seeds/bottles/kits are the
+  // reference set) so the bar and the hand read as one family the day the real set lands.
+  // The repair-kit cursor is deliberately absent: it draws as its ITEM (`item_repair_kit`),
+  // which the atlas already carries for real.
+
+  tool_hand: {
+    paint: (g) => {
+      // The work glove — the slot art for the default verb. Never held: empty hands ARE
+      // the hand tool, which is `toolHeldFrame`'s one divergence from the slot table.
+      g.rect(5, 2, 6, 8).fill(PALETTE.skin);
+      g.rect(4, 3, 2, 5).fill(PALETTE.skin);
+      g.rect(10, 3, 2, 5).fill(PALETTE.skin);
+      g.rect(5, 10, 6, 4).fill(PALETTE.shirt);
+      g.rect(5, 10, 6, 1).fill(0xf07a6e);
+    },
+  },
+
+  tool_water: {
+    paint: (g) => {
+      // The can: a squat metal body, a high handle, a spout with a drip coming off it.
+      g.rect(3, 6, 8, 7).fill(PALETTE.metal);
+      g.rect(3, 6, 8, 2).fill(PALETTE.metalLight);
+      g.rect(3, 11, 8, 2).fill(PALETTE.metalDark);
+      g.rect(5, 3, 4, 3).fill(PALETTE.metalDark);
+      g.rect(10, 7, 4, 2).fill(PALETTE.metalDark);
+      g.rect(13, 6, 2, 2).fill(PALETTE.metal);
+      g.rect(14, 9, 1, 2).fill(PALETTE.water);
+      g.rect(13, 12, 2, 2).fill(PALETTE.water);
+    },
+  },
+
+  tool_plant: {
+    paint: (g) => {
+      // A tied sack spilling seed — the potato-seed chip's browns, at pouch size.
+      g.rect(4, 6, 8, 8).fill(0x8a6b3a);
+      g.rect(4, 6, 8, 2).fill(0xa5834a);
+      g.rect(6, 3, 4, 3).fill(0x5c451f);
+      g.rect(5, 5, 6, 1).fill(PALETTE.woodDark);
+      g.rect(12, 12, 2, 2).fill(0x5c451f);
+      g.rect(13, 10, 1, 1).fill(0x5c451f);
+      g.rect(2, 13, 1, 1).fill(0x5c451f);
+    },
+  },
+
+  tool_harvest: {
+    paint: (g) => {
+      // The gathering basket, with the payoff showing over the rim.
+      g.rect(2, 8, 12, 6).fill(PALETTE.wood);
+      g.rect(2, 8, 12, 2).fill(PALETTE.woodDark);
+      g.rect(4, 10, 2, 3).fill(PALETTE.woodDark);
+      g.rect(8, 10, 2, 3).fill(PALETTE.woodDark);
+      g.circle(6, 7, 2).fill(PALETTE.potato);
+      g.circle(10, 6, 2).fill(PALETTE.potato);
+    },
+  },
+
+  tool_deconstruct: {
+    paint: (g) => {
+      // The teardown bar: a long diagonal with a hooked claw, red like the tool's errand.
+      g.rect(3, 11, 3, 2).fill(PALETTE.metalDark);
+      g.rect(5, 9, 3, 2).fill(PALETTE.metal);
+      g.rect(7, 7, 3, 2).fill(PALETTE.metal);
+      g.rect(9, 5, 3, 2).fill(PALETTE.metal);
+      g.rect(11, 3, 3, 2).fill(PALETTE.shirt);
+      g.rect(12, 2, 2, 2).fill(PALETTE.shirt);
+    },
+  },
+
+  tool_till: {
+    paint: (g) => {
+      // The hoe ([[066]]): a long handle over a dark blade biting a strip of turned soil.
+      g.rect(9, 1, 2, 10).fill(PALETTE.wood);
+      g.rect(10, 0, 2, 3).fill(PALETTE.woodDark);
+      g.rect(6, 10, 5, 3).fill(PALETTE.metalDark);
+      g.rect(6, 10, 5, 1).fill(PALETTE.metal);
+      g.rect(2, 13, 12, 2).fill(PALETTE.soil);
+      g.rect(3, 14, 3, 1).fill(PALETTE.soilDark);
+      g.rect(9, 14, 3, 1).fill(PALETTE.soilDark);
+    },
+  },
 
   // The seven lamp shapes are registered below, next to the masks they are drawn from.
 
@@ -1665,6 +1788,30 @@ function registerBotPlaceholders(): void {
       }
     }
   }
+}
+
+/**
+ * The pawn mid-stride, for the no-atlas walk cells: the same farmer as `pawn` below, with
+ * the trouser block split into two legs that swap which one is planted — one pixel of
+ * difference per step, which is all a 16px walk cycle has ever been (see `botChassis`).
+ */
+function pawnWalk(facing: 'north' | 'south' | 'east', step: number): Paint {
+  const lead = step === 1 ? 0 : 1;
+  return (g) => {
+    // Legs, feet at y = 15, alternating exactly as the bots' do.
+    g.rect(5, 10, 3, 5 - lead).fill(PALETTE.trouser);
+    g.rect(8, 10 + lead, 3, 5 - lead).fill(PALETTE.trouser);
+    g.rect(4, 5, 8, 6).fill(PALETTE.shirt);
+    g.rect(5, 1, 6, 5).fill(facing === 'north' ? PALETTE.hair : PALETTE.skin);
+    g.rect(5, 0, 6, 2).fill(PALETTE.hair);
+    if (facing === 'south') {
+      g.rect(6, 3, 1, 1).fill(PALETTE.black);
+      g.rect(9, 3, 1, 1).fill(PALETTE.black);
+    } else if (facing === 'east') {
+      g.rect(9, 3, 1, 1).fill(PALETTE.black);
+      g.rect(11, 6, 2, 4).fill(PALETTE.skin);
+    }
+  };
 }
 
 function pawn(facing: 'north' | 'east' | 'south' | 'west'): Paint {

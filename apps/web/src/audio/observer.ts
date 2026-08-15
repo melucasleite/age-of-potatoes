@@ -34,7 +34,14 @@
 //
 // The last line is the one the design is actually about.
 
-import { ContractPhase, HAND_REACH_SUBTILES, LampState, MachineKind, SUBTILE } from '@snack/sim';
+import {
+  ContractPhase,
+  HAND_REACH_SUBTILES,
+  LampState,
+  MachineKind,
+  SUBTILE,
+  worldTileKey,
+} from '@snack/sim';
 import type { MachineView, WorldView } from '@snack/sim';
 
 // `TILE_PX` is the renderer's single source of truth for tile size and is imported rather
@@ -90,6 +97,13 @@ export class WorldObserver {
   private readonly prevPoured: number[] = [];
   private readonly prevReady: number[] = [];
   private readonly prevCrop: number[] = [];
+  /**
+   * The world tile key each index held last frame ([[066]]). Farmland is a collection and a
+   * till shifts every index after it; diffed positionally across that frame, a pour sound
+   * could play off a tile nobody watered and a phantom harvest could pop. `alignField`
+   * re-files the memory by key before any diff runs on a frame where the dirt moved.
+   */
+  private readonly prevKeys: number[] = [];
   private readonly prevMachines = new Map<number, MachineMemory>();
 
   private prevItemsSold = 0;
@@ -166,6 +180,7 @@ export class WorldObserver {
     }
 
     if (view.tick !== this.prevTick) {
+      this.alignField(view);
       this.diffField(view, rect);
       this.diffMachines(view, rect);
       this.diffStats(view, rect);
@@ -214,6 +229,52 @@ export class WorldObserver {
 
   // --- the diffs ------------------------------------------------------------------------
 
+  /**
+   * Re-file the field memory under the collection's CURRENT indexing ([[066]]).
+   *
+   * Runs only on a tick where the keys moved — a till or an un-till, a hand gesture. Values
+   * follow their TILE; a position this observer has never heard is primed from the
+   * projection so the till itself makes no sound (tilling has no sim signal to voice, and a
+   * misattributed pour would be worse than silence).
+   */
+  private alignField(view: WorldView): void {
+    const field = view.field;
+    const count = field.crop.length;
+
+    let same = count === this.prevKeys.length;
+    if (same) {
+      for (let i = 0; i < count; i++) {
+        if (this.prevKeys[i] !== worldTileKey(field.tileX[i] ?? 0, field.tileY[i] ?? 0)) {
+          same = false;
+          break;
+        }
+      }
+    }
+    if (same) return;
+
+    const remembered = new Map<number, { poured: number; ready: number; crop: number }>();
+    for (let i = 0; i < this.prevKeys.length; i++) {
+      remembered.set(this.prevKeys[i]!, {
+        poured: this.prevPoured[i] ?? 0,
+        ready: this.prevReady[i] ?? 0,
+        crop: this.prevCrop[i] ?? 0,
+      });
+    }
+
+    for (let i = 0; i < count; i++) {
+      const key = worldTileKey(field.tileX[i] ?? 0, field.tileY[i] ?? 0);
+      const held = remembered.get(key);
+      this.prevPoured[i] = held?.poured ?? field.lastPouredTick[i] ?? 0;
+      this.prevReady[i] = held?.ready ?? field.ready[i] ?? 0;
+      this.prevCrop[i] = held?.crop ?? field.crop[i] ?? 0;
+      this.prevKeys[i] = key;
+    }
+    this.prevPoured.length = count;
+    this.prevReady.length = count;
+    this.prevCrop.length = count;
+    this.prevKeys.length = count;
+  }
+
   private diffField(view: WorldView, rect: WorldRect): void {
     const field = view.field;
     const count = field.crop.length;
@@ -223,8 +284,10 @@ export class WorldObserver {
     let harvestY = 0;
 
     for (let i = 0; i < count; i++) {
-      const tileX = field.originX + (i % field.tilesWide);
-      const tileY = field.originY + Math.floor(i / field.tilesWide);
+      // Per-entry coordinates are the addressing scheme ([[066]]) — the bounding-box
+      // arithmetic this replaces panned sounds wrongly the moment the field went non-rect.
+      const tileX = field.tileX[i] ?? 0;
+      const tileY = field.tileY[i] ?? 0;
 
       // The sim's own pour signal (item 064): newer than last frame means water landed
       // here, INCLUDING on a tile already at full moisture — the case the old moisture
@@ -496,10 +559,12 @@ export class WorldObserver {
       this.prevPoured[i] = field.lastPouredTick[i] ?? 0;
       this.prevReady[i] = field.ready[i] ?? 0;
       this.prevCrop[i] = field.crop[i] ?? 0;
+      this.prevKeys[i] = worldTileKey(field.tileX[i] ?? 0, field.tileY[i] ?? 0);
     }
     this.prevPoured.length = count;
     this.prevReady.length = count;
     this.prevCrop.length = count;
+    this.prevKeys.length = count;
 
     // `view.machines` is a REUSED buffer of reused objects, so only copied primitives are
     // safe to keep. Holding the `MachineView` itself would silently compare a machine with
