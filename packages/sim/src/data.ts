@@ -1242,26 +1242,15 @@ export const COMPOST_PER_SPOILED_ITEM = 1;
 export const COMPOST_PER_FERTILIZER = 4;
 
 /**
- * The armful. Plan §3's manual rung of the transport ladder: *"Armful (12 items, teeter + slow)"*.
- *
- * **IT GATES THE VERB, NOT THE CONTAINER, AND THAT DISTINCTION IS THE WHOLE DESIGN.** `addItem`
- * is deliberately still unbounded, because §4's floor is that nothing vanishes and half the
- * things that put goods in the bag are *involuntary* — taking up a belt with forty slices on it,
- * boxing a machine with a full hopper, cancelling a contract with a truck on the road, a refund.
- * A cap enforced inside `addItem` would have to either destroy those goods or refuse the verb
- * that returns them, and both are fines for misplacement, which plan §4 rules out flat.
- *
- * So the cap is asked at the voluntary door instead: harvest, buy, unload, take-from-storage,
- * pick up compost. A full player cannot harvest — **the crop stays in the ground**, which is item
- * 023's acceptance criterion stated exactly, and it is also the anti-softlock answer, because a
- * tile you could not pick is a tile that is still there when you come back with room.
- *
- * Boxed machines are exempt and counted apart. A box is not a good — the sell bin refuses one,
- * `ItemSpec.sellable` is false on every boxed row, and it is scrapped from a panel rather than
- * carried anywhere — so an armful of potatoes and a Fryer under one arm are different questions,
- * and folding them together would mean demolishing a factory filled your hands with turnips.
+ * The armful cap is GONE, on the record (item 068, owner ruling 2026-08-14, from play:
+ * "that's not something I wanted. Remove it."). `ARMFUL_CAP_ITEMS = 12` and its helpers
+ * `armfulRoom` / `hasArmfulRoom` gated harvest, buy, unload, and take-from-storage; all of it
+ * was deleted rather than softened — no higher cap, no slowdown, no replacement friction.
+ * This deliberately strikes plan §3's manual transport rung ("Armful (12 items, teeter +
+ * slow)") and shrinks the hand cart's pitch to "walk less"; the owner chose that trade with
+ * eyes open. `carriedCount` survives (stats and HUD read it), and `BOT_CARRY_CAPACITY` below
+ * is a different mechanic on different arms — bots keep their capacity.
  */
-export const ARMFUL_CAP_ITEMS = 12;
 
 // --- crops ------------------------------------------------------------------------
 
@@ -1781,6 +1770,28 @@ export interface MachineSpec {
    * disagreed with the ground about it would be unexplainable.
    */
   readonly moistureSensing: boolean;
+  /**
+   * Item 067: may this machine stand ON a farm tile? True for the watering family alone —
+   * the barrel Sprinkler, the PipedSprinkler head, and the Irrigation Hub — whose whole
+   * purpose is to stand among the crops they water; a 5×5 head at the fence waters a slice,
+   * and dead-centre it waters all 24 neighbours.
+   *
+   * A SPEC FLAG RATHER THAN A CHECK ON KIND, exactly like `moistureSensing` above: the
+   * footprint rule (`footprintFree` in tick.ts) consults the flag and nothing else, so the
+   * Fryer stays behind the fence without a kind-switch at the rule site, and the day a
+   * moisture probe wants in it is a data change. The tile hosted is an EMPTY farm tile only
+   * — a crop or waiting compost refuses the placement (nothing is silently destroyed, house
+   * rule) — and the ground underneath is never touched: soil, fertility, and moisture ride
+   * through placement and deconstruction untouched.
+   *
+   * THE IRRIGATION HUB IS DELIBERATELY IN: it is the same watering family (`role` says so),
+   * its coverage is anchored exactly like the heads', and standing mid-field is its entire
+   * pitch. Its 2×2 footprint eats four farm tiles, which is the player's own trade to make.
+   * Mind the plumbing, though — pipes still refuse farmland (`pipePathRefusal`), so a piped
+   * head or Hub placed deep mid-field only drinks if its network reaches a tile beside it;
+   * out of reach it stands dry showing the blue utility lamp, which is honest.
+   */
+  readonly fieldPlaceable: boolean;
 }
 
 /** Condition runs 0..1000 so a "percent" readout has a decimal without needing a float. */
@@ -1941,6 +1952,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // The v0.1 monolith, kept buildable forever. It is strictly worse than the line — one
@@ -1970,6 +1982,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // The $150 sprinkler of plan §7 — the whole v0.1 design gate. You fill its barrel by
@@ -1984,7 +1997,15 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     workRatePerTick: 0,
     inputCapacity: 0,
     outputCapacity: 0,
-    tankCapacityMl: 30_000,
+    /**
+     * Exactly one full mid-field cycle (item 067). A 5×5 head standing dead-centre on
+     * farmland has 24 croppable neighbours at `SPRINKLER_POUR_ML` each — 36,000 ml — and a
+     * barrel that held 20 pours would water the same first twenty tiles every cycle and
+     * starve the back row forever, because the dumb scan always starts at the top-left.
+     * At the fence, where at most ~15 covered tiles are farmland, 24 pours changes nothing
+     * but how often the barrel wants hauling.
+     */
+    tankCapacityMl: 36_000,
     wearPerOperation: 1,
     inputs: [],
     outputItem: null,
@@ -1996,6 +2017,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: SPRINKLER_RADIUS_TILES,
     moistureSensing: false,
+    fieldPlaceable: true,
   },
   {
     kind: MachineKind.Washer,
@@ -2020,6 +2042,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     kind: MachineKind.Slicer,
@@ -2044,6 +2067,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // Half the throughput of everything around it. On purpose. Do not "fix" this.
@@ -2071,6 +2095,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     kind: MachineKind.Seasoner,
@@ -2095,6 +2120,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     kind: MachineKind.Bagger,
@@ -2119,6 +2145,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // The one thing on a network that MAKES water. Plan §5 allows exactly one per network,
@@ -2145,6 +2172,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // A buffer, and the only object in the game that shows a NET RATE and a TIME-TO-EMPTY
@@ -2174,6 +2202,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 600,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // THE TOP RUNG OF PLAN §3'S WATERING LADDER, and deliberately no better at watering than
@@ -2204,6 +2233,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 400,
     coverageRadiusTiles: SPRINKLER_RADIUS_TILES,
     moistureSensing: false,
+    fieldPlaceable: true,
   },
   {
     // "Moisture-sensing heads water only dry tiles" (plan §4). It covers nine times the area
@@ -2232,6 +2262,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 800,
     coverageRadiusTiles: IRRIGATION_HUB_RADIUS_TILES,
     moistureSensing: true,
+    fieldPlaceable: true,
   },
   {
     // Reclaims Washer graywater — plan §4. IT FEEDS A TANK, NOT A NETWORK, and that is not a
@@ -2261,6 +2292,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
 
   // --- the soda line (plan §5's pipe organ) ---------------------------------------------
@@ -2322,6 +2354,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     kind: MachineKind.Kettle,
@@ -2362,6 +2395,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // §5: "flavors are powders". The grinder is the crafted rung of §4's consumable ladder —
@@ -2388,6 +2422,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // PLAN §5'S CENTREPIECE: "the Syrup Mixer (2 pipe inlets + 1 belt inlet) is the one machine
@@ -2440,6 +2475,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // Plan §4 rules out a power system outright, so carbonation costs consumables and wear and
@@ -2482,6 +2518,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // §5: "machines mostly 2×2 (Bottler 3×2 flagship)". The only machine wider than it is tall,
@@ -2523,6 +2560,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // The two bundle machines exist to answer plan §8's release gate with arithmetic instead of
@@ -2551,6 +2589,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // THE ONE TRUE TWO-INGREDIENT RECIPE IN THE GAME, and the reason a recipe is a list rather
@@ -2580,6 +2619,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // The assisted rung of plan §3's selling ladder, and priced exactly where the barrel
@@ -2618,6 +2658,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // The automated rung. $400 and the Trucking node — dearer than any single machine on the
@@ -2649,6 +2690,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // The belt junction: plan §5's splitter and merger, in one tile with no facing.
@@ -2688,6 +2730,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
 
   // --- keeping things -------------------------------------------------------------------
@@ -2726,6 +2769,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // Plan §3's assisted rung of the TRANSPORT ladder. Storage that follows you.
@@ -2757,6 +2801,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // Compost → Fertilizer, and an ordinary `Converter` with nothing special about it at all.
@@ -2784,6 +2829,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
 
   // --- the orchard ----------------------------------------------------------------------
@@ -2819,6 +2865,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     kind: MachineKind.LemonTree,
@@ -2843,6 +2890,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // **THE GATE ON THE COLA LINE, AND THE ONLY TREE WHOSE FRUIT ANYTHING EATS.** A kola nut off
@@ -2875,6 +2923,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
 
   // --- the Agri-Bot docks ------------------------------------------------------------------
@@ -2909,6 +2958,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // The seed hopper on legs. §5: "regrowing crops automate first; one-shots wait for the
@@ -2937,6 +2987,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
 
   // --- automated maintenance (item 039) --------------------------------------------------
@@ -2972,6 +3023,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: REPAIR_KIT_RADIUS_TILES,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // One bay, one drone, a parts hopper in `cargoItem`/`cargoCount` exactly where the planter
@@ -3002,6 +3054,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
   {
     // An ordinary converter, and that ordinariness is the feature: the parts line is built,
@@ -3035,6 +3088,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,
+    fieldPlaceable: false,
   },
 ];
 
@@ -3667,7 +3721,7 @@ function balanceDigest(): string {
     const spec = MACHINE_SPECS[i]!;
     h = fnv1aString(
       h,
-      `${spec.kind}:${spec.slug}:${spec.role}:${spec.tilesWide}x${spec.tilesHigh}:${spec.priceCents}:${spec.workPerOperation}:${spec.workRatePerTick}:${spec.inputCapacity}:${spec.outputCapacity}:${spec.tankCapacityMl}:${spec.wearPerOperation}:${recipeDigest(spec.inputs)}:${spec.outputItem}:${spec.overcookOutputItem}:${spec.requiresTech}:${spec.liquid}:${portsDigest(spec.ports)}:${spec.pumpRateMlPerMinute}:${spec.intakeMlPerTick}:${spec.coverageRadiusTiles}:${spec.moistureSensing}`,
+      `${spec.kind}:${spec.slug}:${spec.role}:${spec.tilesWide}x${spec.tilesHigh}:${spec.priceCents}:${spec.workPerOperation}:${spec.workRatePerTick}:${spec.inputCapacity}:${spec.outputCapacity}:${spec.tankCapacityMl}:${spec.wearPerOperation}:${recipeDigest(spec.inputs)}:${spec.outputItem}:${spec.overcookOutputItem}:${spec.requiresTech}:${spec.liquid}:${portsDigest(spec.ports)}:${spec.pumpRateMlPerMinute}:${spec.intakeMlPerTick}:${spec.coverageRadiusTiles}:${spec.moistureSensing}:${spec.fieldPlaceable}`,
     );
   }
   for (let i = 0; i < LIQUID_SPECS.length; i++) {
@@ -3757,14 +3811,14 @@ function balanceDigest(): string {
   // holds stacks whose spoil ticks were computed from these windows, so a build that shortened a
   // potato's fifteen minutes would describe a stack it did not write as further from turning than
   // it is. The bucket and the stack cap ride along because they decide which stacks a save has at
-  // all, and the armful because it decides which verbs a world can still perform.
+  // all. (The armful cap used to ride here too; item 068 removed it from the game entirely.)
   for (let i = 0; i < FRESHNESS_TICKS_BY_ITEM.length; i++) {
     const row = FRESHNESS_TICKS_BY_ITEM[i]!;
     h = fnv1aString(h, `${row.item}>${row.ticks}`);
   }
   h = fnv1aString(
     h,
-    `${FRESHNESS_BUCKET_TICKS}:${FRESHNESS_MAX_STACKS}:${CRATE_FRESHNESS_TICKS}:${CRATE_PACK_CAPACITY}:${COMPOST_PER_SPOILED_ITEM}:${COMPOST_PER_FERTILIZER}:${ARMFUL_CAP_ITEMS}:${HARVESTS_PER_FERTILITY_STEP}:${FERTILITY_PER_FERTILIZER}:${FERTILITY_MIN}/${FERTILITY_MAX}`,
+    `${FRESHNESS_BUCKET_TICKS}:${FRESHNESS_MAX_STACKS}:${CRATE_FRESHNESS_TICKS}:${CRATE_PACK_CAPACITY}:${COMPOST_PER_SPOILED_ITEM}:${COMPOST_PER_FERTILIZER}:${HARVESTS_PER_FERTILITY_STEP}:${FERTILITY_PER_FERTILIZER}:${FERTILITY_MIN}/${FERTILITY_MAX}`,
   );
   // The assisted tier and the bots. Every one of these is a rate or a capacity a saved world is
   // mid-way through spending: a hitched cart's next step, a bot's next harvest, a swing's width.

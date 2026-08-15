@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   type WorldState,
-  ARMFUL_CAP_ITEMS,
   CONDITION_MAX,
   COMPOST_PER_FERTILIZER,
   CRATE_FRESHNESS_TICKS,
@@ -50,9 +49,9 @@ function world(seed = 7): WorldState {
 /**
  * The same, with the eight starting seeds out of the player's hands.
  *
- * `STARTING_SEEDS` is a gift every world is born holding, and under a twelve-item armful it is
- * two thirds of the cap — which is a real fact about the early game and a nuisance in a test
- * about something else. Removed here so each test measures the rule it names.
+ * `STARTING_SEEDS` is a gift every world is born holding, and a test that wants to count
+ * exactly what a verb put in the arms is better off starting from zero. (This mattered more
+ * when the armful cap existed; it is kept for the counting, not the room.)
  */
 function emptyHanded(seed = 7): WorldState {
   const state = world(seed);
@@ -381,29 +380,58 @@ describe('soil and fertility', () => {
   });
 });
 
-describe('the armful', () => {
-  it('leaves the crop in the ground when the player is full, and destroys nothing', () => {
-    // ITEM 023'S CRITERION, WORD FOR WORD. Refusing is free because the goods never moved.
+describe('the armful, unlimited', () => {
+  it('hand-harvests 50 items in one trip with no refusal and no speed penalty', () => {
+    // ITEM 068'S STORY, WATCHED START TO FINISH (owner ruling 2026-08-14: the cap is removed,
+    // not raised — no refusal at the thirteenth potato, no teeter, no slowdown). Fifty ready
+    // tiles, fifty pulls, zero refusals, and the arms just keep taking it.
     const state = emptyHanded(31);
     const spec = cropSpec(CropId.RussetPotato)!;
-    const tile = state.field[0]!;
-    plantCrop(state, tile, spec);
-    tile.growth = tile.growthTarget;
 
-    addItem(state, ItemId.BaggedChips, ARMFUL_CAP_ITEMS);
-    expect(carriedCount(state)).toBe(ARMFUL_CAP_ITEMS);
+    let planted = 0;
+    const targets: { x: number; y: number }[] = [];
+    for (const tile of state.field) {
+      if (planted >= 50) break;
+      plantCrop(state, tile, spec);
+      tile.growth = tile.growthTarget;
+      targets.push({ x: tile.tileX, y: tile.tileY });
+      planted += 1;
+    }
+    expect(planted).toBe(50);
 
-    state.player.xSub = 4 * 256 + 128;
-    state.player.ySub = 4 * 256 + 128;
-    step(state, { tick: state.tick, commands: [{ type: 'HarvestTile', tileX: 4, tileY: 4 }] });
+    let pulls = 0;
+    for (const { x, y } of targets) {
+      state.player.xSub = x * 256 + 128;
+      state.player.ySub = y * 256 + 128;
+      const trace = state.trace.length;
+      step(state, { tick: state.tick, commands: [{ type: 'HarvestTile', tileX: x, tileY: y }] });
+      expect(state.trace.length, `the pull at (${String(x)},${String(y)}) was refused`).toBe(
+        trace + 1,
+      );
+      pulls += 1;
+    }
+    expect(pulls).toBe(50);
+    // Fifty yields plus fifty returned seeds: far past the old twelve-item cap, in one trip.
+    expect(carriedCount(state)).toBeGreaterThanOrEqual(100);
 
-    expect(tile.crop, 'the crop should still be standing').toBe(CropId.RussetPotato);
-    expect(carriedCount(state)).toBe(ARMFUL_CAP_ITEMS);
+    // And no speed penalty for any of it: a hundred ticks of walking under the full load
+    // covers exactly the distance empty arms would. (Towing is the one legal slowdown.)
+    const loaded = state.player.xSub;
+    step(state, { tick: state.tick, commands: [{ type: 'SetMoveDirection', dir: 2 }] });
+    stepMany(state, 99);
+    const loadedDistance = state.player.xSub - loaded;
+
+    const free = emptyHanded(31);
+    free.player.xSub = loaded;
+    free.player.ySub = state.player.ySub;
+    step(free, { tick: free.tick, commands: [{ type: 'SetMoveDirection', dir: 2 }] });
+    stepMany(free, 99);
+    expect(loadedDistance).toBe(free.player.xSub - loaded);
   });
 
   it('does not count boxed machines against the arms', () => {
-    // A box is not a good: the bin refuses one, and demolishing a factory must not fill your hands
-    // with turnips. See `ARMFUL_CAP_ITEMS`.
+    // A box is not a good: the bin refuses one, and demolishing a factory must not fill your
+    // hands with turnips. See `carriedCount`.
     const state = emptyHanded(32);
     const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
     state.player.xSub = 128;
@@ -416,13 +444,15 @@ describe('the armful', () => {
     expect(carriedCount(state), 'a boxed machine filled the arms').toBe(0);
   });
 
-  it('never blocks goods being handed BACK', () => {
-    // Half the callers of `addItem` are involuntary — a belt taken up, a machine boxed with a full
-    // hopper. §4's floor is that nothing vanishes, so the cap gates verbs and not the container.
+  it('never blocks goods being handed BACK, or bought, at any count', () => {
+    // Half the callers of `addItem` are involuntary — a belt taken up, a machine boxed with a
+    // full hopper. §4's floor is that nothing vanishes; since item 068 the voluntary doors are
+    // exactly as open as the involuntary ones.
     const state = emptyHanded(33);
-    addItem(state, ItemId.BaggedChips, ARMFUL_CAP_ITEMS);
+    addItem(state, ItemId.BaggedChips, 12);
     addItem(state, ItemId.SeasonedChips, 40);
     expect(itemCount(state, ItemId.SeasonedChips)).toBe(40);
+    expect(carriedCount(state)).toBe(52);
   });
 });
 
@@ -506,11 +536,13 @@ describe('the hand cart', () => {
     expect(Number.isInteger(state.player.moveAccum), 'no float multiplier anywhere').toBe(true);
   });
 
-  it('holds far more than an armful, and stops the clock on what is inside', () => {
+  it('holds a real load, and stops the clock on what is inside', () => {
     const state = world(52);
     const cart = spawnMachine(state, MachineKind.HandCart, 20, 20)!;
     const spec = machineSpec(MachineKind.HandCart)!;
-    expect(spec.inputCapacity).toBeGreaterThan(ARMFUL_CAP_ITEMS);
+    // Twenty potatoes ride without complaint. (The cart's promotion used to be "more than an
+    // armful"; since item 068 the arms are unbounded and its pitch is the walking it saves.)
+    expect(spec.inputCapacity).toBeGreaterThanOrEqual(20);
 
     cart.cargoItem = ItemId.RussetPotato;
     cart.cargoCount = 20;

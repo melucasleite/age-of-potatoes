@@ -74,6 +74,8 @@ import {
   type SetZoneCropCommand,
   type SetZonePriorityCommand,
   type SwingScytheCommand,
+  TillMode,
+  type TillTileCommand,
   type UnloadMachineCommand,
   type UpgradeMachineCommand,
   type UseRepairKitCommand,
@@ -185,7 +187,6 @@ import {
   addBoxedMachine,
   addItem,
   addItemFresh,
-  armfulRoom,
   beltById,
   clipDestination,
   clipZoneName,
@@ -195,7 +196,6 @@ import {
   directionStepY,
   fertilizeTile,
   grabberById,
-  hasArmfulRoom,
   inventorySlot,
   isCompassDirection,
   isFieldTile,
@@ -229,12 +229,15 @@ import {
   takeOneOutput,
   tileAt,
   tileOccupied,
+  tillTile,
+  untillTile,
   zoneById,
 } from './state';
 import {
   WaterDraw,
   nearestPointOfReservoir,
   nearestReservoir,
+  reservoirAt,
   rechargeReservoir,
   reservoirAdjacentToTile,
   reservoirWithinReach,
@@ -272,7 +275,7 @@ import {
   divFloor,
   tileCentreSubtiles,
 } from './units';
-import { PaintMode, advanceZones, clipRectToField, paintZoneRect } from './zones';
+import { PaintMode, advanceZones, clipRectToField, paintZoneRect, pruneEmptyZones } from './zones';
 
 /** What the host hands `step()` for one tick. */
 export interface TickInput {
@@ -352,6 +355,8 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applySetMoveDirection(state, command);
     case 'WalkAndAct':
       return applyWalkAndAct(state, command);
+    case 'TillTile':
+      return applyTillTile(state, command);
     case 'WaterTile':
       return applyWaterTile(state, command);
     case 'RefillCan':
@@ -562,6 +567,54 @@ function applyWalkAndAct(state: WorldState, command: WalkAndActCommand): boolean
 }
 
 /**
+ * Swing the till over a run of tiles — the sim half of the till tool (item 066).
+ *
+ * PER-TILE RULES, EACH A GENTLE SKIP RATHER THAN A REFUSAL OF THE RUN — a drag is a gesture,
+ * and the belt's refuse-the-whole-run rule is for purchases; a free hand tool that ate a
+ * sixty-tile drag because one tile was occupied would be the game arguing with a mouse:
+ *
+ * - `Till`: the tile must be inside the world, on OWNED land (building rules ask ownership,
+ *   and breaking ground is making a build surface), not already farm, and not under anything —
+ *   a machine, a belt, a grabber, a pipe, or water. The soil it gets is rolled once per
+ *   position ever; see `tillTile`.
+ * - `Untill`: the tile must currently be farm and EMPTY — a planted or compost-bearing tile
+ *   refuses inside `untillTile`, because the till never destroys what a hand would have to
+ *   pick up (plan §4). A zoned tile may go; the zone loses the tile and an emptied zone is
+ *   pruned, exactly as painting it out would.
+ *
+ * Applied — and traced, and counted as ONE `handCarry` touch — only when at least one tile
+ * actually changed.
+ */
+function applyTillTile(state: WorldState, command: TillTileCommand): boolean {
+  if (command.mode !== TillMode.Till && command.mode !== TillMode.Untill) return false;
+  const clipped = clipRectToField(command.rect);
+  if (clipped === null) return false;
+
+  let changed = 0;
+  for (let y = clipped.y; y < clipped.y + clipped.h; y++) {
+    for (let x = clipped.x; x < clipped.x + clipped.w; x++) {
+      if (command.mode === TillMode.Till) {
+        if (!isOwnedTile(state, x, y)) continue;
+        // `tileOccupied` is machines, belts, grabbers, pipes, and water in one question.
+        if (tileOccupied(state, x, y)) continue;
+        if (tillTile(state, x, y) !== null) changed += 1;
+      } else {
+        // A field-placed machine (item 067) keeps its floor: the ground under it cannot be
+        // pulled away while it stands, for the same reason till skips occupied tiles.
+        if (tileOccupied(state, x, y)) continue;
+        if (untillTile(state, x, y)) changed += 1;
+      }
+    }
+  }
+
+  if (changed === 0) return false;
+  // Un-tilling can take a zone's last tile with it; an empty plan is not a plan.
+  if (command.mode === TillMode.Untill) pruneEmptyZones(state);
+  touch(state, 'handCarry');
+  return true;
+}
+
+/**
  * Pour the can on one tile. One pour is one charge of `CAN_CHARGES_MAX` (item 009, restored
  * by the 2026-08-13 ruling: plan §4's bold clause — "the watering can always fills at any
  * shore at any level" — governs the REFILL, which never fails; the can itself holds 8 pours,
@@ -636,6 +689,8 @@ function applyRefillCan(state: WorldState): boolean {
 function applyPlantTile(state: WorldState, command: PlantTileCommand): boolean {
   const tile = tileAt(state, command.tileX, command.tileY);
   if (tile === null || tile.crop !== CropId.None) return false;
+  // A farm tile hosting a field-placed machine (item 067) grows nothing while it stands.
+  if (machineAt(state, command.tileX, command.tileY) !== null) return false;
   if (!withinReachOfTile(state, command.tileX, command.tileY)) return false;
 
   const spec = cropSpec(command.crop);
@@ -666,19 +721,15 @@ function applyHarvestTile(state: WorldState, command: HarvestTileCommand): boole
 /**
  * The hand-harvest of one tile, shared by the click and by each of the scythe's three.
  *
- * **A FULL PLAYER CANNOT HARVEST, AND THE CROP STAYS IN THE GROUND.** That is item 023's
- * criterion word for word and it is also the anti-softlock answer: refusing costs nothing,
- * because a tile you could not pick is a tile that is still there when you come back with room.
- * The alternative — harvest anyway and drop the overflow — is a fine for misplacement, which
- * plan §4 rules out. The check is deliberately pessimistic about the yield (it asks for room for
- * the whole armful the tile might give, plus the seed it hands back) rather than harvesting and
- * discovering.
+ * NO CAPACITY QUESTION IS ASKED, AND THAT IS A RULING, NOT AN OVERSIGHT (item 068, owner
+ * ruling 2026-08-14): the armful cap that used to refuse this verb when the hands were full
+ * was removed outright — a hand harvest is bounded by time and walking, never by pocket
+ * space. What still refuses is a tile with nothing to give.
  */
 function harvestOneTile(state: WorldState, tile: WorldState['field'][number]): boolean {
   if (!isTileReady(tile)) {
     // Sweeping up after a crop you never got to. Still worth bending down for.
     if (tile.compost <= 0) return false;
-    if (!hasArmfulRoom(state, tile.compost)) return false;
     addItem(state, ItemId.Compost, tile.compost);
     tile.compost = 0;
     touch(state, 'handCarry');
@@ -687,12 +738,6 @@ function harvestOneTile(state: WorldState, tile: WorldState['field'][number]): b
 
   const spec = cropSpec(tile.crop);
   if (spec === null) return false;
-
-  // The most this pull could possibly hand over: the yield at its luckiest, the compost on the
-  // tile, and the seed a one-shot returns. Asked BEFORE anything is mutated, because `takeHarvest`
-  // clears the tile and there would be nothing to put back.
-  const worstCase = tile.fertility + 1 + tile.compost + (spec.regrowTicks > 0 ? 0 : 1);
-  if (!hasArmfulRoom(state, worstCase)) return false;
 
   const result = takeHarvest(state, tile, spec);
   if (result === null) return false;
@@ -749,8 +794,6 @@ function applySwingScythe(state: WorldState, command: SwingScytheCommand): boole
 
     const spec = cropSpec(tile.crop);
     if (spec === null) continue;
-    const worstCase = tile.fertility + 1 + tile.compost + (spec.regrowTicks > 0 ? 0 : 1);
-    if (!hasArmfulRoom(state, worstCase)) continue;
 
     const result = takeHarvest(state, tile, spec);
     if (result === null) continue;
@@ -824,7 +867,15 @@ function applyPackCrate(state: WorldState, command: PackCrateCommand): boolean {
   return true;
 }
 
-/** Every tile of a footprint is inside the world, owned, off the field, and unoccupied. */
+/**
+ * Every tile of a footprint is inside the world, owned, and unoccupied — and off the field,
+ * UNLESS the spec says `fieldPlaceable` (item 067: the watering family stands among the crops
+ * it waters). A flagged machine may take an EMPTY farm tile only: a growing crop or waiting
+ * compost refuses the placement, because nothing is ever silently destroyed (house rule), and
+ * a hand would have had to pick those up. The ground itself is not touched — the `CropTile`
+ * stays in the field with its soil, fertility, and moisture, so deconstruction hands the tile
+ * back exactly as it stood.
+ */
 function footprintFree(
   state: WorldState,
   tileX: number,
@@ -832,6 +883,7 @@ function footprintFree(
   tilesWide: number,
   tilesHigh: number,
   ignoreMachineId: number,
+  fieldPlaceable: boolean,
 ): boolean {
   for (let dy = 0; dy < tilesHigh; dy++) {
     for (let dx = 0; dx < tilesWide; dx++) {
@@ -841,7 +893,12 @@ function footprintFree(
       // A machine may not straddle the fence, not even by one tile of a 3×2 Bottler. Ownership
       // is asked per tile rather than per parcel for exactly that case.
       if (!isOwnedTile(state, x, y)) return false;
-      if (isFieldTile(x, y)) return false;
+      if (isFieldTile(state, x, y)) {
+        if (!fieldPlaceable) return false;
+        const tile = tileAt(state, x, y);
+        if (tile === null) return false;
+        if (tile.crop !== CropId.None || tile.compost > 0) return false;
+      }
       const occupant = machineAt(state, x, y);
       if (occupant !== null && occupant.id !== ignoreMachineId) return false;
       if (occupant === null && tileOccupied(state, x, y)) return false;
@@ -877,7 +934,17 @@ function applyPlaceMachine(state: WorldState, command: PlaceMachineCommand): boo
   const box = boxedItem === null ? null : peekBoxedMachine(state, boxedItem);
   if (box === null && state.moneyCents < spec.priceCents) return false;
 
-  if (!footprintFree(state, command.tileX, command.tileY, spec.tilesWide, spec.tilesHigh, 0)) {
+  if (
+    !footprintFree(
+      state,
+      command.tileX,
+      command.tileY,
+      spec.tilesWide,
+      spec.tilesHigh,
+      0,
+      spec.fieldPlaceable,
+    )
+  ) {
     return false;
   }
   // A pump must stand on a bank, and it may not join a network that already has one. The same
@@ -1094,7 +1161,15 @@ function applyMoveMachine(state: WorldState, command: MoveMachineCommand): boole
   const spec = machineSpec(machine.kind);
   if (spec === null) return false;
   if (
-    !footprintFree(state, command.tileX, command.tileY, spec.tilesWide, spec.tilesHigh, machine.id)
+    !footprintFree(
+      state,
+      command.tileX,
+      command.tileY,
+      spec.tilesWide,
+      spec.tilesHigh,
+      machine.id,
+      spec.fieldPlaceable,
+    )
   ) {
     return false;
   }
@@ -1234,8 +1309,8 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
   // player's arms are loose again.
   if (spec.role === MachineRole.Storage) {
     if (machine.cargoItem === 0 || machine.cargoCount <= 0) return false;
-    const wanted = Math.min(command.count, machine.cargoCount);
-    const taken = Math.min(wanted, armfulRoom(state));
+    // Unbounded arms since item 068: the ask is capped by what the shelf holds, nothing else.
+    const taken = Math.min(command.count, machine.cargoCount);
     if (taken <= 0) return false;
 
     const item = machine.cargoItem;
@@ -1249,8 +1324,8 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
 
   if (spec.outputItem === null) return false;
 
-  const wanted = Math.min(command.count, machine.outputCount);
-  const moved = Math.min(wanted, armfulRoom(state));
+  // Unbounded arms since item 068: the ask is capped by what the buffer holds, nothing else.
+  const moved = Math.min(command.count, machine.outputCount);
   if (moved <= 0) return false;
 
   // One unit at a time through the one take path, rather than a single subtraction, because
@@ -1486,11 +1561,6 @@ function applyBuyItem(state: WorldState, command: BuyItemCommand): boolean {
   if (command.count <= 0) return false;
   if (!isPurchasable(command.item)) return false;
   if (!nearSellBin(state)) return false;
-
-  // The armful again: you can only buy what you can carry home. Refused rather than clamped,
-  // because the count is the player's own number off a panel and quietly buying four of twenty
-  // would be the shop deciding for them — and unlike a harvest there is nothing to leave behind.
-  if (!hasArmfulRoom(state, command.count)) return false;
 
   const cost = listPriceCents(command.item) * command.count;
   if (cost <= 0 || state.moneyCents < cost) return false;
@@ -1781,7 +1851,7 @@ function applyPlaceBelt(state: WorldState, command: PlaceBeltCommand): boolean {
     // player did not aim is a stub they now have to find and take up. With a bend that rule
     // spans both legs, which is why this loop walks the run rather than one segment.
     if (!isOwnedTile(state, x, y)) return false;
-    if (isFieldTile(x, y)) return false;
+    if (isFieldTile(state, x, y)) return false;
     if (tileOccupied(state, x, y)) return false;
   }
 
@@ -1858,7 +1928,7 @@ function applyPlaceGrabber(state: WorldState, command: PlaceGrabberCommand): boo
   if (command.filter !== 0 && !spec.filterable) return false;
   if (!isInsideWorld(command.tileX, command.tileY)) return false;
   if (!isOwnedTile(state, command.tileX, command.tileY)) return false;
-  if (isFieldTile(command.tileX, command.tileY)) return false;
+  if (isFieldTile(state, command.tileX, command.tileY)) return false;
   if (tileOccupied(state, command.tileX, command.tileY)) return false;
   if (state.moneyCents < spec.priceCents) return false;
 
@@ -2021,8 +2091,22 @@ function cropAssignable(state: WorldState, crop: CropId): boolean {
 function applyCreateZone(state: WorldState, command: CreateZoneCommand): boolean {
   if (!cropAssignable(state, command.crop)) return false;
   // Check before creating: a zone that gets rolled back would still have burned an id, and
-  // "the command changed nothing" has to mean exactly that.
-  if (clipRectToField(command.rect) === null) return false;
+  // "the command changed nothing" has to mean exactly that. FARM TILES ARE COUNTED BEFORE
+  // SPAWNING for the same burned-id reason — under the old rect-field clip a surviving rect
+  // always covered field, but the clip is to the world now, so a drag across pure grass
+  // survives it while painting nothing, and a zone with no tiles is not a plan.
+  const clipped = clipRectToField(command.rect);
+  if (clipped === null) return false;
+  let farmTiles = 0;
+  for (let y = clipped.y; y < clipped.y + clipped.h && farmTiles === 0; y++) {
+    for (let x = clipped.x; x < clipped.x + clipped.w; x++) {
+      if (isFieldTile(state, x, y)) {
+        farmTiles += 1;
+        break;
+      }
+    }
+  }
+  if (farmTiles === 0) return false;
 
   const zone = spawnZone(state, command.crop);
   paintZoneRect(state, zone.id, command.rect, PaintMode.Add);
@@ -2286,6 +2370,23 @@ function intentTargetSubtiles(
       };
     }
 
+    case IntentAction.Walk: {
+      // Item 070: the no-op walk. STANDABLE GROUND ONLY, which in this world means owned and
+      // not open water — the same two refusals a clicked verb would meet, minus everything
+      // about machines and crops, because there is nothing to do on arrival. Machines, belts
+      // and pipes are not obstacles here for the same reason they are not obstacles to any
+      // other errand: nothing in this world is solid enough to walk into. Ownership is asked
+      // every tick like every other errand shape rule, so a walk into a parcel sold out from
+      // under it (there is no selling today, but the rule should not care) would go stale
+      // rather than march on.
+      if (!isOwnedTile(state, intent.tileX, intent.tileY)) return null;
+      if (reservoirAt(state, intent.tileX, intent.tileY) !== null) return null;
+      return {
+        xSub: tileCentreSubtiles(intent.tileX),
+        ySub: tileCentreSubtiles(intent.tileY),
+      };
+    }
+
     case IntentAction.Load:
     case IntentAction.Unload:
     case IntentAction.RefillHopper:
@@ -2343,6 +2444,12 @@ function intentCommand(state: WorldState, intent: PlayerIntent): Command | null 
       return { type: 'SwingScythe', tileX: intent.tileX, tileY: intent.tileY };
     case IntentAction.UseRepairKit:
       return { type: 'UseRepairKit', tileX: intent.tileX, tileY: intent.tileY };
+    // Item 070: ARRIVAL IS COMPLETION. There is no command to run and nothing is appended,
+    // counted, or touched — the walk itself was the deed, and `advanceErrand` lets go of the
+    // errand the moment the farmer is within reach. Silence on arrival is the design, not a
+    // hole: no sound, no flash, no trace entry beyond the one click that started it.
+    case IntentAction.Walk:
+      return null;
     case IntentAction.Sell:
       return { type: 'SellItem', item: intent.item as ItemId, count: intent.count };
     // Buy resolves without the machine for the same reason Sell does: `nearSellBin` inside the
@@ -2562,6 +2669,12 @@ function advanceSprinkler(
       if (machine.tankMl < SPRINKLER_POUR_ML) break;
       const tile = tileAt(state, machine.tileX + dx, machine.tileY + dy);
       if (tile === null) continue;
+      // A machine-occupied farm tile — including this head's OWN tile, mid-field (item 067) —
+      // is not part of the watering surface, exactly as grass is not: no pour, no water spent,
+      // no moisture written. The sloppiness tax is re-wetting soaked ground that could grow
+      // something; ground that grows nothing is outside the tax, not an exception to it, and
+      // the moisture underneath stays whatever it was so deconstruction hands it back honestly.
+      if (machineAt(state, machine.tileX + dx, machine.tileY + dy) !== null) continue;
       tile.moisture = MOISTURE_MAX;
       // Non-hashed pour signal; see `CropTile.lastPouredTick`. A dumb head re-wetting a
       // soaked tile is still a pour — that is its sloppiness tax, and it should look like one.
@@ -2630,7 +2743,10 @@ function advanceIrrigationHub(state: WorldState, machine: Machine, spec: Machine
     const dy = divFloor(offset, span) - radius;
     const tile = tileAt(state, machine.tileX + dx, machine.tileY + dy);
 
-    if (tile !== null) {
+    if (tile !== null && machineAt(state, machine.tileX + dx, machine.tileY + dy) === null) {
+      // Machine-occupied farm tiles — including the Hub's own 2×2, mid-field (item 067) — are
+      // outside the watering surface entirely: not poured, and NOT counted in `skippedCount`,
+      // which measures what moisture-sensing saved, not what was never waterable.
       // ONE DEFINITION OF DRY, and it is the one the ground is drawn with.
       if (tile.moisture >= MOISTURE_DRY_THRESHOLD) {
         machine.skippedCount += 1;

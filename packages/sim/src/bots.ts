@@ -57,13 +57,16 @@ import {
   BotKind,
   BotPhase,
   CeremonyId,
-  fieldTileX,
-  fieldTileY,
   isTileReady,
+  machineAt,
   machineById,
   markCeremony,
   plantCrop,
   takeHarvest,
+  tileByKey,
+  worldKeyTileX,
+  worldKeyTileY,
+  worldTileKey,
 } from './state';
 import { effectiveOutputCapacity } from './upgrades';
 import { clampInt, tileCentreSubtiles } from './units';
@@ -353,10 +356,11 @@ function advanceHarvester(state: WorldState, bot: Bot, dock: Machine): void {
     }
 
     case BotPhase.Outbound: {
-      const tile = state.field[bot.targetTile];
-      // The errand went stale — the player pulled the tile first, which they are always allowed
-      // to do (§1: manual never rots). Pick again rather than walking to bare dirt.
-      if (tile === undefined || !isTileReady(tile)) {
+      const tile = tileByKey(state, bot.targetTile);
+      // The errand went stale — the player pulled the tile first (or un-tilled the ground from
+      // under it), which they are always allowed to do (§1: manual never rots). Pick again
+      // rather than walking to bare dirt.
+      if (tile === null || !isTileReady(tile)) {
         bot.phase = BotPhase.Idle;
         bot.targetTile = -1;
         return;
@@ -411,8 +415,8 @@ function advancePlanter(state: WorldState, bot: Bot, dock: Machine): void {
     }
 
     case BotPhase.Outbound: {
-      const tile = state.field[bot.targetTile];
-      if (tile === undefined || tile.crop !== CropId.None || dockSeedCount(dock) <= 0) {
+      const tile = tileByKey(state, bot.targetTile);
+      if (tile === null || tile.crop !== CropId.None || dockSeedCount(dock) <= 0) {
         bot.phase = BotPhase.Idle;
         bot.targetTile = -1;
         return;
@@ -460,8 +464,8 @@ function advancePlanter(state: WorldState, bot: Bot, dock: Machine): void {
  * has one crop.
  */
 function harvestUnderBot(state: WorldState, bot: Bot): void {
-  const tile = state.field[bot.targetTile];
-  if (tile === undefined) return;
+  const tile = tileByKey(state, bot.targetTile);
+  if (tile === null) return;
   const spec = tile.crop === CropId.None ? null : cropSpec(tile.crop);
   if (spec === null) return;
 
@@ -489,8 +493,10 @@ function harvestUnderBot(state: WorldState, bot: Bot): void {
 
 /** Sow the tile the bot is standing on from the dock's hopper. */
 function plantUnderBot(state: WorldState, bot: Bot, dock: Machine): void {
-  const tile = state.field[bot.targetTile];
-  if (tile === undefined || tile.crop !== CropId.None) return;
+  const tile = tileByKey(state, bot.targetTile);
+  if (tile === null || tile.crop !== CropId.None) return;
+  // A machine landed here mid-walk (item 067). The tile grows nothing; keep the seed.
+  if (machineAt(state, tile.tileX, tile.tileY) !== null) return;
   const spec = dockCrop(state, dock);
   if (spec === null) return;
   if (dock.cargoItem !== spec.seedItem || dock.cargoCount <= 0) return;
@@ -550,7 +556,15 @@ function nextPlantableTile(state: WorldState, bot: Bot, dock: Machine): number {
   const spec = dockCrop(state, dock);
   if (spec === null) return -1;
   if (dock.cargoItem !== spec.seedItem || dock.cargoCount <= 0) return -1;
-  return scanZone(state, bot, dock, (tile) => tile.crop === CropId.None);
+  // A farm tile hosting a field-placed machine (item 067) grows nothing while it stands, so
+  // the planter never sets out for one. Ready tiles need no such check: an occupied tile
+  // cannot hold a crop in the first place.
+  return scanZone(
+    state,
+    bot,
+    dock,
+    (tile) => tile.crop === CropId.None && machineAt(state, tile.tileX, tile.tileY) === null,
+  );
 }
 
 function scanZone(
@@ -570,7 +584,9 @@ function scanZone(
     if (tile.zone !== dock.boundZone) continue;
     if (!wants(tile)) continue;
     bot.routeCursor = (index + 1) % count;
-    return index;
+    // THE WORLD KEY, NOT THE ARRAY INDEX. Tilling inserts and removes field entries, so an
+    // index handed out this tick may name a different tile next tick; the key names ground.
+    return worldTileKey(tile.tileX, tile.tileY);
   }
   return -1;
 }
@@ -581,11 +597,11 @@ function scanZone(
 // of a tile" and "where is the middle of a dock" are answered in one place each rather than at
 // four call sites, and so a drone reusing this file gets the same answers.
 
-function walkToTile(bot: Bot, index: number): boolean {
+function walkToTile(bot: Bot, key: number): boolean {
   return stepToward(
     bot,
-    tileCentreSubtiles(fieldTileX(index)),
-    tileCentreSubtiles(fieldTileY(index)),
+    tileCentreSubtiles(worldKeyTileX(key)),
+    tileCentreSubtiles(worldKeyTileY(key)),
     BOT_SPEED_SUBTILES_PER_100_TICKS,
   );
 }

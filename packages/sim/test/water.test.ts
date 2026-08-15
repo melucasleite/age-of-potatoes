@@ -360,10 +360,14 @@ describe('the pour signal', () => {
     const sprinkler = spawnMachine(state, MachineKind.Sprinkler, 5, 5)!;
     stepMany(state, 1); // Past tick 0 so a recorded pour is distinguishable from "never".
     sprinkler.tankMl = 100_000;
-    tileAt(state, 5, 5)!.moisture = MOISTURE_MAX; // Soaked, and the dumb head pours anyway.
+    // A NEIGHBOUR, not the machine's own tile: since item 067 a head standing on farmland
+    // never waters its own feet — the occupied tile is outside the watering surface — so the
+    // sloppiness-tax pour this test watches lands on the soaked tile beside it.
+    tileAt(state, 6, 6)!.moisture = MOISTURE_MAX; // Soaked, and the dumb head pours anyway.
 
     stepMany(state, 3);
-    expect(tileAt(state, 5, 5)!.lastPouredTick).toBeGreaterThan(0);
+    expect(tileAt(state, 6, 6)!.lastPouredTick).toBeGreaterThan(0);
+    expect(tileAt(state, 5, 5)!.lastPouredTick, 'the head watered under itself').toBe(0);
   });
 
   it('marks Hub pours but never Hub skips — a skip is not a pour', () => {

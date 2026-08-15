@@ -19,14 +19,12 @@
 import {
   AUTO_REPLANT_PERIOD_TICKS,
   CropId,
-  FIELD_ORIGIN_X,
-  FIELD_ORIGIN_Y,
-  FIELD_TILES_HIGH,
-  FIELD_TILES_WIDE,
+  WORLD_TILES_HIGH,
+  WORLD_TILES_WIDE,
   ZONE_PAINT_MAX_SPAN,
   cropSpec,
 } from './data';
-import { type WorldState, type Zone, fieldIndex, plantCrop, removeItem } from './state';
+import { type WorldState, type Zone, fieldIndex, machineAt, plantCrop, removeItem } from './state';
 import { TechId, hasTech } from './tech';
 
 /** An integer tile rectangle. Width and height are counts, never coordinates. */
@@ -45,20 +43,26 @@ export const PaintMode = {
 export type PaintMode = (typeof PaintMode)[keyof typeof PaintMode];
 
 /**
- * Clip a rect to the field, or return null when nothing survives.
+ * Clip a rect to the world, or return null when nothing survives.
  *
  * Clipping rather than rejecting: a drag that starts on dirt and ends off the edge of the
- * field is an ordinary gesture, and eating the whole command because the player overshot
+ * map is an ordinary gesture, and eating the whole command because the player overshot
  * would be the game arguing with a mouse.
+ *
+ * TO THE WORLD, NOT TO A FIELD RECT — since format 13 farmland is wherever the player tilled
+ * it, so there is no rectangle to clip against. Which tiles inside the rect actually take
+ * paint is decided per tile by `paintZoneRect` (farm tiles do, grass does not), exactly as
+ * the old field-rect clip decided it for tiles outside the 8×8. The span cap is the same
+ * cost bound it has always been.
  */
 export function clipRectToField(rect: TileRect): TileRect | null {
   if (rect.w <= 0 || rect.h <= 0) return null;
   if (rect.w > ZONE_PAINT_MAX_SPAN || rect.h > ZONE_PAINT_MAX_SPAN) return null;
 
-  const left = rect.x < FIELD_ORIGIN_X ? FIELD_ORIGIN_X : rect.x;
-  const top = rect.y < FIELD_ORIGIN_Y ? FIELD_ORIGIN_Y : rect.y;
-  const rightExclusive = Math.min(rect.x + rect.w, FIELD_ORIGIN_X + FIELD_TILES_WIDE);
-  const bottomExclusive = Math.min(rect.y + rect.h, FIELD_ORIGIN_Y + FIELD_TILES_HIGH);
+  const left = rect.x < 0 ? 0 : rect.x;
+  const top = rect.y < 0 ? 0 : rect.y;
+  const rightExclusive = Math.min(rect.x + rect.w, WORLD_TILES_WIDE);
+  const bottomExclusive = Math.min(rect.y + rect.h, WORLD_TILES_HIGH);
 
   if (rightExclusive <= left || bottomExclusive <= top) return null;
   return { x: left, y: top, w: rightExclusive - left, h: bottomExclusive - top };
@@ -83,7 +87,7 @@ export function paintZoneRect(
   let changed = 0;
   for (let y = clipped.y; y < clipped.y + clipped.h; y++) {
     for (let x = clipped.x; x < clipped.x + clipped.w; x++) {
-      const index = fieldIndex(x, y);
+      const index = fieldIndex(state, x, y);
       if (index < 0) continue;
       const tile = state.field[index]!;
 
@@ -208,6 +212,9 @@ function replantOneTile(state: WorldState, zone: Zone): boolean {
     const tile = state.field[i]!;
     if (tile.zone !== zone.id) continue;
     if (tile.crop !== CropId.None) continue;
+    // A farm tile hosting a field-placed machine (item 067) grows nothing while it stands —
+    // the hopper skips it exactly as the planter bot does, and keeps the seed.
+    if (machineAt(state, tile.tileX, tile.tileY) !== null) continue;
     if (!removeItem(state, spec.seedItem, 1)) return false;
     plantCrop(state, tile, spec);
     return true;

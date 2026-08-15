@@ -31,6 +31,7 @@ export {
   type SavePipe,
   type SavePipeNetwork,
   type SaveReservoir,
+  type SaveSoilMemory,
   type SaveStats,
   type SaveStream,
   type SaveZone,

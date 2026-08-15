@@ -546,6 +546,8 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
 
     // The inline golden. Regenerate deliberately or not at all — a move here is a real
     // behaviour change in the maintenance loop and must be enumerated like any golden.
-    expect(hashState(state)).toBe('cba8a24b');
+    // cba8a24b -> fbdf6072 with format 13 (item 066): the digest gained the field tiles'
+    // coordinates and the soil-memory ledger. Every story assertion above held unchanged.
+    expect(hashState(state)).toBe('fbdf6072');
   });
 });

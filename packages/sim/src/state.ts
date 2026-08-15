@@ -6,15 +6,14 @@
 // round-trip to a world that hashes identically — that is the property the save format,
 // the golden fixtures, and any eventual Worker transport all stand on.
 //
-// Collections are ordered for deterministic iteration: the field is a flat row-major
-// array; machines, belts, grabbers, and zones are arrays kept sorted by id; inventory is
+// Collections are ordered for deterministic iteration: the field is a flat array kept
+// sorted by row-major world tile key; machines, belts, grabbers, and zones are arrays kept sorted by id; inventory is
 // kept sorted by item id; the unlock list is kept sorted by node id. Nothing here is
 // iterated with `for...in`, and nothing depends on object key insertion order — integer-like
 // keys sort ascending while string keys keep insertion order, and that mixed rule will
 // eventually reorder entity iteration on somebody's engine.
 
 import {
-  ARMFUL_CAP_ITEMS,
   BELT_ITEM_SPACING_SUBTILES,
   type BeltTier,
   CAN_CHARGES_MAX,
@@ -71,6 +70,7 @@ import {
   type RngState,
   type SystemId,
   SystemId as SystemIds,
+  deriveKeyedStream,
   deriveStream,
   nextBelow,
   nextRange,
@@ -118,8 +118,15 @@ import { SUBTILE, clampInt, divFloor, tileCentreSubtiles } from './units';
  *     dawn snapshots, dawn-aligned hour buckets with the open hour's starting line, and the dawn
  *     counter the snapshots reset on. Old saves migrate with EMPTY accumulators — history that
  *     was never recorded is not invented.
+ * 13 — the till tool: farmland is player-made, so the field stops being the fixed 8×8 rect and
+ *     becomes a keyed collection — every tile carries its own `tileX`/`tileY` and the array is
+ *     kept sorted by row-major world tile key. The world also carries `soilMemory`, the
+ *     roll-once-per-position-ever ledger of what ground has been under every tile ever tilled,
+ *     and a field bot's `targetTile` becomes a world tile key rather than an index into an
+ *     array that tilling can now reorder. The legacy rect migrates into the collection with
+ *     identical soil, moisture, crops, and fertility — same dirt, new bookkeeping.
  */
-export const WORLD_STATE_VERSION = 12;
+export const WORLD_STATE_VERSION = 13;
 
 /**
  * A held direction, not a delta. Input tells the sim *which way the player is holding*,
@@ -194,8 +201,9 @@ export function rotateDirectionClockwise(dir: Direction): Direction {
  * plus a target tile plus at most two numbers says everything these nine verbs need, and it
  * stays readable when somebody is reading a raw trace at 2 a.m.
  *
- * These are exactly the verbs `tick.ts` gates on `HAND_REACH_SUBTILES`. A verb that is not
- * reach-gated has nothing to walk toward and does not belong here.
+ * These are exactly the verbs `tick.ts` gates on `HAND_REACH_SUBTILES` — plus `Walk`, the
+ * one verb whose walking is the whole deed (item 070). Anything else that is not reach-gated
+ * has nothing to walk toward and does not belong here.
  */
 export const IntentAction = {
   None: 0,
@@ -229,6 +237,16 @@ export const IntentAction = {
    * shape: the kit is aimed at ground and the radius does the addressing.
    */
   UseRepairKit: 16,
+  /**
+   * Walk to a tile and do NOTHING there — item 070: clicking empty ground is a way to just
+   * move. ARRIVAL IS COMPLETION: `intentCommand` returns no command for it, so the errand
+   * ends the moment the farmer is within reach, which dissolves the old objection to a
+   * destination-less walk ("an errand that can never complete is a farmer who can never move
+   * again") — this one always completes. The one verb in this enum that is not reach-gated
+   * work, and the exception is the point: the walk itself is the deed. Targets standable
+   * ground only — owned, not open water — and arrival is silent by design.
+   */
+  Walk: 17,
 } as const;
 
 export type IntentAction = (typeof IntentAction)[keyof typeof IntentAction];
@@ -251,6 +269,7 @@ export const INTENT_ACTIONS: readonly IntentAction[] = [
   IntentAction.HitchCart,
   IntentAction.RefillCan,
   IntentAction.UseRepairKit,
+  IntentAction.Walk,
 ];
 
 /**
@@ -446,6 +465,14 @@ export interface InventorySlot {
 }
 
 export interface CropTile {
+  /**
+   * The world tile this farm tile sits on — THE COLLECTION KEY. Since format 13 farmland is
+   * player-made, so a tile can no longer be addressed as an offset into a fixed rectangle:
+   * it says where it is, and `WorldState.field` stays sorted by `worldTileKey(tileX, tileY)`
+   * so iteration order is row-major over the world and independent of tilling order.
+   */
+  tileX: number;
+  tileY: number;
   crop: CropId;
   /** Growth work-points accrued. Ready when it reaches `growthTarget`. */
   growth: number;
@@ -465,9 +492,13 @@ export interface CropTile {
    */
   moistureAccum: number;
   /**
-   * What this tile is made of. Rolled once at world creation from `SystemId.SoilInit` and never
-   * changed — you cannot re-soil a field, which is exactly what makes §5's "placement is a
-   * decision" a decision.
+   * What this tile is made of. Rolled ONCE PER POSITION, EVER — at world creation for the
+   * starting field (from the sequential `SystemId.SoilInit` stream, exactly as it always was)
+   * and at first-ever till time for player-made farmland (from the position-keyed
+   * `deriveKeyedStream` variant of the same system) — and never changed: you cannot re-soil
+   * a field, which is exactly what makes §5's "placement is a decision" a decision. Un-tilling
+   * and re-tilling hands back the SAME roll, because the roll lives on in
+   * `WorldState.soilMemory` after the tile itself is gone.
    */
   soil: SoilType;
   /** 1..3 stars. Decides yield. Falls a star every `HARVESTS_PER_FERTILITY_STEP` harvests. */
@@ -800,8 +831,15 @@ export interface Bot {
   moveAccum: number;
   phase: BotPhase;
   /**
-   * The field index it is walking to, or -1. An INDEX rather than a pair of tile coordinates,
-   * because the route is a scan over `state.field` and an index is what the scan produces.
+   * The WORLD TILE KEY (`worldTileKey`) it is walking to, or -1. A key since format 13 rather
+   * than the field-array index it used to be, because tilling inserts and removes field
+   * entries — an index held across ticks could quietly come to name a different tile, and a
+   * bot would harvest a neighbour's row with a clear conscience. The key names ground;
+   * `tileByKey` resolves it, and un-tilled ground resolves to `null`, which the bot treats
+   * as the errand going stale.
+   *
+   * For `BotKind.Repair` this holds a MACHINE ID instead — a drone's errand is a machine,
+   * not a tile — exactly as it did before the format change.
    */
   targetTile: number;
   /** Where the route scan resumes. World state, so a reloaded bot carries on where it stopped. */
@@ -1023,6 +1061,38 @@ export interface Contract {
   grossCents: number;
 }
 
+/**
+ * What one position's ground rolled, remembered FOREVER — the roll-once ledger behind the
+ * till tool.
+ *
+ * WHY A LEDGER RATHER THAN NOTHING: a new till's soil roll is a pure function of
+ * `(worldSeed, position)` and needs no memory at all — but the starting field's 64 tiles were
+ * rolled *sequentially* at world creation, so their rolls are not recomputable from their
+ * positions. If un-tilling one of them forgot its soil, re-tilling would draw the
+ * position-keyed roll instead and sometimes come up better, and `state.ts`'s oldest rule —
+ * you cannot re-soil a field — would have a farming exploit named after it. One mechanism for
+ * every position is also one proof: `soilMemory` is written the first time a position's ground
+ * is ever determined and read on every till after, so re-rolling is impossible by construction
+ * rather than merely discouraged.
+ *
+ * WHY IT ALSO CARRIES FERTILITY: fertility wears with harvests and is restored by Fertilizer,
+ * so a memory that dropped it would make till–untill–retill a free alternative to the
+ * Composter loop. Un-tilling writes the tile's *current* fertility and wear back into its
+ * entry; re-tilling hands them back. The ground remembers being farmed.
+ *
+ * Entries are `{ tile, soil, fertility, fertilityWear }` with `tile` the row-major world tile
+ * key, kept sorted ascending by `tile` — hashed and saved like every other collection here,
+ * and bounded by the number of positions ever tilled, which is bounded by the lot.
+ */
+export interface SoilMemory {
+  /** Row-major world tile key: `worldTileKey(tileX, tileY)`. The collection key. */
+  tile: number;
+  soil: SoilType;
+  /** Fertility as it stood when the position was last un-tilled (or first rolled). */
+  fertility: number;
+  fertilityWear: number;
+}
+
 /** One entry of the append-only input trace. */
 export interface TraceEntry {
   tick: number;
@@ -1059,8 +1129,21 @@ export interface WorldState {
    */
   ownedParcels: number[];
 
-  /** Row-major, `FIELD_TILES_WIDE * FIELD_TILES_HIGH` entries. Index is the tile's id. */
+  /**
+   * The farmland, sorted ascending by `worldTileKey(tileX, tileY)` — a KEYED COLLECTION, not
+   * a rectangle. A fresh world's field happens to be the legacy 8×8 rect (sorted by world key,
+   * that is exactly the row-major order the flat array always had), but from format 13 the
+   * player tills tiles in and out, so no code may assume the shape, the count, or that an
+   * array index survives an edit. Address a tile by coordinate (`tileAt`, `tileByKey`);
+   * an index is only valid until the next till.
+   */
   field: CropTile[];
+
+  /**
+   * The roll-once ledger for every position ever tilled, sorted ascending by `tile`.
+   * See `SoilMemory` — this is what makes re-tilling provably rerollproof.
+   */
+  soilMemory: SoilMemory[];
 
   /** Sorted ascending by id. */
   machines: Machine[];
@@ -1187,6 +1270,7 @@ export function createWorld(seed: number): WorldState {
     // every world before deeds was born on.
     ownedParcels: [STARTING_PARCEL],
     field: [],
+    soilMemory: [],
     machines: [],
     nextMachineId: 1,
     belts: [],
@@ -1218,6 +1302,10 @@ export function createWorld(seed: number): WorldState {
   const fieldRng = streamFor(state, SystemIds.FieldInit);
   for (let i = 0; i < FIELD_TILE_COUNT; i++) {
     state.field.push({
+      // Row-major over the starting rect, which is also ascending world-key order — so the
+      // collection is born sorted and the draw order below is the one it has always been.
+      tileX: FIELD_ORIGIN_X + (i % FIELD_TILES_WIDE),
+      tileY: FIELD_ORIGIN_Y + divFloor(i, FIELD_TILES_WIDE),
       crop: CropId.None,
       growth: 0,
       growthTarget: 0,
@@ -1237,6 +1325,20 @@ export function createWorld(seed: number): WorldState {
   for (let i = 0; i < FIELD_TILE_COUNT; i++) {
     const roll = nextBelow(soilRng, SOIL_ROLL_TABLE.length);
     state.field[i]!.soil = SOIL_ROLL_TABLE[roll] ?? SoilType.Loam;
+  }
+
+  // The starting field's rolls go straight into the roll-once ledger, so the 64 gift tiles
+  // obey exactly the rule player-made farmland does: un-till one and re-till it, and the
+  // ground that comes back is the ground that was there. Pushed in field order, which is
+  // ascending key order, so the ledger is born sorted too.
+  for (let i = 0; i < state.field.length; i++) {
+    const tile = state.field[i]!;
+    state.soilMemory.push({
+      tile: worldTileKey(tile.tileX, tile.tileY),
+      soil: tile.soil,
+      fertility: tile.fertility,
+      fertilityWear: 0,
+    });
   }
 
   // The roadside stand is a gift, not a purchase — selling by hand is the manual tier of
@@ -1588,35 +1690,207 @@ export function streamFor(state: WorldState, systemId: SystemId): RngState {
 }
 
 // --- field ------------------------------------------------------------------------
+//
+// FARMLAND IS A KEYED COLLECTION, AND EVERY QUESTION ABOUT IT IS A LOOKUP. `state.field` is
+// sorted ascending by `worldTileKey`, so "is this tile farm" is a binary search rather than a
+// rectangle test — which is the whole structural change of format 13: the 8×8 rect the world
+// starts with is just the tiles it happens to start with, and the till tool edits the set.
 
-export function isFieldTile(tileX: number, tileY: number): boolean {
-  return (
-    tileX >= FIELD_ORIGIN_X &&
-    tileY >= FIELD_ORIGIN_Y &&
-    tileX < FIELD_ORIGIN_X + FIELD_TILES_WIDE &&
-    tileY < FIELD_ORIGIN_Y + FIELD_TILES_HIGH
-  );
+/** The row-major world tile key — the field collection's sort key. */
+export function worldTileKey(tileX: number, tileY: number): number {
+  return tileY * WORLD_TILES_WIDE + tileX;
 }
 
-/** Row-major index of a world tile within the field, or -1 if it is not field. */
-export function fieldIndex(tileX: number, tileY: number): number {
-  if (!isFieldTile(tileX, tileY)) return -1;
-  return (tileY - FIELD_ORIGIN_Y) * FIELD_TILES_WIDE + (tileX - FIELD_ORIGIN_X);
+/** The world tile a key names. The inverse of `worldTileKey`. */
+export function worldKeyTileX(key: number): number {
+  return key % WORLD_TILES_WIDE;
 }
 
-/** The world tile a field index sits on. The inverse of `fieldIndex`. */
-export function fieldTileX(index: number): number {
-  return FIELD_ORIGIN_X + (index % FIELD_TILES_WIDE);
+export function worldKeyTileY(key: number): number {
+  return divFloor(key, WORLD_TILES_WIDE);
 }
 
-export function fieldTileY(index: number): number {
-  return FIELD_ORIGIN_Y + divFloor(index, FIELD_TILES_WIDE);
+/**
+ * Index of the farm tile with this world key, or -1. Binary search over the sorted field —
+ * O(log n), and the ONE lookup every other field accessor goes through.
+ */
+export function fieldIndexOfKey(state: WorldState, key: number): number {
+  let low = 0;
+  let high = state.field.length - 1;
+  while (low <= high) {
+    const mid = divFloor(low + high, 2);
+    const midKey = worldTileKey(state.field[mid]!.tileX, state.field[mid]!.tileY);
+    if (midKey === key) return mid;
+    if (midKey < key) low = mid + 1;
+    else high = mid - 1;
+  }
+  return -1;
+}
+
+/** True when a world tile is CURRENTLY farmland. A fact about the state, not about a rect. */
+export function isFieldTile(state: WorldState, tileX: number, tileY: number): boolean {
+  return fieldIndexOfKey(state, worldTileKey(tileX, tileY)) >= 0;
+}
+
+/**
+ * Index of a world tile within the field array, or -1 if it is not farm.
+ *
+ * AN INDEX IS ONLY VALID UNTIL THE NEXT TILL — inserting or removing a tile shifts everything
+ * after it. Hold a coordinate (or a world key) across ticks, never an index.
+ */
+export function fieldIndex(state: WorldState, tileX: number, tileY: number): number {
+  return fieldIndexOfKey(state, worldTileKey(tileX, tileY));
+}
+
+/** The world tile a field index sits on today. Reads the tile's own coordinate. */
+export function fieldTileX(state: WorldState, index: number): number {
+  const tile = state.field[index];
+  return tile === undefined ? -1 : tile.tileX;
+}
+
+export function fieldTileY(state: WorldState, index: number): number {
+  const tile = state.field[index];
+  return tile === undefined ? -1 : tile.tileY;
 }
 
 export function tileAt(state: WorldState, tileX: number, tileY: number): CropTile | null {
-  const index = fieldIndex(tileX, tileY);
+  const index = fieldIndexOfKey(state, worldTileKey(tileX, tileY));
   if (index < 0) return null;
   return state.field[index] ?? null;
+}
+
+/** The farm tile with this world key, or `null`. What a bot's `targetTile` resolves through. */
+export function tileByKey(state: WorldState, key: number): CropTile | null {
+  const index = fieldIndexOfKey(state, key);
+  if (index < 0) return null;
+  return state.field[index] ?? null;
+}
+
+// --- tilling ----------------------------------------------------------------------
+
+/** The remembered ground for a position, or `null` if it has never been tilled. */
+export function soilMemoryAt(state: WorldState, key: number): SoilMemory | null {
+  let low = 0;
+  let high = state.soilMemory.length - 1;
+  while (low <= high) {
+    const mid = divFloor(low + high, 2);
+    const entry = state.soilMemory[mid]!;
+    if (entry.tile === key) return entry;
+    if (entry.tile < key) low = mid + 1;
+    else high = mid - 1;
+  }
+  return null;
+}
+
+/**
+ * The mechanics of turning grass into a farm tile. LEGALITY IS THE REDUCER'S BUSINESS —
+ * ownership, occupancy, and the world edge are checked in `applyTillTile`, exactly as
+ * `spawnMachine` leaves money to command handling. This refuses only what it must: a tile
+ * that is already farm.
+ *
+ * THE SOIL IS ROLLED ONCE PER POSITION, EVER. First-ever till of a position draws soil and
+ * fertility from `deriveKeyedStream(worldSeed, SoilInit, key)` — a pure function of seed and
+ * position, so till order cannot move anybody's ground — and writes the ledger. Every till
+ * after (including re-tilling ground that started as the gift field) reads the ledger and
+ * rolls nothing. Draw order within the keyed stream: soil first, then fertility.
+ *
+ * The new tile is DRY, BARE, AND UNZONED: moisture, crop, compost, and zone all start at
+ * zero. Only the ground itself — soil, fertility, wear — comes out of the ledger.
+ */
+export function tillTile(state: WorldState, tileX: number, tileY: number): CropTile | null {
+  const key = worldTileKey(tileX, tileY);
+  if (fieldIndexOfKey(state, key) >= 0) return null;
+
+  let memory = soilMemoryAt(state, key);
+  if (memory === null) {
+    const rng = deriveKeyedStream(state.worldSeed, SystemIds.SoilInit, key);
+    const roll = nextBelow(rng, SOIL_ROLL_TABLE.length);
+    memory = {
+      tile: key,
+      soil: SOIL_ROLL_TABLE[roll] ?? SoilType.Loam,
+      fertility: nextRange(rng, FERTILITY_MIN, FERTILITY_MAX),
+      fertilityWear: 0,
+    };
+    rememberSoil(state, memory);
+  }
+
+  const tile: CropTile = {
+    tileX,
+    tileY,
+    crop: CropId.None,
+    growth: 0,
+    growthTarget: 0,
+    moisture: 0,
+    moistureAccum: 0,
+    soil: memory.soil,
+    fertility: memory.fertility,
+    fertilityWear: memory.fertilityWear,
+    readyAge: 0,
+    compost: 0,
+    zone: 0,
+    lastPouredTick: 0,
+  };
+
+  // Sorted insert by world key, so iteration order stays row-major over the world no matter
+  // what order the player tilled in.
+  let at = state.field.length;
+  for (let i = 0; i < state.field.length; i++) {
+    if (worldTileKey(state.field[i]!.tileX, state.field[i]!.tileY) > key) {
+      at = i;
+      break;
+    }
+  }
+  state.field.splice(at, 0, tile);
+  return tile;
+}
+
+/**
+ * The mechanics of turning an EMPTY farm tile back to grass. Refuses — gently, costing
+ * nothing — a tile that is planted or has compost lying on it: the till never destroys
+ * anything a hand would have to pick up first (plan §4: nothing vanishes).
+ *
+ * The tile's current fertility and wear are written back into the ledger on the way out, so
+ * what re-tilling restores is the ground as it was left, not as it was born — worn ground
+ * stays worn, fertilized ground stays fertilized, and the till-untill cycle moves nothing.
+ * Moisture is deliberately NOT remembered: water soaks away when the dirt is turned over,
+ * and remembering it would make un-till a free crate for water.
+ */
+export function untillTile(state: WorldState, tileX: number, tileY: number): boolean {
+  const key = worldTileKey(tileX, tileY);
+  const index = fieldIndexOfKey(state, key);
+  if (index < 0) return false;
+
+  const tile = state.field[index]!;
+  if (tile.crop !== CropId.None || tile.compost > 0) return false;
+
+  const memory = soilMemoryAt(state, key);
+  if (memory === null) {
+    // A migrated world whose ledger predates this position — remember it now, as it stands.
+    rememberSoil(state, {
+      tile: key,
+      soil: tile.soil,
+      fertility: tile.fertility,
+      fertilityWear: tile.fertilityWear,
+    });
+  } else {
+    memory.soil = tile.soil;
+    memory.fertility = tile.fertility;
+    memory.fertilityWear = tile.fertilityWear;
+  }
+
+  state.field.splice(index, 1);
+  return true;
+}
+
+/** Sorted insert into the roll-once ledger. The caller has established the key is absent. */
+function rememberSoil(state: WorldState, entry: SoilMemory): void {
+  for (let i = 0; i < state.soilMemory.length; i++) {
+    if (state.soilMemory[i]!.tile > entry.tile) {
+      state.soilMemory.splice(i, 0, entry);
+      return;
+    }
+  }
+  state.soilMemory.push(entry);
 }
 
 export function isInsideWorld(tileX: number, tileY: number): boolean {
@@ -2195,11 +2469,11 @@ function takeFromStacks(slot: InventorySlot, count: number): void {
 /**
  * Add items, keeping the inventory sorted ascending by item id and stamping freshness.
  *
- * **STILL UNBOUNDED, AND THE ARMFUL CAP IS DELIBERATELY NOT ENFORCED HERE** — see
- * `ARMFUL_CAP_ITEMS`. Half the callers of this function are handing goods BACK (a belt taken up,
- * a machine boxed with a full hopper, a cancelled contract), and §4's floor is that nothing
- * vanishes. A cap in here would have to destroy those goods or refuse the return; the cap
- * therefore lives on the voluntary verbs instead, where refusing costs the player nothing.
+ * UNBOUNDED, TWICE OVER. Half the callers of this function are handing goods BACK (a belt
+ * taken up, a machine boxed with a full hopper, a cancelled contract), and §4's floor is that
+ * nothing vanishes — so no cap could ever live here. And since item 068 struck the armful cap
+ * there is no cap anywhere else either: the voluntary verbs that used to ask for room now
+ * simply take what they take.
  */
 export function addItem(state: WorldState, item: ItemId, count: number): void {
   if (count <= 0) return;
@@ -2266,7 +2540,15 @@ export function soonestSpoilTick(slot: InventorySlot): number {
 
 /**
  * How many ordinary goods the player is carrying. **Boxed machines are not goods and are not
- * counted** — see `ARMFUL_CAP_ITEMS`.
+ * counted** — a box is paperwork, not produce, and demolishing a factory must not fill the
+ * player's hands with turnips.
+ *
+ * A COUNT WITH NO CAP BEHIND IT (item 068, owner ruling 2026-08-14): the armful limit —
+ * `ARMFUL_CAP_ITEMS = 12`, with `armfulRoom` / `hasArmfulRoom` gating harvest, buy, unload,
+ * and storage withdrawal — was struck outright. No cap, no slowdown, no soft replacement:
+ * carrying is bounded by time and walking, never by pocket space. The count itself survives
+ * because the stats ledger and the HUD read it, and `BOT_CARRY_CAPACITY` is a different
+ * mechanic on different arms — bots keep theirs.
  */
 export function carriedCount(state: WorldState): number {
   let total = 0;
@@ -2275,24 +2557,6 @@ export function carriedCount(state: WorldState): number {
     total += slot.count - slot.boxes.length;
   }
   return total;
-}
-
-/** Room left in the player's arms, floored at zero. */
-export function armfulRoom(state: WorldState): number {
-  const room = ARMFUL_CAP_ITEMS - carriedCount(state);
-  return room < 0 ? 0 : room;
-}
-
-/**
- * Whether the player has room for `count` more goods.
- *
- * Asked at the VOLUNTARY doors only — harvest, buy, unload, take-from-storage, pick up compost.
- * A refusal here always leaves the goods where they were (in the ground, on the shelf, in the
- * buffer), which is why refusing is free: §4's "nothing vanishes" is satisfied by not moving
- * anything rather than by finding somewhere to put it.
- */
-export function hasArmfulRoom(state: WorldState, count: number): boolean {
-  return carriedCount(state) + count <= ARMFUL_CAP_ITEMS;
 }
 
 /**

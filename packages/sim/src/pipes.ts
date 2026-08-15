@@ -58,6 +58,7 @@ import {
   machineAt,
   machineCoversTile,
   tileOccupied,
+  worldTileKey,
 } from './state';
 import {
   effectivePortCapacityMl,
@@ -128,9 +129,15 @@ export const BuildRefusal = {
 
 export type BuildRefusal = (typeof BuildRefusal)[keyof typeof BuildRefusal];
 
-/** Row-major world tile index. The basis of every network id — see the header. */
+/**
+ * Row-major world tile index. The basis of every network id — see the header.
+ *
+ * The same formula as `state.ts`'s `worldTileKey` (format 13 made the key a state-wide
+ * concept — the field collection and the soil ledger both sort by it), kept as a delegating
+ * alias here because network ids were speaking it first and the export is API surface.
+ */
 export function worldTileIndex(tileX: number, tileY: number): number {
-  return tileY * WORLD_TILES_WIDE + tileX;
+  return worldTileKey(tileX, tileY);
 }
 
 export function pipeAt(state: WorldState, tileX: number, tileY: number): Pipe | null {
@@ -189,7 +196,7 @@ export function pipePathRefusal(
     // is on it" — a pipe dragged across the neighbour's grass is refused for the reason the
     // player can act on, and the price is standing right there.
     if (!isOwnedTile(state, node.x, node.y)) return BuildRefusal.Unowned;
-    if (isFieldTile(node.x, node.y)) return BuildRefusal.OnField;
+    if (isFieldTile(state, node.x, node.y)) return BuildRefusal.OnField;
     if (reservoirAt(state, node.x, node.y) !== null) return BuildRefusal.Occupied;
     if (pipeAt(state, node.x, node.y) !== null) return BuildRefusal.Occupied;
     if (tileOccupied(state, node.x, node.y)) return BuildRefusal.Occupied;

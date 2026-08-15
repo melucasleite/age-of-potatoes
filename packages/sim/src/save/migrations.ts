@@ -45,7 +45,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 12;
+export const CURRENT_FORMAT_VERSION = 13;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -848,6 +848,79 @@ const migrateFormat11To12: SaveMigration = (payload) => {
 };
 
 /**
+ * The field rectangle AS IT WAS WHEN FORMAT 13 ARRIVED, frozen as literals like every other
+ * `FORMAT_N_*` constant: a migration that imported `FIELD_ORIGIN_X` would relocate every old
+ * save's farm the day somebody moved the starting field. `WORLD_TILES_WIDE` is likewise
+ * frozen because the world tile KEY (`tileY * width + tileX`) is save surface from format 13
+ * on — both in `soilMemory` and in a bot's `targetTile`.
+ */
+const FORMAT_13_FIELD_ORIGIN_X = 4;
+const FORMAT_13_FIELD_ORIGIN_Y = 4;
+const FORMAT_13_FIELD_TILES_WIDE = 8;
+const FORMAT_13_WORLD_TILES_WIDE = 64;
+/** `BotKind.Repair` as it stood: the one kind whose `targetTile` is a machine id, not a tile. */
+const FORMAT_13_BOT_KIND_REPAIR = 3;
+
+/**
+ * Format 12 → 13: the till tool (item 066). Farmland becomes a keyed collection.
+ *
+ * - **Every field tile gains its coordinate**, computed from its index in the legacy 8×8
+ *   row-major rect. Nothing else about the tile changes — same soil, same moisture, same
+ *   crop, same fertility, same zone — so the migrated field is the same dirt with its
+ *   address written on it. Row-major over the rect is ascending world-key order, so the
+ *   array is already sorted the way format 13 requires.
+ * - **`soilMemory` is built from the field itself**: one entry per tile, carrying the soil
+ *   the tile was born with and the fertility it has RIGHT NOW. The ledger's job is to make
+ *   re-tilling hand back what un-tilling took away, and for a world loaded at this moment,
+ *   what would be taken away is the current state — no history is invented.
+ * - **A field bot's `targetTile` becomes a world tile key** (it was an index into the field
+ *   array, which tilling can now reorder). A repair drone's `targetTile` is a machine id and
+ *   is left exactly alone; -1 stays -1.
+ */
+const migrateFormat12To13: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-12 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const tileKeyForIndex = (index: number): number => {
+    const tileX = FORMAT_13_FIELD_ORIGIN_X + (index % FORMAT_13_FIELD_TILES_WIDE);
+    const tileY = FORMAT_13_FIELD_ORIGIN_Y + Math.floor(index / FORMAT_13_FIELD_TILES_WIDE);
+    return tileY * FORMAT_13_WORLD_TILES_WIDE + tileX;
+  };
+
+  const field: Record<string, unknown>[] = [];
+  const soilMemory: Record<string, unknown>[] = [];
+  const oldField = rows(p, 'field');
+  for (let i = 0; i < oldField.length; i++) {
+    const tile = oldField[i]!;
+    const tileX = FORMAT_13_FIELD_ORIGIN_X + (i % FORMAT_13_FIELD_TILES_WIDE);
+    const tileY = FORMAT_13_FIELD_ORIGIN_Y + Math.floor(i / FORMAT_13_FIELD_TILES_WIDE);
+    field.push({ ...tile, tileX, tileY });
+    soilMemory.push({
+      fertility: tile['fertility'],
+      fertilityWear: tile['fertilityWear'],
+      soil: tile['soil'],
+      tile: tileKeyForIndex(i),
+    });
+  }
+
+  const bots: Record<string, unknown>[] = [];
+  const oldBots = rows(p, 'bots');
+  for (let i = 0; i < oldBots.length; i++) {
+    const bot = oldBots[i]!;
+    const kind = bot['kind'];
+    const target = bot['targetTile'];
+    const isFieldBot = kind !== FORMAT_13_BOT_KIND_REPAIR;
+    const convertible =
+      isFieldBot && typeof target === 'number' && Number.isInteger(target) && target >= 0;
+    bots.push(convertible ? { ...bot, targetTile: tileKeyForIndex(target) } : { ...bot });
+  }
+
+  return { ...p, bots, field, soilMemory, version: 13 };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -864,6 +937,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   9: migrateFormat9To10,
   10: migrateFormat10To11,
   11: migrateFormat11To12,
+  12: migrateFormat12To13,
 };
 
 export interface MigrationOutcome {

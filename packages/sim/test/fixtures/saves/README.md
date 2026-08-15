@@ -25,6 +25,8 @@ looked like, and the code that wrote it will be long gone.
 
 | `format-10.json` | 10 | 2026-08-13, `v0.4.0` | Seed 320320, tick 22,929. The first save with a **belt junction** in it, caught mid-rotation: one bag already sent north and one sent east, four more riding the feed belt, and a Chip Kitchen 381 ticks into a run nobody has touched. |
 
+| `format-13.json` | 13 | 2026-08-14, `v0.4.0` | Seed 660660, tick 1,980. The first save with **player-made farmland** in it, recorded by replaying the `the-till` golden to the gap between its un-till and its re-till. A 67-tile NON-RECTANGULAR field — three tilled tiles still standing north of the legacy rect, one already farmed bare with its fertility wear counted — and a 68-entry roll-once soil ledger holding one position **with no tile on it**: ground the world remembers but the map no longer shows, which is the one state no earlier format can express. |
+
 `format-10.json` was recorded by replaying the `depot-run` golden fixture, then driving `step()`
 through eight more commands — research the splitter node, move the depot out of the way, lay the
 feed belt, drop a junction on the end of it, give it a branch on each of two faces, and hand-load

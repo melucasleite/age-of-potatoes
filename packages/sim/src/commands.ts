@@ -36,6 +36,46 @@ export interface SetMoveDirectionCommand {
   dir: Direction;
 }
 
+/** Which way the till is being swung: breaking ground, or turning it back to grass. */
+export const TillMode = {
+  Till: 'till',
+  Untill: 'untill',
+} as const;
+
+export type TillMode = (typeof TillMode)[keyof typeof TillMode];
+
+/**
+ * Swing the till over a run of tiles: grass becomes farmland, or — in `Untill` mode — empty
+ * farmland becomes grass again.
+ *
+ * **ONE DRAG IS ONE COMMAND**, exactly the zone-paint grammar and for the same reasons: a
+ * sixty-tile run is one trace entry, one replay step, and one eventual undo. The mode is
+ * EXPLICIT rather than per-tile toggling, because a rect swept over mixed ground that
+ * flipped each tile to its opposite would be a command whose meaning depends on what it
+ * happened to land on — unreadable in a trace and hostile under a drag.
+ *
+ * **HAND-TOOL DOCTRINE: free, indestructible, always works** (plan §1). No cost, no wear, no
+ * failure state — tiles the swing cannot convert (unowned ground, occupied ground, a planted
+ * or compost-bearing farm tile, ground that already is what the mode asks for) are SKIPPED
+ * GENTLY and cost nothing. Refused only when nothing at all changed, so the trace keeps its
+ * "every applied command changed the world" contract.
+ *
+ * **NOT REACH-GATED**, like `PaintZone` and unlike the watering can. A run of tiles cannot be
+ * walked to one errand at a time (the player holds ONE intent), and the drag gesture is the
+ * point of the tool; the ≤1.5 s feel lives in the input layer, not in a walk. The SOIL each
+ * newly broken tile gets is the sim's rule alone — rolled once per position ever, from the
+ * position-keyed `SoilInit` stream; see `tillTile` in `state.ts`.
+ *
+ * Counts one `handCarry` touch per applied command — it is a physical verb done with a tool
+ * in hand, filed where every unnamed hand verb is filed, and one drag is one motion exactly
+ * as one scythe swing is.
+ */
+export interface TillTileCommand {
+  type: 'TillTile';
+  rect: TileRect;
+  mode: TillMode;
+}
+
 /** Pour the can on one tile. Counts as a hand-water touch. */
 export interface WaterTileCommand {
   type: 'WaterTile';
@@ -621,6 +661,7 @@ export interface WalkAndActCommand {
 export type Command =
   | SetMoveDirectionCommand
   | WalkAndActCommand
+  | TillTileCommand
   | WaterTileCommand
   | RefillCanCommand
   | PlantTileCommand

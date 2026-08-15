@@ -16,7 +16,6 @@
 // the host passes to its draw call is the renderer's business alone.
 
 import {
-  ARMFUL_CAP_ITEMS,
   BELT_ITEM_SPACING_SUBTILES,
   BLEED_WINDOW_TICKS,
   CAN_CHARGES_MAX,
@@ -114,15 +113,33 @@ export const LampState = {
 export type LampState = (typeof LampState)[keyof typeof LampState];
 
 /**
- * The field as parallel arrays, one entry per tile in row-major order. Parallel arrays
- * rather than per-tile objects because the renderer wants columns, and because 64 numbers
- * copy faster than 64 object writes.
+ * The farmland as parallel arrays, one entry per FARM TILE in row-major world order.
+ * Parallel arrays rather than per-tile objects because the renderer wants columns, and
+ * because numbers copy faster than object writes.
+ *
+ * **NON-RECTANGULAR SINCE FORMAT 13** (the till tool, item 066). Farmland is whatever the
+ * player has tilled, so entry `i` is located by `tileX[i]`/`tileY[i]` — never by rect
+ * arithmetic over an origin. `count` is the number of live entries, and every parallel array
+ * below (including `tileX`/`tileY`) has exactly `count` entries.
+ *
+ * The four rect fields survive as the BOUNDING BOX of the current farmland — a fresh or
+ * migrated world's box is exactly the legacy 8×8 rect, so a consumer that has not yet
+ * learned about holes sees the numbers it always saw. They are for camera framing and
+ * culling ONLY: `originX + i % tilesWide` addressing is wrong the moment a tile is tilled
+ * outside the box or un-tilled inside it, and the render lane's move is to switch to the
+ * per-entry coordinates. All four are 0 when the field is empty.
  */
 export interface FieldView {
+  /** Bounding box of the farmland. Framing only — NEVER index arrays by rect arithmetic. */
   originX: number;
   originY: number;
   tilesWide: number;
   tilesHigh: number;
+  /** Live entries in every parallel array below. */
+  count: number;
+  /** World tile coordinate of entry `i`. THE addressing scheme; the box above is not. */
+  tileX: number[];
+  tileY: number[];
   /** `CropId` per tile. */
   crop: number[];
   /** Renderer growth stage, 0 (bare) up to the crop's ready stage. */
@@ -579,18 +596,15 @@ export interface PlayerView {
   /** The `Machine.id` of the hand cart in tow, or 0. Non-zero is "draw the handles". */
   towedCartId: number;
   /**
-   * Ordinary goods in the player's arms, and the cap it is measured against.
-   *
-   * **BOTH NUMBERS, RATHER THAN A FRACTION OR A "FULL" FLAG**, because the HUD has to be able to
-   * say *12 / 12* — item 023's criterion is that the cap is visible, and a player who cannot
-   * harvest needs to see the reason rather than a refusal. Boxed machines are excluded from the
-   * count for the reason `ARMFUL_CAP_ITEMS` gives: a box is not a good.
+   * Ordinary goods in the player's arms. A plain count with no cap beside it — the armful
+   * cap (and the `armfulCap` field that used to ride here) was removed by item 068's owner
+   * ruling, so there is no fraction for the HUD to draw and no "hands full" state to explain.
+   * Boxed machines are excluded from the count: a box is not a good.
    */
   carriedCount: number;
-  armfulCap: number;
   /**
-   * Pours left in the can, and the capacity it is measured against — both numbers, for the
-   * same reason `carriedCount`/`armfulCap` are: the HUD says *3 / 8*, and `canCharges === 0`
+   * Pours left in the can, and the capacity it is measured against — both numbers, so the
+   * HUD can say *3 / 8*, and `canCharges === 0`
    * is the refusal reason a `WaterTile` that did nothing wants explained ("the can is empty —
    * refill at the shore"). The refusal itself is a gentle no-op; this is how the view makes
    * it explainable rather than silent.
@@ -806,7 +820,6 @@ export function createWorldView(): WorldView {
       intentIssuedTick: 0,
       towedCartId: 0,
       carriedCount: 0,
-      armfulCap: ARMFUL_CAP_ITEMS,
       canCharges: 0,
       canChargesMax: CAN_CHARGES_MAX,
     },
@@ -815,6 +828,9 @@ export function createWorldView(): WorldView {
       originY: FIELD_ORIGIN_Y,
       tilesWide: FIELD_TILES_WIDE,
       tilesHigh: FIELD_TILES_HIGH,
+      count: 0,
+      tileX: new Array<number>(FIELD_TILE_COUNT).fill(0),
+      tileY: new Array<number>(FIELD_TILE_COUNT).fill(0),
       crop: new Array<number>(FIELD_TILE_COUNT).fill(0),
       stage: new Array<number>(FIELD_TILE_COUNT).fill(0),
       moisturePermille: new Array<number>(FIELD_TILE_COUNT).fill(0),
@@ -895,7 +911,6 @@ export function view(state: WorldState, out: WorldView = createWorldView()): Wor
   out.player.intentIssuedTick = intent === null ? 0 : intent.issuedTick;
   out.player.towedCartId = state.player.towedCartId;
   out.player.carriedCount = carriedCount(state);
-  out.player.armfulCap = ARMFUL_CAP_ITEMS;
   out.player.canCharges = state.player.canCharges;
   out.player.canChargesMax = CAN_CHARGES_MAX;
 
@@ -919,14 +934,39 @@ export function view(state: WorldState, out: WorldView = createWorldView()): Wor
 
 function projectField(state: WorldState, out: WorldView): void {
   const field = out.field;
-  field.originX = FIELD_ORIGIN_X;
-  field.originY = FIELD_ORIGIN_Y;
-  field.tilesWide = FIELD_TILES_WIDE;
-  field.tilesHigh = FIELD_TILES_HIGH;
+
+  // The bounding box of whatever is tilled today. A fresh world's box is the legacy 8×8 rect
+  // exactly; an empty field publishes four zeros rather than a box around nothing.
+  let minX = 0;
+  let minY = 0;
+  let maxX = -1;
+  let maxY = -1;
+  for (let i = 0; i < state.field.length; i++) {
+    const tile = state.field[i]!;
+    if (maxX < minX) {
+      minX = tile.tileX;
+      minY = tile.tileY;
+      maxX = tile.tileX;
+      maxY = tile.tileY;
+      continue;
+    }
+    if (tile.tileX < minX) minX = tile.tileX;
+    if (tile.tileX > maxX) maxX = tile.tileX;
+    if (tile.tileY < minY) minY = tile.tileY;
+    if (tile.tileY > maxY) maxY = tile.tileY;
+  }
+  const empty = maxX < minX;
+  field.originX = empty ? 0 : minX;
+  field.originY = empty ? 0 : minY;
+  field.tilesWide = empty ? 0 : maxX - minX + 1;
+  field.tilesHigh = empty ? 0 : maxY - minY + 1;
+  field.count = state.field.length;
 
   for (let i = 0; i < state.field.length; i++) {
     const tile = state.field[i]!;
     const ready = tile.crop !== CropId.None && tile.growth >= tile.growthTarget;
+    field.tileX[i] = tile.tileX;
+    field.tileY[i] = tile.tileY;
     field.crop[i] = tile.crop;
     field.stage[i] = growthStage(tile);
     field.moisturePermille[i] = permille(tile.moisture, MOISTURE_MAX);
@@ -941,6 +981,8 @@ function projectField(state: WorldState, out: WorldView): void {
     field.lastPouredTick[i] = tile.lastPouredTick;
   }
 
+  field.tileX.length = state.field.length;
+  field.tileY.length = state.field.length;
   field.crop.length = state.field.length;
   field.stage.length = state.field.length;
   field.moisturePermille.length = state.field.length;

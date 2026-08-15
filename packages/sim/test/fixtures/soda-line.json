@@ -3,7 +3,7 @@
   "description": "The soda line end to end: cane and water into a Juicer, Kettle, Syrup Mixer, Carbonator and Bottler across five single-liquid networks, and bottles out the far end.",
   "seed": 60606,
   "ticks": 54577,
-  "expectedHash": "3b81867d",
+  "expectedHash": "523c5691",
   "commands": [
     {
       "tick": 0,

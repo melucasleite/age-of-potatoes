@@ -82,7 +82,9 @@ describe('determinism', () => {
   it('pins the scripted run to a known hash', () => {
     // If this changes, either the sim changed on purpose or determinism broke by accident.
     // There is no third option, which is the entire point of the fixture.
-    expect(hashState(runScript(1234, 1000))).toBe('e97c57ee');
+    // e97c57ee -> f48076eb with format 13 (item 066): the digest gained the field tiles'
+    // coordinates and the soil-memory ledger; the scripted run's behaviour is unchanged.
+    expect(hashState(runScript(1234, 1000))).toBe('f48076eb');
   });
 
   it('gives different seeds different worlds', () => {

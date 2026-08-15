@@ -159,6 +159,10 @@ export function hashStateUint32(state: WorldState): number {
   d.num(state.field.length);
   for (let i = 0; i < state.field.length; i++) {
     const tile = state.field[i]!;
+    // The coordinate IS state since format 13: two worlds with the same tile data on
+    // different ground are different worlds.
+    d.num(tile.tileX);
+    d.num(tile.tileY);
     d.num(tile.crop);
     d.num(tile.growth);
     d.num(tile.growthTarget);
@@ -170,6 +174,19 @@ export function hashStateUint32(state: WorldState): number {
     d.num(tile.readyAge);
     d.num(tile.compost);
     d.num(tile.zone);
+  }
+
+  // The roll-once ledger (format 13). In the digest because it is a promise about the future:
+  // two worlds that differ only in what an un-tilled position WOULD roll are worlds whose
+  // next till diverges, which is exactly what a hash exists to catch early.
+  d.text('soil-memory');
+  d.num(state.soilMemory.length);
+  for (let i = 0; i < state.soilMemory.length; i++) {
+    const entry = state.soilMemory[i]!;
+    d.num(entry.tile);
+    d.num(entry.soil);
+    d.num(entry.fertility);
+    d.num(entry.fertilityWear);
   }
 
   d.text('machines');
@@ -568,6 +585,8 @@ export function findNonIntegerFields(state: WorldState): string[] {
 
   for (let i = 0; i < state.field.length; i++) {
     const tile = state.field[i]!;
+    check(`field[${i}].tileX`, tile.tileX);
+    check(`field[${i}].tileY`, tile.tileY);
     check(`field[${i}].growth`, tile.growth);
     check(`field[${i}].growthTarget`, tile.growthTarget);
     check(`field[${i}].moisture`, tile.moisture);

@@ -57,6 +57,7 @@ import {
   type PlayerIntent,
   type PlayerState,
   type Reservoir,
+  type SoilMemory,
   type TraceEntry,
   type WorldState,
   type Zone,
@@ -142,9 +143,24 @@ export interface SaveCropTile {
   /** Moisture-drain remainder in thousandths, so clay and sand stay exact. */
   moistureAccum: number;
   readyAge: number;
-  /** `SoilType`. Rolled once at world creation and never changed. */
+  /** `SoilType`. Rolled once per position, ever — see `SoilMemory` in state.ts. */
   soil: number;
+  /** World tile coordinate — the collection key since format 13 (the till tool). */
+  tileX: number;
+  tileY: number;
   zone: number;
+}
+
+/**
+ * One entry of the roll-once soil ledger (format 13): what ground a position rolled, kept
+ * after the tile is un-tilled so re-tilling can never re-roll it.
+ */
+export interface SaveSoilMemory {
+  fertility: number;
+  fertilityWear: number;
+  soil: number;
+  /** Row-major world tile key. Sorted ascending. */
+  tile: number;
 }
 
 /** One typed liquid port's stored state. The liquid itself is balance data, never saved. */
@@ -437,6 +453,8 @@ export interface SavePayload {
   pipes: SavePipe[];
   reservoirs: SaveReservoir[];
   player: SavePlayer;
+  /** The roll-once soil ledger, sorted ascending by `tile`. Format 13. */
+  soilMemory: SaveSoilMemory[];
   stats: SaveStats;
   streams: SaveStream[];
   tick: number;
@@ -469,7 +487,20 @@ export function toPayload(state: WorldState): SavePayload {
       moistureAccum: tile.moistureAccum,
       readyAge: tile.readyAge,
       soil: tile.soil,
+      tileX: tile.tileX,
+      tileY: tile.tileY,
       zone: tile.zone,
+    });
+  }
+
+  const soilMemory: SaveSoilMemory[] = [];
+  for (let i = 0; i < state.soilMemory.length; i++) {
+    const entry = state.soilMemory[i]!;
+    soilMemory.push({
+      fertility: entry.fertility,
+      fertilityWear: entry.fertilityWear,
+      soil: entry.soil,
+      tile: entry.tile,
     });
   }
 
@@ -737,6 +768,7 @@ export function toPayload(state: WorldState): SavePayload {
       xSub: state.player.xSub,
       ySub: state.player.ySub,
     },
+    soilMemory,
     stats: {
       automatedGrossCents: stats.automatedGrossCents,
       dawnsSeen: stats.dawnsSeen,
@@ -1059,6 +1091,7 @@ const ERRAND_ACTIONS: readonly number[] = [
   IntentAction.HitchCart,
   IntentAction.RefillCan,
   IntentAction.UseRepairKit,
+  IntentAction.Walk,
 ];
 
 /**
@@ -1149,6 +1182,8 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     const path = `payload.field[${String(i)}]`;
     const tile = record(fieldRaw[i], path);
     field.push({
+      tileX: int(tile, 'tileX', path),
+      tileY: int(tile, 'tileY', path),
       crop: idInt(tile, 'crop', path, CROP_IDS) as CropId,
       growth: int(tile, 'growth', path),
       growthTarget: int(tile, 'growthTarget', path),
@@ -1164,6 +1199,19 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       // loaded world starts at "never poured", which is correct: a pour that happened before
       // the save owes no droplets after it.
       lastPouredTick: 0,
+    });
+  }
+
+  const soilMemoryRaw = list(p, 'soilMemory', 'payload');
+  const soilMemory: SoilMemory[] = [];
+  for (let i = 0; i < soilMemoryRaw.length; i++) {
+    const path = `payload.soilMemory[${String(i)}]`;
+    const entry = record(soilMemoryRaw[i], path);
+    soilMemory.push({
+      tile: int(entry, 'tile', path),
+      soil: idInt(entry, 'soil', path, SOIL_TYPES) as SoilType,
+      fertility: int(entry, 'fertility', path),
+      fertilityWear: int(entry, 'fertilityWear', path),
     });
   }
 
@@ -1561,6 +1609,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     inventory,
     ownedParcels,
     field,
+    soilMemory,
     machines,
     nextMachineId: int(p, 'nextMachineId', 'payload'),
     belts,

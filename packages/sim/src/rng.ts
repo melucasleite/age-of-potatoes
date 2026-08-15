@@ -142,7 +142,31 @@ function foldSystemId(systemId: string): number {
  * property is a one-way door per plan §12 — it cannot be recovered once worlds exist.
  */
 export function deriveStream(worldSeed: number, systemId: SystemId): RngState {
-  let x = ((worldSeed >>> 0) ^ foldSystemId(systemId)) >>> 0;
+  return deriveStreamFromString(worldSeed, systemId);
+}
+
+/**
+ * Seed a generator for one system AT ONE TILE of one world: the id folded is
+ * `"<systemId>@<key>"`, so `soil-init@1234` is as independent of `soil-init` — and of
+ * `soil-init@1235` — as any two systems are of each other.
+ *
+ * THIS IS WHAT MAKES A TILL-TIME SOIL ROLL ORDER-INDEPENDENT. A draw from the shared
+ * `SoilInit` stream would give a tile whatever the *n*-th roll happened to be, so two players
+ * who tilled the same two tiles in the opposite order would get swapped ground. Keyed by the
+ * tile's row-major world index, the roll is a pure function of `(worldSeed, position)` —
+ * the same answer whenever it is asked, in whatever order, which is also what makes
+ * roll-once-per-position provable rather than merely intended.
+ *
+ * The derived generator is NEVER stored in `WorldState.streams`: it is used for its first
+ * draws and dropped, because it is recomputable by construction and a stored stream per tile
+ * would grow the save with data the seed already contains.
+ */
+export function deriveKeyedStream(worldSeed: number, systemId: SystemId, key: number): RngState {
+  return deriveStreamFromString(worldSeed, `${systemId}@${String(key)}`);
+}
+
+function deriveStreamFromString(worldSeed: number, id: string): RngState {
+  let x = ((worldSeed >>> 0) ^ foldSystemId(id)) >>> 0;
   const state: RngState = { s0: 0, s1: 0, s2: 0, s3: 0 };
 
   x = (x + 0x9e37_79b9) >>> 0;

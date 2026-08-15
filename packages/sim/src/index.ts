@@ -53,6 +53,7 @@ export {
   SYSTEM_IDS,
   SystemId,
   cloneRng,
+  deriveKeyedStream,
   deriveStream,
   nextBelow,
   nextChance,
@@ -65,7 +66,6 @@ export type { RngState } from './rng';
 
 // --- balance data -----------------------------------------------------------------
 export {
-  ARMFUL_CAP_ITEMS,
   AUTO_REPLANT_PERIOD_TICKS,
   BALANCE_HASH,
   BOT_CARRY_CAPACITY,
@@ -361,7 +361,6 @@ export {
   addBoxedMachine,
   addItem,
   addItemFresh,
-  armfulRoom,
   beltAt,
   beltById,
   beltCoversTile,
@@ -378,12 +377,12 @@ export {
   directionStepX,
   directionStepY,
   fieldIndex,
+  fieldIndexOfKey,
   fieldTileX,
   fieldTileY,
   fertilizeTile,
   grabberAt,
   grabberById,
-  hasArmfulRoom,
   inventorySlot,
   isCompassDirection,
   isFieldTile,
@@ -424,9 +423,16 @@ export {
   takeOneOutput,
   spawnReservoir,
   spawnZone,
+  soilMemoryAt,
   streamFor,
   tileAt,
+  tileByKey,
   tileOccupied,
+  tillTile,
+  untillTile,
+  worldKeyTileX,
+  worldKeyTileY,
+  worldTileKey,
   zoneById,
   zoneTileCount,
 } from './state';
@@ -448,6 +454,7 @@ export type {
   PlayerIntent,
   PlayerState,
   Reservoir,
+  SoilMemory,
   TraceEntry,
   WorldState,
   Zone,
@@ -472,7 +479,7 @@ export {
 } from './bots';
 
 // --- commands ---------------------------------------------------------------------
-export { appendTrace } from './commands';
+export { TillMode, appendTrace } from './commands';
 export type {
   BuyDeedCommand,
   BuyItemCommand,
@@ -510,6 +517,7 @@ export type {
   SetZoneAutoReplantCommand,
   SetZoneCropCommand,
   SetZonePriorityCommand,
+  TillTileCommand,
   UnloadMachineCommand,
   UpgradeMachineCommand,
   UseRepairKitCommand,
@@ -601,6 +609,7 @@ export type {
   SavePipe,
   SavePipeNetwork,
   SaveReservoir,
+  SaveSoilMemory,
   SaveStats,
   SaveStream,
   SaveZone,
