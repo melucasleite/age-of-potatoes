@@ -38,9 +38,11 @@ import {
   BOT_SPEED_SUBTILES_PER_100_TICKS,
   BOT_WEAR_PER_OPERATION,
   BOT_WORK_TICKS,
+  CONDITION_EFFECT_THRESHOLD,
   CONDITION_MAX,
   CropId,
-  type ItemId,
+  DRONE_PART_PRICE_CENTS,
+  ItemId,
   MachineKind,
   MachineRole,
   cropSpec,
@@ -105,6 +107,41 @@ export function dockAcceptSeed(state: WorldState, dock: Machine, item: number): 
 }
 
 /**
+ * The one belt door into ANY dock's hopper — the branch `belts.ts` calls.
+ *
+ * A planter's hopper wants its zone's seed; a Drone Bay's wants parts; a harvester dock wants
+ * nothing at all. Routed here rather than taught to `belts.ts`, so the grabber keeps knowing
+ * exactly one fact about docks: they have a door. Counts NO touch, like `dockAcceptSeed` —
+ * the belt path is the free one, and that split is what keeps the Hands-Free board honest.
+ */
+export function dockAcceptDelivery(state: WorldState, dock: Machine, item: number): boolean {
+  if (dock.kind === MachineKind.DroneBay) return bayAcceptPart(dock, item);
+  return dockAcceptSeed(state, dock, item);
+}
+
+/**
+ * One drone part into the bay's hopper. Refuses anything that is not a part and a hopper that
+ * is full, leaving the arm standing there holding it — the same "look downstream" stall every
+ * full hopper in the game gives.
+ */
+function bayAcceptPart(bay: Machine, item: number): boolean {
+  const spec = machineSpec(bay.kind);
+  if (spec === null) return false;
+  if (item !== ItemId.DronePart) return false;
+  if (bay.cargoItem !== 0 && bay.cargoItem !== ItemId.DronePart) return false;
+  if (bay.cargoCount >= spec.inputCapacity) return false;
+
+  bay.cargoItem = ItemId.DronePart;
+  bay.cargoCount += 1;
+  return true;
+}
+
+/** Parts in a bay's hopper. The same shelf the planter keeps seeds on. */
+export function bayPartCount(bay: Machine): number {
+  return bay.cargoItem === ItemId.DronePart ? bay.cargoCount : 0;
+}
+
+/**
  * The seed this dock's zone actually wants, or 0 when it wants nothing.
  *
  * Refusing the wrong seed is what stops a mixed belt silently filling the hopper with cane seed
@@ -158,8 +195,140 @@ export function advanceBots(state: WorldState): void {
     }
 
     if (bot.kind === BotKind.Harvester) advanceHarvester(state, bot, dock);
+    else if (bot.kind === BotKind.Repair) advanceRepairDrone(state, bot, dock);
     else advancePlanter(state, bot, dock);
   }
+}
+
+// --- the repair drone (item 039) ----------------------------------------------------
+//
+// The same four-phase errand the farm bots run, aimed at machines instead of tiles: pick the
+// next wrench-due machine from a wrapping cursor, fly straight at it through `stepToward`,
+// service it for one part from the bay's hopper, fly home. **NO RADIUS** — the drone serves
+// the whole lot, which is what a capstone that outranks the 7×7 station is for.
+//
+// **NO PARTS, NO SERVICE, NO EXCEPTIONS** (item 039 instruction 4). A drone with an empty bay
+// sits in it — the bay shows the blue utility lamp — and the factory degrades exactly as if
+// the player had ignored it, because they have. The fall back to free repair the item forbids
+// simply has no code path to happen through: the dispatch gate and the service both check the
+// hopper.
+//
+// **A DRONE'S SERVICE IS NOT A HAND.** It calls no `touch`, no `handsOn`: the Hands-Free board
+// keeps running and — deliberately — the serviced machine's `untouchedTicks` keeps climbing,
+// so an automated line being automatically maintained still demonstrates the Corporate
+// Charter's milestone. That is the whole promotion: the hands left; the bill stayed.
+
+/** Wrench-due, in exactly the sense the wrench overlay uses — plus a jam, which a kit clears. */
+function machineWantsDroneService(machine: Machine): boolean {
+  return machine.jammed || machine.condition < CONDITION_EFFECT_THRESHOLD;
+}
+
+function advanceRepairDrone(state: WorldState, bot: Bot, bay: Machine): void {
+  switch (bot.phase) {
+    case BotPhase.Idle: {
+      // An empty hopper grounds the drone BEFORE a target is picked, so it never flies an
+      // errand it cannot pay for.
+      if (bayPartCount(bay) <= 0) {
+        if (!atDock(bot, bay)) bot.phase = BotPhase.Returning;
+        else resetMomentum(bot);
+        return;
+      }
+      const target = nextServiceTarget(state, bot);
+      if (target <= 0) {
+        if (!atDock(bot, bay)) bot.phase = BotPhase.Returning;
+        else resetMomentum(bot);
+        return;
+      }
+      // `targetTile` holds a MACHINE ID for this kind — see `BotKind.Repair`.
+      bot.targetTile = target;
+      bot.phase = BotPhase.Outbound;
+      // Plan §3's Hall of Hands, on the tick the first drone rises out of its bay — departure,
+      // like the truck's horn, because that is the moment on screen (item 039 instruction 10).
+      markCeremony(state, CeremonyId.FirstDrone);
+      return;
+    }
+
+    case BotPhase.Outbound: {
+      const machine = machineById(state, bot.targetTile);
+      // Stale errand: the player got there first with a free hand, which they are always
+      // allowed to do (§1). Pick again rather than flying to a healthy machine.
+      if (machine === null || !machineWantsDroneService(machine)) {
+        bot.phase = BotPhase.Idle;
+        bot.targetTile = -1;
+        return;
+      }
+      if (walkToMachine(bot, machine)) {
+        bot.phase = BotPhase.Working;
+        bot.workTicks = BOT_WORK_TICKS;
+      }
+      return;
+    }
+
+    case BotPhase.Working: {
+      if (bot.workTicks > 0) {
+        bot.workTicks -= 1;
+        return;
+      }
+      serviceUnderDrone(state, bot, bay);
+      bot.targetTile = -1;
+      bot.phase = BotPhase.Returning;
+      return;
+    }
+
+    case BotPhase.Returning:
+    default: {
+      if (walkToMachine(bot, bay)) bot.phase = BotPhase.Idle;
+      return;
+    }
+  }
+}
+
+/**
+ * The next machine on the lot that wants a wrench, scanning `state.machines` once from the
+ * bot's wrapping cursor — the same dumb-on-purpose route discipline the zone scan uses, over
+ * machines instead of tiles. The cursor lands one past the choice, so two worn machines are
+ * served alternately rather than the lower id starving the other.
+ */
+function nextServiceTarget(state: WorldState, bot: Bot): number {
+  const count = state.machines.length;
+  if (count <= 0) return 0;
+
+  const start = bot.routeCursor % count;
+  for (let step = 0; step < count; step++) {
+    const index = (start + step) % count;
+    const machine = state.machines[index]!;
+    if (!machineWantsDroneService(machine)) continue;
+    bot.routeCursor = (index + 1) % count;
+    return machine.id;
+  }
+  return 0;
+}
+
+/**
+ * One service: a full restore and an un-jam, for exactly one part off the bay's shelf.
+ *
+ * The part is consumed FROM THE BAY at the moment of service rather than carried: a carried
+ * part would need a return-to-shelf path for every stale errand, which is a bag of edge cases
+ * bought for no observable difference. If the hopper emptied mid-flight the drone arrives,
+ * finds it cannot pay, and flies home having fixed nothing — never free service.
+ *
+ * The spend lands in `repairKitSpendCents` AT LIST, the one maintenance-spend accumulator
+ * (item 039's instruction: flow into the existing accumulators, so "the bill does not fall"
+ * is measurable off one number). Parts never cross a till — the bench is their only source —
+ * so consumption is the only place their cost can be counted.
+ */
+function serviceUnderDrone(state: WorldState, bot: Bot, bay: Machine): void {
+  const machine = machineById(state, bot.targetTile);
+  if (machine === null || !machineWantsDroneService(machine)) return;
+  if (bayPartCount(bay) <= 0) return;
+
+  bay.cargoCount -= 1;
+  if (bay.cargoCount === 0) bay.cargoItem = 0;
+
+  machine.condition = CONDITION_MAX;
+  machine.jammed = false;
+  state.stats.repairKitSpendCents += DRONE_PART_PRICE_CENTS;
+  wearBot(bot);
 }
 
 function advanceHarvester(state: WorldState, bot: Bot, dock: Machine): void {

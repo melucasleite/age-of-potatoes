@@ -223,6 +223,12 @@ export const IntentAction = {
   HitchCart: 14,
   /** Walk to a shore tile and refill the watering can. Wired exactly as `Water` is. */
   RefillCan: 15,
+  /**
+   * Walk to a spot and spend a repair kit on it, servicing the cell around it. Wired as
+   * `Water` is — the target is a tile, not a machine, because that is `UseRepairKit`'s own
+   * shape: the kit is aimed at ground and the radius does the addressing.
+   */
+  UseRepairKit: 16,
 } as const;
 
 export type IntentAction = (typeof IntentAction)[keyof typeof IntentAction];
@@ -244,6 +250,7 @@ export const INTENT_ACTIONS: readonly IntentAction[] = [
   IntentAction.Scythe,
   IntentAction.HitchCart,
   IntentAction.RefillCan,
+  IntentAction.UseRepairKit,
 ];
 
 /**
@@ -485,6 +492,18 @@ export interface CropTile {
   compost: number;
   /** The zone that claims this tile, or 0. A tile belongs to at most one zone. */
   zone: number;
+  /**
+   * The tick water last actually landed on this tile — hand can, sprinkler, or Hub — or 0
+   * for never. **PRESENTATION DATA, DELIBERATELY OUTSIDE THE HASH AND THE SAVE** (item 064's
+   * ruling): the renderer and audio need "a pour happened" even when the tile was already
+   * saturated and the moisture clamp produced no rise, and a moisture *diff* cannot carry
+   * that fact. It is still deterministic — written only by the reducers and systems that
+   * pour, so seed + trace reproduces it exactly — but two worlds that differ only here are
+   * the same world, which is why `hash.ts` and `save/canonical.ts` both skip it (a loaded
+   * world starts at 0 everywhere: a pour before the save needs no droplets after it).
+   * `Contract.destination` is the precedent for a stored field the hash refuses.
+   */
+  lastPouredTick: number;
 }
 
 /**
@@ -699,14 +718,42 @@ export interface Machine {
    * A dock whose zone has been painted out of existence simply has nothing to do; the bot parks.
    */
   boundZone: number;
+
+  /**
+   * Recent wasted-input events — `{ tick, cents }`, oldest first — feeding the diagnostics
+   * ranked list (item 039 instruction 5): `MachineView.bleedCentsLast60s` sums the entries
+   * newer than `BLEED_WINDOW_TICKS`.
+   *
+   * **NON-HASHED, NON-SAVED PRESENTATION DATA**, the `CropTile.lastPouredTick` precedent: it
+   * is written only inside `step()` (the waste cadence in `advanceConverter`), so it is
+   * deterministic under replay, and it is excluded from `hash.ts` and from the save payload,
+   * so a loaded world starts with an empty window — which is correct, because money that bled
+   * before the save owes no alert after it. The write site prunes entries older than the
+   * window, so the array is bounded by the fastest waste cadence (one entry per two
+   * operations, worst case).
+   */
+  bleedEvents: { tick: number; cents: number }[];
 }
 
-/** What an Agri-Bot is for. One dock, one bot, one job. */
+/** What a bot is for. One dock, one bot, one job. */
 export const BotKind = {
   /** Pulls ripe tiles in its zone and carries the goods back to the dock's output buffer. */
   Harvester: 1,
   /** Sows empty tiles in its zone from the dock's seed hopper, per the zone's crop. */
   Planter: 2,
+  /**
+   * A repair drone (item 039). Lives in a Drone Bay, flies to whichever machine on the lot is
+   * wrench-due, services it for one manufactured part from the bay's hopper, and flies home.
+   *
+   * **THE SAME ENTITY, THE SAME MOVER, THE SAME SHED RULES AS THE FARM BOTS** — that is the
+   * item's own criterion ("exactly one movement implementation in the sim") and the reason
+   * this is a `BotKind` rather than a new entity type: hashing, saving, dock repair, kit
+   * service, and `removeBotsForDock` all apply to a drone because nothing about it is new.
+   * One field is REPURPOSED rather than added: `Bot.targetTile` holds a MACHINE ID for this
+   * kind (a drone's errand is a machine, not a tile), so no hashed field had to be added and
+   * no golden hash moved for the enum's arrival.
+   */
+  Repair: 3,
 } as const;
 
 export type BotKind = (typeof BotKind)[keyof typeof BotKind];
@@ -1182,6 +1229,7 @@ export function createWorld(seed: number): WorldState {
       readyAge: 0,
       compost: 0,
       zone: 0,
+      lastPouredTick: 0,
     });
   }
 
@@ -1269,6 +1317,7 @@ export function spawnMachine(
     junctionInCursor: 0,
     junctionOutCursor: 0,
     boundZone: 0,
+    bleedEvents: [],
   };
   state.nextMachineId += 1;
   // Ids only increase, so appending keeps the array sorted by id.
@@ -1362,6 +1411,14 @@ export const CeremonyId = {
    * **The renderer's COPY table for this id is the render lane's to add.**
    */
   FirstBot: 'agri-bot-first-harvest',
+  /**
+   * **THE FIRST DRONE LEAVES ITS BAY** (item 039 instruction 10, reusing this one-shot exactly
+   * as the item asks). Marked on DISPATCH — the tick a drone picks a target and sets off — for
+   * the same reason `FirstTruck` marks departure rather than signing: the moment worth the
+   * theatre is the machine rising out of the hangar, which is on screen right then. The
+   * renderer's copy table for this id is the render lane's to add.
+   */
+  FirstDrone: 'repair-drone-first-launch',
 } as const;
 
 export type CeremonyId = (typeof CeremonyId)[keyof typeof CeremonyId];

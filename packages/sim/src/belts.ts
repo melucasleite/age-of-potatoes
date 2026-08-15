@@ -25,7 +25,7 @@ import {
   grabberSpec,
   machineSpec,
 } from './data';
-import { dockAcceptSeed } from './bots';
+import { dockAcceptDelivery } from './bots';
 import { depotAccept } from './commerce';
 import {
   type Belt,
@@ -388,7 +388,9 @@ function grabberPlace(state: WorldState, grabber: Grabber): boolean {
     // the dock's zone did not ask for and a hopper that is full, and the arm then stands there
     // holding it: the same "look downstream" stall a full Fryer hopper gives.
     if (machineSpecFor.role === MachineRole.BotDock) {
-      return dockAcceptSeed(state, machine, grabber.held);
+      // One door for every dock's hopper: seeds for a planter, drone parts for a bay. The
+      // routing lives in `bots.ts`, so this file keeps knowing one fact about docks.
+      return dockAcceptDelivery(state, machine, grabber.held);
     }
     // An arm puts what it is holding into the line of the recipe that wants it, and stands there
     // holding it if no line does. That is the same "look downstream" stall a blocked arm has

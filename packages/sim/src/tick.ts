@@ -84,6 +84,7 @@ import {
 } from './commands';
 import {
   BELT_MAX_LENGTH_TILES,
+  BLEED_WINDOW_TICKS,
   COMPOST_AFTER_TICKS,
   COMPOST_PER_SPOILED_ITEM,
   CRATE_FRESHNESS_TICKS,
@@ -121,6 +122,7 @@ import {
   REPAIR_PER_TOUCH,
   SPRINKLER_POUR_ML,
   SPRINKLER_PERIOD_TICKS,
+  STATION_SERVICE_PERIOD_TICKS,
   UPGRADE_MAX_LEVEL,
   WALK_ERRAND_TIMEOUT_TICKS,
   WILT_GRACE_TICKS,
@@ -145,7 +147,7 @@ import {
   soilSpec,
 } from './data';
 import { advanceBelts, advanceGrabbers, advanceJunctions } from './belts';
-import { advanceBots, dockWantedSeed } from './bots';
+import { advanceBots, bayPartCount, dockWantedSeed } from './bots';
 import { stepToward } from './movement';
 import {
   advanceCommerce,
@@ -586,6 +588,10 @@ function applyWaterTile(state: WorldState, command: WaterTileCommand): boolean {
   if (state.player.canCharges <= 0) return false;
 
   tile.moisture = MOISTURE_MAX;
+  // The pour signal (item 064): a pour on an already-soaked tile clamps to no moisture rise,
+  // and the renderer's droplets and the pour sound must fire anyway — the charge was spent.
+  // Non-hashed presentation data; see `CropTile.lastPouredTick`.
+  tile.lastPouredTick = state.tick;
   state.player.canCharges -= 1;
   touch(state, 'handWater');
   return true;
@@ -907,15 +913,18 @@ function applyPlaceMachine(state: WorldState, command: PlaceMachineCommand): boo
   // from which docks you built. It comes out of the shed at full condition and stands there until
   // the player points the dock at a zone, which is the one thing about it that IS a decision.
   if (isBotDockKind(command.kind)) {
-    spawnBot(
-      state,
-      command.kind === MachineKind.PlanterDock ? BotKind.Planter : BotKind.Harvester,
-      machine,
-    );
+    spawnBot(state, botKindForDock(command.kind), machine);
   }
   // On edit only, never per tick. A machine that landed beside a pipe run is now on it.
   if (spec.liquid !== 0) rebuildNetworks(state);
   return true;
+}
+
+/** Which bot sleeps in which dock. One dock, one bot, one job — the mapping is the rule. */
+function botKindForDock(kind: MachineKind): BotKind {
+  if (kind === MachineKind.PlanterDock) return BotKind.Planter;
+  if (kind === MachineKind.DroneBay) return BotKind.Repair;
+  return BotKind.Harvester;
 }
 
 /**
@@ -1199,6 +1208,9 @@ function applyUnhitchCart(state: WorldState): boolean {
 function applySetDockZone(state: WorldState, command: SetDockZoneCommand): boolean {
   const dock = machineById(state, command.machineId);
   if (dock === null || !isBotDockKind(dock.kind)) return false;
+  // A Drone Bay reads no zone — its drone serves the whole lot — so a binding would be
+  // instructions nothing can read, which is exactly what this function refuses to store.
+  if (dock.kind === MachineKind.DroneBay) return false;
   if (dock.boundZone === command.zoneId) return false;
   if (command.zoneId !== 0 && zoneById(state, command.zoneId) === null) return false;
 
@@ -1286,18 +1298,25 @@ function applyRefillHopper(state: WorldState, command: RefillHopperCommand): boo
   // exists, already counts `hopperRefill`, and already has a walk-to errand wired — item 023 says
   // in as many words: do not invent a second refill path.
   if (spec.role === MachineRole.BotDock) {
-    if (machine.kind !== MachineKind.PlanterDock) return false;
-    const seed = dockWantedSeed(state, machine);
-    if (seed === 0) return false;
-    if (machine.cargoItem !== 0 && machine.cargoItem !== seed) return false;
+    // A DRONE BAY'S HOPPER TAKES PARTS THE WAY A PLANTER'S TAKES SEEDS: this hand path costs a
+    // `hopperRefill` touch, and the belt path (`dockAcceptDelivery`) costs nothing — §6's
+    // taxonomy again, so a genuinely hands-free maintenance factory has to belt its parts in.
+    const wanted =
+      machine.kind === MachineKind.DroneBay
+        ? ItemId.DronePart
+        : machine.kind === MachineKind.PlanterDock
+          ? dockWantedSeed(state, machine)
+          : 0;
+    if (wanted === 0) return false;
+    if (machine.cargoItem !== 0 && machine.cargoItem !== wanted) return false;
 
     const room = spec.inputCapacity - machine.cargoCount;
-    const have = itemCount(state, seed);
+    const have = itemCount(state, wanted);
     const moved = Math.min(room, have);
     if (moved <= 0) return false;
 
-    removeItem(state, seed, moved);
-    machine.cargoItem = seed;
+    removeItem(state, wanted, moved);
+    machine.cargoItem = wanted;
     machine.cargoCount += moved;
     handsOn(machine);
     touch(state, 'hopperRefill');
@@ -1413,12 +1432,22 @@ function applyUseRepairKit(state: WorldState, command: UseRepairKitCommand): boo
 
 /** Chebyshev distance from a tile to the nearest tile of a machine's footprint. */
 function machineWithinKitRadius(machine: Machine, tileX: number, tileY: number): boolean {
+  return machineWithinRadiusOfTile(machine, tileX, tileY, REPAIR_KIT_RADIUS_TILES);
+}
+
+/** The same footprint distance, against any radius — the Maintenance Station's cell check. */
+function machineWithinRadiusOfTile(
+  machine: Machine,
+  tileX: number,
+  tileY: number,
+  radius: number,
+): boolean {
   const spec = machineSpec(machine.kind);
   if (spec === null) return false;
 
   const dx = Math.max(machine.tileX - tileX, tileX - (machine.tileX + spec.tilesWide - 1), 0);
   const dy = Math.max(machine.tileY - tileY, tileY - (machine.tileY + spec.tilesHigh - 1), 0);
-  return Math.max(dx, dy) <= REPAIR_KIT_RADIUS_TILES;
+  return Math.max(dx, dy) <= radius;
 }
 
 function applyWhackJam(state: WorldState, command: WhackJamCommand): boolean {
@@ -2245,6 +2274,18 @@ function intentTargetSubtiles(
       );
     }
 
+    case IntentAction.UseRepairKit: {
+      // The kit is aimed at GROUND, not at a machine or a field tile, so the only shape
+      // question is "is the tile on the map" — already answered above. Whether anything in
+      // the cell still wants servicing, and whether the bag still holds a kit, are the
+      // arrival reducer's business: both can legitimately change during the walk, and
+      // `applyUseRepairKit` refuses without consuming when the answer is no.
+      return {
+        xSub: tileCentreSubtiles(intent.tileX),
+        ySub: tileCentreSubtiles(intent.tileY),
+      };
+    }
+
     case IntentAction.Load:
     case IntentAction.Unload:
     case IntentAction.RefillHopper:
@@ -2300,6 +2341,8 @@ function intentCommand(state: WorldState, intent: PlayerIntent): Command | null 
       return { type: 'ApplyFertilizer', tileX: intent.tileX, tileY: intent.tileY };
     case IntentAction.Scythe:
       return { type: 'SwingScythe', tileX: intent.tileX, tileY: intent.tileY };
+    case IntentAction.UseRepairKit:
+      return { type: 'UseRepairKit', tileX: intent.tileX, tileY: intent.tileY };
     case IntentAction.Sell:
       return { type: 'SellItem', item: intent.item as ItemId, count: intent.count };
     // Buy resolves without the machine for the same reason Sell does: `nearSellBin` inside the
@@ -2378,8 +2421,87 @@ function advanceMachines(state: WorldState): void {
       advanceConverter(state, machine);
     } else if (spec.role === MachineRole.Orchard) {
       advanceOrchard(machine, spec);
+    } else if (spec.role === MachineRole.MaintenanceStation) {
+      advanceMaintenanceStation(state, machine, spec);
     }
   }
+}
+
+/**
+ * One tick of the Maintenance Station: an automated hand throwing real kits (item 039).
+ *
+ * **IT FIRES WHEN A PLAYER WOULD AND ONLY THEN** — something in its cell is wrench-due
+ * (condition below `CONDITION_EFFECT_THRESHOLD`) or jammed, or a dock's bot in the cell is —
+ * and what it does then is EXACTLY what `applyUseRepairKit` does from a hand: one kit off the
+ * shelf, every machine and dock-bot in the cell back to full, jams cleared. Same radius, same
+ * kit, same rate; the only thing removed is the walk.
+ *
+ * **WHAT IT DELIBERATELY DOES NOT DO:** no `touch` and no `handsOn` — a station's service is
+ * not a hand, so the Hands-Free board keeps running and the serviced machines' untouched
+ * clocks keep climbing — and NO SERVICE WITHOUT A KIT, ever. An empty hopper is the amber
+ * starved lamp and a cell that degrades exactly as if the station were not there, which is
+ * what makes the kit belt a supply line rather than scenery.
+ *
+ * Kit accounting: the kit was bought at the till, where `repairKitSpendCents` counted it, so
+ * consumption here adds only to `repairKitsUsed` — the same split a hand-thrown kit gets.
+ */
+function advanceMaintenanceStation(state: WorldState, machine: Machine, spec: MachineSpec): void {
+  // At zero it halts and costs nothing, like everything else at zero (plan §4). It cannot
+  // service itself back from the floor — its own arm is the one thing it cannot reach with a
+  // dead motor — so hands or another station bring it back.
+  if (machine.condition <= 0) return;
+  if (machine.cooldown > 0) {
+    machine.cooldown -= 1;
+    return;
+  }
+  if ((machine.inputCounts[0] ?? 0) <= 0) return;
+
+  // Anchored on the top-left tile, like every coverage radius in the game, so the placement
+  // overlay shows exactly the cell one kit will service.
+  const radius = spec.coverageRadiusTiles;
+  let due = false;
+  for (let i = 0; i < state.machines.length && !due; i++) {
+    const candidate = state.machines[i]!;
+    if (!machineWithinRadiusOfTile(candidate, machine.tileX, machine.tileY, radius)) continue;
+    if (candidate.jammed || candidate.condition < CONDITION_EFFECT_THRESHOLD) due = true;
+    else if (dockHasWrenchDueBot(state, candidate)) due = true;
+  }
+  if (!due) return;
+
+  machine.inputCounts[0] = (machine.inputCounts[0] ?? 0) - 1;
+  for (let i = 0; i < state.machines.length; i++) {
+    const candidate = state.machines[i]!;
+    if (!machineWithinRadiusOfTile(candidate, machine.tileX, machine.tileY, radius)) continue;
+    let wantsBots = false;
+    for (let j = 0; j < state.bots.length; j++) {
+      const bot = state.bots[j]!;
+      if (bot.dockId === candidate.id && bot.condition < CONDITION_MAX) wantsBots = true;
+    }
+    if (candidate.condition >= CONDITION_MAX && !candidate.jammed && !wantsBots) continue;
+
+    candidate.condition = CONDITION_MAX;
+    candidate.jammed = false;
+    for (let j = 0; j < state.bots.length; j++) {
+      const bot = state.bots[j]!;
+      if (bot.dockId === candidate.id) bot.condition = CONDITION_MAX;
+    }
+  }
+
+  state.stats.repairKitsUsed += 1;
+  machine.opCount += 1;
+  // AFTER the cell service, so a station inside its own radius still pays its own wear for
+  // the operation it just performed — it is a machine, not an exception.
+  wear(machine, spec.wearPerOperation);
+  machine.cooldown = STATION_SERVICE_PERIOD_TICKS;
+}
+
+/** Whether any bot sleeping in this machine is below the wrench threshold. */
+function dockHasWrenchDueBot(state: WorldState, dock: Machine): boolean {
+  for (let i = 0; i < state.bots.length; i++) {
+    const bot = state.bots[i]!;
+    if (bot.dockId === dock.id && bot.condition < CONDITION_EFFECT_THRESHOLD) return true;
+  }
+  return false;
 }
 
 /**
@@ -2441,6 +2563,9 @@ function advanceSprinkler(
       const tile = tileAt(state, machine.tileX + dx, machine.tileY + dy);
       if (tile === null) continue;
       tile.moisture = MOISTURE_MAX;
+      // Non-hashed pour signal; see `CropTile.lastPouredTick`. A dumb head re-wetting a
+      // soaked tile is still a pour — that is its sloppiness tax, and it should look like one.
+      tile.lastPouredTick = state.tick;
       machine.tankMl -= SPRINKLER_POUR_ML;
       watered += 1;
     }
@@ -2516,6 +2641,9 @@ function advanceIrrigationHub(state: WorldState, machine: Machine, spec: Machine
         machine.tankMl -= SPRINKLER_POUR_ML;
         // Clamps, always. No overwatering is possible on any rung (plan §2, hard rule).
         tile.moisture = MOISTURE_MAX;
+        // Non-hashed pour signal; see `CropTile.lastPouredTick`. The Hub only pours on dry
+        // tiles, so this is the one head whose skips are silent by design.
+        tile.lastPouredTick = state.tick;
         machine.wateredCount += 1;
         machine.opCount += 1;
         // Plan §3's Hall of Hands: the first activation is owed ~10 seconds of theatre, once
@@ -2665,6 +2793,7 @@ function advanceConverter(state: WorldState, machine: Machine): void {
   const wastePeriod = effectiveWastePeriod(spec, machine);
   if (wastePeriod > 0 && machine.opCount % wastePeriod === 0) {
     state.stats.inputsWastedByMachine += 1;
+    recordBleed(state, machine, spec);
   } else {
     produceRecipe(spec, machine);
     state.stats.itemsProducedByMachine += 1;
@@ -2781,6 +2910,33 @@ function advanceOvercooking(machine: Machine, spec: MachineSpec): void {
 
 function wear(machine: Machine, amount: number): void {
   machine.condition = clampInt(machine.condition - amount, 0, CONDITION_MAX);
+}
+
+/**
+ * One wasted operation, priced and remembered for the diagnostics window (item 039).
+ *
+ * THE CASH IS THE SOLID INPUTS AT LIST — the recipe was consumed and nothing came out, so what
+ * bled is exactly what went in. Liquids are deliberately unpriced: there is no item id and no
+ * price for a millilitre of anything in this game, and inventing one here would be a second
+ * opinion about what water is worth. Written into `Machine.bleedEvents` (non-hashed
+ * presentation data — see the field), pruned to the window on every write so the array stays
+ * a handful of entries however long a worn machine is left grinding.
+ */
+function recordBleed(state: WorldState, machine: Machine, spec: MachineSpec): void {
+  let cents = 0;
+  for (let i = 0; i < spec.inputs.length; i++) {
+    const line = spec.inputs[i]!;
+    cents += listPriceCents(line.item) * line.count;
+  }
+  if (cents <= 0) return;
+
+  machine.bleedEvents.push({ tick: state.tick, cents });
+  while (
+    machine.bleedEvents.length > 0 &&
+    machine.bleedEvents[0]!.tick <= state.tick - BLEED_WINDOW_TICKS
+  ) {
+    machine.bleedEvents.shift();
+  }
 }
 
 // --- 8. crops ---------------------------------------------------------------------

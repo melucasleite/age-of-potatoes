@@ -323,6 +323,76 @@ describe('the watering can', () => {
   });
 });
 
+// --- the pour signal (item 064) ------------------------------------------------------
+
+describe('the pour signal', () => {
+  it('acknowledges a pour on an already-saturated tile, where the moisture diff is blind', () => {
+    // The case this signal exists for: the clamp produces no moisture rise, the charge is
+    // still spent, and the player is owed droplets and a sound. A renderer inferring pours
+    // from moisture diffs is structurally unable to see this one.
+    const state = createWorld(17);
+    standOn(state, 6, 6);
+    stepMany(state, 5); // Off tick 0, where a recorded pour and "never" share a value.
+
+    run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
+    const tile = tileAt(state, 6, 6)!;
+    const firstPour = tile.lastPouredTick;
+    expect(firstPour).toBeGreaterThan(0);
+
+    tile.moisture = MOISTURE_MAX; // Saturate: the next pour cannot raise anything.
+    const charges = state.player.canCharges;
+    run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
+    expect(state.player.canCharges).toBe(charges - 1);
+    // Soaked, minus the same tick's drain — up to 2 points on sand (1500‰ of 1). The pour
+    // itself raised nothing; that is the whole premise.
+    expect(tile.moisture).toBeGreaterThanOrEqual(MOISTURE_MAX - 2);
+    expect(tile.lastPouredTick).toBeGreaterThan(firstPour);
+
+    // And the view carries it, per tile, in the same row-major order as every field column.
+    const projected = view(state, createWorldView());
+    const idx =
+      (6 - projected.field.originY) * projected.field.tilesWide + (6 - projected.field.originX);
+    expect(projected.field.lastPouredTick[idx]).toBe(tile.lastPouredTick);
+  });
+
+  it('marks sprinkler pours, wet tiles included — a re-wet is still a pour', () => {
+    const state = createWorld(18);
+    const sprinkler = spawnMachine(state, MachineKind.Sprinkler, 5, 5)!;
+    stepMany(state, 1); // Past tick 0 so a recorded pour is distinguishable from "never".
+    sprinkler.tankMl = 100_000;
+    tileAt(state, 5, 5)!.moisture = MOISTURE_MAX; // Soaked, and the dumb head pours anyway.
+
+    stepMany(state, 3);
+    expect(tileAt(state, 5, 5)!.lastPouredTick).toBeGreaterThan(0);
+  });
+
+  it('marks Hub pours but never Hub skips — a skip is not a pour', () => {
+    const state = createWorld(19);
+    const hub = spawnMachine(state, MachineKind.IrrigationHub, 5, 5)!;
+    stepMany(state, 1);
+    hub.tankMl = 1_000_000;
+    const soaked = tileAt(state, 6, 5)!;
+    soaked.moisture = MOISTURE_MAX;
+
+    stepMany(state, 60);
+    // Dry tiles in the patch were poured on; the soaked one was inspected and passed over,
+    // and the signal says so — silence on a skip is by design, it is the saving on display.
+    expect(state.field.some((tile) => tile.lastPouredTick > 0)).toBe(true);
+    expect(soaked.lastPouredTick).toBe(0);
+  });
+
+  it('stays out of the hash: worlds that differ only in pour ticks are the same world', () => {
+    const state = createWorld(20);
+    standOn(state, 6, 6);
+    stepMany(state, 5);
+    run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
+
+    const before = hashState(state);
+    tileAt(state, 6, 6)!.lastPouredTick = 424_242;
+    expect(hashState(state)).toBe(before);
+  });
+});
+
 // --- the ledger ---------------------------------------------------------------------
 
 describe('the one-ledger flow model', () => {

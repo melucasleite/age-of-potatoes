@@ -117,9 +117,11 @@ export const HARVESTS_PER_FERTILITY_STEP = 5;
 export const FERTILITY_PER_FERTILIZER = 1;
 
 /**
- * Plan §5 caps the recipe graph at ~50 items. We are at **26 items plus 5 liquids = 31 nodes**
- * (the soda line spent 6 item slots and 4 liquid slots). Numeric values are permanent — they
- * are in every save and on every belt.
+ * Plan §5 caps the recipe graph at ~50 items. We are at **35 items plus 5 liquids = 40 nodes**:
+ * the original 26 (the soda line spent 6 item slots and 4 liquid slots), the crop roster's 8
+ * (gold potato trio, two tree fruits, fertilizer, scythe, crate), and item 039's drone part.
+ * Boxed machines are not graph nodes — nothing eats one, nothing makes one, no belt carries
+ * one. Numeric values are permanent — they are in every save and on every belt.
  */
 export const ItemId = {
   PotatoSeed: 1,
@@ -276,6 +278,26 @@ export const ItemId = {
   BoxedKolaTree: 63,
   BoxedHarvesterDock: 64,
   BoxedPlanterDock: 65,
+
+  /**
+   * What a repair drone burns: one part per service, manufactured and belted to the bay.
+   *
+   * **PLAN §4'S CAPSTONE CONSUMABLE, AND THE INVERSION IS THE POINT**: automation "saves your
+   * hands, not the bill", so this is deliberately dearer per machine serviced than the kit path
+   * it sits above — a kit is $8 for a whole 7×7 cell, a part is one machine's service. It is
+   * NEVER purchasable: the Parts Bench is the only source, which is what makes late-game
+   * maintenance a logistics problem rather than a bigger shopping trip. Sellable at list so an
+   * over-producer has an exit (§4's floor, same as Fertilizer).
+   *
+   * The recipe (see the Parts Bench spec) is a Bottle and Kola Powder — an existing store-bought
+   * consumable and an existing manufactured intermediate, no new crops, no new raw materials
+   * (item 039 instruction 1). Yes, the propellant is cola powder. It is that kind of factory.
+   */
+  DronePart: 66,
+
+  BoxedMaintenanceStation: 67,
+  BoxedDroneBay: 68,
+  BoxedPartsBench: 69,
 } as const;
 
 export type ItemId = (typeof ItemId)[keyof typeof ItemId];
@@ -398,6 +420,21 @@ export const MachineKind = {
   HarvesterDock: 31,
   /** And this one puts them back, from a seed hopper you keep filled — by hand, or by belt. */
   PlanterDock: 32,
+
+  // --- automated maintenance (item 039, plan §3's ladder topping out) ---------------------
+  //
+  // The Maintenance Station is an arm that does what your hand did: it spends REAL repair kits
+  // from a belt-fed hopper on the same 7×7 cell a hand-thrown kit services, at the same cadence
+  // a player would (when the wrench lamp is due), and it starves honestly — no kits on the belt,
+  // no service, ever. The Drone Bay is a `BotDock` in everything but cargo: its bot is a repair
+  // drone that flies to whichever machine on the lot wants a wrench and burns one manufactured
+  // part per service. The Parts Bench is the ordinary converter that makes those parts.
+  /** Belt-fed kits in, serviced cell out. §3's first automated maintenance rung. */
+  MaintenanceStation: 33,
+  /** One bay, one drone, a hopper of parts. The tech tree's capstone (§3). */
+  DroneBay: 34,
+  /** Bottle + kola powder → drone part. The factory whose product is the factory. */
+  PartsBench: 35,
 } as const;
 
 export type MachineKind = (typeof MachineKind)[keyof typeof MachineKind];
@@ -527,6 +564,16 @@ export function rusticStylePriceCents(): number {
  * system in the sim yet, and a price for a recipe nobody can cook is balance data that lies.
  */
 export const REPAIR_KIT_PRICE_CENTS = 800;
+
+/**
+ * What a drone part is worth at list, and what one drone service is accounted at.
+ *
+ * $4 per machine serviced, against the kit's $8 per 7×7 CELL — so per machine touched,
+ * automated maintenance runs dearer than the hand it replaced, which is §4's thesis
+ * ("saves your hands, not the bill") written as a price. It lives up here for the same
+ * temporal-dead-zone reason the kit price does: `ITEM_SPECS` reads it while initialising.
+ */
+export const DRONE_PART_PRICE_CENTS = 400;
 
 /**
  * The end of the chip chain, hoisted for the same reason seasoned chips are: the Snack Combo's
@@ -877,6 +924,18 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.BoxedKolaTree, slug: 'boxed-kola-tree', ...BOXED },
   { id: ItemId.BoxedHarvesterDock, slug: 'boxed-harvester-dock', ...BOXED },
   { id: ItemId.BoxedPlanterDock, slug: 'boxed-planter-dock', ...BOXED },
+
+  {
+    // Manufactured only — `purchasable: false` IS the logistics problem (see `ItemId.DronePart`).
+    id: ItemId.DronePart,
+    slug: 'drone-part',
+    listPriceCents: DRONE_PART_PRICE_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+  { id: ItemId.BoxedMaintenanceStation, slug: 'boxed-maintenance-station', ...BOXED },
+  { id: ItemId.BoxedDroneBay, slug: 'boxed-drone-bay', ...BOXED },
+  { id: ItemId.BoxedPartsBench, slug: 'boxed-parts-bench', ...BOXED },
 ];
 
 /**
@@ -924,6 +983,9 @@ export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly
     { kind: MachineKind.KolaTree, item: ItemId.BoxedKolaTree },
     { kind: MachineKind.HarvesterDock, item: ItemId.BoxedHarvesterDock },
     { kind: MachineKind.PlanterDock, item: ItemId.BoxedPlanterDock },
+    { kind: MachineKind.MaintenanceStation, item: ItemId.BoxedMaintenanceStation },
+    { kind: MachineKind.DroneBay, item: ItemId.BoxedDroneBay },
+    { kind: MachineKind.PartsBench, item: ItemId.BoxedPartsBench },
   ];
 
 /** The boxed item a machine kind goes into, or `null` for a kind that has no box. */
@@ -1537,13 +1599,32 @@ export const MachineRole = {
    * the bot is an entity rather than a number on this machine.
    */
   BotDock: 12,
+  /**
+   * The Maintenance Station: an automated hand with a kit hopper.
+   *
+   * ITS OWN ROLE RATHER THAN A CONVERTER WITH A STRANGE RECIPE, because it consumes on a
+   * different clock: a converter eats when its recipe is full and its output has room; this
+   * eats a kit only when something in its cell is wrench-due, and it produces nothing a belt
+   * could take. Its "operation" is `applyUseRepairKit`'s cell service with the hand taken out —
+   * no touch, no `handsOn`, and therefore no reset of any machine's untouched clock, which is
+   * what lets an automated factory hold the Corporate Charter's milestone while being serviced.
+   */
+  MaintenanceStation: 13,
 } as const;
 
 export type MachineRole = (typeof MachineRole)[keyof typeof MachineRole];
 
-/** True for the two docks. A dock is bound to a zone and spawns exactly one bot. */
+/**
+ * True for the three dock kinds — a dock is where a bot sleeps and what it fills. The two
+ * farm docks are bound to a zone; the Drone Bay is bound to nothing and holds parts instead
+ * of seeds, but it spawns its one bot on placement exactly as they do.
+ */
 export function isBotDockKind(kind: MachineKind): boolean {
-  return kind === MachineKind.HarvesterDock || kind === MachineKind.PlanterDock;
+  return (
+    kind === MachineKind.HarvesterDock ||
+    kind === MachineKind.PlanterDock ||
+    kind === MachineKind.DroneBay
+  );
 }
 
 /** True for the roles that register as consumers on a pipe network and draw a ledger share. */
@@ -1742,6 +1823,26 @@ export const WASTE_PERIOD_AT_ZERO = 2;
  * trip, which is the entire point of the number.
  */
 export const REPAIR_KIT_RADIUS_TILES = 3;
+
+/**
+ * One Maintenance Station service cycle: ten active seconds per kit application.
+ *
+ * The station consumes kits AT THE RATE A PLAYER WOULD (item 039 instruction 2): it fires only
+ * when something in its cell is actually wrench-due — condition below
+ * `CONDITION_EFFECT_THRESHOLD`, or jammed — never on a timer and never to top up a machine
+ * that merely did some work. The cooldown is the arm resetting between applications, roughly
+ * the walk-and-hold a hand service costs, so a cell that falls apart faster than a person
+ * could kit it does not get super-human service either.
+ */
+export const STATION_SERVICE_PERIOD_TICKS = 200;
+
+/**
+ * The diagnostics window: 60 active seconds, plan §5's own number ("alerts only when money
+ * bleeds >60s, phrased in cash"). `MachineView.bleedCentsLast60s` sums each machine's wasted
+ * inputs over this many trailing ticks. Presentation cadence, not balance — it prices nothing
+ * and is deliberately NOT folded into `BALANCE_HASH`.
+ */
+export const BLEED_WINDOW_TICKS = 60 * TICKS_PER_SECOND;
 
 /**
  * How long a full output buffer stands still before one more unit of it overcooks.
@@ -2837,6 +2938,104 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     coverageRadiusTiles: 0,
     moistureSensing: false,
   },
+
+  // --- automated maintenance (item 039) --------------------------------------------------
+  {
+    // An arm that throws repair kits. `coverageRadiusTiles` is EXACTLY the hand kit's radius,
+    // deliberately: the station is not a better kit, it is the same kit without the walk, so
+    // one station services precisely the cell one trip would have. `inputs` names the kit so
+    // the ordinary grabber recipe-line door belt-feeds the hopper with no new plumbing; the
+    // consumption clock is `advanceMaintenanceStation`'s, not the converter's.
+    kind: MachineKind.MaintenanceStation,
+    slug: 'maintenance-station',
+    role: MachineRole.MaintenanceStation,
+    tilesWide: 2,
+    tilesHigh: 2,
+    // Above the dearest assisted tool on the ladder (the $80 kit is per-trip; this is the
+    // trip removed), below the drone bay that outranks it. Era-3 money by the 15-Minute Rule.
+    priceCents: 120_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    /** The kit hopper. Hand-filled counts a touch; belt-filled does not. */
+    inputCapacity: 6,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    /** Per service, like every wear rate in this file. It can service itself — for a kit. */
+    wearPerOperation: 2,
+    inputs: [{ item: ItemId.RepairKit, count: 1 }],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.Diagnostics,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: REPAIR_KIT_RADIUS_TILES,
+    moistureSensing: false,
+  },
+  {
+    // One bay, one drone, a parts hopper in `cargoItem`/`cargoCount` exactly where the planter
+    // keeps its seeds. The bay itself never wears and never works — the DRONE wears, per
+    // service, and is repaired at the bay by hand or kit like any dock's bot.
+    kind: MachineKind.DroneBay,
+    slug: 'drone-bay',
+    role: MachineRole.BotDock,
+    tilesWide: 2,
+    tilesHigh: 2,
+    // The capstone's hangar: priced above every dock on the lot. What it buys is a machine
+    // that services the whole lot with no radius at all.
+    priceCents: 200_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    /** Parts the hopper holds. Hand-filled counts a touch; belt-filled does not. */
+    inputCapacity: 12,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.Drones,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
+  {
+    // An ordinary converter, and that ordinariness is the feature: the parts line is built,
+    // belted, upgraded, worn, jammed, and serviced with exactly the rules the chip line taught.
+    // Bottle + kola powder → drone part; input cost ≈ $2.70 crafted against a $4 list, so the
+    // bench adds value like any other machine and §4's "the bill does not fall" survives the
+    // player building it well.
+    kind: MachineKind.PartsBench,
+    slug: 'parts-bench',
+    role: MachineRole.Converter,
+    tilesWide: 2,
+    tilesHigh: 2,
+    priceCents: 80_000,
+    workPerOperation: 30 * WORK_RATE_SCALE,
+    workRatePerTick: WORK_RATE_SCALE,
+    inputCapacity: 20,
+    outputCapacity: 20,
+    tankCapacityMl: 0,
+    /** A 30-tick machine that machines metal — rounds UP, per the wear derivation above. */
+    wearPerOperation: 2,
+    inputs: [
+      { item: ItemId.Bottle, count: 1 },
+      { item: ItemId.KolaPowder, count: 1 },
+    ],
+    outputItem: ItemId.DronePart,
+    overcookOutputItem: null,
+    requiresTech: TechId.Drones,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+  },
 ];
 
 export function machineSpec(kind: MachineKind): MachineSpec | null {
@@ -3512,7 +3711,7 @@ function balanceDigest(): string {
   // the world numbers; everything a worn or neglected machine actually *does* is here.
   h = fnv1aString(
     h,
-    `${REPAIR_PER_TOUCH}:${JAM_EVERY_N_OPERATIONS_WHEN_WORN}:${WASTE_PERIOD_AT_THRESHOLD}:${WASTE_PERIOD_AT_ZERO}:${REPAIR_KIT_PRICE_CENTS}:${REPAIR_KIT_RADIUS_TILES}:${OVERCOOK_BLOCKED_TICKS}:${RUSTIC_STYLE_NUMERATOR}/${RUSTIC_STYLE_DENOMINATOR}`,
+    `${REPAIR_PER_TOUCH}:${JAM_EVERY_N_OPERATIONS_WHEN_WORN}:${WASTE_PERIOD_AT_THRESHOLD}:${WASTE_PERIOD_AT_ZERO}:${REPAIR_KIT_PRICE_CENTS}:${REPAIR_KIT_RADIUS_TILES}:${OVERCOOK_BLOCKED_TICKS}:${RUSTIC_STYLE_NUMERATOR}/${RUSTIC_STYLE_DENOMINATOR}:${STATION_SERVICE_PERIOD_TICKS}:${DRONE_PART_PRICE_CENTS}`,
   );
   // The soda line's derived prices. The bundle premiums are ratios rather than literals, so the
   // digest folds in the ratio — a repriced bag of chips moves the Combo, and the digest with it.

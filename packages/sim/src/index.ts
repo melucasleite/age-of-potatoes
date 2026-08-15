@@ -147,9 +147,12 @@ export {
   POND_TILES_WIDE,
   PUMP_RATE_ML_PER_MINUTE,
   RECIRCULATOR_ML_PER_MINUTE,
+  BLEED_WINDOW_TICKS,
+  DRONE_PART_PRICE_CENTS,
   REPAIR_KIT_PRICE_CENTS,
   REPAIR_KIT_RADIUS_TILES,
   REPAIR_PER_TOUCH,
+  STATION_SERVICE_PERIOD_TICKS,
   RESERVOIR_CAPACITY_ML,
   RESERVOIR_CAPACITY_UNITS,
   RESERVOIR_LOW_PERMILLE,
@@ -458,7 +461,15 @@ export { resetMomentum, stepToward } from './movement';
 export type { Mover } from './movement';
 
 // --- Agri-Bots --------------------------------------------------------------------
-export { advanceBots, dockAcceptSeed, dockSeedCount, dockWantedSeed, isBotDock } from './bots';
+export {
+  advanceBots,
+  bayPartCount,
+  dockAcceptDelivery,
+  dockAcceptSeed,
+  dockSeedCount,
+  dockWantedSeed,
+  isBotDock,
+} from './bots';
 
 // --- commands ---------------------------------------------------------------------
 export { appendTrace } from './commands';

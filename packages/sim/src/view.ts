@@ -17,6 +17,8 @@
 
 import {
   ARMFUL_CAP_ITEMS,
+  BELT_ITEM_SPACING_SUBTILES,
+  BLEED_WINDOW_TICKS,
   CAN_CHARGES_MAX,
   CART_CAPACITY,
   CONDITION_EFFECT_THRESHOLD,
@@ -30,6 +32,7 @@ import {
   FIELD_TILE_COUNT,
   MOISTURE_DRY_THRESHOLD,
   MOISTURE_MAX,
+  MachineKind,
   MachineRole,
   type MachineSpec,
   PARCELS_HIGH,
@@ -41,6 +44,7 @@ import {
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
   WiltStage,
+  beltSpec,
   boxedMachineScrapCents,
   cropSpec,
   grabberSpec,
@@ -83,7 +87,7 @@ import {
   effectiveOutputCapacity,
   effectivePortCapacityMl,
 } from './upgrades';
-import { beatIndex, clampInt, divFloor, permille } from './units';
+import { SUBTILE, beatIndex, clampInt, divFloor, permille } from './units';
 
 /**
  * Plan §5's status-lamp grammar, plus `Jammed`, which the renderer draws as the red
@@ -140,6 +144,17 @@ export interface FieldView {
   compost: number[];
   /** Owning zone id, or 0. Drives the chunked zone-paint bake. */
   zone: number[];
+  /**
+   * The tick water last actually landed on this tile, or 0 for never — THE POUR SIGNAL
+   * (item 064). A consumer that keeps last frame's value and fires droplets and the pour
+   * sound when this one is newer catches every pour, INCLUDING a pour on a saturated tile,
+   * which the old moisture-rise diff was structurally blind to: the clamp produces no rise,
+   * but the charge was spent and the player is owed the acknowledgement. Written by every
+   * pour source — hand can, sprinkler, Hub — and by nothing else; a skip is not a pour.
+   * Projected from non-hashed presentation state (`CropTile.lastPouredTick`), so it is
+   * deterministic under replay and resets to 0 on load.
+   */
+  lastPouredTick: number[];
 }
 
 export interface MachineView {
@@ -211,6 +226,27 @@ export interface MachineView {
   wateredCount: number;
   /** Tiles looked at, found wet, and skipped — lifetime. The Hub's saving is the gap. */
   skippedCount: number;
+
+  /**
+   * The dock-hopper shelf: what is on it and how many — a planter's seeds, a Drone Bay's
+   * parts, a parked cart's or a crate's cargo. Zero/0 on every machine without one. Published
+   * because a hopper nobody can read is not a hopper (the same argument `boundZone` carries):
+   * the bay card says "3 parts", and the blue lamp's cause is visible on the machine.
+   */
+  cargoItem: number;
+  cargoCount: number;
+
+  /**
+   * DIAGNOSTICS (item 039): cents of input value this machine wasted over the trailing
+   * `BLEED_WINDOW_TICKS` (60 active seconds) — wasted operations priced at the list value of
+   * the solids they consumed. **This is the sim's half of the ranked bleed list**: the HUD
+   * sorts machines on this number and phrases every entry in cash (§5). Idle-time bleed is
+   * deliberately NOT in it — `apps/web/src/reports/idle.ts` already prices idleness at the
+   * realised rate from view data it has, and two sources for one number is how a report
+   * disagrees with itself. Projected from non-hashed presentation state
+   * (`Machine.bleedEvents`); resets to 0 on load.
+   */
+  bleedCentsLast60s: number;
 
   /**
    * Every line of the recipe and every typed port, for the machines that have more than one of
@@ -320,6 +356,20 @@ export interface BeltView {
   itemDist: number[];
   /** `ItemId` per entry, same index. */
   itemType: number[];
+  /**
+   * How fast goods are actually moving through this segment: the belt's speed scaled by its
+   * occupancy, in subtiles per 100 ticks — THE NUMBER THE FLOW LOD'S SCROLL RATE RIDES
+   * (item 026 instruction 4). The sim computes it so the renderer never derives throughput
+   * from item counts against a capacity formula of its own; `beltFlowScrollPxPerSecond` in
+   * `apps/web/src/game/input/lod.ts` swaps its occupancy estimate for this field verbatim.
+   *
+   * Two properties are load-bearing and pinned by tests: **an empty belt reads exactly 0**
+   * (a stalled line must not scroll — spotting the stopped segment is the far view's whole
+   * job), and a full belt reads exactly its tier speed, never more — a surface outrunning
+   * the goods on it would be a lie told at the zoom where the player reads circulation.
+   * Convert with `× ticksPerSecond ÷ 100 ÷ SUBTILE × tilePx` for source px/sec.
+   */
+  throughputSubtilesPer100Ticks: number;
 }
 
 export interface GrabberView {
@@ -776,6 +826,7 @@ export function createWorldView(): WorldView {
       readyAge: new Array<number>(FIELD_TILE_COUNT).fill(0),
       compost: new Array<number>(FIELD_TILE_COUNT).fill(0),
       zone: new Array<number>(FIELD_TILE_COUNT).fill(0),
+      lastPouredTick: new Array<number>(FIELD_TILE_COUNT).fill(0),
     },
     machines: [],
     belts: [],
@@ -887,6 +938,7 @@ function projectField(state: WorldState, out: WorldView): void {
     field.readyAge[i] = tile.readyAge;
     field.compost[i] = tile.compost;
     field.zone[i] = tile.zone;
+    field.lastPouredTick[i] = tile.lastPouredTick;
   }
 
   field.crop.length = state.field.length;
@@ -899,6 +951,7 @@ function projectField(state: WorldState, out: WorldView): void {
   field.readyAge.length = state.field.length;
   field.compost.length = state.field.length;
   field.zone.length = state.field.length;
+  field.lastPouredTick.length = state.field.length;
 }
 
 /** Bare soil is stage 0, ready is the crop's last stage, and growth fills the middle. */
@@ -956,6 +1009,9 @@ function projectMachines(state: WorldState, out: WorldView): void {
         moistureSensing: 0,
         wateredCount: 0,
         skippedCount: 0,
+        cargoItem: 0,
+        cargoCount: 0,
+        bleedCentsLast60s: 0,
         recipe: [],
         ports: [],
       };
@@ -1004,11 +1060,28 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.moistureSensing = spec !== null && spec.moistureSensing ? 1 : 0;
     mv.wateredCount = machine.wateredCount;
     mv.skippedCount = machine.skippedCount;
+    mv.cargoItem = machine.cargoItem;
+    mv.cargoCount = machine.cargoCount;
+    mv.bleedCentsLast60s = bleedCentsWithinWindow(machine, state.tick);
     projectRecipe(machine, spec, mv);
     projectPorts(machine, spec, mv);
   }
 
   out.machines.length = count;
+}
+
+/**
+ * Cash wasted inside the trailing diagnostics window. A read-time sum over the machine's
+ * pruned event list — the projection mutates nothing, and events that have aged past the
+ * window but not yet been pruned by a newer write are filtered here rather than deleted.
+ */
+function bleedCentsWithinWindow(machine: Machine, tick: number): number {
+  let cents = 0;
+  for (let i = 0; i < machine.bleedEvents.length; i++) {
+    const event = machine.bleedEvents[i]!;
+    if (event.tick > tick - BLEED_WINDOW_TICKS) cents += event.cents;
+  }
+  return cents;
 }
 
 /**
@@ -1213,6 +1286,7 @@ function projectBelts(state: WorldState, out: WorldView): void {
         itemCount: 0,
         itemDist: [],
         itemType: [],
+        throughputSubtilesPer100Ticks: 0,
       };
       out.belts.push(bv);
     }
@@ -1233,9 +1307,30 @@ function projectBelts(state: WorldState, out: WorldView): void {
     bv.itemDist.length = items;
     bv.itemType.length = items;
     bv.itemCount = items;
+    bv.throughputSubtilesPer100Ticks = beltThroughputSubtilesPer100Ticks(belt);
   }
 
   out.belts.length = count;
+}
+
+/**
+ * The belt's speed scaled by how loaded it is — throughput, not velocity. A fast belt
+ * carrying four items an hour is not a busy belt, and an empty one moves nothing at all.
+ *
+ * Capacity is the items the segment could hold shoulder to shoulder at
+ * `BELT_ITEM_SPACING_SUBTILES`, the same spacing `belts.ts` enforces between riders, so
+ * "full" here is exactly the state in which the belt physically cannot accept another item.
+ * Integer arithmetic throughout: `permille` floors and clamps to 0..1000, so the result
+ * never exceeds the tier's real speed.
+ */
+function beltThroughputSubtilesPer100Ticks(belt: WorldState['belts'][number]): number {
+  const items = belt.items.length;
+  if (items <= 0 || belt.lengthTiles <= 0) return 0;
+  const spec = beltSpec(belt.tier);
+  if (spec === null) return 0;
+  const capacity = Math.max(1, divFloor(belt.lengthTiles * SUBTILE, BELT_ITEM_SPACING_SUBTILES));
+  const loadPermille = permille(items, capacity);
+  return divFloor(spec.speedSubtilesPer100Ticks * loadPermille, 1000);
 }
 
 /**
@@ -1453,6 +1548,20 @@ function lampFor(state: WorldState, index: number): LampState {
 
   if (spec.role === MachineRole.Recirculator) {
     return machine.flowMlPerMinute <= 0 ? LampState.Starved : LampState.Running;
+  }
+
+  // The Maintenance Station starves on kits exactly as a converter starves on inputs — AMBER,
+  // "look upstream", and upstream of a station is its kit belt (item 039's criterion: the lamp
+  // is the honest half of "repairs halt, never free service"). Jammed/Halted are handled above.
+  if (spec.role === MachineRole.MaintenanceStation) {
+    return (machine.inputCounts[0] ?? 0) <= 0 ? LampState.Starved : LampState.Running;
+  }
+
+  // A Drone Bay with no parts shows BLUE — "a utility is missing" — because that is precisely
+  // the situation: the drone is fine, the machine it would service is fine, and the consumable
+  // that connects them has run out (item 039 instruction 4, by name).
+  if (machine.kind === MachineKind.DroneBay) {
+    return machine.cargoCount <= 0 ? LampState.UtilityMissing : LampState.Running;
   }
 
   if (spec.workPerOperation <= 0) return LampState.Off;

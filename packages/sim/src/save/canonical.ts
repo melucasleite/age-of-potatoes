@@ -951,7 +951,7 @@ const CROP_IDS: readonly number[] = [
 ];
 /** The roster's other three are machines, not crops — see `CropId`. */
 const SOIL_TYPES: readonly number[] = [SoilType.Loam, SoilType.Sand, SoilType.Clay];
-const BOT_KINDS: readonly number[] = [BotKind.Harvester, BotKind.Planter];
+const BOT_KINDS: readonly number[] = [BotKind.Harvester, BotKind.Planter, BotKind.Repair];
 const BOT_PHASES: readonly number[] = [
   BotPhase.Idle,
   BotPhase.Outbound,
@@ -1007,6 +1007,9 @@ const MACHINE_KINDS: readonly number[] = [
   MachineKind.KolaTree,
   MachineKind.HarvesterDock,
   MachineKind.PlanterDock,
+  MachineKind.MaintenanceStation,
+  MachineKind.DroneBay,
+  MachineKind.PartsBench,
 ];
 /** `None` is not a legal liquid for a pipe: a pipe that carries nothing is not a pipe. */
 const LIQUIDS: readonly number[] = [
@@ -1055,6 +1058,7 @@ const ERRAND_ACTIONS: readonly number[] = [
   IntentAction.Scythe,
   IntentAction.HitchCart,
   IntentAction.RefillCan,
+  IntentAction.UseRepairKit,
 ];
 
 /**
@@ -1156,6 +1160,10 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       readyAge: int(tile, 'readyAge', path),
       compost: int(tile, 'compost', path),
       zone: int(tile, 'zone', path),
+      // Presentation data, never saved and never read (see `CropTile.lastPouredTick`). Every
+      // loaded world starts at "never poured", which is correct: a pour that happened before
+      // the save owes no droplets after it.
+      lastPouredTick: 0,
     });
   }
 
@@ -1198,6 +1206,10 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       junctionInCursor: int(machine, 'junctionInCursor', path),
       junctionOutCursor: int(machine, 'junctionOutCursor', path),
       boundZone: int(machine, 'boundZone', path),
+      // Presentation data, never saved and never read (see `Machine.bleedEvents`). A loaded
+      // world opens with an empty diagnostics window: money that bled before the save owes no
+      // alert after it.
+      bleedEvents: [],
     });
   }
 

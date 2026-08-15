@@ -27,6 +27,7 @@ import {
   FIELD_ORIGIN_Y,
   GrabberTier,
   ITEM_SPECS,
+  IntentAction,
   ItemId,
   LiquidId,
   MACHINE_SPECS,
@@ -775,6 +776,45 @@ describe('wear and repair', () => {
     expect(state.stats.repairKitsUsed).toBe(1);
   });
 
+  it('walks to an out-of-reach cell with the kit armed, and services it on arrival', () => {
+    // Wave 8's rough edge: every other verb walked when clicked out of reach; the armed kit
+    // refused. `IntentAction.UseRepairKit` wires it exactly as `RefillCan` was — one click,
+    // one trace entry, and the arrival runs the same reducer a standing click would.
+    const state = createWorld(87);
+    const machine = spawnMachine(state, MachineKind.Washer, 20, 20)!;
+    machine.condition = 200;
+    addItem(state, ItemId.RepairKit, 1);
+    standOn(state, 4, 4); // Sixteen tiles away: far outside hand reach.
+
+    const before = state.trace.length;
+    run(state, [
+      {
+        type: 'WalkAndAct',
+        action: IntentAction.UseRepairKit,
+        tileX: 20,
+        tileY: 20,
+        item: 0,
+        count: 0,
+      },
+    ]);
+    expect(state.player.intent).not.toBeNull();
+
+    let walked = 0;
+    while (state.player.intent !== null && walked < 1000) {
+      run(state, []);
+      walked++;
+    }
+
+    // The walk has to be real, and the arrival has to be the same event as a direct click:
+    // machine restored, kit spent, stats counted, and exactly ONE trace entry for all of it.
+    expect(walked).toBeGreaterThan(1);
+    expect(machine.condition).toBe(CONDITION_MAX);
+    expect(itemCount(state, ItemId.RepairKit)).toBe(0);
+    expect(state.stats.repairKitsUsed).toBe(1);
+    expect(state.trace.length - before).toBe(1);
+    expect(state.trace[state.trace.length - 1]!.command.type).toBe('WalkAndAct');
+  });
+
   it('refuses a kit that would do nothing rather than eating it', () => {
     // Misplacement is never a fine (plan §4). A misclick that silently spent $8 would teach
     // the player to distrust the tool.
@@ -966,6 +1006,43 @@ describe('belts', () => {
     stepMany(state, 500);
     expect(belt.items).toHaveLength(3);
     expect(belt.items[2]!.dist).toBe(3 * SUBTILE - 1);
+  });
+
+  // Item 026 instruction 4: the flow LOD's scroll rate rides this field instead of the
+  // renderer's occupancy estimate. The two properties lod.ts calls load-bearing are pinned
+  // here at the source: an empty belt reads zero, and a full one reads its real speed.
+  it('publishes throughput as speed scaled by occupancy — zero empty, tier speed full', () => {
+    const state = createWorld(90);
+    const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 1)!;
+
+    // AN EMPTY BELT READS ZERO. A stalled line must not scroll; spotting the stopped
+    // segment is the far view's whole job.
+    expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(0);
+
+    // One item in four shoulder-to-shoulder slots: a quarter of the tier's 320.
+    beltInsert(belt, 0, ItemId.RussetPotato);
+    expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(80);
+
+    // Packed solid: exactly the tier speed, never more — a surface outrunning its goods
+    // would be a lie told at the zoom where the player reads circulation.
+    beltInsert(belt, 64, ItemId.RussetPotato);
+    beltInsert(belt, 128, ItemId.RussetPotato);
+    beltInsert(belt, 192, ItemId.RussetPotato);
+    expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(320);
+  });
+
+  it('reads throughput, not velocity: a trickle on an express loses to a packed basic', () => {
+    const state = createWorld(91);
+    const basic = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 1)!;
+    const express = spawnBelt(state, BeltTier.Express, 0, 2, Direction.East, 4)!;
+    for (let slot = 0; slot < 4; slot++) beltInsert(basic, slot * 64, ItemId.RussetPotato);
+    beltInsert(express, 0, ItemId.RussetPotato); // One item on sixteen slots.
+
+    const projected = view(state, createWorldView());
+    const full = projected.belts[0]!.throughputSubtilesPer100Ticks;
+    const trickle = projected.belts[1]!.throughputSubtilesPer100Ticks;
+    expect(trickle).toBeGreaterThan(0);
+    expect(trickle).toBeLessThan(full); // A fast belt carrying almost nothing is not busy.
   });
 });
 

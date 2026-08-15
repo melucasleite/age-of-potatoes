@@ -178,6 +178,44 @@ describe('the save round trip', () => {
     expect(restored.player.intent).toBeNull();
   });
 
+  it('carries a kit errand through the round trip — UseRepairKit is on the allowlist', () => {
+    // The errand allowlist in `canonical.ts` is hand-written, exactly like `MACHINE_KINDS`,
+    // and this is the same failure made cheap: a save written mid-walk with the kit armed
+    // must not be refused by a loader whose list stopped at RefillCan.
+    const state = createWorld(64);
+    step(state, {
+      tick: state.tick,
+      commands: [
+        {
+          type: 'WalkAndAct',
+          action: IntentAction.UseRepairKit,
+          tileX: 30,
+          tileY: 30,
+          item: 0,
+          count: 0,
+        },
+      ],
+    });
+    expect(state.player.intent).not.toBeNull();
+
+    const restored = restoreWorld(throughJson(serialize(state))).state;
+    expect(restored.player.intent!.action).toBe(IntentAction.UseRepairKit);
+    expect(hashState(restored)).toBe(hashState(state));
+  });
+
+  it('leaves the pour signal behind: presentation data does not survive a save', () => {
+    // `CropTile.lastPouredTick` is deliberately outside the payload and outside the hash —
+    // a pour that happened before the save owes no droplets after it. Two worlds differing
+    // only there are the same world, and the round trip proves it by hashing identically
+    // while the signal comes back zeroed.
+    const state = playedWorld();
+    state.field[0]!.lastPouredTick = 4_242;
+
+    const restored = restoreWorld(throughJson(serialize(state))).state;
+    expect(restored.field[0]!.lastPouredTick).toBe(0);
+    expect(hashState(restored)).toBe(hashState(state));
+  });
+
   it('writes no errand as null rather than as a zeroed row', () => {
     const payload = serialize(playedWorld()).payload as { player: { intent: unknown } };
     expect(payload.player.intent).toBeNull();

@@ -76,6 +76,16 @@ export const TechId = {
 
   /** Washer and Slicer — the front half of the chip line. */
   WashAndSlice: 'fabrication-wash-and-slice',
+  /**
+   * Diagnostics: the ranked list of machines by cash bled in the last 60 seconds, and the
+   * Maintenance Station that acts on what the list says.
+   *
+   * A VERB UNLOCK LIKE EVERY NODE HERE — it makes a panel and a machine legal, and carries no
+   * number. §5's readability rules describe the panel exactly: last-60s figures on an object,
+   * phrased in cash, a ranked list of bleeding machines and never a dashboard of graphs. The
+   * sim's half is `MachineView.bleedCentsLast60s`; the list itself is the HUD's.
+   */
+  Diagnostics: 'fabrication-diagnostics',
   /** The Fryer. Flashiest machine in the game and deliberately the bottleneck. */
   Fryer: 'fabrication-fryer',
   /** Seasoner and Bagger — the back half. */
@@ -114,6 +124,15 @@ export const TechId = {
    * writes — neither is a thing research touches.
    */
   Trucking: 'commerce-trucking',
+  /**
+   * Repair drones: the Drone Bay, the Parts Bench, and the drone part recipe — the capstone of
+   * plan §3's Commerce & Operations column, and **THE THIRD NAMED JOINT, FINALLY MADE**:
+   * *"drones need diagnostics AND trucking."* You cannot buy a machine that dispatches flying
+   * service vehicles before you have read a diagnosis or dispatched a vehicle; both
+   * prerequisites are real nodes, exactly as §3 demands, and `TECH_NODES`' header comment has
+   * been promising this line since the branch shipped.
+   */
+  Drones: 'commerce-repair-drones',
 
   // The soda wing (plan §8's v0.5). It hangs off HYDRAULICS rather than fabrication, and that
   // is the interlock plan §3 asks for: soda is a pipe organ, so a player who never laid a pipe
@@ -236,13 +255,10 @@ export interface TechNode {
  * something that exists — chips lead soda by half an era (plan §3), and Hydraulics, which was
  * once declared and empty, now carries the plumbing and the whole soda wing.
  *
- * **THE ONE JOINT PLAN §3 NAMES THAT IS NOT HERE: "drones need diagnostics *and* trucking".**
- * Trucking exists and is standing ready; there is no drone and no diagnostics verb, and a
- * capstone that unlocked a machine nobody has built would be exactly the lie the Hydraulics
- * branch was left empty to avoid. Item 039 (*waiting*) builds the Maintenance Station and the
- * drones; the joint gets made in the same commit they do, and `TechId.Trucking`'s comment already
- * says so. Two of the three joints are real today: sprinklers need pipes, and bottling needs
- * fluids and belts.
+ * **ALL THREE OF PLAN §3'S NAMED JOINTS ARE NOW REAL**: sprinklers need pipes, bottling needs
+ * fluids and belts, and — as of item 039 — drones need diagnostics *and* trucking. The joint
+ * was made in the same commit as the machines it gates, exactly as this comment used to
+ * promise it would be.
  */
 export const TECH_NODES: readonly TechNode[] = [
   {
@@ -551,6 +567,31 @@ export const TECH_NODES: readonly TechNode[] = [
     branch: TechBranch.Agronomy,
     priceCents: 300_000,
     requires: [TechId.AgriBots, TechId.AutoReplant],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+
+  // --- automated maintenance (item 039) ---------------------------------------------------
+  {
+    // Behind the Assembly Charter rather than a cheaper gate, because a ranked list of
+    // bleeding machines means nothing on a lot with two machines: the player this node serves
+    // is the one whose factory is big enough that "which machine is costing me most" is a real
+    // question. Priced level with the Hub — an era-3 information tool, not a capstone.
+    id: TechId.Diagnostics,
+    branch: TechBranch.Fabrication,
+    priceCents: 120_000,
+    requires: [TechId.AssemblyCharter],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    // **THE CAPSTONE, AND §3'S THIRD JOINT: diagnostics AND trucking.** Fantasy-correct on both
+    // legs — a drone is a dispatched vehicle aimed by a diagnosis. Priced above the AgriBots
+    // node: the last thing the tree sells is the factory that keeps the factory alive.
+    id: TechId.Drones,
+    branch: TechBranch.Commerce,
+    priceCents: 500_000,
+    requires: [TechId.Diagnostics, TechId.Trucking],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },
