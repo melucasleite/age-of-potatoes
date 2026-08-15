@@ -1,17 +1,26 @@
 {
   "id": "player_walk_down",
   "provider": "retro-diffusion",
-  "model": "rd_fast",
-  "seed": 886411752,
-  "prompt": "two walk frames of the same farmer character side by side, left to right, both facing the viewer, chunky simple body, wide straw hat, brown overalls, arms at sides, the legs swapped between the two frames, identical character and colours in both frames, evenly spaced in two equal cells, feet on the bottom edge, transparent background, no text",
-  "promptStyle": "rd_fast__default",
+  "model": "rd_plus",
+  "seed": 1369170674,
+  "prompt": "the same farmer character seen from behind in every frame, walking away from the viewer, showing the back of a wide yellow straw hat, a blue shirt, brown overalls with two straps crossing the back, chunky simple body, short stubby arms and legs, identical character and colours in every frame, feet on the bottom edge, no face visible, transparent background, no text",
+  "promptStyle": "rd_animation__four_angle_walking",
   "native": {
     "width": 32,
     "height": 16
   },
   "requested": {
-    "width": 128,
-    "height": 64
+    "width": 48,
+    "height": 48
+  },
+  "animation": {
+    "frames": 2,
+    "framesRequested": 4,
+    "frameSize": 48,
+    "keptFrames": [8, 10],
+    "discardRule": "sheetCells at time of purchase \u2014 the live selection is art/manifest.json",
+    "takes": 1,
+    "geometry": "sheet accepted: 4x4 cells of 48px, cell choice deferred to cook"
   },
   "removeBg": true,
   "tileX": false,
@@ -19,6 +28,7 @@
   "palette": "palette/master.json",
   "anchor": "top-left",
   "atlasGroup": "player",
-  "costUsd": 0.018,
-  "generatedAt": "2026-08-12T18:55:46.507Z"
+  "costUsd": 0,
+  "generatedAt": "2026-08-15T05:06:57.315Z",
+  "note": "byte copy of player_walk_up.png \u2014 one four-angle sheet (seed 1369170674, $0.07, recorded on player_walk_up) is harvested into all three walk strips so every facing shows the same farmer"
 }
