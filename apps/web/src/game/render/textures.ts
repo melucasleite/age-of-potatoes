@@ -56,6 +56,7 @@ export const ART = {
   groundGrassC: 'ground_grass_c',
   groundLot: 'ground_lot',
   groundField: 'ground_field',
+  groundWater: 'terrain_water',
   soilWet: 'soil_wet',
   cropStage: (crop: number, stage: number) =>
     `crop_${CROP_SLUG.get(crop) ?? 'russet_potato'}_${stage}`,
@@ -538,6 +539,9 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   [ART.groundGrassC]: { paint: grassTile(19) },
 
   [ART.groundLot]: { paint: (g) => speckle(g, PALETTE.lot, PALETTE.lotDark, 3) },
+  // The pond's no-atlas fallback. The real `terrain_water` frame ships in the packed atlas,
+  // so this paint only ever shows on a build with no art at all — same rule as the pawns.
+  [ART.groundWater]: { paint: (g) => speckle(g, PALETTE.water, 0x4fa3d1, 11) },
 
   [ART.groundField]: {
     paint: (g) => {

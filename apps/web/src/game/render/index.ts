@@ -22,6 +22,7 @@ import {
   WiltStage,
   itemSpec,
   machineSpec,
+  worldTileKey,
 } from '@snack/sim';
 import type { GrabberView, MachineView, WorldView } from '@snack/sim';
 
@@ -118,6 +119,22 @@ export function render(
   //    So it re-bakes the whole map rather than diffing tiles — the wash and the fence line
   //    both move, on both sides of a boundary sixteen tiles long, and `drainDirty` spreads the
   //    cost over the next few frames anyway.
+  //    THE WATER SYNC IS THE CHEAPEST OF THE LOT: reservoirs never move and never resize,
+  //    so their count is the whole signature. In practice this fires exactly once, on the
+  //    first projection after a world loads — and until it fired, the pond had never been
+  //    drawn at all: the view carried the rectangles since [[027]] and no renderer read them.
+  if (view.reservoirs.length !== scene.reservoirStamp) {
+    scene.reservoirStamp = view.reservoirs.length;
+    scene.water.clear();
+    for (const r of view.reservoirs) {
+      for (let ty = r.tileY; ty < r.tileY + r.tilesHigh; ty++) {
+        for (let tx = r.tileX; tx < r.tileX + r.tilesWide; tx++) {
+          scene.water.add(worldTileKey(tx, ty));
+          scene.terrain.markTileDirty(tx, ty);
+        }
+      }
+    }
+  }
   scene.fieldTiles.sync(view.field, scene.farmland, (tileX, tileY) =>
     scene.terrain.markTileDirty(tileX, tileY),
   );

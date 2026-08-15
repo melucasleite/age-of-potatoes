@@ -119,6 +119,17 @@ export interface WorldScene {
    * Renderer-local and write-once-per-till; never a reference into the projection.
    */
   readonly farmland: Set<number>;
+  /**
+   * Every water tile's world key — the ponds. [[027]] built the reservoirs and the view has
+   * carried their rectangles ever since, but no renderer ever consumed them: the pond was
+   * invisible for as long as the infinite can made nobody go looking for it. The 8-pour can
+   * ([[009]]) ended that, and the can chip now points at a shore the player deserves to see.
+   * Synced from `view.reservoirs` in `render()`; reservoirs never move or resize, so the
+   * sync fires when one appears (world load, in practice) and marks its tiles dirty.
+   */
+  readonly water: Set<number>;
+  /** How many reservoirs the water set was last built from. -1 forces the first sync. */
+  reservoirStamp: number;
   readonly machines: Map<number, MachineVisual>;
   readonly player: Sprite;
   /**
@@ -182,8 +193,18 @@ export interface WorldScene {
  * still fixed decoration, still deterministic per position, so a re-bake is pixel-identical
  * to the bake it replaced everywhere the dirt did not move.
  */
-function groundNameAt(farmland: ReadonlySet<number>, tileX: number, tileY: number): string {
-  if (farmland.has(worldTileKey(tileX, tileY))) return ART.groundField;
+function groundNameAt(
+  farmland: ReadonlySet<number>,
+  water: ReadonlySet<number>,
+  tileX: number,
+  tileY: number,
+): string {
+  const tileKey = worldTileKey(tileX, tileY);
+  // Water outranks everything: a pond tile is a pond tile even if a stale farmland key ever
+  // pointed at it — the sim refuses to till open water, so a disagreement here means a bug
+  // upstream, and drawing the water is the honest way to make that bug visible.
+  if (water.has(tileKey)) return ART.groundWater;
+  if (farmland.has(tileKey)) return ART.groundField;
 
   // The yard: a dirt strip south of the STARTING field where the stand sits. Cosmetic and
   // frozen — the constants name where the v0.1 lot put its furniture, not where farmland is.
@@ -242,9 +263,10 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   // until the first projection arrives — and the first bake only runs inside `render()`,
   // after the first sync, so the opening frame already knows where the dirt is.
   const farmland = new Set<number>();
+  const water = new Set<number>();
 
   const source: TerrainSource = {
-    ground: (tileX, tileY) => art.get(groundNameAt(farmland, tileX, tileY)),
+    ground: (tileX, tileY) => art.get(groundNameAt(farmland, water, tileX, tileY)),
     // LAND OUTRANKS ZONES, and the two can never actually meet: zone paint exists only on
     // field tiles and the field is inside the starting parcel, which every world owns. The
     // order is written down anyway, because "these two cannot collide" is exactly the kind of
@@ -414,6 +436,8 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     dayNight,
     fieldTiles,
     farmland,
+    water,
+    reservoirStamp: -1,
     machines: new Map(),
     player,
     heldToolBack,
