@@ -42,6 +42,17 @@
 // The two kinds are two sets of frames rather than one tinted set, and that is the art's call
 // rather than this file's: a harvester carries a basket and a planter carries a seed funnel,
 // which is a silhouette difference, and no tint produces a silhouette.
+//
+// ── THE REPAIR DRONE IS THE ONE THAT FLIES ([[039]]) ────────────────────────────────────
+//
+// Same `BotView`, same `stepToward` in the sim, same interpolation here — one movement
+// implementation on both sides of the seam, which is item 039's own rule. What differs is
+// entirely presentational: the art is ONE 16×16 frame rather than walk strips (no feet, no
+// footfall), it rides a few pixels above the ground with a slow wall-clock bob so it reads
+// as hovering rather than standing, and while its phase is `Working` a wrench swings beside
+// it — repair-in-progress legible at a glance, from across the lot, without opening a card.
+// The bob and the swing are cosmetic wall-clock animation, legal on this side of the seam
+// and fed the frame's ONE `performance.now()` reading by the caller (see `index.ts`).
 
 import { TILE_PX } from './pixel';
 
@@ -79,12 +90,31 @@ const KIND_SLUG: Readonly<Record<number, string>> = {
   [BotKind.Planter]: 'planter',
 };
 
+/** How far above its tile the drone hovers, in source px, before the bob. */
+const DRONE_HOVER_PX = 5;
+
+/** The bob's reach and pace. Slow and shallow: a machine holding station, not a bee. */
+const DRONE_BOB_PX = 1.5;
+const DRONE_BOB_MS = 280;
+
+/** The service wrench's swing, in radians, and how fast it works. */
+const TOOL_SWING = 0.55;
+const TOOL_SWING_MS = 90;
+
 interface BotVisual {
   body: Sprite;
   /** What it is carrying, over its head. Hidden the whole way out; drawn the whole way back. */
   cargo: Sprite;
   /** The same wrench a worn machine wears, in the same corner of the same footprint. */
   wrench: Sprite;
+  /**
+   * The drone's SERVICE wrench, swinging while it works — a different sprite from `wrench`
+   * above on purpose, because they say opposite things: `wrench` parked in the status corner
+   * means "this bot needs maintenance", and this one swinging beside the drone means "this
+   * drone is performing it". Overloading one sprite with both would put the game's
+   * maintenance vocabulary at war with itself on its own repair vehicle.
+   */
+  tool: Sprite;
   /** Subtile position at the previous tick and at the current one. Write-only (§12). */
   prevXSub: number;
   prevYSub: number;
@@ -124,7 +154,7 @@ export class BotLayer {
     }
   }
 
-  update(view: WorldView, alpha: number, rect: WorldRect): void {
+  update(view: WorldView, alpha: number, rect: WorldRect, nowMs: number): void {
     const seen = new Set<number>();
 
     for (let i = 0; i < view.bots.length; i++) {
@@ -151,23 +181,41 @@ export class BotLayer {
         worldX - TILE_PX < rect.x + rect.width &&
         worldY + TILE_PX > rect.y &&
         worldY - TILE_PX < rect.y + rect.height;
+      const working = bot.phase === BotPhase.Working;
       visual.body.visible = visible;
       visual.cargo.visible = visible && bot.carryCount > 0;
       visual.wrench.visible = visible && bot.condition < CONDITION_EFFECT_THRESHOLD;
+      visual.tool.visible = visible && bot.kind === BotKind.Repair && working;
       if (!visible) continue;
 
       const drawX = Math.round(worldX);
       const drawY = Math.round(worldY) + TILE_PX / 2;
 
-      // A standing bot holds step 1 rather than freezing on whichever foot it happened to
-      // stop on: a robot parked mid-stride looks broken, and `phase` already knows.
-      const step = walking(bot.phase) ? stridePhase(bot) + 1 : 1;
-      const kind = KIND_SLUG[bot.kind] ?? 'harvester';
-      visual.body.texture = this.art.get(ART.bot(kind, poseFor(bot.facing), step));
-      // East is the side pose mirrored. Anchored at 0.5 across, so the flip is about the
-      // bot's own centre line and it does not shuffle sideways when it turns around.
-      visual.body.scale.x = bot.facing === Direction.East ? -1 : 1;
-      visual.body.position.set(drawX, drawY);
+      if (bot.kind === BotKind.Repair) {
+        // The drone: one frame, hovering. The bob rides the frame's shared wall clock and
+        // the sprite still lands on whole source pixels, same shimmer rule as everything.
+        visual.body.texture = this.art.get(ART.botRepairDrone);
+        visual.body.scale.x = bot.facing === Direction.East ? -1 : 1;
+        const bob = Math.round(Math.sin(nowMs / DRONE_BOB_MS + bot.id) * DRONE_BOB_PX);
+        visual.body.position.set(drawX, drawY - DRONE_HOVER_PX + bob);
+
+        // Repair in progress, at a glance: the wrench swings beside the hovering drone for
+        // as long as the sim says the service is running, and not a frame longer.
+        if (working) {
+          visual.tool.position.set(drawX + 6, drawY - DRONE_HOVER_PX - 2);
+          visual.tool.rotation = Math.sin(nowMs / TOOL_SWING_MS) * TOOL_SWING;
+        }
+      } else {
+        // A standing bot holds step 1 rather than freezing on whichever foot it happened to
+        // stop on: a robot parked mid-stride looks broken, and `phase` already knows.
+        const step = walking(bot.phase) ? stridePhase(bot) + 1 : 1;
+        const kind = KIND_SLUG[bot.kind] ?? 'harvester';
+        visual.body.texture = this.art.get(ART.bot(kind, poseFor(bot.facing), step));
+        // East is the side pose mirrored. Anchored at 0.5 across, so the flip is about the
+        // bot's own centre line and it does not shuffle sideways when it turns around.
+        visual.body.scale.x = bot.facing === Direction.East ? -1 : 1;
+        visual.body.position.set(drawX, drawY);
+      }
 
       if (bot.carryCount > 0) {
         visual.cargo.texture = this.items.texture(bot.carryItem);
@@ -195,8 +243,12 @@ export class BotLayer {
   }
 
   private build(bot: BotView): BotVisual {
-    const kind = KIND_SLUG[bot.kind] ?? 'harvester';
-    const body = new Sprite(this.art.get(ART.bot(kind, poseFor(bot.facing), 1)));
+    const body =
+      bot.kind === BotKind.Repair
+        ? new Sprite(this.art.get(ART.botRepairDrone))
+        : new Sprite(
+            this.art.get(ART.bot(KIND_SLUG[bot.kind] ?? 'harvester', poseFor(bot.facing), 1)),
+          );
     body.anchor.set(0.5, 1);
 
     const cargo = new Sprite(this.items.texture(bot.carryItem));
@@ -205,10 +257,16 @@ export class BotLayer {
     const wrench = new Sprite(this.art.get(ART.uiWrench));
     wrench.visible = false;
 
+    // Anchored at its middle so the service swing pivots the wrench rather than orbiting it.
+    const tool = new Sprite(this.art.get(ART.uiWrench));
+    tool.anchor.set(0.5, 0.5);
+    tool.visible = false;
+
     return {
       body,
       cargo,
       wrench,
+      tool,
       prevXSub: bot.xSub,
       prevYSub: bot.ySub,
       currXSub: bot.xSub,
@@ -255,6 +313,7 @@ function destroyVisual(visual: BotVisual): void {
   visual.body.destroy();
   visual.cargo.destroy();
   visual.wrench.destroy();
+  visual.tool.destroy();
 }
 
 export type { BotVisual };

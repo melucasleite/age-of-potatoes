@@ -108,6 +108,12 @@ export const ART = {
    */
   bot: (kind: string, facing: string, step: number) => `bot_${kind}_${facing}_${step}`,
   /**
+   * The repair drone ([[039]]): ONE 16×16 frame, not a walk strip, because it flies. No
+   * facing variants and no footfall — `bots.ts` mirrors it for east and bobs it on the wall
+   * clock instead, which is what a hovering machine does that a walking one does not.
+   */
+  botRepairDrone: 'bot_repair_drone',
+  /**
    * ONE SHAPE PER LAMP STATE, still tinted in code.
    *
    * §13's "one sprite, tinted" bought thirty machines' worth of state animation for the cost
@@ -1111,6 +1117,13 @@ const MACHINE_LOOKS: Record<string, MachinePaint> = {
   // seed sacks on the planter. The bot itself is drawn by `bots.ts` and is usually elsewhere.
   'harvester-dock': botDock(PALETTE.potato, 0xe8b53d),
   'planter-dock': botDock(0x6f7a3a, 0x7ed68e),
+
+  // The drone bay is the third dock, and it wears the dock silhouette on purpose: same shed,
+  // same open doorway, so "the thing that lives here is out working" reads before the player
+  // has ever seen the drone. Brass parts stacked outside, a red charge light — the repair
+  // drone's own capsule colour. PLACEHOLDER: the art lane has generated no `machine_drone_bay`
+  // sprite yet (item 039's handoff); when one lands in the atlas it wins automatically.
+  'drone-bay': botDock(0xb08d57, 0xe0674a),
 };
 
 /**

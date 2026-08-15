@@ -150,8 +150,6 @@ export interface WorldScene {
   prevYSub: number;
   currXSub: number;
   currYSub: number;
-  /** Last frame's moisture, to notice the sprinkler pouring and spray a few droplets. */
-  readonly lastMoisture: number[];
   /** True until the first projection has been folded in. */
   primed: boolean;
   /** Whether the day/night filter is currently attached. */
@@ -367,10 +365,11 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   // every other readout in the game, so a chip being carried passes IN FRONT of the farmer
   // rather than disappearing behind him, exactly as the harvest magnet does.
   const bots = new BotLayer(art, itemPage, (visual) => {
-    contentRoot.addChild(visual.body, visual.cargo, visual.wrench);
+    contentRoot.addChild(visual.body, visual.cargo, visual.wrench, visual.tool);
     layers.player.attach(visual.body);
     layers.worldUi.attach(visual.cargo);
     layers.worldUi.attach(visual.wrench);
+    layers.worldUi.attach(visual.tool);
   });
 
   // BEFORE anything that draws text. `BitmapText` resolves its font lazily, so a plaque built
@@ -434,7 +433,6 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     prevYSub: 0,
     currXSub: 0,
     currYSub: 0,
-    lastMoisture: new Array<number>(FIELD_TILE_COUNT).fill(0),
     primed: false,
     filterOn: false,
   };

@@ -2,9 +2,16 @@
 //
 // ── WHY THIS IS A DIFFER AND NOT A SIM EVENT CHANNEL ───────────────────────────────
 // Same reasoning as `audio/observer.ts`, and deliberately the same shape. The sim
-// publishes no "a tile was watered" or "a tile was harvested" event, and inventing one
-// would mean editing `packages/sim`. So both effects are derived from the projection the
-// sim already publishes: moisture that rose, and a ready crop that vanished.
+// publishes no per-tick event list, so both effects are derived from the projection it
+// already publishes: `lastPouredTick` that moved forward, and a ready crop that vanished.
+//
+// THE POUR IS A SIGNAL NOW, NOT AN INFERENCE (item 064). This file used to guess a pour
+// from a moisture RISE between frames, which was structurally blind to the one case the
+// item is named after: a pour on a saturated tile clamps, produces no rise, and played
+// nothing — a spent can charge with zero acknowledgement. `FieldView.lastPouredTick` is
+// written by the sim at every point water actually lands (hand can, sprinkler, Hub), so
+// "this tile's value is newer than last frame's" catches every pour including that one,
+// and never fires on a moisture rise that was not a pour.
 //
 // The property that matters is that this only ever READS. Item 009 is explicit that the
 // pop and the flight are "purely visual — the item is already in the sim inventory at the
@@ -50,9 +57,6 @@ const POP_MS = 620;
 /** How high the pop throws the potato, in world px, before the magnet takes over. */
 const POP_RISE = 13;
 
-/** A moisture rise larger than this permille counts as somebody pouring on the tile. */
-const POUR_RISE_PERMILLE = 40;
-
 interface Pop {
   sprite: Sprite;
   /** Milliseconds remaining. `<= 0` means this slot is free. */
@@ -90,11 +94,12 @@ export class FarmFx {
   private readonly bounceLife: number[] = [];
   private readonly bounceTotal: number[] = [];
 
-  /** Last frame's field, for the harvest diff. Owned here so the scene does not grow four. */
+  /** Last frame's field, for the harvest and pour diffs. Owned here, not on the scene. */
   private readonly prevReady: number[] = [];
   private readonly prevCrop: number[] = [];
   private readonly prevCompost: number[] = [];
   private readonly prevWilt: number[] = [];
+  private readonly prevPoured: number[] = [];
   private primed = false;
 
   /** Scratch, reused every frame so the getter allocates nothing. */
@@ -110,6 +115,7 @@ export class FarmFx {
       this.prevCrop.push(0);
       this.prevCompost.push(0);
       this.prevWilt.push(0);
+      this.prevPoured.push(0);
     }
 
     for (let i = 0; i < POP_POOL; i++) {
@@ -135,9 +141,15 @@ export class FarmFx {
    *
    * The FIRST call only snapshots. A world restored from disk arrives with a field full of
    * ripe crops and wet soil, and treating that as sixty-four simultaneous pours would open
-   * the save with the entire field convulsing.
+   * the save with the entire field convulsing. (Priming also covers a renderer torn down
+   * and rebuilt against a RUNNING world, whose pour ticks are already non-zero.)
+   *
+   * `onPour` fires once per tile whose pour signal moved forward this frame — the caller
+   * sprays the droplets there, so ONE diff still drives both halves of the feedback. The
+   * bounce is started here directly. One caveat, inherited from the signal itself: a pour
+   * applied at tick 0 equals the "never" sentinel, which no frame can precede anyway.
    */
-  observe(field: FieldView): void {
+  observe(field: FieldView, onPour?: (index: number) => void): void {
     const count = field.crop.length;
 
     if (!this.primed) {
@@ -150,6 +162,14 @@ export class FarmFx {
       const ready = field.ready[i] ?? 0;
       const crop = field.crop[i] ?? 0;
       const compost = field.compost[i] ?? 0;
+
+      // Water landed here since last frame — INCLUDING on a tile already at full moisture,
+      // which the old moisture-rise diff could not see and item 064 exists to fix.
+      const poured = field.lastPouredTick[i] ?? 0;
+      if (poured > (this.prevPoured[i] ?? 0)) {
+        this.pour(i);
+        if (onPour !== undefined) onPour(i);
+      }
 
       // A ready crop that vanished. The sim clears the tile outright on harvest, so "was
       // ripe, is gone" is unambiguous — EXCEPT for the one case where the crop collapsed
@@ -171,8 +191,8 @@ export class FarmFx {
   /**
    * A tile just drank. Bounce it.
    *
-   * Called by the field pass, which is already comparing moisture frame over frame to spray
-   * droplets — one diff, two effects, rather than a second pass over the same 64 numbers.
+   * Driven by the pour diff in `observe` — one diff, two effects, rather than a second
+   * pass over the same 64 numbers. Public so the test can pin the bounce curve directly.
    */
   pour(index: number): void {
     if (index < 0 || index >= this.bounceLife.length) return;
@@ -187,11 +207,6 @@ export class FarmFx {
     this.bounceTotal[index] = total;
     // Life runs past the total by the stagger; `bounceAt` holds at rest until it catches up.
     this.bounceLife[index] = total + Math.random() * 80;
-  }
-
-  /** Whether a moisture reading rose enough to count as a pour. Shared with the droplets. */
-  static isPour(moisture: number, previous: number): boolean {
-    return moisture > previous + POUR_RISE_PERMILLE;
   }
 
   /**
@@ -317,6 +332,7 @@ export class FarmFx {
       this.prevCrop[i] = field.crop[i] ?? 0;
       this.prevCompost[i] = field.compost[i] ?? 0;
       this.prevWilt[i] = field.wilt[i] ?? WiltStage.Fresh;
+      this.prevPoured[i] = field.lastPouredTick[i] ?? 0;
     }
   }
 }

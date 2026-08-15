@@ -5,8 +5,11 @@
 // `{ kindId, tileX, tileY }` through `view()`. That is a fine design and remains the
 // better one — but `packages/sim` belongs to another work item, and inventing a new field
 // on `WorldView` from here would collide with it. So this file derives the same
-// information from the projection the sim already publishes: moisture that rose, a crop
-// that stopped being ready, a tank that dropped, a progress bar that wrapped.
+// information from the projection the sim already publishes: a pour tick that moved, a
+// crop that stopped being ready, a tank that dropped, a progress bar that wrapped.
+// (The pour IS a real signal now — `FieldView.lastPouredTick`, item 064 — because the
+// moisture-rise diff it replaced was blind to a pour on an already-saturated tile: the
+// clamp produces no rise, and a spent can charge played nothing.)
 //
 // The important property is unchanged, and it is the only one that is load-bearing:
 // AUDIO READS SIM OUTPUT AND NEVER CALLS INTO THE SIM. A differ is, if anything, further
@@ -17,7 +20,7 @@
 // seam it feeds (`QueuedEvent` into the scheduler) does not move.
 //
 // ── WHAT IT WATCHES ────────────────────────────────────────────────────────────────
-//   moisture rises within arm's reach of the player  → a hand pour        (immediate)
+//   a pour lands within arm's reach of the player    → a hand pour        (immediate)
 //   `ready` 1→0 with the crop cleared                → a harvest          (immediate, streak)
 //   crop 0→something                                 → a seed going in    (immediate)
 //   `itemsSold` climbing                             → the ka-ching       (immediate)
@@ -53,9 +56,6 @@ const EDGE_GAIN = 0.55;
 /** Machines that may hold a part in the groove at once. Sorted nearest-first. */
 const MAX_ENSEMBLE = 8;
 
-/** A moisture reading must climb by more than this to count as water arriving. */
-const MOISTURE_RISE_PERMILLE = 20;
-
 /** Consecutive harvests inside this many ticks keep the pitch ladder climbing. 3 seconds. */
 const STREAK_WINDOW_TICKS = 60;
 
@@ -87,7 +87,7 @@ export class WorldObserver {
   private prevTick = -1;
   private initialized = false;
 
-  private readonly prevMoisture: number[] = [];
+  private readonly prevPoured: number[] = [];
   private readonly prevReady: number[] = [];
   private readonly prevCrop: number[] = [];
   private readonly prevMachines = new Map<number, MachineMemory>();
@@ -226,13 +226,14 @@ export class WorldObserver {
       const tileX = field.originX + (i % field.tilesWide);
       const tileY = field.originY + Math.floor(i / field.tilesWide);
 
-      const moisture = field.moisturePermille[i] ?? 0;
-      const wasMoisture = this.prevMoisture[i] ?? 0;
-      // A hand pour slams the tile to full; a sprinkler does the same to a 5×5 patch. The
-      // two are told apart by REACH rather than by counting tiles: only the player's own
-      // pour can land within arm's length of the player, and the sprinkler's own pour is
-      // detected far more precisely from its tank level in `diffMachines`.
-      if (moisture > wasMoisture + MOISTURE_RISE_PERMILLE && this.withinReach(view, tileX, tileY)) {
+      // The sim's own pour signal (item 064): newer than last frame means water landed
+      // here, INCLUDING on a tile already at full moisture — the case the old moisture
+      // diff missed and the whole reason the field exists. A hand pour and a sprinkler's
+      // are still told apart by REACH rather than by counting tiles: only the player's
+      // own pour can land within arm's length of the player, and the sprinkler's own pour
+      // is detected far more precisely from its tank level in `diffMachines`.
+      const poured = field.lastPouredTick[i] ?? 0;
+      if (poured > (this.prevPoured[i] ?? 0) && this.withinReach(view, tileX, tileY)) {
         this.emit(SoundId.WaterPour, view.tick, tileX, tileY, 1, 1, rect);
       }
 
@@ -492,11 +493,11 @@ export class WorldObserver {
     const field = view.field;
     const count = field.crop.length;
     for (let i = 0; i < count; i++) {
-      this.prevMoisture[i] = field.moisturePermille[i] ?? 0;
+      this.prevPoured[i] = field.lastPouredTick[i] ?? 0;
       this.prevReady[i] = field.ready[i] ?? 0;
       this.prevCrop[i] = field.crop[i] ?? 0;
     }
-    this.prevMoisture.length = count;
+    this.prevPoured.length = count;
     this.prevReady.length = count;
     this.prevCrop.length = count;
 

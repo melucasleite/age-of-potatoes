@@ -31,7 +31,6 @@ import { grabberAtView, tileAtView, tileWithinReach } from '../input/picking';
 import { bestSellable } from '../input/pointer';
 import { outcomePhrase, teardownTargetAt } from '../input/teardown';
 import { beltItemAtTile } from './belt-items';
-import { FarmFx } from './farm-fx';
 import { money } from './hud';
 import { junctionMask, junctionQuarterTurns } from './junction';
 import { LAMP_PX, lampAlpha, lampTint } from './lamps';
@@ -160,8 +159,9 @@ export function render(
   else scene.beltItems.clear();
   scene.grabbers.update(view, rect, nowMs);
   // The bots go with the arms rather than with the player above, because they are factory
-  // objects that happen to walk: same `alpha`, same cull rect, same pooled-visual shape.
-  scene.bots.update(view, alpha, rect);
+  // objects that happen to walk: same `alpha`, same cull rect, same pooled-visual shape —
+  // and the same `nowMs`, so the drone's hover bob breathes with the lamps beside it.
+  scene.bots.update(view, alpha, rect, nowMs);
 
   // 7. Machines, and then the vehicles among them: a cart's own readouts are in the commerce
   //    projection rather than on its `MachineView`, so they are applied as a second pass over
@@ -198,10 +198,15 @@ function updateField(
   const field = view.field;
   const now = performance.now();
 
-  // The harvest diff, before anything reads the field this frame. It spots a ripe crop that
-  // vanished and throws a potato at the player — see `farm-fx.ts` for why that is derived
-  // here rather than pushed by the sim, and for why it can never write anything back.
-  scene.farmFx.observe(field);
+  // The field diffs, before anything reads the field this frame. The harvest half spots a
+  // ripe crop that vanished and throws a potato at the player; the pour half reads the
+  // sim's own `lastPouredTick` signal (item 064) and fires the droplets and the
+  // drink-bounce — INCLUDING for a pour on a saturated tile, which the old moisture-rise
+  // inference was blind to. One diff, both effects; see `farm-fx.ts` for why it is a
+  // differ, and for why it can never write anything back.
+  scene.farmFx.observe(field, (i) =>
+    spawnDroplets(scene, i, field.originX, field.originY, field.tilesWide),
+  );
 
   for (let i = 0; i < scene.soil.length; i++) {
     const moisture = field.moisturePermille[i] ?? 0;
@@ -210,19 +215,6 @@ function updateField(
     // and immediately, which is the entire feedback loop the v0.1 design gate rests on.
     const wet = scene.soil[i]!;
     wet.alpha = (moisture / 1000) * 0.72;
-
-    // A rise in moisture means somebody — hand or sprinkler — just poured. Spray a few
-    // droplets, and bounce whatever is planted here: item 009's "plants bounce when they
-    // drink", which together with the darkening soil is the three-part feedback the design
-    // gate rests on. ONE diff drives both effects rather than two passes over 64 numbers.
-    // Cosmetic randomness lives in the renderer and uses `Math.random` freely (§12); it
-    // must never touch a sim RNG stream, and it does not.
-    const previous = scene.lastMoisture[i] ?? 0;
-    if (FarmFx.isPour(moisture, previous)) {
-      spawnDroplets(scene, i, field.originX, field.originY, field.tilesWide);
-      scene.farmFx.pour(i);
-    }
-    scene.lastMoisture[i] = moisture;
 
     // Compost is litter, not a plant: it shows whether or not anything is growing here,
     // because the tile it is lying on is usually the tile whose crop just collapsed.
@@ -1145,7 +1137,14 @@ function machineStatus(view: WorldView, m: MachineView): string {
     case LampState.Starved:
       return `${name} wants ${itemName(m.inputItem)}`;
     case LampState.UtilityMissing:
-      return 'barrel dry — click to refill';
+      // The same blue lamp means two different empties: a sprinkler's water barrel, and the
+      // drone bay's parts shelf ([[039]]). The bay's sentence names the real errand — parts
+      // cannot be bought, only made — because "click to refill" on a machine whose whole
+      // design is a supply chain would be a lie about how to fix it. (A click with parts in
+      // the bag still refills; the sentence is for the player who has none.)
+      return m.kind === MachineKind.DroneBay
+        ? 'drone bay out of parts — make them at the parts bench'
+        : 'barrel dry — click to refill';
     case LampState.Running:
       return m.kind === MachineKind.Sprinkler ? 'sprinkler running' : `${name} running`;
     default:

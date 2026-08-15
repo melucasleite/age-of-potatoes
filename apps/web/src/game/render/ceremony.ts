@@ -135,6 +135,26 @@ const COPY: Record<string, CeremonyCopy> = {
     subtitle: 'nobody has to walk the rows now',
     tint: 0xe8b53d,
   },
+  /**
+   * The first repair drone dispatch ([[039]]) — the tech tree's capstone, marked by the sim
+   * the moment a drone first leaves its bay.
+   *
+   * THE SUBTITLE IS §4'S OWN THESIS, almost word for word: "automation saves your hands, not
+   * the bill". Every other plaque here promises a chore ending; this one is honest that the
+   * cost stays — the drone burns manufactured parts, and the player just built a factory
+   * whose only product is keeping the rest of the factory alive. Saying so ON the plaque is
+   * the design speaking, not a caveat.
+   *
+   * Steel grey-blue, because the maintenance ladder has no colour yet and every neighbour is
+   * taken: the water ceremonies own the blues-with-saturation and the green, the truck owns
+   * timber red, the bot owns harvest amber — and the drone's own capsule red would read as
+   * the truck's plaque at a glance.
+   */
+  [CeremonyId.FirstDrone]: {
+    title: 'THE REPAIR DRONE',
+    subtitle: 'it saves your hands, not the bill',
+    tint: 0xaec6d4,
+  },
 };
 
 /**
@@ -571,6 +591,9 @@ function locate(id: string, view: WorldView): MachineView | null {
   // And the bot, for exactly the same reason: a dock waters nothing, so reached through the
   // coverage filter below the first harvest would have haloed a sprinkler and called it a robot.
   if (id === CeremonyId.FirstBot) return locateHarvesterDock(view);
+  // And the drone, whose bay waters nothing either. Same shape as the harvester's ceremony:
+  // frame the BAY, not the 16px vehicle that spends the whole show flying somewhere else.
+  if (id === CeremonyId.FirstDrone) return locateDroneBay(view);
 
   let fallback: MachineView | null = null;
 
@@ -644,6 +667,30 @@ function locateHarvesterDock(view: WorldView): MachineView | null {
   let fallback: MachineView | null = null;
   for (const machine of view.machines) {
     if (machine.kind !== MachineKind.HarvesterDock) continue;
+    if (machine.id === dockId) return machine;
+    if (fallback === null) fallback = machine;
+  }
+  return fallback;
+}
+
+/**
+ * The bay the drone that just launched came out of, or the first bay on the lot.
+ *
+ * `locateHarvesterDock`'s reasoning, applied to the third dock: found THROUGH the drone's own
+ * `dockId` so a lot with two bays haloes the one whose drone actually flew, and on the frame
+ * this ceremony fires the first repair bot in id order is the only one that can have launched.
+ */
+function locateDroneBay(view: WorldView): MachineView | null {
+  let dockId = 0;
+  for (const bot of view.bots) {
+    if (bot.kind !== BotKind.Repair) continue;
+    dockId = bot.dockId;
+    break;
+  }
+
+  let fallback: MachineView | null = null;
+  for (const machine of view.machines) {
+    if (machine.kind !== MachineKind.DroneBay) continue;
     if (machine.id === dockId) return machine;
     if (fallback === null) fallback = machine;
   }

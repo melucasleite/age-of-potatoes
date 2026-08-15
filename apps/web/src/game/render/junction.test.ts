@@ -36,6 +36,7 @@ function belt(tileX: number, tileY: number, dir: number, lengthTiles: number): B
     itemCount: 0,
     itemDist: [],
     itemType: [],
+    throughputSubtilesPer100Ticks: 0,
   };
 }
 

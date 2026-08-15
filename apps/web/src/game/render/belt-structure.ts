@@ -41,7 +41,7 @@ import {
 } from '@snack/sim';
 import type { WorldView } from '@snack/sim';
 
-import { beltFlowScrollPxPerSecond, beltLoadPermille } from '../input/lod';
+import { beltLoadPermille } from '../input/lod';
 import type { WorldRect } from './camera';
 import { beltSubtilesPerTick, stepX as dirStepX, stepY as dirStepY } from './directions';
 import { LAMP_TINT } from './lamps';
@@ -156,24 +156,21 @@ export class BeltStructureLayer {
 
       if (flow) {
         // Throughput, not velocity: a fast belt carrying four items an hour is not a busy
-        // belt. `beltFlowScrollPxPerSecond` owns that arithmetic — see `input/lod.ts`, where
-        // "an empty belt does not scroll" is stated as the property it must never lose.
+        // belt. THE SCROLL RATE NOW RIDES THE SIM'S OWN NUMBER — item 026 instruction 4
+        // landed `BeltView.throughputSubtilesPer100Ticks`, tier speed scaled by occupancy,
+        // computed beside the capacity rule it depends on and pinned at the source: an
+        // empty belt reads exactly 0 (so a stalled line STANDS STILL, the property the far
+        // view exists for) and a full belt exactly its tier speed. What is left here is
+        // unit conversion, subtiles-per-100-ticks into source px/sec — a full basic belt
+        // comes out at exactly the 4 px/sec `input/lod.test.ts` pins. The occupancy
+        // ESTIMATE (`beltLoadPermille`) survives only for the tint below, where "how alive
+        // does it look" is honestly a question about items present, not items moving.
+        const pxPerSecond =
+          (belt.throughputSubtilesPer100Ticks * TICKS_PER_SECOND * TILE_PX) / (100 * SUBTILE);
         const load = beltLoadPermille(
           belt.itemCount,
           belt.lengthTiles,
           SUBTILE,
-          BELT_ITEM_SPACING_SUBTILES,
-        );
-        const pxPerSecond = beltFlowScrollPxPerSecond(
-          // The helper takes the sim's own per-100-tick unit; `beltSubtilesPerTick` has
-          // already divided it down, so this puts it back rather than reading BELT_SPECS
-          // a second time and risking two answers.
-          beltSubtilesPerTick(belt.tier) * 100,
-          belt.itemCount,
-          belt.lengthTiles,
-          TICKS_PER_SECOND,
-          SUBTILE,
-          TILE_PX,
           BELT_ITEM_SPACING_SUBTILES,
         );
         const phase =

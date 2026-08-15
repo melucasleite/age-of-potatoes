@@ -56,6 +56,7 @@ function field(overrides: Partial<FieldView> = {}): FieldView {
     readyAge: new Array<number>(COUNT).fill(0),
     compost: new Array<number>(COUNT).fill(0),
     zone: new Array<number>(COUNT).fill(0),
+    lastPouredTick: new Array<number>(COUNT).fill(0),
     ...overrides,
   };
 }
@@ -102,14 +103,51 @@ describe('drink-bounce', () => {
     expect(fx.bounceAt(1).scaleX).toBe(1);
   });
 
-  it('only counts a real rise as a pour', () => {
-    // The threshold exists so that a tile drying out one permille at a time never reads as
-    // somebody watering it.
-    expect(FarmFx.isPour(1000, 0)).toBe(true);
-    expect(FarmFx.isPour(41, 0)).toBe(true);
-    expect(FarmFx.isPour(40, 0)).toBe(false);
-    expect(FarmFx.isPour(500, 500)).toBe(false);
-    expect(FarmFx.isPour(499, 500)).toBe(false);
+  // ── THE POUR SIGNAL (item 064) ──────────────────────────────────────────────────────
+  // The pour is read off `FieldView.lastPouredTick`, never inferred from moisture. The
+  // three tests below pin the three ways the old inference got it wrong: silent on a
+  // saturated tile, loud on a rise that was not a pour, and convulsing on a loaded save.
+
+  it('plays full feedback for a pour on an already-saturated tile', () => {
+    const fx = makeFx();
+    const poured: number[] = [];
+
+    // Soaked before and after — the clamp means moisture cannot move. Only the pour tick
+    // does, and that must be enough for the bounce AND the droplets.
+    fx.observe(field({ moisturePermille: [1000, 1000, 1000, 1000] }), (i) => poured.push(i));
+    fx.observe(
+      field({ moisturePermille: [1000, 1000, 1000, 1000], lastPouredTick: [50, 0, 0, 0] }),
+      (i) => poured.push(i),
+    );
+
+    expect(poured).toEqual([0]);
+    advance(fx, 140);
+    expect(fx.bounceAt(0).scaleX).not.toBe(1);
+  });
+
+  it('does not treat a moisture rise without a pour signal as a pour', () => {
+    // A rise the signal does not claim — this is the deleted inference, pinned dead.
+    const fx = makeFx();
+    const poured: number[] = [];
+
+    fx.observe(field(), (i) => poured.push(i));
+    fx.observe(field({ moisturePermille: [1000, 0, 0, 0] }), (i) => poured.push(i));
+
+    expect(poured).toEqual([]);
+    expect(fx.bounceAt(0).scaleX).toBe(1);
+  });
+
+  it('primes on the first frame instead of firing on old pour ticks', () => {
+    // A renderer rebuilt against a running world sees non-zero ticks on its first frame.
+    const fx = makeFx();
+    const poured: number[] = [];
+
+    fx.observe(field({ lastPouredTick: [40, 41, 42, 43] }), (i) => poured.push(i));
+    expect(poured).toEqual([]);
+
+    // The NEXT pour still lands.
+    fx.observe(field({ lastPouredTick: [40, 90, 42, 43] }), (i) => poured.push(i));
+    expect(poured).toEqual([1]);
   });
 });
 
