@@ -1,0 +1,24 @@
+{
+  "id": "tool_deconstruct",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1367453878,
+  "prompt": "a heavy sledgehammer lying diagonally across the frame, one thick wooden handle running from the bottom left up to the top right, one huge rectangular dark metal head crossways at the top end with a red band painted around its middle, game inventory item icon, chunky readable silhouette, bold dark outline all the way round, very large solid areas of flat colour, no thin lines, no small details, no nails, no cracks, no sparks, no debris, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-15T05:06:19.279Z"
+}

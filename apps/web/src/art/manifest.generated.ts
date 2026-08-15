@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.4db09a8c.png';
-export const ATLAS_JSON_URL = '/art/atlas.4db09a8c.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.69a1e8c2.png';
+export const ATLAS_JSON_URL = '/art/atlas.69a1e8c2.json';
 
 export const ATLAS_SIZE = { width: 1024, height: 512 } as const;
 
@@ -718,6 +718,14 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'player',
   },
+  player_walk_up: {
+    x: 66,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
   tech_agronomy_cane: {
     x: 0,
     y: 234,
@@ -885,6 +893,54 @@ export const ATLAS_FRAMES = {
     height: 16,
     anchor: 'top-left',
     group: 'terrain',
+  },
+  tool_deconstruct: {
+    x: 391,
+    y: 125,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  tool_hand: {
+    x: 408,
+    y: 125,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  tool_harvest: {
+    x: 425,
+    y: 125,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  tool_plant: {
+    x: 442,
+    y: 125,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  tool_till: {
+    x: 459,
+    y: 125,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  tool_water: {
+    x: 476,
+    y: 125,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
   },
   ui_font: {
     x: 0,

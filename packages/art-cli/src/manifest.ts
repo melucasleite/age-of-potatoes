@@ -57,6 +57,21 @@ export interface AssetEntry {
    * Absent on an entry, nothing changes: the plain single-sprite path is untouched.
    */
   frames?: number;
+  /**
+   * Sheet-harvest mode, for styles that SUBSTITUTE their own animation format. Measured
+   * (items 063/065): `rd_animation__small_sprites` ignores `frames_duration` and always
+   * returns a twenty-cell RPG character sheet — useless for a crop strip, exactly right for
+   * a character walk cycle. With `sheetCells`, that substitution is the point: the entry
+   * keeps exactly these row-major cell indices from whatever grid the style returns, in
+   * order, as its strip cells.
+   *
+   * The cell choice is a COOK-TIME selection from the committed raw sheet: `gen` gates only
+   * that the take is a real sheet on the style's frame grid (a wrong index is fixed by
+   * editing this array and re-cooking — no re-buy), while `cook` slices the named cells and
+   * runs the full cell-geometry gate on the result, every pack. Requires `frames`, and the
+   * array's length must equal it.
+   */
+  sheetCells?: readonly number[];
 }
 
 export interface ArtManifest {
@@ -153,6 +168,25 @@ function parseEntry(raw: unknown, index: number): AssetEntry {
       fail(where, 'declares "frames" without "trim": false — trimming slides cells off the grid');
     }
     parsed.frames = frames;
+  }
+
+  if (entry.sheetCells !== undefined) {
+    const cells = entry.sheetCells;
+    if (parsed.frames === undefined) {
+      fail(where, '"sheetCells" requires "frames" — it names which sheet cells become strip cells');
+    }
+    if (
+      !Array.isArray(cells) ||
+      cells.length !== parsed.frames ||
+      cells.some((cell) => typeof cell !== 'number' || !Number.isInteger(cell) || cell < 0)
+    ) {
+      fail(
+        where,
+        `"sheetCells" must be an array of exactly ${parsed.frames} non-negative integer ` +
+          'cell indices (row-major into the returned sheet)',
+      );
+    }
+    parsed.sheetCells = cells as number[];
   }
 
   return parsed;

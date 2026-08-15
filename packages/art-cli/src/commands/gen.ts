@@ -213,7 +213,32 @@ export async function gen(args: Args): Promise<number> {
       // billed); a geometry reject rolls a FRESH seed, because the picture itself is the
       // problem and same-session determinism would buy the identical failure again.
       let geometry: StripGeometryReport | null = null;
-      if (animation) {
+      if (animation && entry.sheetCells !== undefined) {
+        // Sheet-harvest mode: the style substitutes its own character-sheet format by
+        // design, so the take gate only asks "is this a real sheet on the style's frame
+        // grid?". Which cells ship is a cook-time selection from the committed original —
+        // inspect the sheet, name the cells, re-cook. A wrong index costs an edit, not a
+        // re-buy; the full cell-geometry gate still runs in `cook` on every pack.
+        const sheet = await decode(image);
+        const { frameSize } = animation;
+        if (sheet.width % frameSize !== 0 || sheet.height % frameSize !== 0) {
+          geometry = {
+            ok: false,
+            clusters: [],
+            message:
+              `provider returned ${sheet.width}x${sheet.height}, not a multiple of the ` +
+              `${frameSize}px frame — likely a GIF or a plain image, not a spritesheet`,
+          };
+        } else {
+          const cols = sheet.width / frameSize;
+          const rows = sheet.height / frameSize;
+          geometry = {
+            ok: true,
+            clusters: [],
+            message: `sheet accepted: ${cols}x${rows} cells of ${frameSize}px, cell choice deferred to cook`,
+          };
+        }
+      } else if (animation) {
         try {
           geometry = checkStripGeometry(
             reassembleStrip(await decode(image), animation, entry.id),
@@ -223,32 +248,32 @@ export async function gen(args: Args): Promise<number> {
           const message = error instanceof Error ? error.message : String(error);
           geometry = { ok: false, clusters: [], message };
         }
+      }
 
-        if (!geometry.ok) {
-          // The take was paid for either way — keep the receipt where a human can look.
-          const rejectedDir = resolve(REVIEW_DIR, 'rejected');
-          mkdirSync(rejectedDir, { recursive: true });
-          const receipt = `${entry.id}.take${take}.seed${result.seed ?? 'none'}`;
-          writeFileSync(resolve(rejectedDir, `${receipt}.png`), image);
-          console.warn(
-            `  gate  ${entry.id.padEnd(24)} take ${take} rejected: ${geometry.message}\n` +
-              `        receipt in art/review/rejected/${receipt}.png`,
-          );
+      if (geometry !== null && !geometry.ok) {
+        // The take was paid for either way — keep the receipt where a human can look.
+        const rejectedDir = resolve(REVIEW_DIR, 'rejected');
+        mkdirSync(rejectedDir, { recursive: true });
+        const receipt = `${entry.id}.take${take}.seed${result.seed ?? 'none'}`;
+        writeFileSync(resolve(rejectedDir, `${receipt}.png`), image);
+        console.warn(
+          `  gate  ${entry.id.padEnd(24)} take ${take} rejected: ${geometry.message}\n` +
+            `        receipt in art/review/rejected/${receipt}.png`,
+        );
 
-          if (entrySpent + result.cost > STRIP_RETRY_SPEND_CAP) {
-            failures.push({
-              id: entry.id,
-              message:
-                `geometry gate rejected ${take} take(s) for ${usd(entrySpent)}; another take ` +
-                `would pass the ${usd(STRIP_RETRY_SPEND_CAP)} per-strip cap. Aborted — see ` +
-                `art/review/rejected/ for the paid takes. Last: ${geometry.message}`,
-              billed: false,
-            });
-            return;
-          }
-          takeSeed = Math.floor(Math.random() * 2 ** 31);
-          continue;
+        if (entrySpent + result.cost > STRIP_RETRY_SPEND_CAP) {
+          failures.push({
+            id: entry.id,
+            message:
+              `geometry gate rejected ${take} take(s) for ${usd(entrySpent)}; another take ` +
+              `would pass the ${usd(STRIP_RETRY_SPEND_CAP)} per-strip cap. Aborted — see ` +
+              `art/review/rejected/ for the paid takes. Last: ${geometry.message}`,
+            billed: false,
+          });
+          return;
         }
+        takeSeed = Math.floor(Math.random() * 2 ** 31);
+        continue;
       }
 
       writeFileSync(originalPath(entry.id), image);
@@ -270,8 +295,10 @@ export async function gen(args: Args): Promise<number> {
                     frames: animation.frames,
                     framesRequested: animation.framesRequested,
                     frameSize: animation.frameSize,
-                    keptFrames: [...animation.keep],
-                    discardRule: 'first frames-1 requested frames, plus the last',
+                    keptFrames: [...(animation.cells ?? animation.keep)],
+                    discardRule: animation.cells
+                      ? 'sheetCells at time of purchase — the live selection is art/manifest.json'
+                      : 'first frames-1 requested frames, plus the last',
                     takes: take,
                     geometry: geometry?.message ?? null,
                   },

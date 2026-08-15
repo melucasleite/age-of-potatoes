@@ -45,6 +45,13 @@ export interface AnimationPlan {
    * kept frames, forever.
    */
   keep: readonly number[];
+  /**
+   * Sheet-harvest override (`entry.sheetCells`): the row-major cells to keep from a style
+   * that substitutes its own sheet format for the asked frame count. Null on ordinary strip
+   * entries. When set, `reassembleStrip` slices THESE cells and does not require the sheet's
+   * cell count to equal `framesRequested` — the substitution is the point, not a defect.
+   */
+  cells: readonly number[] | null;
 }
 
 /**
@@ -96,7 +103,15 @@ export function planAnimation(entry: AssetEntry): AnimationPlan {
     keep.push(framesRequested - 1);
   }
 
-  return { frames, framesRequested, frameSize, cell, factor: frameSize / cell, keep };
+  return {
+    frames,
+    framesRequested,
+    frameSize,
+    cell,
+    factor: frameSize / cell,
+    keep,
+    cells: entry.sheetCells ?? null,
+  };
 }
 
 /**
@@ -118,7 +133,7 @@ export function planAnimation(entry: AssetEntry): AnimationPlan {
  * the take; the geometry gate cannot judge subject matter, but this it can catch.
  */
 export function reassembleStrip(sheet: RawImage, plan: AnimationPlan, id: string): RawImage {
-  const { frameSize, framesRequested, keep } = plan;
+  const { frameSize, framesRequested, cells } = plan;
   if (sheet.width % frameSize !== 0 || sheet.height % frameSize !== 0) {
     throw new Error(
       `Asset "${id}": provider returned a ${sheet.width}x${sheet.height} sheet, not a multiple ` +
@@ -127,7 +142,20 @@ export function reassembleStrip(sheet: RawImage, plan: AnimationPlan, id: string
   }
   const cols = sheet.width / frameSize;
   const rows = sheet.height / frameSize;
-  if (cols * rows !== framesRequested) {
+
+  // Sheet-harvest mode (`sheetCells`): the style is EXPECTED to substitute its own sheet
+  // format, and the manifest names which of its cells ship. The only sheet requirement is
+  // that the named cells exist on the grid.
+  if (cells !== null) {
+    const outOfBounds = cells.filter((cell) => cell >= cols * rows);
+    if (outOfBounds.length > 0) {
+      throw new Error(
+        `Asset "${id}": sheetCells [${outOfBounds.join(', ')}] fall outside the returned ` +
+          `${cols}x${rows} sheet (${cols * rows} cells, row-major 0-${cols * rows - 1}). ` +
+          `Fix sheetCells in art/manifest.json against the committed sheet — no re-buy needed.`,
+      );
+    }
+  } else if (cols * rows !== framesRequested) {
     throw new Error(
       `Asset "${id}": sheet has ${cols}x${rows} = ${cols * rows} cell(s) but exactly ` +
         `${framesRequested} frame(s) were requested — the style substituted its own animation ` +
@@ -135,6 +163,7 @@ export function reassembleStrip(sheet: RawImage, plan: AnimationPlan, id: string
     );
   }
 
+  const keep = cells ?? plan.keep;
   const out: RawImage = {
     data: Buffer.alloc(keep.length * frameSize * frameSize * 4),
     width: keep.length * frameSize,

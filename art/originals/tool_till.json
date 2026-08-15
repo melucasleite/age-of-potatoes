@@ -1,0 +1,24 @@
+{
+  "id": "tool_till",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 819929886,
+  "prompt": "a garden hoe lying diagonally across the frame, one thick straight wooden handle running from the bottom left up to the top right, one wide flat dark metal blade bent sharply downward at the top end, game inventory item icon, chunky readable silhouette, bold dark outline all the way round, very large solid areas of flat colour, no thin lines, no small details, no rake teeth, no prongs, no soil, no plants, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-15T05:06:05.797Z"
+}

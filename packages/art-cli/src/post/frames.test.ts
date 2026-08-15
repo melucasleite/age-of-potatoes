@@ -70,6 +70,17 @@ describe('planAnimation', () => {
   });
 });
 
+describe('planAnimation — sheet-harvest opt-in', () => {
+  it('carries sheetCells into the plan', () => {
+    const plan = planAnimation(stripEntry({ frames: 2, width: 32, sheetCells: [15, 17] }));
+    expect(plan.cells).toEqual([15, 17]);
+  });
+
+  it('leaves cells null on ordinary strip entries', () => {
+    expect(planAnimation(stripEntry()).cells).toBeNull();
+  });
+});
+
 describe('reassembleStrip — the deterministic discard rule', () => {
   const plan: AnimationPlan = {
     frames: 5,
@@ -78,6 +89,7 @@ describe('reassembleStrip — the deterministic discard rule', () => {
     cell: 16,
     factor: 2,
     keep: [0, 1, 2, 3, 5],
+    cells: null,
   };
 
   it('slices a single-row sheet and drops the interior surplus frame', () => {
@@ -112,5 +124,39 @@ describe('reassembleStrip — the deterministic discard rule', () => {
     expect(() => reassembleStrip(sheet, plan, 'crop_test_strip')).toThrow(
       /substituted its own animation format/,
     );
+  });
+});
+
+describe('reassembleStrip — sheet-harvest mode (sheetCells)', () => {
+  const harvestPlan: AnimationPlan = {
+    frames: 2,
+    framesRequested: 4,
+    frameSize: 32,
+    cell: 16,
+    factor: 2,
+    keep: [0, 1],
+    cells: [15, 17],
+  };
+
+  it('harvests the named cells from the small_sprites twenty-cell character sheet', () => {
+    // The exact sheet the plain-strip path rejects above IS the expected input here: the
+    // style substitutes its walk-cycle format, and the manifest names which cells ship.
+    const sheet = numberedSheet(5, 4, 32);
+    const strip = reassembleStrip(sheet, harvestPlan, 'player_walk_up');
+    expect(strip.width).toBe(64);
+    expect(strip.height).toBe(32);
+    expect([0, 1].map((c) => frameIndexAtCell(strip, c, 32))).toEqual([15, 17]);
+  });
+
+  it('refuses a named cell that falls outside the returned grid', () => {
+    const sheet = numberedSheet(2, 2, 32);
+    expect(() => reassembleStrip(sheet, harvestPlan, 'player_walk_up')).toThrow(
+      /outside the returned 2x2 sheet/,
+    );
+  });
+
+  it('still refuses a sheet off the frame grid, cells or no cells', () => {
+    const sheet: RawImage = { data: Buffer.alloc(100 * 32 * 4), width: 100, height: 32 };
+    expect(() => reassembleStrip(sheet, harvestPlan, 'player_walk_up')).toThrow(/not a multiple/);
   });
 });

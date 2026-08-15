@@ -1,0 +1,24 @@
+{
+  "id": "tool_harvest",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1845947101,
+  "prompt": "a harvest sickle lying diagonally across the frame, one short thick wooden handle at the bottom right, one very wide fat curved silver crescent blade sweeping up to the top left, the blade broad and solid and thick, game inventory item icon, chunky readable silhouette, bold dark outline all the way round, very large solid areas of flat colour, no thin lines, no small details, no wheat, no grass, no rope, no bolts, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-15T05:06:15.253Z"
+}

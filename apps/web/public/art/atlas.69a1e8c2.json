@@ -1914,6 +1914,28 @@
       "anchorMode": "top-left",
       "group": "player"
     },
+    "player_walk_up": {
+      "frame": {
+        "x": 66,
+        "y": 209,
+        "w": 32,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "player"
+    },
     "tech_agronomy_cane": {
       "frame": {
         "x": 0,
@@ -2376,6 +2398,138 @@
       "anchorMode": "top-left",
       "group": "terrain"
     },
+    "tool_deconstruct": {
+      "frame": {
+        "x": 391,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "tool_hand": {
+      "frame": {
+        "x": 408,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "tool_harvest": {
+      "frame": {
+        "x": 425,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "tool_plant": {
+      "frame": {
+        "x": 442,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "tool_till": {
+      "frame": {
+        "x": 459,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "tool_water": {
+      "frame": {
+        "x": 476,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
     "ui_font": {
       "frame": {
         "x": 0,
@@ -2445,7 +2599,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.4db09a8c.png",
+    "image": "atlas.69a1e8c2.png",
     "format": "RGBA8888",
     "size": {
       "w": 1024,
@@ -2497,9 +2651,9 @@
         "group": "items",
         "x": 0,
         "y": 125,
-        "width": 390,
+        "width": 492,
         "height": 16,
-        "count": 23
+        "count": 29
       },
       {
         "group": "machines",
@@ -2529,9 +2683,9 @@
         "group": "player",
         "x": 0,
         "y": 209,
-        "width": 65,
+        "width": 98,
         "height": 16,
-        "count": 2
+        "count": 3
       },
       {
         "group": "status",
