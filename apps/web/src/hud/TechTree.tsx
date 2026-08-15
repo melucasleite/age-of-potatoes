@@ -121,55 +121,49 @@ export function TechPanel({ onClose }: { onClose: () => void }) {
     return new Set(BRANCH_ORDER.filter((branch) => !populated.has(branch)));
   }, [tech.cards]);
 
+  // No scrim any more ([[069]]): the panel renders inside the sidebar's contextual slot,
+  // the lot stays visible and clickable beside it, and closing is the ESC key or button —
+  // there is no backdrop left to click.
   return (
-    <div
-      className={s.scrim}
-      onMouseDown={(event) => {
-        // Only a click on the scrim ITSELF closes. Without the target check, a click that
-        // starts inside the panel and drifts onto the backdrop would dismiss it mid-read.
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div className={s.techPanel} onMouseDown={(event) => event.stopPropagation()}>
-        <div className={s.techHead}>
-          <span className={s.techTitle}>Research</span>
-          <span className={s.techEra}>
-            Era {eraCopy(tech.era).numeral} · {eraCopy(tech.era).name}
-          </span>
-          <span className={s.techCount}>
-            {tech.ownedCount} of {tech.cards.length} researched
-          </span>
-          <span className={s.techMoney}>{formatCents(economy.moneyCents)}</span>
-          <button type="button" className={s.techClose} onMouseDown={keepFocus} onClick={onClose}>
-            ESC
-          </button>
-        </div>
-
-        <div className={s.techScroll}>
-          {eras.map((era) => (
-            <EraBand
-              key={era}
-              era={era}
-              current={era === tech.era}
-              cards={tech.cards}
-              emptyBranches={emptyBranches}
-              selectedId={selected?.id ?? null}
-              onSelect={setSelectedId}
-            />
-          ))}
-        </div>
-
-        {selected === null ? null : (
-          <Detail
-            card={selected}
-            economy={economy}
-            pending={pending.isPending(selected.id)}
-            onResearch={research}
-          />
-        )}
-
-        <div className={s.techHint}>Every node unlocks something you can do · T or ESC closes</div>
+    <div className={s.techPanel}>
+      <div className={s.techHead}>
+        <span className={s.techTitle}>Research</span>
+        <span className={s.techEra}>
+          Era {eraCopy(tech.era).numeral} · {eraCopy(tech.era).name}
+        </span>
+        <span className={s.techCount}>
+          {tech.ownedCount} of {tech.cards.length} researched
+        </span>
+        <span className={s.techMoney}>{formatCents(economy.moneyCents)}</span>
+        <button type="button" className={s.techClose} onMouseDown={keepFocus} onClick={onClose}>
+          ESC
+        </button>
       </div>
+
+      <div className={s.techScroll}>
+        {eras.map((era) => (
+          <EraBand
+            key={era}
+            era={era}
+            current={era === tech.era}
+            cards={tech.cards}
+            emptyBranches={emptyBranches}
+            selectedId={selected?.id ?? null}
+            onSelect={setSelectedId}
+          />
+        ))}
+      </div>
+
+      {selected === null ? null : (
+        <Detail
+          card={selected}
+          economy={economy}
+          pending={pending.isPending(selected.id)}
+          onResearch={research}
+        />
+      )}
+
+      <div className={s.techHint}>Every node unlocks something you can do · T or ESC closes</div>
     </div>
   );
 }

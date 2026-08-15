@@ -23,6 +23,7 @@ import {
   ItemId,
   MachineKind,
   SUBTILE,
+  TillMode,
   createWorldView,
 } from '@snack/sim';
 import type { Command, WorldView } from '@snack/sim';
@@ -33,6 +34,9 @@ import {
   dragCommands,
   primaryCommand,
   reachAdjusted,
+  tillConverts,
+  tillModeFor,
+  walkFallback,
 } from './pointer';
 import { ToolMode } from './tools';
 
@@ -402,6 +406,158 @@ describe('the watering can refills on the Water tool ([[009]])', () => {
       tileX: 2,
       tileY: 1,
     });
+  });
+});
+
+/** Own the parcel a tile sits on, so standability stops refusing on ownership. */
+function owning(view: WorldView, parcel = 0): WorldView {
+  view.land.owned.push(parcel);
+  return view;
+}
+
+/**
+ * A view whose farmland is exactly `tiles`, in the sim's row-major world order — the shape
+ * `fieldIndexAtView` binary-searches (see `picking.test.ts`).
+ */
+function withFieldTiles(view: WorldView, tiles: readonly (readonly [number, number])[]): WorldView {
+  const sorted = [...tiles].sort(
+    (a, b) => a[1] * view.worldTilesWide + a[0] - (b[1] * view.worldTilesWide + b[0]),
+  );
+  view.field.count = sorted.length;
+  sorted.forEach(([x, y], i) => {
+    view.field.tileX[i] = x;
+    view.field.tileY[i] = y;
+  });
+  return view;
+}
+
+describe('click-to-walk, the dead-click fallback ([[070]])', () => {
+  // The dispatch ORDER is the contract: `onPointerDown` asks `primaryCommand`, then
+  // `counterPanelFor`, and only a click both declined reaches `walkFallback`. The cases
+  // below pin the fallback's own refusals, so even a future re-ordering cannot make it
+  // shadow a live click — it says null wherever a click could mean anything else.
+
+  it('walks to empty owned ground out of reach, with the Walk action and empty payload', () => {
+    const view = owning(standingOn(1, 1));
+    expect(walkFallback(view, FAR)).toEqual({
+      type: 'WalkAndAct',
+      action: IntentAction.Walk,
+      tileX: FAR.tileX,
+      tileY: FAR.tileY,
+      item: 0,
+      count: 0,
+    });
+  });
+
+  it('emits nothing within arm’s reach — the errand would complete on the spot', () => {
+    const view = owning(standingOn(4, 4));
+    expect(walkFallback(view, { tileX: 4, tileY: 5 })).toBeNull();
+  });
+
+  it('never walks onto a machine tile — the Hand declining it is not an invitation', () => {
+    const view = owning(withMachine(standingOn(1, 1), FAR.tileX, FAR.tileY, MachineKind.Fryer));
+    expect(walkFallback(view, FAR)).toBeNull();
+  });
+
+  it('never walks at a crop tile', () => {
+    const view = owning(withFieldTiles(standingOn(1, 1), [[FAR.tileX, FAR.tileY]]));
+    view.field.crop[0] = CropId.RussetPotato;
+    expect(walkFallback(view, FAR)).toBeNull();
+  });
+
+  it('refuses water and unowned land, exactly as the sim’s standability does', () => {
+    const unowned = standingOn(1, 1);
+    expect(walkFallback(unowned, FAR)).toBeNull();
+
+    const view = owning(standingOn(1, 1));
+    view.reservoirs.push({
+      id: 1,
+      tileX: FAR.tileX,
+      tileY: FAR.tileY,
+      tilesWide: 1,
+      tilesHigh: 1,
+    } as WorldView['reservoirs'][number]);
+    expect(walkFallback(view, FAR)).toBeNull();
+  });
+
+  it('walks to an EMPTY farm tile — dirt is a place too', () => {
+    const view = owning(withFieldTiles(standingOn(1, 1), [[FAR.tileX, FAR.tileY]]));
+    expect(walkFallback(view, FAR)).toMatchObject({ action: IntentAction.Walk });
+  });
+});
+
+describe('the till tool ([[066]])', () => {
+  function tillDrag(view: WorldView, anchor: [number, number], cursor: [number, number]) {
+    return dragCommands(
+      view,
+      {
+        pointerId: 1,
+        anchor: { tileX: anchor[0], tileY: anchor[1] },
+        cursor: { tileX: cursor[0], tileY: cursor[1] },
+        tool: ToolMode.Till,
+        flipped: false,
+      },
+      CropId.RussetPotato,
+    );
+  }
+
+  it('the anchor decides the mode: grass tills, farmland un-tills', () => {
+    const view = owning(withFieldTiles(createWorldView(), [[4, 4]]));
+    expect(tillModeFor(view, { tileX: 10, tileY: 10 })).toBe(TillMode.Till);
+    expect(tillModeFor(view, { tileX: 4, tileY: 4 })).toBe(TillMode.Untill);
+  });
+
+  it('one drag is ONE TillTile carrying the whole rect', () => {
+    const view = owning(createWorldView());
+    expect(tillDrag(view, [10, 10], [12, 11])).toEqual([
+      {
+        type: 'TillTile',
+        rect: { x: 10, y: 10, w: 3, h: 2 },
+        mode: TillMode.Till,
+      },
+    ]);
+  });
+
+  it('a click is a 1×1 drag, and an anchor on dirt asks for grass back', () => {
+    const view = owning(withFieldTiles(createWorldView(), [[4, 4]]));
+    expect(tillDrag(view, [4, 4], [4, 4])).toEqual([
+      { type: 'TillTile', rect: { x: 4, y: 4, w: 1, h: 1 }, mode: TillMode.Untill },
+    ]);
+  });
+
+  it('the ghost mirrors the reducer’s skips: occupied, unowned, water, already-converted', () => {
+    const view = owning(withFieldTiles(createWorldView(), [[4, 4]]));
+    withMachine(view, 10, 10, MachineKind.Fryer);
+    view.reservoirs.push({
+      id: 1,
+      tileX: 12,
+      tileY: 12,
+      tilesWide: 1,
+      tilesHigh: 1,
+    } as WorldView['reservoirs'][number]);
+
+    expect(tillConverts(view, 9, 9, TillMode.Till)).toBe(true); // owned grass
+    expect(tillConverts(view, 10, 10, TillMode.Till)).toBe(false); // machine
+    expect(tillConverts(view, 12, 12, TillMode.Till)).toBe(false); // water
+    expect(tillConverts(view, 40, 40, TillMode.Till)).toBe(false); // unowned parcel
+    expect(tillConverts(view, 4, 4, TillMode.Till)).toBe(false); // already farmland
+  });
+
+  it('un-till converts only EMPTY farmland — a planted or compost tile keeps its floor', () => {
+    const view = owning(
+      withFieldTiles(createWorldView(), [
+        [4, 4],
+        [5, 4],
+        [6, 4],
+      ]),
+    );
+    view.field.crop[1] = CropId.RussetPotato; // (5,4)
+    view.field.compost[2] = 1; // (6,4)
+
+    expect(tillConverts(view, 4, 4, TillMode.Untill)).toBe(true);
+    expect(tillConverts(view, 5, 4, TillMode.Untill)).toBe(false);
+    expect(tillConverts(view, 6, 4, TillMode.Untill)).toBe(false);
+    expect(tillConverts(view, 9, 9, TillMode.Untill)).toBe(false); // grass already
   });
 });
 

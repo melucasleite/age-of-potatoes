@@ -43,6 +43,19 @@ export const ToolMode = {
   PlaceSprinkler: 4,
   PlaceChipKitchen: 5,
 
+  /**
+   * The till ([[066]]): drag grass, get farmland; drag empty farmland, get grass back.
+   *
+   * A HAND TOOL, NOT A PURCHASE — free, indestructible, mandatory on the hotbar like the
+   * other five verbs, which is why it lives up here with them rather than in the build
+   * palette. One drag is ONE `TillTile` (zone-paint grammar, §16), and the ANCHOR decides
+   * the mode exactly as the anchor decides which zone a paint grows: press on grass and the
+   * drag tills, press on farmland and it un-tills. The sim skips per tile — occupied ground,
+   * planted or compost-bearing tiles — and soil quality stays roll-once-per-position-ever
+   * (`soilMemory`), so tilling is never a reroll.
+   */
+  Till: 34,
+
   // --- the build menu ---------------------------------------------------------------
   // Everything below is armed from the `B` palette, never from a digit key.
   PaintZone: 6,
@@ -229,6 +242,15 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     hint: 'click a ripe plant to pull it',
     costCents: 0,
     gesture: 'click',
+  },
+  [ToolMode.Till]: {
+    label: 'Till',
+    // Both halves of the verb in one sentence, because the anchor decides which one a drag
+    // means and the player should learn that here rather than by surprise.
+    hint: 'drag grass into farmland — start on dirt to turn it back',
+    costCents: 0,
+    // A rect, like zone painting: a click is a 1×1 drag, so single tiles still work.
+    gesture: 'rect',
   },
   [ToolMode.PlaceSprinkler]: {
     label: 'Buy Sprinkler',
@@ -586,6 +608,44 @@ export function toolCoverageVerb(tool: ToolMode): string {
   const kind = toolMachineKind(tool);
   const role = kind === null ? null : machineSpec(kind)?.role;
   return role === MachineRole.MaintenanceStation ? 'services' : 'waters';
+}
+
+/**
+ * ONE icon sprite per hand tool, Minecraft-style ([[065]]): the SAME atlas frame draws big
+ * in the tool's hotbar slot and small in the avatar's hands when armed, so what you see on
+ * the bar is what your character is holding — by construction, not by coincidence.
+ *
+ * The names are the art pipeline's own ids (`art/manifest.json`, `tool_*`, 16×16, on the
+ * items page). Resolution to atlas rectangles happens at each consumer — the HUD through
+ * `hud/item-art.ts`'s `resolveFrameIcon`, the renderer through its loaded atlas — and a
+ * frame the atlas has not packed yet degrades to the letter chip / nothing rather than
+ * magenta ([[037]]). This table is deliberately ONLY the mandatory hotbar verbs: item
+ * shortcuts already draw as their item, and placement cursors draw as their machine.
+ */
+const TOOL_ICON_FRAMES: Readonly<Partial<Record<ToolMode, string>>> = {
+  [ToolMode.Hand]: 'tool_hand',
+  [ToolMode.Water]: 'tool_water',
+  [ToolMode.Plant]: 'tool_plant',
+  [ToolMode.Harvest]: 'tool_harvest',
+  [ToolMode.Till]: 'tool_till',
+  [ToolMode.Deconstruct]: 'tool_deconstruct',
+};
+
+/** The slot art for a hand tool, or `''` for a tool that draws as something else. */
+export function toolIconFrame(tool: ToolMode): string {
+  return TOOL_ICON_FRAMES[tool] ?? '';
+}
+
+/**
+ * The frame the avatar HOLDS while this tool is armed, or `''` for empty hands.
+ *
+ * Identical to `toolIconFrame` for every tool except the Hand: the glove is the SLOT's
+ * picture of the default verb, but the default verb IS empty hands, and an avatar visibly
+ * clutching a second glove would be the overlay inventing an object the player never armed.
+ * The equality (minus that one exception) is pinned by the mapping test in `hotbar.test.ts`.
+ */
+export function toolHeldFrame(tool: ToolMode): string {
+  return tool === ToolMode.Hand ? '' : toolIconFrame(tool);
 }
 
 /** The footprint a placement tool will occupy, for the ghost. `null` when it has none. */

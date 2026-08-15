@@ -45,9 +45,9 @@ export interface TileQuery {
    * standing on it. Every build affordance reads this, and the sim re-checks all of it (§12).
    */
   owned: boolean;
-  /** True when the tile belongs to the 8×8 field. */
+  /** True when the tile is farmland — a live entry in the field's parallel arrays. */
   isField: boolean;
-  /** Row-major index into the field arrays, or -1. */
+  /** Index into the field's parallel arrays, or -1. Valid until the next till. */
   fieldIndex: number;
   crop: number;
   stage: number;
@@ -55,6 +55,8 @@ export interface TileQuery {
   dry: boolean;
   moisturePermille: number;
   fertility: number;
+  /** Compost lying on the tile. Refuses a field-placed machine exactly as a crop does. */
+  compost: number;
   /** The machine whose footprint covers this tile, if any. */
   machine: MachineView | null;
   /** Renderer-side hint only. The sim re-checks and harmlessly rejects (§12). */
@@ -114,13 +116,8 @@ export function tileAtView(v: WorldView, tileX: number, tileY: number): TileQuer
   const insideWorld =
     tileX >= 0 && tileY >= 0 && tileX < v.worldTilesWide && tileY < v.worldTilesHigh;
 
-  const isField =
-    tileX >= field.originX &&
-    tileY >= field.originY &&
-    tileX < field.originX + field.tilesWide &&
-    tileY < field.originY + field.tilesHigh;
-
-  const index = isField ? (tileY - field.originY) * field.tilesWide + (tileX - field.originX) : -1;
+  const index = fieldIndexAtView(v, tileX, tileY);
+  const isField = index >= 0;
 
   let machine: MachineView | null = null;
   for (let i = 0; i < v.machines.length; i++) {
@@ -152,9 +149,38 @@ export function tileAtView(v: WorldView, tileX: number, tileY: number): TileQuer
     dry: index >= 0 && field.dry[index] === 1,
     moisturePermille: index >= 0 ? (field.moisturePermille[index] ?? 0) : 0,
     fertility: index >= 0 ? (field.fertility[index] ?? 0) : 0,
+    compost: index >= 0 ? (field.compost[index] ?? 0) : 0,
     machine,
     withinReach: tileWithinReach(v, tileX, tileY),
   };
+}
+
+/**
+ * The farmland entry standing on a tile, or -1 — the projection-side twin of the sim's
+ * `fieldIndex(state, x, y)`.
+ *
+ * **NON-RECTANGULAR SINCE FORMAT 13** (the till tool, item 066): farmland is whatever the
+ * player has tilled, so membership is a lookup in the per-entry coordinate arrays, never
+ * rect arithmetic over `originX`/`tilesWide` — those four fields are the BOUNDING BOX, kept
+ * for framing and culling only, and indexing by them is wrong the moment a tile is tilled
+ * outside the box or un-tilled inside it (the standing debt `FieldView`'s header named).
+ *
+ * Binary search over the row-major world order the sim maintains (`worldTileKey` ascending),
+ * so the ribbon's per-pointer-move query and a drag's per-tile sweep stay O(log n).
+ */
+export function fieldIndexAtView(v: WorldView, tileX: number, tileY: number): number {
+  const field = v.field;
+  const key = tileY * v.worldTilesWide + tileX;
+  let lo = 0;
+  let hi = field.count - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const midKey = field.tileY[mid]! * v.worldTilesWide + field.tileX[mid]!;
+    if (midKey === key) return mid;
+    if (midKey < key) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return -1;
 }
 
 /**

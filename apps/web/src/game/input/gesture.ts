@@ -27,6 +27,8 @@ import {
   type CropId,
 } from '@snack/sim';
 
+import { fieldIndexAtView } from './picking';
+
 export interface TilePoint {
   tileX: number;
   tileY: number;
@@ -240,19 +242,15 @@ export function runLength(run: LineRun): number {
   return run.lengthTiles + run.turnLengthTiles;
 }
 
-/** The zone that owns a tile, or 0 for none. Reads the projection's plain arrays only. */
+/**
+ * The zone that owns a tile, or 0 for none. Reads the projection's plain arrays only —
+ * through the per-entry coordinate lookup, because farmland is non-rectangular since the
+ * till tool ([[066]]) and rect arithmetic over the bounding box finds the wrong tile the
+ * moment the field has a hole in it.
+ */
 export function zoneIdAt(view: WorldView, tileX: number, tileY: number): number {
-  const field = view.field;
-  if (
-    tileX < field.originX ||
-    tileY < field.originY ||
-    tileX >= field.originX + field.tilesWide ||
-    tileY >= field.originY + field.tilesHigh
-  ) {
-    return 0;
-  }
-  const index = (tileY - field.originY) * field.tilesWide + (tileX - field.originX);
-  return field.zone[index] ?? 0;
+  const index = fieldIndexAtView(view, tileX, tileY);
+  return index >= 0 ? (view.field.zone[index] ?? 0) : 0;
 }
 
 /**

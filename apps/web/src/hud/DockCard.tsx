@@ -4,7 +4,7 @@
 //
 // IT OPENS BECAUSE YOU WALKED OVER, exactly like the upgrade bench, and for the same reason: plan
 // §5's posture is that a machine is configured where it stands. Walk away and it closes itself.
-// The two cards share the `midRight` corner and can never both be there — the bench takes
+// The two cards share the sidebar's contextual slot and can never both be there — the bench takes
 // machines with a work cycle and this takes docks, which have none — so the corner shows whichever
 // machine you are actually at.
 //

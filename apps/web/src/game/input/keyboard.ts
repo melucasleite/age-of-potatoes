@@ -30,6 +30,7 @@
 
 import { Direction } from '@snack/sim';
 
+import { publishArmedTool } from './armed-tool';
 import type { InputHost } from './context';
 import { digitToSlotIndex, hotbar, itemPlaceTool } from './hotbar';
 import type { InputSystem } from './system';
@@ -147,7 +148,10 @@ export class KeyboardInput {
         // abandon the drag, put the tool down. Each step is one press.
         if (this.system.menuOpen) this.system.closeBuildMenu();
         else if (this.system.dragging) this.system.cancelDrag();
-        else this.host.setTool(ToolMode.Hand);
+        else {
+          this.host.setTool(ToolMode.Hand);
+          publishArmedTool(ToolMode.Hand);
+        }
         return;
       case 'F3':
       case 'Backquote':
@@ -159,18 +163,35 @@ export class KeyboardInput {
     }
   };
 
-  /** Returns true when the menu swallowed the key. */
+  /**
+   * Returns true when the menu swallowed the key.
+   *
+   * ALL FOUR DIRECTIONS NOW ([[071]]): the menu is a grid, so left and right are real moves
+   * rather than dead keys. WASD mirrors the arrows for the same reason it always did — the
+   * hand is already resting there — and every direction key the menu takes here is one the
+   * walk suppressor below would have eaten anyway.
+   */
   private handleMenuKey(event: KeyboardEvent): boolean {
     switch (event.code) {
       case 'ArrowUp':
       case 'KeyW':
         event.preventDefault();
-        this.system.moveMenuCursor(-1);
+        this.system.moveMenuCursor('up');
         return true;
       case 'ArrowDown':
       case 'KeyS':
         event.preventDefault();
-        this.system.moveMenuCursor(1);
+        this.system.moveMenuCursor('down');
+        return true;
+      case 'ArrowLeft':
+      case 'KeyA':
+        event.preventDefault();
+        this.system.moveMenuCursor('left');
+        return true;
+      case 'ArrowRight':
+      case 'KeyD':
+        event.preventDefault();
+        this.system.moveMenuCursor('right');
         return true;
       case 'Enter':
       case 'NumpadEnter':
@@ -210,6 +231,8 @@ export class KeyboardInput {
     if (entry === null) return;
     if (entry.kind === 'tool') {
       this.host.setTool(entry.tool);
+      // The held-tool overlay changes in the same frame as the slot highlight ([[065]]).
+      publishArmedTool(entry.tool);
       return;
     }
 
@@ -228,6 +251,7 @@ export class KeyboardInput {
       if (bagged <= 0 && cost > 0 && view.moneyCents < cost) return;
     }
     this.host.setTool(tool);
+    publishArmedTool(tool);
   }
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {

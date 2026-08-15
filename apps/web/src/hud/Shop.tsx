@@ -128,43 +128,37 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
     };
   }, [onClose]);
 
+  // No scrim any more ([[069]]): the board renders inside the sidebar's contextual slot,
+  // the lot — and the stand itself — stay visible beside it, and closing is the ESC key
+  // or button. There is no backdrop left to click.
   return (
-    <div
-      className={s.scrim}
-      onMouseDown={(event) => {
-        // Only a click on the scrim ITSELF closes, as in the research panel: a drag that starts
-        // on a row and ends on the backdrop must not dismiss the board mid-purchase.
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div className={s.shopPanel} onMouseDown={(event) => event.stopPropagation()}>
-        <div className={s.techHead}>
-          <span className={s.techTitle}>Roadside Stand</span>
-          <span className={s.shopTag}>bought at list</span>
-          <span className={s.techMoney}>{formatCents(economy.moneyCents)}</span>
-          <button type="button" className={s.techClose} onMouseDown={keepFocus} onClick={onClose}>
-            ESC
-          </button>
-        </div>
-
-        <Counter shop={shop} />
-
-        <div className={s.shopList}>
-          {shop.rows.map((row) => (
-            <Row
-              key={row.id}
-              row={row}
-              moneyCents={economy.moneyCents}
-              open={shop.standExists === 1}
-              walks={shop.atStand === 0}
-              pending={pending.isPending}
-              onBuy={buy}
-            />
-          ))}
-        </div>
-
-        <div className={s.techHint}>The stand sells; it does not haggle · G or ESC closes</div>
+    <div className={s.shopPanel}>
+      <div className={s.techHead}>
+        <span className={s.techTitle}>Roadside Stand</span>
+        <span className={s.shopTag}>bought at list</span>
+        <span className={s.techMoney}>{formatCents(economy.moneyCents)}</span>
+        <button type="button" className={s.techClose} onMouseDown={keepFocus} onClick={onClose}>
+          ESC
+        </button>
       </div>
+
+      <Counter shop={shop} />
+
+      <div className={s.shopList}>
+        {shop.rows.map((row) => (
+          <Row
+            key={row.id}
+            row={row}
+            moneyCents={economy.moneyCents}
+            open={shop.standExists === 1}
+            walks={shop.atStand === 0}
+            pending={pending.isPending}
+            onBuy={buy}
+          />
+        ))}
+      </div>
+
+      <div className={s.techHint}>The stand sells; it does not haggle · G or ESC closes</div>
     </div>
   );
 }

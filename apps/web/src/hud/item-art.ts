@@ -192,6 +192,25 @@ export function resolveMachineIcon(kind: number): IconSource | null {
   return lookup(`machine_${frameSlug(spec.slug)}`, MACHINE_ALIASES);
 }
 
+/**
+ * An atlas frame by its own name, for the build menu's cells ([[071]]).
+ *
+ * The catalogue derives frame NAMES on the input side (`BuildEntry.frame` — the sim's slugs
+ * under the pipeline's naming rule) and this is where they become rectangles, because the
+ * manifest belongs to this module and to nobody across the seam. The machine aliases apply
+ * for the same one machine they always cover: `machine_belt_junction` lives on the belt page
+ * as `belt_junction`, and a menu cell should degrade exactly as the bag's crate does.
+ *
+ * `null` falls to the same neutral chip every other missing frame gets — never magenta
+ * ([[037]]). Today that is the Drone Bay and the Parts Bench, which have no world sprite
+ * either (`render/textures.ts` draws them procedurally); the mapping test in
+ * `build-menu.test.ts` pins that list so a new frameless entry fails loudly.
+ */
+export function resolveFrameIcon(name: string): IconSource | null {
+  if (name === '') return null;
+  return lookup(name, MACHINE_ALIASES);
+}
+
 const CACHE = new Map<number, IconSource | null>();
 
 /**

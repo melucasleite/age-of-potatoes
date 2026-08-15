@@ -28,6 +28,25 @@ export interface BuildEntry {
   /** Cents. For belts this is per tile and `perTile` is set. */
   readonly costCents: number;
   readonly perTile: boolean;
+  /**
+   * The atlas frame this entry is drawn as in the menu ([[071]]).
+   *
+   * DERIVED FROM THE SPEC, NEVER TYPED PER MACHINE: a machine row's frame is its spec's own
+   * slug under the art pipeline's naming rule (`machine_<slug>`, dashes to underscores), so a
+   * new machine brings its picture with it and a renamed slug fails the mapping test instead
+   * of silently drawing the neighbour. Belts and grabbers share one world sprite per family —
+   * that is a fact about the atlas (tiers differ by speed, not by paint; see
+   * `render/belt-structure.ts`, "No tint"), so the menu says the same thing the lot does.
+   *
+   * The four abstract rows carry their frame explicitly because no spec knows them: a zone is
+   * painted as the zone overlay the lot actually wears, a deed as the grass it buys, and
+   * teardown as the crate a machine goes into — pictures the player has already met, reused
+   * rather than invented (the sourcing rule in [[071]]).
+   *
+   * Resolution — name → atlas rectangle — happens on the HUD side (`hud/item-art.ts`), which
+   * owns the manifest. This module never imports geometry; the name is the whole contract.
+   */
+  readonly frame: string;
 }
 
 /**
@@ -59,6 +78,11 @@ const TECH_LABELS: Readonly<Record<string, string>> = {
   'commerce-repair-drones': 'Repair Drones',
 };
 
+/** The art pipeline's naming rule, restated in one line: slugs dash, frames underscore. */
+function frameSlug(slug: string): string {
+  return slug.split('-').join('_');
+}
+
 function machineEntry(group: string, tool: ToolMode): BuildEntry {
   const kind = toolMachineKind(tool);
   const spec = kind === null ? null : machineSpec(kind);
@@ -68,6 +92,9 @@ function machineEntry(group: string, tool: ToolMode): BuildEntry {
     requiresTech: spec?.requiresTech ?? null,
     costCents: spec?.priceCents ?? 0,
     perTile: false,
+    // An empty frame for a spec-less tool would be a bug twice over; the mapping test
+    // (`build-menu.test.ts`) fails on it rather than letting the cell render a blank.
+    frame: spec === null ? '' : `machine_${frameSlug(spec.slug)}`,
   };
 }
 
@@ -80,6 +107,7 @@ function beltEntry(tool: ToolMode): BuildEntry {
     requiresTech: spec?.requiresTech ?? null,
     costCents: spec?.priceCentsPerTile ?? 0,
     perTile: true,
+    frame: 'belt_straight',
   };
 }
 
@@ -92,13 +120,31 @@ function grabberEntry(tool: ToolMode): BuildEntry {
     requiresTech: spec?.requiresTech ?? null,
     costCents: spec?.priceCents ?? 0,
     perTile: false,
+    frame: 'grabber_arm',
   };
 }
 
 /** Menu order. Zones first because zones are what v0.2 is about. */
 export const BUILD_CATALOGUE: readonly BuildEntry[] = [
-  { tool: ToolMode.PaintZone, group: 'Zones', requiresTech: null, costCents: 0, perTile: false },
-  { tool: ToolMode.EraseZone, group: 'Zones', requiresTech: null, costCents: 0, perTile: false },
+  // Both zone verbs wear the zone overlay itself — the picture the lot puts on a zoned tile,
+  // which is the honest glyph for "this tool is about that". Erase carries a red strike over
+  // the same sprite on the HUD side: what it erases IS the thing in the picture.
+  {
+    tool: ToolMode.PaintZone,
+    group: 'Zones',
+    requiresTech: null,
+    costCents: 0,
+    perTile: false,
+    frame: 'zone_overlay',
+  },
+  {
+    tool: ToolMode.EraseZone,
+    group: 'Zones',
+    requiresTech: null,
+    costCents: 0,
+    perTile: false,
+    frame: 'zone_overlay',
+  },
 
   beltEntry(ToolMode.PlaceBeltBasic),
   beltEntry(ToolMode.PlaceBeltFast),
@@ -143,8 +189,16 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   machineEntry('Maintenance', ToolMode.PlaceDroneBay),
   machineEntry('Maintenance', ToolMode.PlacePartsBench),
 
-  // The one row whose price is not a constant. See `dynamicCostCents` below.
-  { tool: ToolMode.BuyDeed, group: 'Land', requiresTech: null, costCents: 0, perTile: false },
+  // The one row whose price is not a constant. See `dynamicCostCents` below. Drawn as the
+  // grass it buys — the deed signs already stand on exactly this tile in the world.
+  {
+    tool: ToolMode.BuyDeed,
+    group: 'Land',
+    requiresTech: null,
+    costCents: 0,
+    perTile: false,
+    frame: 'terrain_grass',
+  },
 
   // The one row in here that spends nothing, and the only one that takes something away.
   // Last, in a group of its own, because a teardown verb sitting between two machines you
@@ -157,6 +211,9 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
     requiresTech: null,
     costCents: 0,
     perTile: false,
+    // The crate a boxed machine becomes — the picture of where a teardown puts things,
+    // already worn by every box in the bag (`item-art.ts`'s `item_crate`).
+    frame: 'item_crate',
   },
 ];
 
@@ -172,6 +229,8 @@ export interface BuildRow {
   readonly lockReason: string;
   /** `false` when the row is unlocked but the money is not there. */
   readonly affordable: boolean;
+  /** The atlas frame the cell draws, straight off the entry. See `BuildEntry.frame`. */
+  readonly frame: string;
 }
 
 /**
@@ -208,6 +267,7 @@ export function buildRows(view: WorldView | null): BuildRow[] {
       // belongs on the button in the tech panel that actually performs it.
       lockReason: soldOut ? 'the whole lot is yours' : open ? '' : `needs ${techLabel}`,
       affordable: cost <= 0 || money >= cost,
+      frame: entry.frame,
     });
   }
   return rows;
@@ -247,4 +307,101 @@ function dynamicCostCents(entry: BuildEntry, view: WorldView | null): number {
  */
 function formatPrice(cents: number, perTile: boolean): string {
   return perTile ? `${formatCents(cents)}/tile` : formatCentsWhole(cents);
+}
+
+// --- the grid ------------------------------------------------------------------------------
+//
+// The menu is a grid of pictures now ([[071]]), and the cursor has to move the way the eye
+// does: left/right walk the shopping list in order, up/down move between VISUAL rows. What a
+// visual row is depends on the group layout — every group starts a fresh row and fills across
+// `BUILD_GRID_COLS` columns — so the layout is computed here, once, as data, and the React
+// grid and the keyboard agree by construction. A column count typed in the stylesheet as well
+// would be the classic two-sources bug: arrows that jump diagonally after a CSS tweak.
+
+/** Columns per grid row. The one place this number lives; the panel reads it for CSS. */
+export const BUILD_GRID_COLS = 5;
+
+export type GridDirection = 'up' | 'down' | 'left' | 'right';
+
+export interface GridPlace {
+  readonly row: number;
+  readonly col: number;
+}
+
+/**
+ * Where each entry sits in the grid. Groups break rows: a group's first entry always starts
+ * at column zero, and a group never shares a row with its neighbour — which is what makes
+ * the group headings between the grids honest about the geometry underneath them.
+ */
+export function gridPlaces(rows: readonly { readonly group: string }[], cols: number): GridPlace[] {
+  const places: GridPlace[] = [];
+  let row = 0;
+  let col = 0;
+  let group: string | null = null;
+
+  for (const entry of rows) {
+    if (entry.group !== group) {
+      if (group !== null && col > 0) {
+        row += 1;
+      }
+      col = 0;
+      group = entry.group;
+    }
+    places.push({ row, col });
+    col += 1;
+    if (col === cols) {
+      col = 0;
+      row += 1;
+    }
+  }
+  return places;
+}
+
+/**
+ * One arrow press. Left and right walk the catalogue in order and wrap — the grid read as a
+ * list, which keeps the old ↑/↓-through-everything muscle memory reachable sideways. Up and
+ * down move to the NEAREST row above or below and keep the column as best that row allows,
+ * wrapping top to bottom; a short last row (three cells under a row of five) catches a
+ * descending cursor at its rightmost cell instead of refusing the move.
+ *
+ * Locked cells are landable on purpose, exactly as locked rows were: the cursor is how the
+ * player reads a lock reason, and `armMenuCursor` is where refusal lives.
+ */
+export function moveGridCursor(
+  rows: readonly { readonly group: string }[],
+  cols: number,
+  cursor: number,
+  dir: GridDirection,
+): number {
+  const count = rows.length;
+  if (count === 0) return 0;
+  const from = cursor < 0 ? 0 : cursor >= count ? count - 1 : cursor;
+
+  if (dir === 'left') return (from - 1 + count) % count;
+  if (dir === 'right') return (from + 1) % count;
+
+  const places = gridPlaces(rows, cols);
+  const here = places[from]!;
+  const lastRow = places[count - 1]!.row;
+  const step = dir === 'up' ? -1 : 1;
+
+  // Scan rows outward in the direction of travel, wrapping once past either edge. The rows
+  // are dense (every index between 0 and lastRow is occupied), so the first candidate row
+  // is the answer; the loop exists only to express the wrap without a modulo-on-negatives.
+  let targetRow = here.row + step;
+  if (targetRow < 0) targetRow = lastRow;
+  if (targetRow > lastRow) targetRow = 0;
+
+  let best = from;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < count; i++) {
+    const place = places[i]!;
+    if (place.row !== targetRow) continue;
+    const distance = Math.abs(place.col - here.col);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = i;
+    }
+  }
+  return best;
 }

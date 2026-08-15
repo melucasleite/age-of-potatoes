@@ -17,20 +17,35 @@
 //
 // The cost line is the affordability tell: the price turns red before you click, rather
 // than the click failing silently and leaving you to wonder whether you missed the tile.
+//
+// ICON-FIRST SINCE [[065]] (owner ruling: "text is not as good as a visual representation").
+// Every slot draws a sprite — a tool slot its `toolIconFrame` (the SAME atlas entry the
+// held-in-hand overlay draws, so the bar shows what the character holds), an item shortcut
+// its `ItemIcon`. The digit is a corner badge, the name lives in the hover title, and the
+// one text that stays visible at a glance is the cost — the red-before-you-click tell is
+// load-bearing, so it shrank to a badge rather than moving to hover.
 
 import { useEffect, useState } from 'react';
 
 import { hotbar } from '@/game/input/hotbar';
+import { toolIconFrame } from '@/game/input/tools';
 import type { ToolMode } from '@/game/input/tools';
 import { activeWorldId } from '@/storage/worlds';
 
 import { ItemIcon } from './ItemIcon';
 import { formatCentsWhole } from './format';
 import { beginHotbarDrag, onHotbarRefusal, registerHotbarSlot } from './hotbar-drag';
+import { paintIcon, resolveFrameIcon } from './item-art';
 import { hudStore } from './store';
 import { cx, s } from './styles';
 import type { ToolSlot } from './types';
 import { useHudSlice } from './use-hud';
+
+/**
+ * The slot's icon box. 16px tool art draws at 2×, a 32px machine sprite at 1× — both
+ * integer, per `paintIcon`'s no-stretching rule.
+ */
+const SLOT_ICON = 32;
 
 /** How long a refused drop wears its flash. Matches the CSS animation, which does the work. */
 const FLASH_MS = 450;
@@ -113,7 +128,10 @@ function SlotButton({
     <button
       type="button"
       className={className}
-      title={slot.hint}
+      // The NAME lives here now, with the hint — demoted from the slot face to hover so the
+      // sprite can be the slot ([[065]]). The icon is aria-hidden; these words are the slot.
+      title={empty ? slot.hint : `${slot.label} — ${slot.hint}`}
+      aria-label={empty ? undefined : slot.label}
       // Every slot registers as a drop target, empty ones very much included — an empty
       // slot is what a drag from the bag is FOR. The registry lives in `hotbar-drag.ts`;
       // a ref callback with `null` on unmount keeps it honest across re-renders.
@@ -145,22 +163,63 @@ function SlotButton({
       }}
     >
       <span className={s.slotKey}>{slot.digit}</span>
-      {slot.item !== -1 ? <ItemIcon item={slot.item} size={24} className={s.slotIcon} /> : null}
-      <span className={s.slotName}>{empty ? '·' : slot.label}</span>
+      {empty ? (
+        <span className={s.slotVacant}>·</span>
+      ) : slot.item !== -1 ? (
+        <ItemIcon item={slot.item} size={SLOT_ICON} className={s.slotIcon} />
+      ) : (
+        <ToolGlyph tool={slot.tool} label={slot.label} />
+      )}
       {/*
         "from the bag" outranks the price, because it IS the price: `PlaceMachine` opens a boxed
         machine before it charges anybody ([[054]]). A slot that kept quoting $100 over a box the
         player is about to spend would be contradicting the panel they just pressed Place in.
+        The badge stays visible at a glance — the red-before-you-click tell must never be a
+        hover-only fact — but a free hand verb says nothing: nine "free" tags in a row is noise.
       */}
-      {empty ? null : (
+      {empty || (slot.costCents === 0 && slot.fromBox !== 1) ? null : (
         <span className={s.slotCost}>
-          {slot.fromBox === 1
-            ? 'from the bag'
-            : slot.costCents === 0
-              ? 'free'
-              : formatCentsWhole(slot.costCents)}
+          {slot.fromBox === 1 ? 'bag' : formatCentsWhole(slot.costCents)}
         </span>
       )}
     </button>
+  );
+}
+
+/**
+ * A hand tool's sprite — the SAME atlas entry the held-in-hand overlay draws
+ * (`toolIconFrame`, [[065]]), resolved through the bag's own atlas plumbing. Art that has
+ * not landed in the atlas yet degrades to the bag's quiet lettered chip, never magenta
+ * ([[037]]) — the ordinary gap between an id in `art/manifest.json` and a packed frame.
+ */
+function ToolGlyph({ tool, label }: { tool: number; label: string }) {
+  const frame = tool === -1 ? '' : toolIconFrame(tool as ToolMode);
+  const source = frame === '' ? null : resolveFrameIcon(frame);
+
+  if (source === null) {
+    return (
+      <span
+        className={cx(s.icon, s.iconBlank, s.slotIcon)}
+        style={{ width: SLOT_ICON, height: SLOT_ICON }}
+        aria-hidden="true"
+      >
+        {label.charAt(0).toUpperCase()}
+      </span>
+    );
+  }
+
+  const paint = paintIcon(source, SLOT_ICON);
+  return (
+    <span
+      className={cx(s.icon, s.slotIcon)}
+      style={{
+        width: SLOT_ICON,
+        height: SLOT_ICON,
+        backgroundImage: paint.backgroundImage,
+        backgroundPosition: paint.backgroundPosition,
+        backgroundSize: paint.backgroundSize,
+      }}
+      aria-hidden="true"
+    />
   );
 }

@@ -35,12 +35,18 @@ import {
   zoneIdAt,
 } from './gesture';
 
-/** A projection with one tile of the field assigned to zone 7. */
+/**
+ * A projection with one FARM TILE, assigned to a zone. Written in the collection shape —
+ * `count` + per-entry coordinates — because farmland is non-rectangular since the till tool
+ * ([[066]]) and `zoneIdAt` looks tiles up by coordinate, never by rect arithmetic.
+ */
 function viewWithZone(tileX: number, tileY: number, zoneId: number): WorldView {
   const view = createWorldView();
   const field = view.field;
-  const index = (tileY - field.originY) * field.tilesWide + (tileX - field.originX);
-  field.zone[index] = zoneId;
+  field.count = 1;
+  field.tileX[0] = tileX;
+  field.tileY[0] = tileY;
+  field.zone[0] = zoneId;
   return view;
 }
 

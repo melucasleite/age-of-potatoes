@@ -7,7 +7,7 @@
 //
 // WHAT A SLOT HOLDS. One of three things:
 //
-//   a TOOL   — one of the five hand verbs (Hand, Water, Plant, Harvest, Teardown). They are
+//   a TOOL   — one of the six hand verbs (Hand, Water, Plant, Harvest, Teardown, Till). They are
 //              on the bar by default, can be rearranged, and can NEVER be removed: a player
 //              must not be able to strand themselves without the Hand or the teardown tool.
 //   an ITEM  — a shortcut to a bagged item that has a placement cursor. Pressing its digit
@@ -37,9 +37,10 @@ import { ToolMode, toolForMachineKind } from './tools';
 export const HOTBAR_SLOTS = 10;
 
 /**
- * The five hand tools, in bar order, all mandatory. `Deconstruct` is the teardown tool
+ * The six hand tools, in bar order, all mandatory. `Deconstruct` is the teardown tool
  * ([[060]]) — one cursor for every removal in the game, and the one a player must never be
- * able to lose.
+ * able to lose. `Till` ([[066]]) makes farmland and unmakes it, and joins for the same
+ * reason: ground you can no longer till is a farm that can no longer grow.
  */
 export const HOTBAR_TOOLS: readonly ToolMode[] = [
   ToolMode.Hand,
@@ -47,6 +48,7 @@ export const HOTBAR_TOOLS: readonly ToolMode[] = [
   ToolMode.Plant,
   ToolMode.Harvest,
   ToolMode.Deconstruct,
+  ToolMode.Till,
 ];
 
 export type HotbarEntry =
@@ -174,7 +176,7 @@ function sanitize(raw: unknown): HotbarSlot[] | null {
         placed = true;
       }
     }
-    // Ten slots, five mandatory tools: unplaceable means the layout was full of tools that
+    // Ten slots, six mandatory tools: unplaceable means the layout was full of tools that
     // should not all exist. Beyond repair.
     if (!placed) return null;
   }

@@ -18,6 +18,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+// A leaf module, not the `@/hud` barrel — one integer, no React tree ([[069]]). The HUD
+// draws its sidebar at this width; the canvas starts where the sidebar stops, so the two
+// can never overlap and the renderer's container is `calc(100vw - sidebar)` by geometry
+// rather than by coordination.
+import { SIDEBAR_WIDTH_PX } from '@/hud/layout';
 import { bootWorld, startAutosave } from '@/storage';
 
 import { GameHost } from './GameHost';
@@ -85,17 +90,27 @@ export default function GameCanvas({ seed }: GameCanvasProps) {
     );
   }
 
+  // The sidebar's column is left out of the container entirely, so the Pixi renderer sizes
+  // itself to the visible region and NOTHING else: `GameHost.resize()` reads this element's
+  // rect through its ResizeObserver, and because the offset is a constant the observer fires
+  // once per real layout change, never per frame. Picking survives untouched — it subtracts
+  // the canvas's own `getBoundingClientRect()` before inverting the camera (`picking.ts`).
   return (
     <div
       ref={containerRef}
-      style={{ position: 'absolute', inset: 0, overflow: 'hidden', cursor: 'crosshair' }}
+      style={{
+        position: 'absolute',
+        inset: `0 0 0 ${SIDEBAR_WIDTH_PX}px`,
+        overflow: 'hidden',
+        cursor: 'crosshair',
+      }}
     />
   );
 }
 
 const REFUSAL_STYLE: React.CSSProperties = {
   position: 'absolute',
-  inset: 0,
+  inset: `0 0 0 ${SIDEBAR_WIDTH_PX}px`,
   display: 'grid',
   placeItems: 'center',
   padding: '2rem',

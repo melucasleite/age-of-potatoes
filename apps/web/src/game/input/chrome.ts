@@ -1,4 +1,8 @@
-// The input layer's own chrome: the rubber band, the placement ghost, and the build menu.
+// The input layer's own chrome: the rubber band, the placement ghost, and the world signs.
+//
+// THE BUILD MENU IS NOT HERE ANY MORE ([[071]]). It was the one piece of this file that was
+// neither per-frame nor world-anchored, and it is a React panel in the sidebar's contextual
+// slot now — state in `system.ts`, surface in `hud/BuildMenu.tsx`, seam in `build-panel.ts`.
 //
 // ────────────────────────────────────────────────────────────────────────────────────
 //  WHY THIS IS PLAIN DOM AND NOT REACT, AND NOT PIXI EITHER.
@@ -28,8 +32,6 @@ import { formatCentsWhole } from '../../format/money';
 
 import type { Camera } from '../render/camera';
 import { TILE_PX } from '../render/pixel';
-import { buildRows } from './build-menu';
-import type { BuildRow } from './build-menu';
 import type { GuideSign } from './first-run';
 import { TOOL_INFO, ToolMode } from './tools';
 
@@ -111,23 +113,6 @@ const CSS = `
 .sm-ix-guide[data-place="below"]::after { top:auto; bottom:100%;
   border-top-color:transparent; border-bottom-color:rgba(126,214,142,0.55); }
 @keyframes sm-ix-guide-bob { 0%,100% { margin-top:0; } 50% { margin-top:-6px; } }
-.sm-ix-menu { position:absolute; right:14px; top:14px; width:296px; display:none;
-  pointer-events:auto; padding:8px; border-radius:6px; background:rgba(20,16,25,0.94);
-  border:1px solid rgba(255,255,255,0.14); box-shadow:0 8px 28px rgba(0,0,0,0.5);
-  max-height:calc(100% - 28px); overflow:auto; }
-.sm-ix-menu h4 { margin:8px 4px 4px; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:#8d8378; }
-.sm-ix-menu h4:first-child { margin-top:2px; }
-.sm-ix-row { display:flex; gap:8px; align-items:baseline; padding:3px 6px; border-radius:3px;
-  cursor:pointer; white-space:nowrap; }
-.sm-ix-row[data-cursor="1"] { background:rgba(126,214,142,0.20); outline:1px solid rgba(126,214,142,0.55); }
-.sm-ix-row[data-locked="1"] { color:#6d6459; cursor:not-allowed; }
-.sm-ix-row[data-armed="1"] .sm-ix-name { color:#7ed68e; }
-.sm-ix-key { width:14px; color:#8d8378; flex:none; }
-.sm-ix-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
-.sm-ix-cost { flex:none; color:#c8b9a4; }
-.sm-ix-row[data-locked="1"] .sm-ix-cost,
-.sm-ix-row[data-broke="1"] .sm-ix-cost { color:#e97c6e; }
-.sm-ix-foot { margin:6px 4px 2px; color:#8d8378; font-size:11px; }
 `;
 
 function ensureStyle(): void {
@@ -191,11 +176,6 @@ export interface BandState {
   dir: number;
 }
 
-export interface ChromeHooks {
-  arm(tool: ToolMode): void;
-  latestView(): WorldView | null;
-}
-
 /**
  * One instance per `GameHost`, mounted and unmounted with it.
  *
@@ -209,12 +189,7 @@ export class InputChrome {
   private chev: HTMLElement | null = null;
   private tag: HTMLElement | null = null;
   private hint: HTMLElement | null = null;
-  private menu: HTMLElement | null = null;
 
-  private rows: BuildRow[] = [];
-  private cursor = 0;
-  private open = false;
-  private refreshCountdown = 0;
   private lastHintKey = '';
   /** One div per tile of a non-rectangular band, grown on demand and reused. */
   private readonly cells: HTMLElement[] = [];
@@ -229,7 +204,6 @@ export class InputChrome {
   constructor(
     private readonly container: HTMLElement,
     private readonly camera: Camera,
-    private readonly hooks: ChromeHooks,
   ) {}
 
   mount(): void {
@@ -247,10 +221,8 @@ export class InputChrome {
     tag.className = 'sm-ix-tag';
     const hint = document.createElement('div');
     hint.className = 'sm-ix-hint';
-    const menu = document.createElement('div');
-    menu.className = 'sm-ix-menu';
 
-    root.append(band, chev, tag, hint, menu);
+    root.append(band, chev, tag, hint);
     this.container.appendChild(root);
 
     this.root = root;
@@ -258,7 +230,6 @@ export class InputChrome {
     this.chev = chev;
     this.tag = tag;
     this.hint = hint;
-    this.menu = menu;
   }
 
   unmount(): void {
@@ -268,7 +239,6 @@ export class InputChrome {
     this.chev = null;
     this.tag = null;
     this.hint = null;
-    this.menu = null;
     // The signs and cells are children of `root` and go with it, but the arrays must not
     // survive a StrictMode remount holding nodes that are no longer in the document.
     this.cells.length = 0;
@@ -276,11 +246,6 @@ export class InputChrome {
     this.deedText.length = 0;
     this.guideSigns.length = 0;
     this.guideText.length = 0;
-    this.open = false;
-  }
-
-  get menuOpen(): boolean {
-    return this.open;
   }
 
   // --- the band ------------------------------------------------------------------------
@@ -593,132 +558,6 @@ export class InputChrome {
     hint.innerHTML =
       `<b>${escapeHtml(info.label)}</b> <span>${escapeHtml(info.hint)}</span><br>` +
       `<span>${zoom}× zoom · ${keys.join(' · ')}</span>`;
-  }
-
-  // --- the build menu ------------------------------------------------------------------
-
-  toggleMenu(armed: ToolMode): void {
-    if (this.open) this.closeMenu();
-    else this.openMenu(armed);
-  }
-
-  openMenu(armed: ToolMode): void {
-    if (this.menu === null) return;
-    this.open = true;
-    this.menu.style.display = 'block';
-    const index = this.rowsNow().findIndex((row) => row.tool === armed);
-    this.cursor = index >= 0 ? index : this.firstUnlocked();
-    this.renderMenu(armed);
-  }
-
-  closeMenu(): void {
-    if (this.menu === null) return;
-    this.open = false;
-    this.menu.style.display = 'none';
-  }
-
-  moveCursor(delta: number, armed: ToolMode): void {
-    if (!this.open) return;
-    const count = this.rows.length;
-    if (count === 0) return;
-    this.cursor = (((this.cursor + delta) % count) + count) % count;
-    this.renderMenu(armed);
-  }
-
-  /** Digit shortcut. 1-based over the whole list; out of range is simply ignored. */
-  jumpTo(oneBased: number, armed: ToolMode): void {
-    if (!this.open) return;
-    const index = oneBased - 1;
-    if (index < 0 || index >= this.rows.length) return;
-    this.cursor = index;
-    this.renderMenu(armed);
-  }
-
-  /**
-   * Arm whatever the cursor is on.
-   *
-   * A LOCKED ROW REFUSES rather than arming a tool whose command the sim will throw away.
-   * This is the one place a UI-side legality check is right: it is not deciding what the
-   * world does, it is declining to pretend the player did something.
-   */
-  armCursor(): void {
-    const row = this.rows[this.cursor];
-    if (row === undefined || row.locked) return;
-    this.hooks.arm(row.tool);
-    this.closeMenu();
-  }
-
-  /** Called once per frame; repaints the open menu a few times a second, never more. */
-  tick(armed: ToolMode): void {
-    if (!this.open) return;
-    if (this.refreshCountdown > 0) {
-      this.refreshCountdown -= 1;
-      return;
-    }
-    this.renderMenu(armed);
-  }
-
-  private rowsNow(): BuildRow[] {
-    this.rows = buildRows(this.hooks.latestView());
-    return this.rows;
-  }
-
-  private firstUnlocked(): number {
-    const index = this.rows.findIndex((row) => !row.locked);
-    return index >= 0 ? index : 0;
-  }
-
-  private renderMenu(armed: ToolMode): void {
-    const menu = this.menu;
-    if (menu === null) return;
-    this.refreshCountdown = 20;
-
-    const rows = this.rowsNow();
-    const parts: string[] = [];
-    let group = '';
-
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]!;
-      if (row.group !== group) {
-        group = row.group;
-        parts.push(`<h4>${escapeHtml(group)}</h4>`);
-      }
-      const right = row.locked ? row.lockReason : row.price;
-      parts.push(
-        `<div class="sm-ix-row" data-index="${i}" data-cursor="${i === this.cursor ? 1 : 0}"` +
-          ` data-locked="${row.locked ? 1 : 0}" data-armed="${row.tool === armed ? 1 : 0}"` +
-          ` data-broke="${row.affordable ? 0 : 1}" title="${escapeHtml(row.hint)}">` +
-          `<span class="sm-ix-key">${i < 9 ? i + 1 : ''}</span>` +
-          `<span class="sm-ix-name">${escapeHtml(row.label)}</span>` +
-          `<span class="sm-ix-cost">${escapeHtml(right)}</span>` +
-          `</div>`,
-      );
-    }
-    parts.push('<div class="sm-ix-foot">↑↓ move · Enter build · Esc close</div>');
-    menu.innerHTML = parts.join('');
-
-    // Clicking is a convenience over the keyboard path, and goes through exactly the same
-    // `armCursor()` so there is one code path that can arm a tool.
-    const nodes = menu.querySelectorAll<HTMLElement>('.sm-ix-row');
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i]!;
-      // Keep focus on the canvas: `mousedown`, not `pointerdown`. Per the Pointer Events
-      // spec, `preventDefault()` on `pointerdown` suppresses the compatibility mouse
-      // sequence including `click`, and the row would silently stop responding.
-      node.addEventListener('mousedown', (event) => event.preventDefault());
-      node.addEventListener('click', () => {
-        this.cursor = Number(node.dataset.index ?? 0);
-        this.armCursor();
-      });
-    }
-
-    // KEEP THE CURSOR ON SCREEN. The catalogue outgrew the panel the moment the storage,
-    // orchard and bot rows landed — `max-height` plus `overflow:auto` means the list scrolls,
-    // and this function replaces `innerHTML` wholesale a few times a second, which resets
-    // `scrollTop` to zero every time. Without this the menu yanks itself back to the top while
-    // the player is arrow-keying down it, and the highlighted row is somewhere below the fold.
-    // `nearest` so a row already in view is left exactly where it is.
-    nodes[this.cursor]?.scrollIntoView({ block: 'nearest' });
   }
 }
 

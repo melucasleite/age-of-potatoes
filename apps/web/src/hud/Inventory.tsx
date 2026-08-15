@@ -15,7 +15,7 @@
 // thing a player does with an inventory forty times an hour is look for one item in it. Sprites
 // are found by shape and colour in one saccade; names are found by scanning. So the grid answers
 // "what have I got", one cell per kind, and everything that needs a sentence moved into a pane
-// beside it that describes the ONE thing you pointed at. Two questions, two surfaces, and
+// under it that describes the ONE thing you pointed at. Two questions, two surfaces, and
 // neither one is now paying for the other's clutter.
 //
 // FOUR THINGS IT REFUSES TO DO, each of which would have been shorter to write:
@@ -42,11 +42,12 @@
 //   are paperwork and sell from here. Two verbs, two places, and collapsing them into one list
 //   of sell buttons would teach the player that the walk to the stand is optional.
 //
-//   IT DOES NOT PLACE ANYTHING ITSELF. "Place" arms the build cursor and closes the panel; the
-//   machine goes down where the player clicks. Placement is a gesture on the world, and a panel
-//   that put a Fryer down for you would have to invent a tile to put it on.
+//   IT DOES NOT PLACE ANYTHING ITSELF. "Place" arms the build cursor; the machine goes down
+//   where the player clicks, on a lot that is fully visible beside the docked bag ([[069]]).
+//   Placement is a gesture on the world, and a panel that put a Fryer down for you would have
+//   to invent a tile to put it on.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { CONDITION_EFFECT_THRESHOLD, CONDITION_MAX, UPGRADE_MAX_LEVEL, permille } from '@snack/sim';
 import type { ItemId } from '@snack/sim';
@@ -68,16 +69,10 @@ import type { InventoryBox, InventoryRow } from './types';
  * would start lying silently the day somebody rescaled one of them. */
 const ROUGH_PERMILLE = permille(CONDITION_EFFECT_THRESHOLD, CONDITION_MAX);
 
-/**
- * How wide the grid is, in slots — and it is a CONSTANT rather than an `auto-fill`.
- *
- * A responsive grid would be one line of CSS and would make the arrow keys lie: Down means "the
- * slot underneath this one", the handler works that out by adding this number, and a grid that
- * reflowed to five columns at some window width would send the cursor somewhere the player is
- * not looking. The DOM and the keyboard have to agree about the shape of the thing, so exactly
- * one of them gets to decide it.
- */
-const COLUMNS = 6;
+// THE GRID IS SIX FIXED COLUMNS, declared in `.invGrid` — and that number is now the widest
+// thing the whole sidebar is sized around (`layout.ts`'s SIDEBAR_WIDTH_PX). The arrow-key
+// cursor that used to share the constant went with the modal ([[069]]): arrows walk the
+// farmer again, so nothing in this file does column arithmetic any more.
 
 /** Sprite box sizes. Bigger in the pane, because that is the one you are actually looking at. */
 const SLOT_ICON = 48;
@@ -88,45 +83,24 @@ function keepFocus(event: React.MouseEvent): void {
   event.preventDefault();
 }
 
-// --- the corner button -----------------------------------------------------------------
+// --- the persistent dock section ([[069]]) ---------------------------------------------
 
 /**
- * Third in the top-left column, under Research and the Stand.
+ * The bag as an always-open sidebar section. The header is a collapsible toggle — never a
+ * close button — and it lights up when there is a boxed machine inside, which is the only
+ * teaching the feature gets: a player who boxes their first Fryer sees the dock change while
+ * they are still standing where the Fryer was.
  *
- * It lights up when there is a boxed machine in the bag, which is the only teaching the feature
- * gets: a player who boxes their first Fryer sees a corner of the screen change while they are
- * still standing where the Fryer was.
+ * WHAT THE MOVE OUT OF THE MODAL COST, ON PURPOSE: the arrow-key grid cursor and
+ * Enter-to-place are gone. They were captured away from the walk keys, and that was
+ * defensible exactly as long as the bag was a full-screen scrim the player could not see the
+ * lot through — a docked bag beside a live, visible lot must not stop WASD/arrows from
+ * walking. Selection is a click; placing is the pane's button; the drag to the hotbar
+ * ([[061]]) is untouched. Esc no longer closes anything here because there is nothing to
+ * close — it falls through to the input layer, which uses it to put the tool down.
  */
-export function InventoryToggle({ onOpen }: { onOpen: () => void }) {
+export function InventorySection({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const inventory = useHudSlice('inventory');
-  const boxed = inventory.boxCount;
-
-  return (
-    <button
-      type="button"
-      className={cx(s.techToggle, boxed > 0 && s.techToggleReady)}
-      title="The bag — goods, seeds, and machines you have boxed up"
-      onMouseDown={keepFocus}
-      onClick={onOpen}
-    >
-      <span className={s.techToggleName}>The Bag</span>
-      <span className={s.techToggleBadge}>
-        {boxed > 0
-          ? `${boxed} boxed`
-          : inventory.rows.length === 0
-            ? 'empty'
-            : `${inventory.rows.length} ${inventory.rows.length === 1 ? 'kind' : 'kinds'}`}
-      </span>
-      <span className={s.techToggleKey}>I</span>
-    </button>
-  );
-}
-
-// --- the panel -------------------------------------------------------------------------
-
-export function InventoryPanel({ onClose }: { onClose: () => void }) {
-  const inventory = useHudSlice('inventory');
-  const economy = useHudSlice('economy');
   const pending = usePending();
 
   // WHICH SLOT, HELD AS AN ITEM ID RATHER THAN AN INDEX. The rows are rebuilt from the world
@@ -154,104 +128,51 @@ export function InventoryPanel({ onClose }: { onClose: () => void }) {
   );
 
   // Arming a cursor is UI state and never a command (§12), so this goes out through
-  // `selectTool` rather than `dispatch`. Closing afterwards is not a flourish: the panel is a
-  // full-screen scrim, and a build cursor you cannot see the lot through is not armed, it is
-  // stuck.
-  const place = useCallback(
-    (tool: number) => {
-      hudStore.selectTool(tool as ToolMode);
-      onClose();
-    },
-    [onClose],
-  );
+  // `selectTool` rather than `dispatch`. It no longer closes anything afterwards: the bag is
+  // docked beside a fully visible lot, so an armed build cursor is armed, not stuck — the
+  // exact problem the old modal had to close itself to avoid.
+  const place = useCallback((tool: number) => {
+    hudStore.selectTool(tool as ToolMode);
+  }, []);
 
-  // The key handler is bound once and reads the current grid through a ref. This panel
-  // re-renders on every publish; putting `rows` in the dependency array would tear the listener
-  // down and build it again eight times a second for a keyboard that has not changed.
-  const live = useRef<{ rows: readonly InventoryRow[]; index: number }>({ rows, index });
-  useEffect(() => {
-    live.current = { rows, index };
-  });
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.code === 'Escape') {
-        // Deliberately NOT swallowed, unlike the keys below: Escape has meant "put the tool
-        // down" to the input layer since before this panel existed, and closing the bag has
-        // always done both. Changing that here would be a second feature in a stealth commit.
-        onClose();
-        return;
-      }
-
-      const step = STEPS[event.code];
-      const acting = event.code === 'Enter' || event.code === 'NumpadEnter';
-      if (step === undefined && !acting) return;
-
-      // CAPTURED AND SWALLOWED. Arrows are also the walk keys (`input/keyboard.ts`), and this
-      // listener is registered in the capture phase specifically so it can stop them reaching
-      // the window listener that walks the farmer. Without it, browsing the bag marches the
-      // player across a lot they cannot see behind a full-screen scrim. The build menu already
-      // makes exactly this courtesy — see its note about walking away from a menu you are
-      // reading. Only the keys this panel consumes are taken; everything else passes through.
-      event.preventDefault();
-      event.stopPropagation();
-
-      const grid = live.current;
-      const row = grid.rows[grid.index];
-      if (row === undefined) return;
-
-      if (step !== undefined) {
-        // One clamp for all four directions: Left at the start stays, Right at the end stays,
-        // Down off the bottom lands on the last slot. Wrapping would move the cursor somewhere
-        // the eye has to go hunting for.
-        const next = Math.min(Math.max(grid.index + step, 0), grid.rows.length - 1);
-        setSelected(grid.rows[next]?.id ?? -1);
-        return;
-      }
-
-      // ENTER PLACES; ENTER NEVER SCRAPS. Place is free and reversible — the machine goes back
-      // in the bag with one whack of the wrench — and scrapping is money you cannot get back at
-      // a price you did not read. A blind Enter on a keyboard-driven grid must not be able to
-      // sell a maxed Fryer, so the destructive verb stays a deliberate click.
-      if (row.boxedKind !== 0 && row.placeTool >= 0) place(row.placeTool);
-    };
-
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      window.removeEventListener('keydown', onKey, true);
-    };
-  }, [onClose, place]);
+  const boxed = inventory.boxCount;
 
   return (
-    <div
-      className={s.scrim}
-      onMouseDown={(event) => {
-        // Only a click on the scrim ITSELF closes, as in the other two panels: a drag that
-        // starts on a row and ends on the backdrop must not dismiss the bag mid-scrap.
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div className={cx(s.shopPanel, s.invPanel)} onMouseDown={(event) => event.stopPropagation()}>
-        <div className={s.techHead}>
-          <span className={s.techTitle}>The Bag</span>
-          <span className={s.shopTag}>everything you are carrying</span>
-          <span className={s.techMoney}>{formatCents(economy.moneyCents)}</span>
-          <button type="button" className={s.techClose} onMouseDown={keepFocus} onClick={onClose}>
-            ESC
-          </button>
-        </div>
+    <div className={cx(s.sideSection, s.sideBag)}>
+      <button
+        type="button"
+        aria-expanded={open}
+        className={cx(s.techToggle, boxed > 0 && s.techToggleReady)}
+        title={
+          open
+            ? 'The bag — everything you are carrying. Collapses; never closes.'
+            : 'The bag — collapsed. I or a click reopens it.'
+        }
+        onMouseDown={keepFocus}
+        onClick={onToggle}
+      >
+        <span className={s.techToggleName}>The Bag</span>
+        <span className={s.techToggleBadge}>
+          {boxed > 0
+            ? `${boxed} boxed`
+            : rows.length === 0
+              ? 'empty'
+              : `${rows.length} ${rows.length === 1 ? 'kind' : 'kinds'}`}
+        </span>
+        <span className={s.techToggleKey}>I</span>
+      </button>
 
-        <div
-          className={cx(s.shopStatus, inventory.boxCount > 0 ? s.shopStatusOpen : s.shopStatusShut)}
-        >
-          {inventory.boxCount > 0
-            ? `${inventory.boxCount} boxed ${inventory.boxCount === 1 ? 'machine' : 'machines'} — ${formatCents(inventory.scrapCents)} if you scrapped every one of them.`
-            : 'Nothing boxed. A machine you take apart comes here whole, with its dials, and goes back down for free.'}
-        </div>
+      {!open ? null : active === null ? (
+        <div className={s.invEmpty}>Your pockets are empty.</div>
+      ) : (
+        <div className={s.sideBagBody}>
+          {boxed > 0 ? (
+            <div className={cx(s.shopStatus, s.shopStatusOpen)}>
+              {boxed} boxed {boxed === 1 ? 'machine' : 'machines'} —{' '}
+              {formatCents(inventory.scrapCents)} if you scrapped every one of them.
+            </div>
+          ) : null}
 
-        {active === null ? (
-          <div className={s.invEmpty}>Your pockets are empty.</div>
-        ) : (
           <div className={s.invBody}>
             <div className={s.invGrid}>
               {rows.map((row) => (
@@ -271,23 +192,11 @@ export function InventoryPanel({ onClose }: { onClose: () => void }) {
               onPlace={place}
             />
           </div>
-        )}
-
-        <div className={s.techHint}>
-          A box keeps its dials and its wear · arrows pick, Enter places · I or ESC closes
         </div>
-      </div>
+      )}
     </div>
   );
 }
-
-/** Which way each key moves the cursor, in slots. `COLUMNS` is what makes Up and Down mean anything. */
-const STEPS: Readonly<Record<string, number>> = {
-  ArrowLeft: -1,
-  ArrowRight: 1,
-  ArrowUp: -COLUMNS,
-  ArrowDown: COLUMNS,
-};
 
 // --- one slot in the grid ----------------------------------------------------------------
 

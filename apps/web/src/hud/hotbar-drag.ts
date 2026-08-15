@@ -21,8 +21,10 @@
 // what lets the same pointer-down serve "select this tool" and "start rearranging it".
 
 import { hotbar } from '@/game/input/hotbar';
+import { TOOL_INFO, toolIconFrame } from '@/game/input/tools';
+import type { ToolMode } from '@/game/input/tools';
 
-import { paintIcon, resolveItemIcon } from './item-art';
+import { paintIcon, resolveFrameIcon, resolveItemIcon } from './item-art';
 import { itemName } from './item-copy';
 import { hudStore } from './store';
 import { cx, s } from './styles';
@@ -175,16 +177,32 @@ function makeGhost(source: DragSource): HTMLElement {
   if (item !== -1) {
     el.appendChild(iconNode(item));
   } else if (source.type === 'slot') {
-    // A tool being rearranged: its name, in the belt's own type.
+    // A tool being rearranged: its icon, exactly as its slot draws it ([[065]] — the slot
+    // face is the sprite now, so the thing in your hand mid-drag is the same picture).
     const entry = hotbar.entryAt(source.index);
-    el.textContent = entry?.kind === 'tool' ? toolGhostLabel(source.index) : '';
+    if (entry?.kind === 'tool') el.appendChild(toolIconNode(entry.tool));
   }
   return el;
 }
 
-/** The Toolbelt prints the label; the ghost only needs *a* name, read off the slot's DOM. */
-function toolGhostLabel(index: number): string {
-  return slotNodes.get(index)?.textContent ?? '';
+/** The same sprite the slot draws, painted without React — letter chip when art is absent. */
+function toolIconNode(tool: ToolMode): HTMLElement {
+  const frame = toolIconFrame(tool);
+  const iconSource = frame === '' ? null : resolveFrameIcon(frame);
+  const span = document.createElement('span');
+  span.style.width = `${GHOST_PX}px`;
+  span.style.height = `${GHOST_PX}px`;
+  if (iconSource === null) {
+    span.className = cx(s.icon, s.iconBlank);
+    span.textContent = TOOL_INFO[tool].label.charAt(0).toUpperCase();
+    return span;
+  }
+  const paint = paintIcon(iconSource, GHOST_PX);
+  span.className = s.icon;
+  span.style.backgroundImage = paint.backgroundImage;
+  span.style.backgroundPosition = paint.backgroundPosition;
+  span.style.backgroundSize = paint.backgroundSize;
+  return span;
 }
 
 /** The same sprite the bag draws, painted without React — same atlas, same arithmetic. */

@@ -15,6 +15,10 @@
 import type { CropId, WorldView } from '@snack/sim';
 import { CropId as Crop, Direction, cropSpec, techSatisfied } from '@snack/sim';
 
+import { publishArmedTool } from './armed-tool';
+import { BUILD_GRID_COLS, buildRows, moveGridCursor } from './build-menu';
+import type { BuildRow, GridDirection } from './build-menu';
+import { publishBuildMenu, registerBuildMenuHooks } from './build-panel';
 import { InputChrome } from './chrome';
 import type { InputHost } from './context';
 import { firstRunSigns } from './first-run';
@@ -51,11 +55,21 @@ export class InputSystem {
   /** The way the next grabber will face — the direction it moves goods. */
   placeDir: Direction = Direction.East;
 
+  // --- the build menu's state, owned here since [[071]] ------------------------------------
+  //
+  // The SURFACE is React now (`hud/BuildMenu.tsx`, in the sidebar's contextual slot), but the
+  // modality — arrows and digits are the menu's while it is up, walking stops — belongs to
+  // this layer, so the state does too. Every mutation below ends in `publishMenu()`, which
+  // hands a frozen snapshot across the seam (`build-panel.ts`).
+  private menuVisible = false;
+  private menuCursor = 0;
+  private menuRows: BuildRow[] = [];
+  /** Frames until the open menu re-reads the projection. The old chrome's cadence, kept. */
+  private menuRefresh = 0;
+  private unregisterMenuHooks: (() => void) | null = null;
+
   constructor(private readonly host: InputHost) {
-    this.chrome = new InputChrome(host.overlayRoot, host.camera, {
-      arm: (tool) => host.setTool(tool),
-      latestView: () => host.latestView(),
-    });
+    this.chrome = new InputChrome(host.overlayRoot, host.camera);
     this.pointer = new PointerInput(host, this);
     this.keyboard = new KeyboardInput(host, this);
   }
@@ -64,12 +78,23 @@ export class InputSystem {
     this.chrome.mount();
     this.pointer.attach();
     this.keyboard.attach();
+    // The click path in from the React grid. Registered per attach so a StrictMode remount
+    // ends up with the LIVE system holding the doors, not the disposed one.
+    this.unregisterMenuHooks = registerBuildMenuHooks({
+      armAt: (index) => this.armMenuIndex(index),
+      close: () => this.closeBuildMenu(),
+    });
     // The camera ships at `DEFAULT_ZOOM_INDEX`; publish it so the renderer's LOD flag is
-    // right on frame one rather than on the first scroll wheel notch.
+    // right on frame one rather than on the first scroll wheel notch. Same for the armed
+    // tool: the held-tool overlay must be right before the first key is ever pressed.
     publishLod(this.host.camera.zoomIndex_);
+    publishArmedTool(this.host.getTool());
   }
 
   detach(): void {
+    this.closeBuildMenu();
+    this.unregisterMenuHooks?.();
+    this.unregisterMenuHooks = null;
     this.pointer.detach();
     this.keyboard.detach();
     this.chrome.unmount();
@@ -83,6 +108,10 @@ export class InputSystem {
    */
   update(): void {
     const tool = this.host.getTool();
+    // The safety net for the armed-tool contract (`armed-tool.ts`): every arming edge
+    // publishes at the edge, and this catches any path a later feature forgets to wire.
+    // A no-change publish is one comparison.
+    publishArmedTool(tool);
     this.chrome.setBand(this.pointer.band());
     // The deed signs stand on the land rather than following the cursor, so they are driven by
     // the frame loop like the band and unlike anything hover-driven — the camera moves while
@@ -94,7 +123,19 @@ export class InputSystem {
     // themselves by reading the same projection — see `first-run.ts` for the gates.
     this.chrome.setGuideSigns(firstRunSigns(view));
     this.chrome.setHint(tool, this.host.camera.transform.zoom, this.pointer.rotateAdvertised(tool));
-    this.chrome.tick(tool);
+
+    // The open menu re-reads the projection a few times a second — prices, locks and the
+    // deed's ladder are live while you shop. `publishMenu` compares before it notifies, so
+    // the common no-change case costs a field walk and no React work at all.
+    if (this.menuVisible) {
+      if (this.menuRefresh > 0) {
+        this.menuRefresh -= 1;
+      } else {
+        this.menuRefresh = 20;
+        this.menuRows = buildRows(view);
+        this.publishMenu();
+      }
+    }
   }
 
   // --- zoom ------------------------------------------------------------------------------
@@ -125,34 +166,78 @@ export class InputSystem {
   // --- the build menu ----------------------------------------------------------------------
 
   get menuOpen(): boolean {
-    return this.chrome.menuOpen;
+    return this.menuVisible;
   }
 
   toggleBuildMenu(): void {
-    if (this.chrome.menuOpen) {
-      this.chrome.closeMenu();
+    if (this.menuVisible) {
+      this.closeBuildMenu();
       return;
     }
     // Stop walking as the menu opens. One command, on a real state edge — the character
     // genuinely stops, so the trace is not lying about anything.
     this.keyboard.stopWalking();
-    this.chrome.openMenu(this.host.getTool());
+    this.menuRows = buildRows(this.host.latestView());
+    this.menuRefresh = 20;
+    // The cursor lands on the tool you are holding — reopening the menu resumes the
+    // conversation — or on the first unlocked cell for a hand tool that has no cell here.
+    const armed = this.menuRows.findIndex((row) => row.tool === this.host.getTool());
+    this.menuCursor = armed >= 0 ? armed : Math.max(0, this.firstUnlockedIndex());
+    this.menuVisible = true;
+    this.publishMenu();
   }
 
   closeBuildMenu(): void {
-    this.chrome.closeMenu();
+    if (!this.menuVisible) return;
+    this.menuVisible = false;
+    this.publishMenu();
   }
 
-  moveMenuCursor(delta: number): void {
-    this.chrome.moveCursor(delta, this.host.getTool());
+  moveMenuCursor(dir: GridDirection): void {
+    if (!this.menuVisible || this.menuRows.length === 0) return;
+    this.menuCursor = moveGridCursor(this.menuRows, BUILD_GRID_COLS, this.menuCursor, dir);
+    this.publishMenu();
   }
 
+  /** Digit shortcut. 1-based over the whole catalogue; out of range is simply ignored. */
   jumpMenuCursor(oneBased: number): void {
-    this.chrome.jumpTo(oneBased, this.host.getTool());
+    if (!this.menuVisible) return;
+    const index = oneBased - 1;
+    if (index < 0 || index >= this.menuRows.length) return;
+    this.menuCursor = index;
+    this.publishMenu();
   }
 
   armMenuCursor(): void {
-    this.chrome.armCursor();
+    this.armMenuIndex(this.menuCursor);
+  }
+
+  /**
+   * Arm the cell at `index` — Enter and the React grid's click both land here, so there is
+   * exactly one code path that can arm a tool from the menu, the same property the old
+   * in-canvas surface kept.
+   *
+   * A LOCKED CELL REFUSES rather than arming a tool whose command the sim will throw away.
+   * This is the one place a UI-side legality check is right: it is not deciding what the
+   * world does, it is declining to pretend the player did something.
+   */
+  private armMenuIndex(index: number): void {
+    if (!this.menuVisible) return;
+    const row = this.menuRows[index];
+    if (row === undefined || row.locked) return;
+    this.menuCursor = index;
+    this.host.setTool(row.tool);
+    // Same frame as the arming edge, so the held sprite never lags the slot highlight.
+    publishArmedTool(row.tool);
+    this.closeBuildMenu();
+  }
+
+  private firstUnlockedIndex(): number {
+    return this.menuRows.findIndex((row) => !row.locked);
+  }
+
+  private publishMenu(): void {
+    publishBuildMenu(this.menuVisible, this.menuCursor, this.host.getTool(), this.menuRows);
   }
 
   // --- cursor state ------------------------------------------------------------------------

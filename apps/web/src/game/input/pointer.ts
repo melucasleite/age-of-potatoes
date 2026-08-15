@@ -50,8 +50,10 @@ import {
   LampState,
   MachineKind,
   SUBTILE,
+  TillMode,
   beltSpec,
   listPriceCents,
+  machineSpec,
 } from '@snack/sim';
 
 import { formatCents, formatCentsWhole } from '../../format/money';
@@ -73,9 +75,11 @@ import type { DragRun, RectRun, TilePoint } from './gesture';
 import type { PanelRequest } from './panels';
 import { requestPanel } from './panels';
 import {
+  beltAtView,
   grabberAtView,
   machineWithinReach,
   parcelOrigin,
+  pipeAtView,
   screenToTile,
   tileAtView,
   tileWithinReach,
@@ -255,7 +259,15 @@ export class PointerInput {
       // Nothing to do here with this tool — which for the sell bin is not "nothing", it is
       // the other half of the counter. See `counterPanelFor`.
       const panel = counterPanelFor(view, tile, tool);
-      if (panel !== null) requestPanel(panel);
+      if (panel !== null) {
+        requestPanel(panel);
+        return;
+      }
+      // STILL nothing — so the click is a place, not a job, and the farmer just goes there
+      // ([[070]]). Strictly a fallback: it runs only after the tool's verb and the counter
+      // both declined, so every click that had a meaning keeps exactly that meaning.
+      const walk = walkFallback(view, tile);
+      if (walk !== null) this.host.queue.push(walk);
       return;
     }
 
@@ -393,6 +405,13 @@ export class PointerInput {
       return teardownBand(view, { x: hover.tileX, y: hover.tileY, w: 1, h: 1 });
     }
 
+    // The till's hover ghost is its drag band at 1×1: what THIS tile would become, in the
+    // mode the anchor-to-be would pick, before the button ever goes down.
+    if (tool === ToolMode.Till) {
+      const bounds = { x: hover.tileX, y: hover.tileY, w: 1, h: 1 };
+      return tillBand(view, bounds, tillModeFor(view, { tileX: hover.tileX, tileY: hover.tileY }));
+    }
+
     const grabber = this.grabberUnderCursor();
     if (grabber !== null && toolMachineKind(tool) === null) return grabberBand(hover, grabber);
 
@@ -497,6 +516,43 @@ export function counterPanelFor(
   const machine = tileAtView(view, tile.tileX, tile.tileY).machine;
   if (machine === null || machine.kind !== MachineKind.SellBin) return null;
   return 'shop';
+}
+
+/**
+ * A click that means NOTHING ELSE walks the farmer there ([[070]]).
+ *
+ * THE LAST RUNG OF THE CLICK DISPATCH, and the order is the contract: the tool's verb
+ * (`primaryCommand`) is asked first, the counter (`counterPanelFor`) second, and only a
+ * click both declined reaches here — so this adds a meaning to dead clicks and never
+ * reinterprets a live one. In practice that is the Hand over ground with no machine on it;
+ * the other click-gesture verbs always form a command and let the sim judge it.
+ *
+ * WHAT REFUSES, input-side: a machine tile (the Hand declining it means "nothing to do",
+ * not "go stand on it"), a crop tile (the same — the Hand has no crop verb, and stomping
+ * toward a plant you clicked by accident reads as the game mishearing you), water, unowned
+ * land, and off-world — the same standability the sim's `intentTargetSubtiles` enforces,
+ * mirrored so the click is a quiet no rather than a refused command. A click already within
+ * arm's reach emits nothing: the errand would complete on the spot, and a trace entry that
+ * does nothing is noise.
+ *
+ * The command is the EXISTING `WalkAndAct` with `IntentAction.Walk` (17) — arrival IS
+ * completion, no new command type, no sound, no flash; the walk itself is the feedback.
+ * A second click mid-walk retargets through the sim's ordinary errand replacement.
+ */
+export function walkFallback(view: WorldView, tile: HoverTile): Command | null {
+  const query = tileAtView(view, tile.tileX, tile.tileY);
+  if (!query.insideWorld || !query.owned) return null;
+  if (query.machine !== null || query.crop !== 0) return null;
+  if (reservoirAtTile(view, tile.tileX, tile.tileY)) return null;
+  if (tileWithinReach(view, tile.tileX, tile.tileY)) return null;
+  return {
+    type: 'WalkAndAct',
+    action: IntentAction.Walk,
+    tileX: tile.tileX,
+    tileY: tile.tileY,
+    item: 0,
+    count: 0,
+  };
 }
 
 /**
@@ -674,6 +730,20 @@ export function dragCommands(view: WorldView, drag: Drag, crop: CropId): Command
 
   if (run.kind === 'rect') {
     if (drag.tool === ToolMode.Deconstruct) return teardownCommands(view, run);
+    // The till ([[066]]): one drag is ONE `TillTile`, and the ANCHOR picked the mode at the
+    // press — grass anchor tills, farmland anchor un-tills — the same commit-at-the-press
+    // rule zone painting uses, so the band can label itself correctly the whole way. The
+    // command is formed and sent even when every tile in it will be skipped; the sim is the
+    // authority and refuses a no-op drag untraced (§12).
+    if (drag.tool === ToolMode.Till) {
+      return [
+        {
+          type: 'TillTile',
+          rect: { x: run.x, y: run.y, w: run.w, h: run.h },
+          mode: tillModeFor(view, drag.anchor),
+        },
+      ];
+    }
     const command =
       drag.tool === ToolMode.EraseZone
         ? eraseCommandFor(view, drag.anchor, run)
@@ -709,6 +779,40 @@ function runFor(drag: Drag): DragRun {
   return gestureFor(drag.tool) === 'line'
     ? elbowBetween(drag.anchor, drag.cursor, drag.flipped)
     : rectBetween(drag.anchor, drag.cursor);
+}
+
+// --- the till ----------------------------------------------------------------------------
+
+/**
+ * Which way a till drag converts, decided by its ANCHOR: press on farmland and the drag
+ * un-tills, press on anything else and it tills. Exported for the pointer tests.
+ */
+export function tillModeFor(view: WorldView, anchor: TilePoint): TillMode {
+  return tileAtView(view, anchor.tileX, anchor.tileY).isField ? TillMode.Untill : TillMode.Till;
+}
+
+/**
+ * Would the sim's `applyTillTile` convert this tile, in this mode? The ghost's per-tile
+ * truth, mirroring the reducer's own skip list — owned ground only, `tileOccupied` (which
+ * over there is machines, belts, arms, pipes and water in one question), farmland keeps a
+ * planted or compost-bearing tile, and a tile already in the asked-for state is a skip.
+ * A hint, never a gate (§12): the command goes regardless; this only colours the preview.
+ */
+export function tillConverts(
+  view: WorldView,
+  tileX: number,
+  tileY: number,
+  mode: TillMode,
+): boolean {
+  const query = tileAtView(view, tileX, tileY);
+  if (!query.insideWorld || !query.owned) return false;
+  if (query.machine !== null) return false;
+  if (reservoirAtTile(view, tileX, tileY)) return false;
+  if (beltAtView(view, tileX, tileY) !== null) return false;
+  if (grabberAtView(view, tileX, tileY) !== null) return false;
+  if (pipeAtView(view, tileX, tileY) !== null) return false;
+  if (mode === TillMode.Till) return !query.isField;
+  return query.isField && query.crop === 0 && query.compost === 0;
 }
 
 /** Right click: maintenance, on whatever machine is under the cursor. */
@@ -882,6 +986,7 @@ function dragBand(view: WorldView, drag: Drag, crop: CropId): BandState {
   }
 
   if (drag.tool === ToolMode.Deconstruct) return teardownBand(view, bounds);
+  if (drag.tool === ToolMode.Till) return tillBand(view, bounds, tillModeFor(view, drag.anchor));
 
   const inField = tilesInsideField(view, bounds);
   if (drag.tool === ToolMode.EraseZone) {
@@ -933,6 +1038,47 @@ function teardownBand(view: WorldView, bounds: Bounds): BandState {
     tone: plan.boxCount > 0 && plan.refundCents === 0 ? 'box' : 'erase',
     cells: plan.cells,
     label: plan.label,
+    dir: Direction.None,
+  };
+}
+
+/**
+ * The till band: exactly the tiles this drag would convert, filled; everything the sim will
+ * skip — machines, water, crops, ground already in the asked-for state — shows through.
+ *
+ * PER-TILE, LIKE TEARDOWN AND FOR THE SAME REASON: a till is N independent conversions and
+ * the tiles genuinely disagree, so a single fill would have to lie about the sprinkler
+ * standing mid-rectangle. Green (`zone`) going to farmland, red (`erase`) going back to
+ * grass — the erase tone because un-tilling releases ground exactly as un-zoning does. An
+ * empty result keeps the plain outline in the refusal tone, like a teardown over bare dirt.
+ */
+function tillBand(view: WorldView, bounds: Bounds, mode: TillMode): BandState {
+  const tone: BandTone = mode === TillMode.Till ? 'zone' : 'erase';
+  const cells: BandCell[] = [];
+  for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
+    for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
+      if (tillConverts(view, x, y, mode)) cells.push({ x, y, tone });
+    }
+  }
+
+  if (cells.length === 0) {
+    return {
+      ...bounds,
+      tone: 'blocked',
+      label: mode === TillMode.Till ? 'nothing here to till' : 'nothing to return to grass',
+      dir: Direction.None,
+    };
+  }
+
+  const n = cells.length;
+  return {
+    ...bounds,
+    tone,
+    cells,
+    label:
+      mode === TillMode.Till
+        ? `till ${n} tile${n === 1 ? '' : 's'}`
+        : `${n} tile${n === 1 ? '' : 's'} → grass`,
     dir: Direction.None,
   };
 }
@@ -1023,7 +1169,12 @@ export function ghostBand(
     h: footprint.tilesHigh,
   };
   const cost = TOOL_INFO[tool].costCents;
-  const free = footprintClear(view, bounds) && view.moneyCents >= cost;
+  // A machine whose spec says so may stand ON farmland ([[067]]) — the sprinkler family,
+  // read off `fieldPlaceable` exactly as the sim's footprint rule reads it, never by kind.
+  const kind = toolMachineKind(tool);
+  const fieldPlaceable = kind !== null && (machineSpec(kind)?.fieldPlaceable ?? false);
+  const farmReason = farmRefusal(view, bounds, fieldPlaceable);
+  const free = farmReason === '' && footprintClear(view, bounds) && view.moneyCents >= cost;
   const isGrabber = toolGrabberTier(tool) !== null;
   const tone: BandTone = free ? 'zone' : 'blocked';
 
@@ -1067,7 +1218,12 @@ export function ghostBand(
       cells,
       // "waters" for the sprinklers, "services" for the Maintenance Station — the verb comes
       // off the spec's role (`toolCoverageVerb`) so the preview never claims the wrong deed.
-      label: `${TOOL_INFO[tool].label} · ${toolCoverageVerb(tool)} ${span}×${span}`,
+      // A farm refusal outranks the coverage boast: the one fact a red band owes the player
+      // is WHY ([[067]]), and "waters 5×5" is not an answer to "why not here".
+      label:
+        farmReason !== ''
+          ? `${TOOL_INFO[tool].label} · ${farmReason}`
+          : `${TOOL_INFO[tool].label} · ${toolCoverageVerb(tool)} ${span}×${span}`,
       dir: Direction.None,
     };
   }
@@ -1075,7 +1231,12 @@ export function ghostBand(
   return {
     ...bounds,
     tone,
-    label: isGrabber ? `${TOOL_INFO[tool].label} ${arrow(placeDir)} · R` : TOOL_INFO[tool].label,
+    label:
+      farmReason !== ''
+        ? `${TOOL_INFO[tool].label} · ${farmReason}`
+        : isGrabber
+          ? `${TOOL_INFO[tool].label} ${arrow(placeDir)} · R`
+          : TOOL_INFO[tool].label,
     // The fix for the complaint that started item 052: rotating before placement "technically
     // worked", but the only feedback was this label's arrow, which is a character in a string
     // and reads as nothing happening. The chevron is the same fact drawn as a shape that
@@ -1091,14 +1252,20 @@ interface Bounds {
   h: number;
 }
 
+/**
+ * Farm tiles inside a paint rectangle — counted PER TILE, because farmland has been
+ * non-rectangular since the till tool ([[066]]) and intersecting the bounding box counts
+ * holes as field. The rect is span-capped (`ZONE_PAINT_MAX_SPAN`), so this is at most a few
+ * hundred binary-searched lookups per frame while a drag is live.
+ */
 function tilesInsideField(view: WorldView, bounds: Bounds): number {
-  const f = view.field;
-  const left = Math.max(bounds.x, f.originX);
-  const top = Math.max(bounds.y, f.originY);
-  const right = Math.min(bounds.x + bounds.w, f.originX + f.tilesWide);
-  const bottom = Math.min(bounds.y + bounds.h, f.originY + f.tilesHigh);
-  if (right <= left || bottom <= top) return 0;
-  return (right - left) * (bottom - top);
+  let count = 0;
+  for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
+    for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
+      if (tileAtView(view, x, y).isField) count += 1;
+    }
+  }
+  return count;
 }
 
 /**
@@ -1132,6 +1299,29 @@ function footprintClear(view: WorldView, bounds: Bounds): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Why a footprint's overlap with FARMLAND refuses, phrased for the tag — or `''` when the
+ * farmland raises no objection ([[067]]).
+ *
+ * Mirrors the sim's `footprintFree` exactly: a machine whose spec is not `fieldPlaceable`
+ * may not touch a farm tile at all, and a flagged one may take only EMPTY farm tiles — a
+ * crop or compost refuses per tile, because nothing is silently destroyed (house rule).
+ * Every input is view-readable (`TileQuery.isField`/`crop`/`compost` + the spec flag); the
+ * sim re-checks all of it and this string only explains the red (§12).
+ */
+function farmRefusal(view: WorldView, bounds: Bounds, fieldPlaceable: boolean): string {
+  for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
+    for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
+      const query = tileAtView(view, x, y);
+      if (!query.isField) continue;
+      if (!fieldPlaceable) return 'not on farmland';
+      if (query.crop !== 0) return 'a crop is in the way';
+      if (query.compost > 0) return 'compost in the way';
+    }
+  }
+  return '';
 }
 
 /** Takes a plain number: `GrabberView.dir` crosses the view boundary unbranded (§12). */

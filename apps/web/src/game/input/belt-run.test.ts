@@ -63,8 +63,8 @@ function clearCorner(state: WorldState, span: number): { x: number; y: number } 
     for (let x = 0; x + span < 16; x++) {
       let ok = true;
       for (let i = 0; i <= span; i++) {
-        if (!isOwnedTile(state, x + i, y) || isFieldTile(x + i, y)) ok = false;
-        if (!isOwnedTile(state, x + span, y + i) || isFieldTile(x + span, y + i)) ok = false;
+        if (!isOwnedTile(state, x + i, y) || isFieldTile(state, x + i, y)) ok = false;
+        if (!isOwnedTile(state, x + span, y + i) || isFieldTile(state, x + span, y + i)) ok = false;
       }
       if (ok) return { x, y };
     }

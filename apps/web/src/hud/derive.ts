@@ -56,7 +56,7 @@ const CATALOGUE: readonly CatalogueEntry[] = [
     kind: MachineKind.Sprinkler,
     id: 'sprinkler',
     label: 'Sprinkler',
-    blurb: 'Waters the five tiles around it every five seconds. It never forgets.',
+    blurb: 'Waters the 5×5 patch around it every five seconds. It never forgets.',
   },
   {
     kind: MachineKind.ChipKitchen,

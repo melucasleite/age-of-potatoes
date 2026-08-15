@@ -13,10 +13,15 @@ import raw from './hud.module.css';
 
 export type StyleName =
   | 'root'
+  | 'sidebar'
+  | 'sideSection'
+  | 'sideBag'
+  | 'sideBagBody'
+  | 'sideSlot'
+  | 'sidePapers'
+  | 'stage'
   | 'corner'
-  | 'topLeft'
   | 'topRight'
-  | 'bottomRight'
   | 'bottomCentre'
   | 'card'
   | 'label'
@@ -66,10 +71,9 @@ export type StyleName =
   | 'slotIcon'
   | 'slotFlash'
   | 'slotKey'
-  | 'slotName'
+  | 'slotVacant'
   | 'slotCost'
   | 'dragGhost'
-  | 'bottomRaised'
   | 'ribbon'
   | 'clipboard'
   | 'clip'
@@ -91,7 +95,6 @@ export type StyleName =
   | 'techToggleKey'
   | 'techToggleBadge'
   | 'techToggleReady'
-  | 'scrim'
   | 'techPanel'
   | 'techHead'
   | 'techTitle'
@@ -173,6 +176,27 @@ export type StyleName =
   | 'shopBuyReady'
   | 'shopBuyCount'
   | 'shopBuyCost'
+  // --- the build menu ---
+  // Shell, head, scroll and footer are the tech tree's classes, reused — only the grid,
+  // its cells and the focused-entry detail line are new ([[071]]).
+  | 'buildGroup'
+  | 'buildGrid'
+  | 'buildCell'
+  | 'buildCellOn'
+  | 'buildCellArmed'
+  | 'buildCellLocked'
+  | 'buildCellIcon'
+  | 'buildCellStrike'
+  | 'buildCellPrice'
+  | 'buildCellPriceBroke'
+  | 'buildCellPriceLocked'
+  | 'buildDetail'
+  | 'buildDetailHead'
+  | 'buildDetailName'
+  | 'buildDetailPrice'
+  | 'buildDetailBroke'
+  | 'buildDetailLocked'
+  | 'buildDetailHint'
   // --- item sprites ---
   // One class for every sprite in the HUD, wherever it is drawn. The size and the atlas offset
   // are inline styles on the element, because both are arithmetic (`item-art.ts`) rather than
@@ -180,10 +204,10 @@ export type StyleName =
   | 'icon'
   | 'iconBlank'
   // --- the bag ---
-  // Panel, head, list, rows and buttons are the stand's, class for class — it is the same
-  // modal showing a different list, and two lists laid out differently read as two games.
-  // Only what a boxed machine adds is new below.
-  | 'invPanel'
+  // A persistent dock section now ([[069]]); its header borrows `techToggle*` and its
+  // status line and buttons are the stand's, class for class — same dock, same chrome,
+  // and two lists laid out differently read as two games. Only what a boxed machine adds
+  // is new below.
   | 'invEmpty'
   | 'invBody'
   | 'invGrid'
@@ -220,7 +244,6 @@ export type StyleName =
   | 'invInvested'
   | 'invScrap'
   // --- the upgrade bench ---
-  | 'midRight'
   | 'bench'
   | 'benchHead'
   | 'benchName'

@@ -20,14 +20,101 @@
 .root {
   position: absolute;
   inset: 0;
-  /* The HUD must never eat a click meant for the lot. Only controls opt back in. */
+  /* The HUD must never eat a click meant for the lot. The SIDEBAR opts back in wholesale —
+   * it is opaque and owns its column of screen — and on the stage only controls do. */
   pointer-events: none;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
   font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
   font-size: 13px;
   line-height: 1.4;
   color: #efe2c6;
   user-select: none;
   z-index: 10;
+}
+
+/* --- the docked sidebar ([[069]]) ------------------------------------------------ */
+
+/*
+ * The only place panels live. Opaque ink, fixed width (`SIDEBAR_WIDTH_PX`, set inline by
+ * `HudRoot` so the number has one home), and the canvas gets everything to its right —
+ * opening a panel changes what this column shows, never what the player can see of the lot.
+ *
+ * `pointer-events: auto` on the whole box is deliberate and NEW: the old floating corners
+ * had to let clicks fall through to tiles underneath, but nothing is underneath this — an
+ * opaque dock that swallowed a click would only be swallowing a click on itself.
+ */
+.sidebar {
+  flex: 0 0 auto;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* Backstop for short windows: sections flex first, and only then does the column scroll. */
+  overflow-y: auto;
+  background: #14100e;
+  box-shadow: inset -2px 0 0 #2b2119;
+  scrollbar-width: thin;
+  scrollbar-color: #46392f #14100e;
+}
+
+/* One section of the dock: money, bag, papers. The contextual slot has its own class. */
+.sideSection {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 0;
+}
+
+/* The persistent bag. It may shrink (its grid scrolls) but it never leaves the dock. */
+.sideBag {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+
+.sideBagBody {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-height: 0;
+}
+
+/*
+ * THE ONE CONTEXTUAL SLOT. Shop, research, and the at-the-machine cards swap through it;
+ * Esc empties it; the sidebar itself never closes. It takes the free height between the
+ * bag and the papers, and a panel too tall for it scrolls inside itself (`.techScroll`,
+ * `.shopList`) exactly as it did as a modal.
+ */
+.sideSlot {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #46392f #14100e;
+}
+
+/* The paper corner: field card above clipboard, same order the old bottom-right kept. */
+.sidePapers {
+  padding-bottom: 12px;
+}
+
+/* --- the stage: everything over the canvas --------------------------------------- */
+
+/*
+ * What is ALLOWED over the canvas, exhaustively: the hotbar stack (bottom centre), thin
+ * transient hints (top centre), and the dev overlay. Everything else is in the dock.
+ */
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  pointer-events: none;
 }
 
 .corner {
@@ -37,10 +124,6 @@
   gap: 10px;
 }
 
-.topLeft {
-  top: 14px;
-  left: 14px;
-}
 .topRight {
   top: 14px;
   right: 14px;
@@ -51,16 +134,6 @@
  * lives there ([[014]]), and a control the player must press once before anything makes a
  * sound should not be underneath the toolbelt.
  */
-.bottomRight {
-  bottom: 14px;
-  right: 14px;
-  align-items: flex-end;
-}
-/* The bottom stack, floated above the bag's scrim (z-index 20) while that panel is open,
- * because the toolbelt is the drop target for its drag-to-assign ([[061]]). */
-.bottomRaised {
-  z-index: 30;
-}
 .bottomCentre {
   bottom: 14px;
   left: 50%;
@@ -108,7 +181,7 @@
 /* --- the Ticker ----------------------------------------------------------------- */
 
 .ticker {
-  min-width: 268px;
+  width: 100%;
 }
 
 .moneyRow {
@@ -384,12 +457,15 @@
 .slot {
   pointer-events: auto;
   cursor: pointer;
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  min-width: 74px;
-  padding: 6px 8px 7px;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 46px;
+  min-height: 46px;
+  padding: 6px 7px;
   border: 0;
   font: inherit;
   text-align: left;
@@ -478,7 +554,8 @@
 }
 
 /* The drag ghost (`hotbar-drag.ts`): a plain fixed div the module moves by transform.
- * Above the scrim (20) and the raised belt (30) — the thing in your hand is on top. */
+ * z-index 40 outlives the scrim it used to clear — the thing in your hand stays on top
+ * of the dock, the belt, and anything a later layer stacks below 40. */
 .dragGhost {
   position: fixed;
   top: 0;
@@ -495,19 +572,37 @@
   color: #efe2c6;
 }
 
+/* The digit, badged in the top-left corner — the sprite owns the slot face now ([[065]]). */
 .slotKey {
+  position: absolute;
+  top: 2px;
+  left: 4px;
   font-size: 9px;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.06em;
   opacity: 0.75;
 }
 
-.slotName {
-  font-size: 12px;
-  font-weight: 700;
+/* The waiting dot of an empty slot, sitting where a sprite would. */
+.slotVacant {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  opacity: 0.6;
 }
 
+/* The affordability tell, shrunk to a corner badge but never hidden ([[065]]): the price
+ * that turns red before you click is load-bearing Toolbelt behaviour, not decoration. */
 .slotCost {
-  font-size: 10px;
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 2px;
+  border-radius: 2px;
+  background: rgba(20, 16, 14, 0.65);
   color: #b58b4d;
   font-variant-numeric: tabular-nums;
 }
@@ -550,7 +645,7 @@
  */
 .clipboard {
   position: relative;
-  width: 292px;
+  width: 100%;
   padding: 18px 14px 12px;
   color: #46392f;
   background:
@@ -697,7 +792,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  min-width: 268px;
+  width: 100%;
   padding: 8px 12px 9px;
   border: 0;
   font: inherit;
@@ -769,23 +864,18 @@
 
 /* --- research: the panel -------------------------------------------------------- */
 
-.scrim {
-  pointer-events: auto;
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(20, 16, 14, 0.74);
-  z-index: 20;
-}
-
+/*
+ * NO SCRIM ANY MORE ([[069]]). The panel docks into the sidebar's contextual slot, the
+ * lot stays fully visible and fully clickable beside it, and the panel's height is the
+ * slot's — it scrolls inside itself exactly as it did as a modal.
+ */
 .techPanel {
   display: flex;
   flex-direction: column;
-  width: min(1060px, 100%);
+  width: 100%;
   max-height: 100%;
+  min-height: 0;
+  flex: 0 1 auto;
   padding: 0;
   background: linear-gradient(180deg, #2b2119 0%, #1c1610 100%);
   box-shadow:
@@ -917,9 +1007,14 @@
   color: #6d5c4d;
 }
 
+/*
+ * Two columns, not four, since the tree moved into the 440px dock ([[069]]) — the same
+ * pairing the old ≤1040px media rule reached for, now simply the shape of the panel's
+ * one home. A branch is still read against a neighbour; the eye scrolls for the rest.
+ */
 .branchRow {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: 10px;
 }
@@ -1252,8 +1347,11 @@
 .techDetail {
   flex: 0 0 auto;
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
+  /* Stacked, not side by side — the dock is 440px and the buy button under the prose is
+   * what the old narrow-window media rule already chose. Now it is the only layout. */
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   padding: 12px 20px 14px;
   background: linear-gradient(180deg, #1c1610 0%, #14100e 100%);
   box-shadow: inset 0 2px 0 #46392f;
@@ -1304,7 +1402,7 @@
   flex-direction: column;
   align-items: stretch;
   gap: 5px;
-  min-width: 168px;
+  width: 100%;
 }
 
 .buyButton {
@@ -1383,15 +1481,17 @@
  * of five things with a price each, and a list stretched to 1060px makes the player's eye
  * travel the width of the screen between a name and the button that buys it.
  *
- * Everything else — the scrim, the head, the money, the ESC key, the footer hint — is the
- * research panel's, class for class. Two modals in one game that are laid out differently
- * read as two games.
+ * Everything else — the head, the money, the ESC key, the footer hint — is the research
+ * panel's, class for class. Two panels in one dock that are laid out differently read as
+ * two games.
  */
 .shopPanel {
   display: flex;
   flex-direction: column;
-  width: min(660px, 100%);
+  width: 100%;
   max-height: 100%;
+  min-height: 0;
+  flex: 0 1 auto;
   background: linear-gradient(180deg, #2b2119 0%, #1c1610 100%);
   box-shadow:
     inset 0 0 0 2px #14100e,
@@ -1455,8 +1555,10 @@
 
 .shopRow {
   display: flex;
+  /* At dock width the two buy buttons may drop under the prose rather than crush it. */
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 8px 14px;
   padding: 10px 12px 11px;
   background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
   box-shadow:
@@ -1604,6 +1706,180 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- the build menu ([[071]]) ----------------------------------------------------- */
+
+/*
+ * The panel shell, head, scroll region and footer are the tech tree's, class for class —
+ * same slot, same chrome ([[069]]'s rule about panels that must not drift apart by a
+ * pixel). What is new is only the middle: a grid of sprite cells per group, and the
+ * detail line that speaks for the focused one.
+ */
+
+/* The group heading. The old in-canvas menu's h4, dressed in the sidebar's serifs. */
+.buildGroup {
+  padding: 10px 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8a7a63;
+}
+
+/* Columns come inline from `BUILD_GRID_COLS` — the same constant the arrow keys navigate
+   by, and a number typed here as well would be the two-sources bug the comment on that
+   constant names. */
+.buildGrid {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+/* A cell is the bag's slot with a price line under the picture — recognisably the same
+   control the player already drags sprites out of, one section up. */
+.buildCell {
+  position: relative;
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 6px 2px 4px;
+  border: 0;
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    5px 0,
+    calc(100% - 5px) 0,
+    100% 5px,
+    100% calc(100% - 5px),
+    calc(100% - 5px) 100%,
+    5px 100%,
+    0 calc(100% - 5px),
+    0 5px
+  );
+  transition: transform 70ms steps(2, end);
+}
+
+.buildCell:hover {
+  transform: translateY(-2px);
+}
+
+/* The keyboard cursor. Gold, like every "this is the thing you are about to act on". */
+.buildCellOn {
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #f5d382;
+}
+
+/* The tool already in hand — the old menu's green name, now a green rim. The cursor's
+   gold wins when both apply, hence the earlier rule. */
+.buildCellArmed:not(.buildCellOn) {
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #7ed68e;
+}
+
+/* Locked is dim but PRESENT — a greyed cell that names its unlock (detail line, tooltip)
+   is the whole difference between a tech tree and a surprise (`build-menu.ts`'s header). */
+.buildCellLocked {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.buildCellLocked:hover {
+  transform: none;
+}
+
+.buildCellIcon {
+  position: relative;
+}
+
+/* The erase verb: the zone overlay with a red strike through it. Drawn, not lettered —
+   the cell is 70px wide and the word would not fit where the meaning does. */
+.buildCellStrike::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  background: #e97c6e;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+  transform: rotate(-45deg);
+}
+
+/* THE AFFORDABILITY TELL, PER CELL, WITHOUT FOCUS — the [[065]] ruling carried over: the
+   price is on every cell, and red means the money is not there. Never behind hover. */
+.buildCellPrice {
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: #c8b9a4;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.buildCellPriceBroke {
+  color: #e97c6e;
+}
+
+.buildCellPriceLocked {
+  color: #6d5c4d;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 8.5px;
+}
+
+/* The focused entry's words: name and price on one line, the hint under them. */
+.buildDetail {
+  flex: 0 0 auto;
+  min-height: 44px;
+  margin: 8px 20px 0;
+  padding: 8px 10px;
+  background: #14100e;
+  box-shadow: inset 0 0 0 2px #46392f;
+}
+
+.buildDetailHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.buildDetailName {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  color: #efe2c6;
+}
+
+.buildDetailPrice {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #f5d382;
+}
+
+.buildDetailBroke {
+  color: #e97c6e;
+}
+
+.buildDetailLocked {
+  color: #e97c6e;
+  font-size: 11px;
+}
+
+.buildDetailHint {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #9c8f7c;
+}
+
 /* --- item sprites --------------------------------------------------------------- */
 
 /*
@@ -1653,18 +1929,6 @@
  * is a grid of pictures and a pane ([[058]]), and the two live below.
  */
 
-/*
- * The one measurement where the bag parts company with the stand.
- *
- * The stand is a column of five rows and is deliberately narrow ("a list stretched to 1060px
- * makes the player's eye travel the width of the screen between a name and the button that buys
- * it"). The bag is now two things side by side, and six columns of sprites plus a pane of
- * details do not fit in 660px without one of them getting cramped. A hundred pixels, spent once.
- */
-.invPanel {
-  width: min(760px, 100%);
-}
-
 .invEmpty {
   padding: 18px 4px;
   text-align: center;
@@ -1672,25 +1936,30 @@
   color: #6d5c4d;
 }
 
-/* Grid left, pane right. `min-height: 0` for the same reason `.shopList` needs it: a flex child
-   that refuses to shrink pushes the footer hint out through the bottom of the panel. */
+/* Grid above, pane below ([[069]]). The bag is a persistent 440px dock section now, and six
+   columns of sprites plus a 300px pane do not sit side by side in it — so the pane moved
+   under the grid, which is also the order the eye reads them in: find the thing, then read
+   about the thing. `min-height: 0` for the same reason `.shopList` needs it. */
 .invBody {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
   display: flex;
-  gap: 12px;
-  padding: 10px 20px 12px;
+  flex-direction: column;
+  gap: 9px;
 }
 
 /*
- * Six fixed columns, and the count is repeated in `Inventory.tsx` where the arrow keys use it.
- * An `auto-fill` grid would be shorter and would make Down mean something different at a
- * different window width — see the note on `COLUMNS`.
+ * Six fixed columns — the measurement the entire sidebar's width is derived from
+ * (`layout.ts`). An `auto-fill` grid would let the dock's one constant quietly stop being
+ * true; the arrow-key cursor that used to share this number went with the modal ([[069]]).
  */
 .invGrid {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   min-height: 0;
+  /* Four rows of cells before the grid scrolls — the dock section may not grow forever,
+     because the contextual slot below it owns the free height. */
+  max-height: 258px;
   overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(6, 60px);
@@ -1843,10 +2112,11 @@
 /* Sunk into the panel rather than raised off it: the grid is the thing being used and the pane
    is the thing being read, and two raised surfaces side by side compete for the same eye. */
 .invDetail {
-  /* Shrinks before the grid does. On a window too narrow for both, a pane with a wrapped line in
-     it is still readable; a grid whose sixth column is off the edge has lost a slot. */
-  flex: 0 1 300px;
+  flex: 0 1 auto;
   min-height: 0;
+  /* The pane sits under the grid now and clamps rather than growing — a boxed Fryer with
+     three dials and two prices is still the tallest thing it ever has to say. */
+  max-height: 224px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -2001,23 +2271,14 @@
 /* --- the upgrade bench ---------------------------------------------------------- */
 
 /*
- * Anchored mid-right, which is the last edge this HUD had free: the Ticker owns the top left,
- * the dev overlay the top right, the Clipboard the bottom right, the toolbelt the bottom
- * centre, and the audio start gate the bottom left.
- *
- * It appears because the PLAYER WALKED UP TO A MACHINE — no menu, no picking a machine out of a
- * list. Plan §5's posture is that anything a machine does automatically the player can also do
- * standing next to it, and buying its dials is the same gesture: you are at the thing.
+ * Docked in the sidebar's contextual slot now ([[069]]), not floated mid-right — but the
+ * trigger is unchanged and still the point: it appears because the PLAYER WALKED UP TO A
+ * MACHINE — no menu, no picking a machine out of a list. Plan §5's posture is that anything
+ * a machine does automatically the player can also do standing next to it, and buying its
+ * dials is the same gesture: you are at the thing.
  */
-.midRight {
-  top: 50%;
-  right: 14px;
-  transform: translateY(-50%);
-  align-items: flex-end;
-}
-
 .bench {
-  width: 274px;
+  width: 100%;
   padding: 11px 13px 12px;
 }
 
@@ -2375,7 +2636,7 @@
  * thing in this corner with a deadline on it.
  */
 .fieldCard {
-  width: 292px;
+  width: 100%;
   padding: 10px 12px;
 }
 
@@ -2551,55 +2812,16 @@
 /* --- small screens -------------------------------------------------------------- */
 
 /*
- * The clipboard gives way before the toolbelt does. The centred stack grows toward it, and
- * an observation you cannot read is worth less than a tool you cannot click.
+ * The one small-screen concession left ([[069]] slimmed this block down to it). The dock
+ * is a constant 440px, so everything in it stopped caring about the viewport — but the
+ * hotbar lives over the CANVAS, which is now `100vw - 440px`, and ten slots at full width
+ * want ~800px of it. The old 1040px breakpoint moves out by the sidebar's width so the
+ * belt compacts at the same canvas width it always did.
  */
-@media (max-width: 1040px) {
-  .clipboard {
-    display: none;
-  }
-  /*
-   * The field card does NOT go with it. The clipboard is observations the player can catch
-   * up on later; this is the one alert in the game, it only speaks after a minute of actual
-   * losses, and hiding it on a narrow window would mean the smallest screens are the ones
-   * that silently lose crops. It gives up width instead.
-   */
-  .fieldCard {
-    width: 238px;
-  }
-  .money {
-    font-size: 24px;
-  }
+@media (max-width: 1480px) {
   .slot {
-    min-width: 58px;
-  }
-  .slotName {
-    font-size: 11px;
-  }
-  .techToggle {
-    min-width: 0;
-  }
-  /* Two columns before one, so a branch is still read against its neighbours. */
-  .branchRow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .techDetail {
-    flex-direction: column;
-    gap: 10px;
-  }
-  .detailBuy {
-    min-width: 0;
-    width: 100%;
-  }
-  /*
-   * The bench is a control, so it moves rather than hiding — but mid-right collides with the
-   * centred toolbelt stack once the viewport is this narrow, so it goes back up to the top.
-   */
-  .midRight {
-    top: 14px;
-    transform: none;
-  }
-  .bench {
-    width: 238px;
+    min-width: 42px;
+    min-height: 42px;
+    padding: 4px 5px;
   }
 }

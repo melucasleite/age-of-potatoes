@@ -31,6 +31,7 @@
 
 import type { Command, WorldView } from '@snack/sim';
 
+import { publishArmedTool } from '@/game/input/armed-tool';
 import type { ToolMode } from '@/game/input/tools';
 
 import {
@@ -342,6 +343,9 @@ export class HudStore {
    */
   selectTool(tool: ToolMode): void {
     this.selector?.(tool);
+    // The renderer's armed-tool seam (`input/armed-tool.ts`): a hotbar click changes the
+    // held sprite in the same frame it lights the slot, exactly as a digit press does.
+    if (this.selector !== null) publishArmedTool(tool);
   }
 
   /**

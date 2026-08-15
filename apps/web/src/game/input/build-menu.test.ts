@@ -25,7 +25,9 @@ import {
 } from '@snack/sim';
 import type { WorldView } from '@snack/sim';
 
-import { BUILD_CATALOGUE } from './build-menu';
+import { resolveFrameIcon } from '../../hud/item-art';
+
+import { BUILD_CATALOGUE, BUILD_GRID_COLS, gridPlaces, moveGridCursor } from './build-menu';
 import { primaryCommand } from './pointer';
 import { TOOL_INFO, ToolMode, toolFootprint, toolForMachineKind, toolMachineKind } from './tools';
 
@@ -115,6 +117,109 @@ describe('the maintenance chain rows ([[039]])', () => {
     expect(station?.group).toBe('Maintenance');
     expect(bay?.group).toBe('Maintenance');
     expect(bench?.group).toBe('Maintenance');
+  });
+});
+
+/**
+ * FIXTURE STORY: the two machines the art lane has not painted yet.
+ *
+ * The Drone Bay and the Parts Bench have no atlas frame AT ALL — the world itself draws them
+ * procedurally (`render/textures.ts`, whose comment says "PLACEHOLDER: the art lane has
+ * generated no `machine_drone_bay`"), so the menu cell falling back to the lettered chip is
+ * the same honest degradation the bag already performs for them. They are PINNED here, both
+ * ways: a NEW entry with no frame fails the test below (the "complete overall" criterion in
+ * executable form), and the day the art lane ships these two frames, this list fails too —
+ * which is the reminder to shorten it, not a bug.
+ */
+const KNOWN_FRAMELESS: readonly ToolMode[] = [ToolMode.PlaceDroneBay, ToolMode.PlacePartsBench];
+
+describe('the build menu icons ([[071]])', () => {
+  it('gives every entry a frame name, derived or declared', () => {
+    for (const entry of BUILD_CATALOGUE) {
+      expect(entry.frame, `${TOOL_INFO[entry.tool].label} names no frame`).not.toBe('');
+    }
+  });
+
+  it('resolves every frame against the atlas, except the pinned art-lane gaps', () => {
+    for (const entry of BUILD_CATALOGUE) {
+      const label = TOOL_INFO[entry.tool].label;
+      const source = resolveFrameIcon(entry.frame);
+      if (KNOWN_FRAMELESS.includes(entry.tool)) {
+        // Pinned in BOTH directions — see the fixture story above. `not.toBeNull` here would
+        // pass silently forever; `toBeNull` makes the atlas landing the art tell us so.
+        expect(source, `${label} has art now — remove it from KNOWN_FRAMELESS`).toBeNull();
+      } else {
+        expect(source, `${label} points at a frame the atlas does not have`).not.toBeNull();
+      }
+    }
+  });
+
+  it('derives machine frames from the spec slug, never from a hand-written table', () => {
+    for (const entry of BUILD_CATALOGUE) {
+      const kind = toolMachineKind(entry.tool);
+      if (kind === null) continue;
+      const slug = machineSpec(kind)!.slug.split('-').join('_');
+      expect(entry.frame, `${TOOL_INFO[entry.tool].label} frame drifted from its slug`).toBe(
+        `machine_${slug}`,
+      );
+    }
+  });
+});
+
+describe('the build grid ([[071]])', () => {
+  /** Three groups: five entries (a full row), then three, then seven (a row and a spill). */
+  const rows = [
+    ...Array.from({ length: 5 }, () => ({ group: 'A' })),
+    ...Array.from({ length: 3 }, () => ({ group: 'B' })),
+    ...Array.from({ length: 7 }, () => ({ group: 'C' })),
+  ];
+
+  it('starts every group at column zero, on its own row', () => {
+    const places = gridPlaces(rows, 5);
+    // Group A fills row 0 exactly; B must not share it even though A ended flush.
+    expect(places[0]).toEqual({ row: 0, col: 0 });
+    expect(places[4]).toEqual({ row: 0, col: 4 });
+    expect(places[5]).toEqual({ row: 1, col: 0 }); // B
+    expect(places[8]).toEqual({ row: 2, col: 0 }); // C, new row despite B's short row
+    expect(places[12]).toEqual({ row: 2, col: 4 });
+    expect(places[13]).toEqual({ row: 3, col: 0 }); // C spills
+  });
+
+  it('walks left and right through the whole catalogue in order, wrapping', () => {
+    expect(moveGridCursor(rows, 5, 0, 'right')).toBe(1);
+    expect(moveGridCursor(rows, 5, 14, 'right')).toBe(0);
+    expect(moveGridCursor(rows, 5, 0, 'left')).toBe(14);
+  });
+
+  it('moves down to the nearest row, keeping the column where it can', () => {
+    // From A's col 4 down to B, whose row only reaches col 2: caught, not refused.
+    expect(moveGridCursor(rows, 5, 4, 'down')).toBe(7);
+    // From B's col 1 down into C's full row: same column.
+    expect(moveGridCursor(rows, 5, 6, 'down')).toBe(9);
+    // Down off the bottom wraps to the top row, same column.
+    expect(moveGridCursor(rows, 5, 14, 'up')).toBe(9);
+    expect(moveGridCursor(rows, 5, 13, 'down')).toBe(0);
+  });
+
+  it('moves up off the top by wrapping to the bottom row', () => {
+    // A col 0 up → C's spill row (the last row), which only has cols 0–1.
+    expect(moveGridCursor(rows, 5, 0, 'up')).toBe(13);
+    expect(moveGridCursor(rows, 5, 4, 'up')).toBe(14);
+  });
+
+  it('lays the real catalogue out inside the advertised columns', () => {
+    const places = gridPlaces(BUILD_CATALOGUE, BUILD_GRID_COLS);
+    expect(places.length).toBe(BUILD_CATALOGUE.length);
+    for (const place of places) {
+      expect(place.col).toBeGreaterThanOrEqual(0);
+      expect(place.col).toBeLessThan(BUILD_GRID_COLS);
+    }
+    // Group boundaries in the real data start fresh rows, exactly as the synthetic ones do.
+    for (let i = 1; i < BUILD_CATALOGUE.length; i++) {
+      if (BUILD_CATALOGUE[i]!.group === BUILD_CATALOGUE[i - 1]!.group) continue;
+      expect(places[i]!.col, `${BUILD_CATALOGUE[i]!.group} does not start its row`).toBe(0);
+      expect(places[i]!.row).toBeGreaterThan(places[i - 1]!.row);
+    }
   });
 });
 

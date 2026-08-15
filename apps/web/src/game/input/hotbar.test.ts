@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { ItemId } from '@snack/sim';
 
 import { HOTBAR_SLOTS, HOTBAR_TOOLS, Hotbar, digitToSlotIndex, itemPlaceTool } from './hotbar';
-import { ToolMode } from './tools';
+import { ToolMode, toolHeldFrame, toolIconFrame } from './tools';
 
 /** A localStorage stand-in: the three methods the model touches, over a Map. */
 function fakeStorage(): Storage {
@@ -59,6 +59,37 @@ describe('the default layout', () => {
 
   it('includes the teardown tool — the one a player must never lose', () => {
     expect(HOTBAR_TOOLS).toContain(ToolMode.Deconstruct);
+  });
+
+  it('includes the till tool ([[066]]) — ground you cannot till is a farm that cannot grow', () => {
+    expect(HOTBAR_TOOLS).toContain(ToolMode.Till);
+  });
+});
+
+// Item 065's mapping test: ONE sprite per hand tool, worn by the hotbar slot AND by the
+// avatar's hands, from the same table — so the bar cannot show a can while the character
+// holds a hoe. What fails quietly without this: a new mandatory tool ships with no frame
+// and its slot silently falls to the letter chip forever.
+describe('tool icons — one sprite for the slot and the hand ([[065]])', () => {
+  it('every mandatory hotbar tool names exactly one atlas frame, uniquely', () => {
+    const frames = HOTBAR_TOOLS.map((tool) => toolIconFrame(tool));
+    for (const frame of frames) expect(frame).toMatch(/^tool_[a-z_]+$/);
+    expect(new Set(frames).size).toBe(frames.length);
+  });
+
+  it('the held frame IS the slot frame — except the Hand, whose held state is empty hands', () => {
+    for (const tool of HOTBAR_TOOLS) {
+      if (tool === ToolMode.Hand) {
+        expect(toolHeldFrame(tool)).toBe('');
+      } else {
+        expect(toolHeldFrame(tool)).toBe(toolIconFrame(tool));
+      }
+    }
+  });
+
+  it('a cursor without hand art says so explicitly rather than borrowing a picture', () => {
+    expect(toolIconFrame(ToolMode.PlaceFryer)).toBe('');
+    expect(toolHeldFrame(ToolMode.PlaceFryer)).toBe('');
   });
 });
 

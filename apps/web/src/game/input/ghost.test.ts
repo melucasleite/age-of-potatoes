@@ -15,11 +15,15 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  CropId,
   Direction,
+  MachineKind,
   REPAIR_KIT_RADIUS_TILES,
   SPRINKLER_RADIUS_TILES,
   createWorldView,
+  machineSpec,
 } from '@snack/sim';
+import type { WorldView } from '@snack/sim';
 
 import { ghostBand } from './pointer';
 import { ToolMode, toolCoverageRadius, toolCoverageVerb } from './tools';
@@ -106,5 +110,69 @@ describe('ghostBand coverage preview', () => {
     expect(band!.y).toBe(HOVER.tileY);
     expect(band!.w).toBe(2);
     expect(band!.h).toBe(2);
+  });
+});
+
+// Item 067: the sim's `footprintFree` accepts a `fieldPlaceable` machine on EMPTY farm
+// tiles, so the ghost must go green there — and must say WHY when a crop refuses it. What
+// fails quietly without these: a red ghost over the legal mid-field spot the whole item
+// exists to allow (the player never tries the click), or a green fryer ghost over the crops
+// (the click dies in the reducer and reads as a dead click).
+describe('ghostBand on farmland ([[067]])', () => {
+  /** Owned world, money in the pouch, and farmland at exactly `tiles`. */
+  function farmView(tiles: readonly (readonly [number, number])[]): WorldView {
+    const view = createWorldView();
+    view.land.owned.push(0);
+    view.moneyCents = 1_000_000;
+    const sorted = [...tiles].sort(
+      (a, b) => a[1] * view.worldTilesWide + a[0] - (b[1] * view.worldTilesWide + b[0]),
+    );
+    view.field.count = sorted.length;
+    sorted.forEach(([x, y], i) => {
+      view.field.tileX[i] = x;
+      view.field.tileY[i] = y;
+    });
+    return view;
+  }
+
+  it('the flag this reads is the spec’s own, not a kind list', () => {
+    expect(machineSpec(MachineKind.Sprinkler)!.fieldPlaceable).toBe(true);
+    expect(machineSpec(MachineKind.Fryer)!.fieldPlaceable).toBe(false);
+  });
+
+  it('a sprinkler ghost is LEGAL on an empty farm tile', () => {
+    const view = farmView([[HOVER.tileX, HOVER.tileY]]);
+    const band = ghostBand(view, HOVER, ToolMode.PlaceSprinkler, Direction.East)!;
+    expect(band.tone).toBe('zone');
+  });
+
+  it('a crop-bearing farm tile refuses, and the label says the reason', () => {
+    const view = farmView([[HOVER.tileX, HOVER.tileY]]);
+    view.field.crop[0] = CropId.RussetPotato;
+    const band = ghostBand(view, HOVER, ToolMode.PlaceSprinkler, Direction.East)!;
+    expect(band.tone).toBe('blocked');
+    expect(band.label).toContain('a crop is in the way');
+  });
+
+  it('compost refuses with its own reason — nothing is silently destroyed', () => {
+    const view = farmView([[HOVER.tileX, HOVER.tileY]]);
+    view.field.compost[0] = 1;
+    const band = ghostBand(view, HOVER, ToolMode.PlaceSprinkler, Direction.East)!;
+    expect(band.tone).toBe('blocked');
+    expect(band.label).toContain('compost in the way');
+  });
+
+  it('a non-flagged machine stays banned from farmland, and the ghost says so', () => {
+    // The fryer's 2×2 clips one farm tile; the whole footprint refuses, per the sim's rule.
+    const view = farmView([[HOVER.tileX + 1, HOVER.tileY + 1]]);
+    const band = ghostBand(view, HOVER, ToolMode.PlaceFryer, Direction.East)!;
+    expect(band.tone).toBe('blocked');
+    expect(band.label).toContain('not on farmland');
+  });
+
+  it('off the farm nothing changed: clear owned ground is still legal', () => {
+    const view = farmView([]);
+    const band = ghostBand(view, HOVER, ToolMode.PlaceFryer, Direction.East)!;
+    expect(band.tone).toBe('zone');
   });
 });
