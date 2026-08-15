@@ -31,14 +31,17 @@ import type { Command, WorldView } from '@snack/sim';
 import {
   bestSellable,
   counterPanelFor,
+  createHold,
   dragCommands,
+  holdCommand,
   primaryCommand,
   reachAdjusted,
   tillConverts,
   tillModeFor,
   walkFallback,
 } from './pointer';
-import { ToolMode } from './tools';
+import type { HoldState } from './pointer';
+import { ToolMode, gestureFor } from './tools';
 
 /** Stand the farmer on the centre of a tile. Reach is measured from tile centres. */
 function standingOn(tileX: number, tileY: number): WorldView {
@@ -558,6 +561,142 @@ describe('the till tool ([[066]])', () => {
     expect(tillConverts(view, 5, 4, TillMode.Untill)).toBe(false);
     expect(tillConverts(view, 6, 4, TillMode.Untill)).toBe(false);
     expect(tillConverts(view, 9, 9, TillMode.Untill)).toBe(false); // grass already
+  });
+});
+
+// Hold-to-paint ([[072]]): the left button held on a paint tool repeats the verb, once per
+// NEW tile, direct commands only. The brain is `createHold` + `holdCommand`, both pure, so a
+// whole drag is a sequence of calls here — no DOM, no camera, no pointer events. What these
+// pin is exactly the silent failures: a double-fire on a re-crossed tile, a walk errand
+// leaking out of a hold (which would thrash the single-errand model), and a dry can ringing
+// its refusal once per tile instead of once.
+describe('hold-to-paint ([[072]])', () => {
+  /** The press edge, as `onPointerDown` performs it: the click's command, then the hold. */
+  function pressHold(view: WorldView, tileX: number, tileY: number, tool: ToolMode): HoldState {
+    const at = { tileX, tileY };
+    const pressed = primaryCommand(view, at, tool, Direction.None)!;
+    return createHold(1, 0, 0, view, at, tool, pressed);
+  }
+
+  it('the three hand verbs are paint; clicks, rects and lines all keep their grammar', () => {
+    expect(gestureFor(ToolMode.Plant)).toBe('paint');
+    expect(gestureFor(ToolMode.Water)).toBe('paint');
+    expect(gestureFor(ToolMode.Harvest)).toBe('paint');
+    // NOT the Hand, and NOT a placement — a held drag placing eight sprinklers is a
+    // financial incident, not a convenience.
+    expect(gestureFor(ToolMode.Hand)).toBe('click');
+    expect(gestureFor(ToolMode.PlaceSprinkler)).toBe('click');
+    expect(gestureFor(ToolMode.UseRepairKit)).toBe('click');
+    // The drag grammars are untouched: their dispatch never sees a hold.
+    expect(gestureFor(ToolMode.Till)).toBe('rect');
+    expect(gestureFor(ToolMode.PaintZone)).toBe('rect');
+    expect(gestureFor(ToolMode.Deconstruct)).toBe('rect');
+    expect(gestureFor(ToolMode.PlaceBeltBasic)).toBe('line');
+  });
+
+  it('sows each crossed tile once — and never the anchor, which the press already got', () => {
+    const view = standingOn(4, 4);
+    const hold = pressHold(view, 4, 4, ToolMode.Plant);
+
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 5 })).toEqual({
+      type: 'PlantTile',
+      tileX: 4,
+      tileY: 5,
+      crop: CropId.RussetPotato,
+    });
+    expect(holdCommand(view, hold, { tileX: 5, tileY: 4 })).toMatchObject({ type: 'PlantTile' });
+    // Re-crossing a tile is silence, not a second plant.
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 5 })).toBeNull();
+    // The anchor was the click; the hold never repeats it.
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 4 })).toBeNull();
+  });
+
+  it('skips an out-of-reach tile — never a walk errand — then fires it when reach arrives', () => {
+    const view = standingOn(4, 4);
+    const hold = pressHold(view, 4, 4, ToolMode.Plant);
+
+    // Two tiles south is past arm's length. Skipped: no command, and above all no WalkAndAct.
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 6 })).toBeNull();
+
+    // The farmer walks one tile south while the button stays down; the same tile under the
+    // same cursor is now in reach, and fires — the long-row loop.
+    view.player.ySub += SUBTILE;
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 6 })).toMatchObject({
+      type: 'PlantTile',
+      tileX: 4,
+      tileY: 6,
+    });
+  });
+
+  it('harvest repeats the same way', () => {
+    const view = standingOn(4, 4);
+    const hold = pressHold(view, 4, 4, ToolMode.Harvest);
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 5 })).toEqual({
+      type: 'HarvestTile',
+      tileX: 4,
+      tileY: 5,
+    });
+  });
+
+  it('water budgets the can within a tick, and the dry-can tell rings once, not per tile', () => {
+    const view = standingOn(4, 4);
+    view.player.canCharges = 2;
+    // The press poured one (in reach, direct), so the hold starts owing one charge.
+    const hold = pressHold(view, 4, 4, ToolMode.Water);
+
+    // Second pour: the last charge the can actually has.
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 5 })).toMatchObject({ type: 'WaterTile' });
+    // Third tile: dry. ONE more command goes through so the sim's refusal tell rings…
+    expect(holdCommand(view, hold, { tileX: 5, tileY: 4 })).toMatchObject({
+      type: 'WaterTile',
+      tileX: 5,
+      tileY: 4,
+    });
+    // …and then silence, however many more tiles the drag crosses.
+    expect(holdCommand(view, hold, { tileX: 5, tileY: 5 })).toBeNull();
+    expect(holdCommand(view, hold, { tileX: 3, tileY: 4 })).toBeNull();
+
+    // The view advances a tick — every queued pour is now reflected in `canCharges`, which
+    // the sim has at zero. Still silent, and still no second tell.
+    view.tick = 1;
+    view.player.canCharges = 0;
+    expect(holdCommand(view, hold, { tileX: 3, tileY: 5 })).toBeNull();
+  });
+
+  it('a hold that begins with a dry can says nothing more — the press was the tell', () => {
+    const view = standingOn(4, 4);
+    view.player.canCharges = 0;
+    // A pond far away, so the pondless-world special case stays out of the way and the
+    // press is an ordinary (refused, audible) pour.
+    view.reservoirs.push({
+      id: 1,
+      tileX: 14,
+      tileY: 14,
+      tilesWide: 1,
+      tilesHigh: 1,
+    } as WorldView['reservoirs'][number]);
+    const hold = pressHold(view, 4, 4, ToolMode.Water);
+
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 5 })).toBeNull();
+    expect(holdCommand(view, hold, { tileX: 5, tileY: 4 })).toBeNull();
+  });
+
+  it('a drag that clips the pond does not dip the can mid-row', () => {
+    const view = standingOn(4, 4);
+    view.player.canCharges = 5;
+    view.reservoirs.push({
+      id: 1,
+      tileX: 4,
+      tileY: 5,
+      tilesWide: 1,
+      tilesHigh: 1,
+    } as WorldView['reservoirs'][number]);
+    const hold = pressHold(view, 4, 4, ToolMode.Water);
+
+    // Open water under the held cursor means `RefillCan` to a click; the hold filters it.
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 5 })).toBeNull();
+    // And the row continues on the far side of the clip.
+    expect(holdCommand(view, hold, { tileX: 5, tileY: 4 })).toMatchObject({ type: 'WaterTile' });
   });
 });
 

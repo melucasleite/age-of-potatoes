@@ -190,8 +190,15 @@ export const TOOL_ORDER: readonly ToolMode[] = [
  *             leads with the axis the cursor moved further along and R flips that; the sim
  *             still stores two straight segments, because that is what a corner is, but the
  *             player expresses it in one gesture and it enters the trace as one command.
+ *   `paint` — a `click` on the press edge, exactly, and then the HELD button repeats the
+ *             verb on each new tile the cursor crosses, once per tile per hold ([[072]]).
+ *             Farming a row is one gesture instead of eight clicks. Deliberately NOT the
+ *             rect grammar: each tile is an ordinary per-tile command in the trace, judged
+ *             by the sim like the click it stands in for — no new command, no batching.
+ *             Only the three tile verbs carry it; a held drag that placed eight sprinklers
+ *             would be a financial incident, not a convenience.
  */
-export type GestureKind = 'click' | 'rect' | 'line';
+export type GestureKind = 'click' | 'rect' | 'line' | 'paint';
 
 export interface ToolInfo {
   readonly label: string;
@@ -227,21 +234,21 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
   },
   [ToolMode.Water]: {
     label: 'Water',
-    hint: 'click soil to pour the can',
+    hint: 'click soil to pour the can — hold and drag to water a row',
     costCents: 0,
-    gesture: 'click',
+    gesture: 'paint',
   },
   [ToolMode.Plant]: {
     label: 'Plant',
-    hint: 'click bare soil to sow a potato',
+    hint: 'click bare soil to sow a potato — hold and drag to sow a row',
     costCents: 0,
-    gesture: 'click',
+    gesture: 'paint',
   },
   [ToolMode.Harvest]: {
     label: 'Harvest',
-    hint: 'click a ripe plant to pull it',
+    hint: 'click a ripe plant to pull it — hold and drag to clear a row',
     costCents: 0,
-    gesture: 'click',
+    gesture: 'paint',
   },
   [ToolMode.Till]: {
     label: 'Till',

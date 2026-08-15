@@ -115,9 +115,43 @@ interface Drag {
   flipped: boolean;
 }
 
+/**
+ * A paint hold in progress ([[072]]): the left button is down on a `paint` tool, and every
+ * NEW tile the cursor crosses gets the verb once. See `holdCommand` for the rules; this is
+ * only the memory they need. Renderer-side state, never traced — what enters the trace is
+ * the ordinary per-tile commands the hold emits.
+ */
+export interface HoldState {
+  pointerId: number;
+  tool: ToolMode;
+  /**
+   * The last CLIENT coordinates the pointer reported, kept so the per-frame step can
+   * re-project them through the live camera. The mouse can sit perfectly still while WASD
+   * walks the world underneath it — the camera is the player's body — so "which tile is
+   * under the cursor" changes without a single pointer event, and a hold that only listened
+   * to `pointermove` would go quiet the moment the player started walking the row.
+   */
+  clientX: number;
+  clientY: number;
+  /**
+   * Tiles this hold has already fired on, as `"x,y"` keys, seeded with the anchor (the
+   * press edge already dispatched it as an ordinary click). Once per tile per hold: dragging
+   * back over a just-planted tile does not double-plant, and a tile that legally wants the
+   * verb again mid-hold still fires only once, for predictability. Cleared by existing.
+   */
+  fired: Set<string>;
+  /** `view.tick` when `watersEmitted` was last reset — see `holdCommand`. */
+  viewTick: number;
+  /** WaterTile commands emitted since the view last advanced, so the charge budget is live. */
+  watersEmitted: number;
+  /** The empty-can refusal has been shown this dry spell. One tell, not one per tile. */
+  canRefusalTold: boolean;
+}
+
 export class PointerInput {
   private attached = false;
   private drag: Drag | null = null;
+  private hold: HoldState | null = null;
   private hover: HoverTile | null = null;
   /** True while a gesture that belongs to the camera is in progress. Never paints. */
   private panReserved = false;
@@ -152,6 +186,7 @@ export class PointerInput {
     canvas.removeEventListener('contextmenu', this.onContextMenu);
     canvas.removeEventListener('wheel', this.onWheel);
     this.drag = null;
+    this.hold = null;
     this.panReserved = false;
     this.hover = null;
     this.host.setHover(null);
@@ -160,11 +195,24 @@ export class PointerInput {
   /** Esc, and anything else that means "forget it". Emits nothing, by definition. */
   cancelDrag(): void {
     this.drag = null;
+    this.hold = null;
     this.panReserved = false;
   }
 
+  /** A paint hold counts: Esc mid-row means "stop painting", not "disarm the tool". */
   get dragging(): boolean {
-    return this.drag !== null;
+    return this.drag !== null || this.hold !== null;
+  }
+
+  /**
+   * Once per frame from `InputSystem.update()`, after the camera is applied. This is what
+   * makes HOLDING WHILE WALKING work: the stored client coordinates are re-projected through
+   * the transform that actually reached the display, so tiles scroll under a stationary
+   * cursor as the farmer walks, enter reach, and fire — the long-row loop. A frame with no
+   * hold in progress is one null check.
+   */
+  update(): void {
+    this.stepHold();
   }
 
   /**
@@ -189,6 +237,15 @@ export class PointerInput {
     this.hover = tile;
     this.host.setHover(tile);
     if (this.drag !== null) this.drag.cursor = tile;
+    const hold = this.hold;
+    if (hold !== null && event.pointerId === hold.pointerId) {
+      hold.clientX = event.clientX;
+      hold.clientY = event.clientY;
+      // Step on the move edge as well as per frame — pointer events can outpace the rAF
+      // loop, and the extra samples catch tiles a fast drag would otherwise cross between
+      // frames. A sample that lands on an already-fired tile costs one Set lookup.
+      this.stepHold();
+    }
   };
 
   private readonly onPointerLeave = (): void => {
@@ -228,9 +285,9 @@ export class PointerInput {
     this.hover = tile;
     this.host.setHover(tile);
 
-    // Right button: cancel a drag if there is one, otherwise the maintenance verb.
+    // Right button: cancel a drag (or a paint hold) if there is one, otherwise maintenance.
     if (event.button === 2) {
-      if (this.drag !== null || this.panReserved) {
+      if (this.drag !== null || this.hold !== null || this.panReserved) {
         this.cancelDrag();
         return;
       }
@@ -248,12 +305,17 @@ export class PointerInput {
     if (event.button !== 0) return;
 
     const tool = this.host.getTool();
-    if (gestureFor(tool) === 'click') {
-      // One press is one command, on the press edge. Nothing re-fires while it is held —
-      // a hold-to-repeat water verb would put one command per frame in the trace.
+    const kind = gestureFor(tool);
+    if (kind === 'click' || kind === 'paint') {
+      // One press is one command, on the press edge — a `paint` press is EXACTLY a click,
+      // including the walk-to-act wrapper ([[050]]), so single clicks keep their meaning to
+      // the byte. What `paint` adds happens after this dispatch: the hold begins, and each
+      // NEW tile the held cursor crosses gets the verb once (`holdCommand`) — once per TILE,
+      // never per frame, which is what keeps the trace from recording the mouse.
       const command = primaryCommand(view, tile, tool, this.system.placeDir);
       if (command !== null) {
         this.host.queue.push(reachAdjusted(view, tile, command));
+        if (kind === 'paint') this.beginHold(event, view, tile, tool, command);
         return;
       }
       // Nothing to do here with this tool — which for the sell bin is not "nothing", it is
@@ -286,6 +348,19 @@ export class PointerInput {
       return;
     }
 
+    // A paint hold simply ENDS on release — every command it had to say was said per tile
+    // while the button was down, so the release edge emits nothing and forgets the fired set.
+    const hold = this.hold;
+    if (hold !== null && event.button === 0) {
+      this.hold = null;
+      try {
+        this.host.canvas.releasePointerCapture(event.pointerId);
+      } catch {
+        /* Already released, or never captured. */
+      }
+      return;
+    }
+
     const drag = this.drag;
     this.drag = null;
     if (drag === null || event.button !== 0) return;
@@ -314,6 +389,54 @@ export class PointerInput {
 
   private tileUnder(event: PointerEvent): HoverTile {
     return screenToTile(this.host.canvas, this.host.camera, event.clientX, event.clientY);
+  }
+
+  // --- the paint hold ([[072]]) ----------------------------------------------------------
+
+  /**
+   * The press edge of a `paint` gesture has already dispatched as a click; remember enough
+   * to repeat the verb on every new tile while the button stays down. Pointer capture for
+   * the same reason a drag takes it: a row that ends past the canvas edge is an ordinary
+   * gesture, and losing the `pointerup` would leave the hold painting with the button up.
+   */
+  private beginHold(
+    event: PointerEvent,
+    view: WorldView,
+    anchor: HoverTile,
+    tool: ToolMode,
+    pressed: Command,
+  ): void {
+    this.hold = createHold(
+      event.pointerId,
+      event.clientX,
+      event.clientY,
+      view,
+      anchor,
+      tool,
+      pressed,
+    );
+    try {
+      this.host.canvas.setPointerCapture(event.pointerId);
+    } catch {
+      /* Capture is a nicety; a browser that refuses it still gets a working hold inside. */
+    }
+  }
+
+  /** Re-project the held cursor through the live camera and fire on the tile if it is new. */
+  private stepHold(): void {
+    const hold = this.hold;
+    if (hold === null) return;
+    // The keyboard can re-arm mid-hold. The new tool did not get this press, so it does not
+    // inherit the hold — the player re-presses, which is the same contract a click has.
+    if (this.host.getTool() !== hold.tool) {
+      this.hold = null;
+      return;
+    }
+    const view = this.host.latestView();
+    if (view === null) return;
+    const tile = screenToTile(this.host.canvas, this.host.camera, hold.clientX, hold.clientY);
+    const command = holdCommand(view, hold, tile);
+    if (command !== null) this.host.queue.push(command);
   }
 
   // --- what R acts on ----------------------------------------------------------------------
@@ -491,6 +614,109 @@ export function primaryCommand(
     default:
       return null;
   }
+}
+
+// --- the paint hold's brain ([[072]]) ---------------------------------------------------
+//
+// Both functions are PURE in the house sense: a `WorldView`, a plain state record, a tile —
+// no DOM, no camera, no listeners — which is what lets the tests below drive a whole hold
+// as a sequence of calls. `holdCommand` mutates only its own bookkeeping (the fired set and
+// the charge guess); the world is the sim's, reached exclusively through the returned
+// command.
+
+/**
+ * The memory a fresh hold starts with, from the press that began it.
+ *
+ * The anchor is seeded as FIRED because the press edge already dispatched it as an ordinary
+ * click — including, when it was out of reach, as a walk-to-act errand ([[050]]); seeding it
+ * means the arriving farmer and the hold cannot both perform the same tile. The charge guess
+ * starts at one when the press poured directly, since that pour is in the queue and not yet
+ * in the view; and a hold that BEGINS with a dry can starts with the refusal already told —
+ * the press's own refused pour was the tell, and once is the contract.
+ */
+export function createHold(
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+  view: WorldView,
+  anchor: HoverTile,
+  tool: ToolMode,
+  pressed: Command,
+): HoldState {
+  return {
+    pointerId,
+    tool,
+    clientX,
+    clientY,
+    fired: new Set([holdKey(anchor.tileX, anchor.tileY)]),
+    viewTick: view.tick,
+    watersEmitted:
+      pressed.type === 'WaterTile' && tileWithinReach(view, anchor.tileX, anchor.tileY) ? 1 : 0,
+    canRefusalTold: tool === ToolMode.Water && view.player.canCharges === 0,
+  };
+}
+
+/**
+ * The command a held cursor over `tile` means right now, or `null` for silence. Called on
+ * every pointer move and every frame while the button is down; almost every call is a Set
+ * lookup and out.
+ *
+ * THE RULES, in the order they refuse:
+ *   · Once per tile per hold. A re-crossed tile is silent even if it legally wants the verb
+ *     again — predictability outranks thoroughness, and the player can always release and
+ *     press again.
+ *   · Out of reach is SKIPPED, never walked to. A hold must not emit walk errands per
+ *     crossed tile — the sim holds ONE errand at a time ([[050]]) and a drag would thrash
+ *     it. But the skip is not a sentence: reach is re-read on every call, so holding while
+ *     WASD walks the row fires each tile as it comes into arm's length.
+ *   · Only the tile verbs repeat. `primaryCommand`'s other answer on these tools is
+ *     `RefillCan` — the Water tool crossing open water — and a drag that clipped the pond
+ *     must not dip the can mid-row.
+ *   · Per-tile legality is the sim's, same as a click (§12): the command goes and the
+ *     reducer judges it. The ONE input-side gate is the dry can, because a refused pour has
+ *     an audible tell and a nine-tile drag deserves it once, not nine times.
+ */
+export function holdCommand(view: WorldView, hold: HoldState, tile: HoverTile): Command | null {
+  // The queue drains at every tick boundary, so a view that has advanced already reflects
+  // every pour emitted before it — the local spend guess starts over. Without the guess, a
+  // fast drag inside one 50 ms tick would out-pour the can against a stale charge count and
+  // ring the refusal tell for each overdraft.
+  if (view.tick !== hold.viewTick) {
+    hold.viewTick = view.tick;
+    hold.watersEmitted = 0;
+  }
+
+  const key = holdKey(tile.tileX, tile.tileY);
+  if (hold.fired.has(key)) return null;
+  if (!tileWithinReach(view, tile.tileX, tile.tileY)) return null;
+
+  const direct = primaryCommand(view, tile, hold.tool, Direction.None);
+  if (direct === null) return null;
+  if (direct.type !== 'WaterTile' && direct.type !== 'PlantTile' && direct.type !== 'HarvestTile') {
+    return null;
+  }
+
+  if (direct.type === 'WaterTile') {
+    const charges = view.player.canCharges - hold.watersEmitted;
+    if (charges <= 0) {
+      // Dry mid-row: ONE more pour goes through so the sim's refusal tell rings, then
+      // silence. The tile is deliberately NOT marked fired — the refusal performed nothing,
+      // so nothing is owed to predictability, and the tile can still fire properly in the
+      // (rare) case the view was merely lagging a refill.
+      if (hold.canRefusalTold) return null;
+      hold.canRefusalTold = true;
+      return direct;
+    }
+    hold.canRefusalTold = false;
+    hold.watersEmitted += 1;
+  }
+
+  hold.fired.add(key);
+  return direct;
+}
+
+function holdKey(tileX: number, tileY: number): string {
+  return `${tileX},${tileY}`;
 }
 
 /**

@@ -112,6 +112,10 @@ export class InputSystem {
     // publishes at the edge, and this catches any path a later feature forgets to wire.
     // A no-change publish is one comparison.
     publishArmedTool(tool);
+    // The paint hold ([[072]]) steps here, after the camera is applied for the same reason
+    // the band is positioned here: while WASD walks the row, tiles scroll under a stationary
+    // cursor, and only the frame loop can see that happen. No hold in progress is one check.
+    this.pointer.update();
     this.chrome.setBand(this.pointer.band());
     // The deed signs stand on the land rather than following the cursor, so they are driven by
     // the frame loop like the band and unlike anything hover-driven — the camera moves while
