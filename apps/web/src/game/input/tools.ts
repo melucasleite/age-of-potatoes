@@ -28,6 +28,7 @@ import {
   CropId,
   GrabberTier,
   MachineKind,
+  MachineRole,
   beltSpec,
   grabberSpec,
   machineSpec,
@@ -117,6 +118,16 @@ export const ToolMode = {
    * "refusing with the existing affordance is fine" ruling item 052 made for rotation.
    */
   UseRepairKit: 30,
+
+  // --- the maintenance chain ([[039]]) -------------------------------------------------
+  //
+  // Three more rows of pure data, exactly like the eight above: ordinary `PlaceMachine`s on
+  // spec-published footprints, so nothing here needed a gesture, a command, or a `pointer.ts`
+  // branch. The one wrinkle is the station's coverage preview — it shows the same 7×7 cell a
+  // hand kit services, and `toolCoverageVerb` below keeps the ghost from claiming it "waters".
+  PlaceMaintenanceStation: 31,
+  PlaceDroneBay: 32,
+  PlacePartsBench: 33,
 
   /**
    * Take anything off the lot ([[054]], widened by [[060]]).
@@ -374,6 +385,27 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     gesture: 'click',
   },
 
+  [ToolMode.PlaceMaintenanceStation]: {
+    label: 'Maintenance Station',
+    // The cell sentence again, because the station IS the kit: same radius, same service,
+    // minus the walk. What the hint must say is what keeps it alive — the belt of kits.
+    hint: 'clear 2x2 — it throws kits at whatever nearby needs one',
+    costCents: machinePrice(MachineKind.MaintenanceStation),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceDroneBay]: {
+    label: 'Drone Bay',
+    hint: 'clear 2x2 — its drone serves the whole lot, one part per fix',
+    costCents: machinePrice(MachineKind.DroneBay),
+    gesture: 'click',
+  },
+  [ToolMode.PlacePartsBench]: {
+    label: 'Parts Bench',
+    hint: 'bottle + kola powder in, drone part out',
+    costCents: machinePrice(MachineKind.PartsBench),
+    gesture: 'click',
+  },
+
   [ToolMode.UseRepairKit]: {
     label: 'Repair Kit',
     // The radius sentence, because the kit's whole price argument is the cell, not the machine:
@@ -446,6 +478,12 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       return MachineKind.HarvesterDock;
     case ToolMode.PlacePlanterDock:
       return MachineKind.PlanterDock;
+    case ToolMode.PlaceMaintenanceStation:
+      return MachineKind.MaintenanceStation;
+    case ToolMode.PlaceDroneBay:
+      return MachineKind.DroneBay;
+    case ToolMode.PlacePartsBench:
+      return MachineKind.PartsBench;
     default:
       return null;
   }
@@ -488,6 +526,9 @@ const PLACEMENT_TOOLS: readonly ToolMode[] = [
   ToolMode.PlaceKolaTree,
   ToolMode.PlaceHarvesterDock,
   ToolMode.PlacePlanterDock,
+  ToolMode.PlaceMaintenanceStation,
+  ToolMode.PlaceDroneBay,
+  ToolMode.PlacePartsBench,
 ];
 
 export function toolBeltTier(tool: ToolMode): BeltTier | null {
@@ -514,6 +555,37 @@ export function toolGrabberTier(tool: ToolMode): GrabberTier | null {
     default:
       return null;
   }
+}
+
+/**
+ * The Chebyshev radius the placed machine will water, for the ghost's coverage preview.
+ * Zero for anything without an area of effect.
+ *
+ * READ FROM THE SPEC, NEVER TYPED HERE — the sim anchors coverage on the machine's anchor
+ * tile (`advanceSprinkler`, and the Hub's own comment: "what the placement overlay draws is
+ * exactly what gets watered"), so the one honest preview is the one derived from the same
+ * number the watering loop reads. The barrel sprinkler is the only placeable head today;
+ * any future tool whose machine declares `coverageRadiusTiles` gets the preview for free.
+ */
+export function toolCoverageRadius(tool: ToolMode): number {
+  const kind = toolMachineKind(tool);
+  if (kind === null) return 0;
+  return machineSpec(kind)?.coverageRadiusTiles ?? 0;
+}
+
+/**
+ * What the coverage preview's label says the machine DOES to its square.
+ *
+ * The sprinklers water theirs; the Maintenance Station ([[039]]) reuses the same
+ * `coverageRadiusTiles` plumbing to declare its service cell, and a ghost that said the
+ * repair bench "waters 7×7" would be the preview lying about the one fact it exists to
+ * state. Decided by the spec's role rather than by tool id, so the next coverage machine
+ * gets the right sentence for free — or is at worst damp instead of wrong.
+ */
+export function toolCoverageVerb(tool: ToolMode): string {
+  const kind = toolMachineKind(tool);
+  const role = kind === null ? null : machineSpec(kind)?.role;
+  return role === MachineRole.MaintenanceStation ? 'services' : 'waters';
 }
 
 /** The footprint a placement tool will occupy, for the ghost. `null` when it has none. */

@@ -185,6 +185,37 @@ export interface BoardsSlice {
   readonly loaded: number;
 }
 
+// --- diagnostics ---------------------------------------------------------------------
+
+/**
+ * One machine's waste over the trailing minute, phrased in cash by the component.
+ *
+ * The number is the sim's own (`MachineView.bleedCentsLast60s` — inputs destroyed, priced
+ * at list over `BLEED_WINDOW_TICKS`), never recomputed here. See `diagnostics.ts` for why
+ * this is a different quantity from `idle.ts`'s standing-still cost and must not be summed
+ * with it.
+ */
+export interface BleedRow {
+  readonly id: number;
+  /** "Fryer B" — kind label plus letter rank, the same naming `idle.ts` uses. */
+  readonly label: string;
+  readonly bleedCents: number;
+}
+
+/**
+ * The diagnostics slice: work item 039's ranked list, behind its tech node.
+ *
+ * `unlocked` is 0 until the Diagnostics node is researched. The panel renders its locked
+ * state rather than vanishing — same argument as a locked build-menu row: a surface that
+ * hides until researched is a surface the player never learns to want.
+ */
+export interface DiagnosticsSlice {
+  readonly version: number;
+  readonly unlocked: number;
+  /** Worst first, capped at `DIAGNOSTICS_ROW_LIMIT`. Empty is a good minute. */
+  readonly rows: readonly BleedRow[];
+}
+
 // --- commerce ----------------------------------------------------------------------
 
 /**
@@ -272,6 +303,7 @@ export interface ReportsSnapshot {
   readonly dawn: DawnSlice;
   readonly boards: BoardsSlice;
   readonly commerce: CommerceSlice;
+  readonly diagnostics: DiagnosticsSlice;
 }
 
 export type ReportsSliceName = keyof ReportsSnapshot;
@@ -308,6 +340,12 @@ export const ZERO_COMMERCE: CommerceSlice = Object.freeze({
   wired: 0,
 });
 
+export const ZERO_DIAGNOSTICS: DiagnosticsSlice = Object.freeze({
+  version: 0,
+  unlocked: 0,
+  rows: Object.freeze([]),
+});
+
 /**
  * The server snapshot, frozen and shared.
  *
@@ -320,4 +358,5 @@ export const ZERO_REPORTS: ReportsSnapshot = Object.freeze({
   dawn: ZERO_DAWN,
   boards: ZERO_BOARDS,
   commerce: ZERO_COMMERCE,
+  diagnostics: ZERO_DIAGNOSTICS,
 });

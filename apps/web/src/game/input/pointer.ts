@@ -56,7 +56,7 @@ import {
 
 import { formatCents, formatCentsWhole } from '../../format/money';
 
-import type { BandState } from './chrome';
+import type { BandCell, BandState, BandTone } from './chrome';
 import type { HoverTile, InputHost } from './context';
 import {
   beltCommandFor,
@@ -88,6 +88,8 @@ import {
   V01_CROP,
   gestureFor,
   toolBeltTier,
+  toolCoverageRadius,
+  toolCoverageVerb,
   toolFootprint,
   toolGrabberTier,
   toolMachineKind,
@@ -999,8 +1001,13 @@ function deedBand(view: WorldView, hover: HoverTile): BandState | null {
   };
 }
 
-/** The footprint the armed placement tool would occupy under the cursor. */
-function ghostBand(
+/**
+ * The footprint the armed placement tool would occupy under the cursor.
+ *
+ * Exported for the tests, which drive it directly rather than through `band()` — the method
+ * needs a host, and this function needs only a view and a tile.
+ */
+export function ghostBand(
   view: WorldView,
   hover: HoverTile,
   tool: ToolMode,
@@ -1018,10 +1025,56 @@ function ghostBand(
   const cost = TOOL_INFO[tool].costCents;
   const free = footprintClear(view, bounds) && view.moneyCents >= cost;
   const isGrabber = toolGrabberTier(tool) !== null;
+  const tone: BandTone = free ? 'zone' : 'blocked';
+
+  // A MACHINE WITH AN AREA OF EFFECT SHOWS IT BEFORE THE CLICK (item 011: the sprinkler's
+  // real coverage, not its one-tile footprint). Derived from the spec's radius, never
+  // hardcoded, and the geometry is the sim's own: `advanceSprinkler` waters every tile
+  // within Chebyshev `radius` of the machine's anchor tile — the tile under the cursor —
+  // so these cells are exactly the tiles the machine will wet. The footprint keeps the
+  // ghost's legality tone; the surrounding coverage is drawn in `mist`, which never turns
+  // red, because "where the water lands" is a fact about the machine, not a refusal.
+  const radius = toolCoverageRadius(tool);
+  if (radius > 0) {
+    const cells: BandCell[] = [];
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const x = hover.tileX + dx;
+        const y = hover.tileY + dy;
+        const inFootprint =
+          x >= bounds.x && x < bounds.x + bounds.w && y >= bounds.y && y < bounds.y + bounds.h;
+        cells.push({ x, y, tone: inFootprint ? tone : 'mist' });
+      }
+    }
+    // A footprint wider than the coverage square is nothing in this game today, but the day
+    // it exists its tiles must not silently vanish from their own ghost.
+    for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
+      for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
+        if (Math.max(Math.abs(x - hover.tileX), Math.abs(y - hover.tileY)) > radius) {
+          cells.push({ x, y, tone });
+        }
+      }
+    }
+    const span = radius * 2 + 1;
+    const left = Math.min(bounds.x, hover.tileX - radius);
+    const top = Math.min(bounds.y, hover.tileY - radius);
+    return {
+      x: left,
+      y: top,
+      w: Math.max(bounds.x + bounds.w, hover.tileX + radius + 1) - left,
+      h: Math.max(bounds.y + bounds.h, hover.tileY + radius + 1) - top,
+      tone,
+      cells,
+      // "waters" for the sprinklers, "services" for the Maintenance Station — the verb comes
+      // off the spec's role (`toolCoverageVerb`) so the preview never claims the wrong deed.
+      label: `${TOOL_INFO[tool].label} · ${toolCoverageVerb(tool)} ${span}×${span}`,
+      dir: Direction.None,
+    };
+  }
 
   return {
     ...bounds,
-    tone: free ? 'zone' : 'blocked',
+    tone,
     label: isGrabber ? `${TOOL_INFO[tool].label} ${arrow(placeDir)} · R` : TOOL_INFO[tool].label,
     // The fix for the complaint that started item 052: rotating before placement "technically
     // worked", but the only feedback was this label's arrow, which is a character in a string

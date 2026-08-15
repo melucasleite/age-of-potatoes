@@ -97,6 +97,27 @@ describe('the build catalogue', () => {
   });
 });
 
+describe('the maintenance chain rows ([[039]])', () => {
+  // Presence is the one thing the generic gates above cannot check: a row that was never
+  // added passes every per-row assertion by not being there. The three machines and their
+  // tech gates are pinned against the sim's own specs — the generic tests then prove the
+  // prices, footprints and gates are the sim's numbers and not typed twice.
+  it('sells the station, the bay and the bench, behind their nodes', () => {
+    const rows = new Map(BUILD_CATALOGUE.map((entry) => [entry.tool, entry]));
+    const station = rows.get(ToolMode.PlaceMaintenanceStation);
+    const bay = rows.get(ToolMode.PlaceDroneBay);
+    const bench = rows.get(ToolMode.PlacePartsBench);
+
+    expect(station?.requiresTech).toBe(machineSpec(MachineKind.MaintenanceStation)?.requiresTech);
+    expect(bay?.requiresTech).toBe(machineSpec(MachineKind.DroneBay)?.requiresTech);
+    expect(bench?.requiresTech).toBe(machineSpec(MachineKind.PartsBench)?.requiresTech);
+    // One group, supply-chain order: station, bay, bench.
+    expect(station?.group).toBe('Maintenance');
+    expect(bay?.group).toBe('Maintenance');
+    expect(bench?.group).toBe('Maintenance');
+  });
+});
+
 describe('the belt junction tool', () => {
   it('places a junction with no direction, the way the sim wants it ([[056]])', () => {
     const view = standingOn(4, 4);

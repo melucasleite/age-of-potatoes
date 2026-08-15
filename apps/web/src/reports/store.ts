@@ -35,6 +35,7 @@ import type { ItemId, MachineKind, WorldView } from '@snack/sim';
 import { deriveBoards, emptyBests, foldBests, readBoardValues } from './boards';
 import type { BoardValues, PersonalBests } from './boards';
 import { dawnCount, dayNumber, ticksUntilDawn } from './day';
+import { diagnosticsUnlocked, rankBleeds } from './diagnostics';
 import { IdleWatch } from './idle';
 import { loadBests, loadLedger, saveBests, saveLedger } from './persist';
 import { centsPerActiveHour, rateIsSettled } from './rate';
@@ -53,10 +54,12 @@ import {
   ZERO_BOARDS,
   ZERO_COMMERCE,
   ZERO_DAWN,
+  ZERO_DIAGNOSTICS,
   ZERO_REPORTS,
   ZERO_SHIFT,
 } from './types';
 import type {
+  BleedRow,
   BoardsSlice,
   CartRow,
   CommerceSlice,
@@ -64,6 +67,7 @@ import type {
   DawnCard,
   DawnSlice,
   DepotRow,
+  DiagnosticsSlice,
   ReportsSliceName,
   ReportsSnapshot,
   ShiftBucket,
@@ -86,6 +90,7 @@ export class ReportsStore {
   private dawn: DawnSlice = ZERO_DAWN;
   private boards: BoardsSlice = ZERO_BOARDS;
   private commerce: CommerceSlice = ZERO_COMMERCE;
+  private diagnostics: DiagnosticsSlice = ZERO_DIAGNOSTICS;
   private snapshot: ReportsSnapshot = ZERO_REPORTS;
 
   private owner: object | null = null;
@@ -129,6 +134,7 @@ export class ReportsStore {
     dawn: () => this.snapshot.dawn,
     boards: () => this.snapshot.boards,
     commerce: () => this.snapshot.commerce,
+    diagnostics: () => this.snapshot.diagnostics,
   };
 
   /**
@@ -141,6 +147,7 @@ export class ReportsStore {
     dawn: () => ZERO_REPORTS.dawn,
     boards: () => ZERO_REPORTS.boards,
     commerce: () => ZERO_REPORTS.commerce,
+    diagnostics: () => ZERO_REPORTS.diagnostics,
   };
 
   getSnapshot(): ReportsSnapshot {
@@ -233,6 +240,7 @@ export class ReportsStore {
     this.dawn = ZERO_DAWN;
     this.boards = ZERO_BOARDS;
     this.commerce = ZERO_COMMERCE;
+    this.diagnostics = ZERO_DIAGNOSTICS;
     this.snapshot = ZERO_REPORTS;
     this.notify();
   }
@@ -271,6 +279,7 @@ export class ReportsStore {
     this.refreshSellable(view);
     this.lastCommerce = readCommerce(view);
     if (this.setCommerce(this.lastCommerce, this.sink !== null)) changed = true;
+    if (this.setDiagnostics(view)) changed = true;
     if (this.advanceDawn(view)) changed = true;
 
     if (view.tick >= this.persistDueTick) {
@@ -308,6 +317,7 @@ export class ReportsStore {
       dawn: this.dawn,
       boards: this.boards,
       commerce: this.commerce,
+      diagnostics: this.diagnostics,
     };
     this.notify();
   }
@@ -500,6 +510,28 @@ export class ReportsStore {
   }
 
   /**
+   * The diagnostics ranking (work item 039): worst bleeds first, behind the tech node.
+   *
+   * Same shape as `setCommerce`: derive, compare field by field, and only republish when a
+   * row actually moved. The rows are integers off the projection, so the comparison is
+   * cheap and the slice holds still for minutes at a time on a healthy lot.
+   */
+  private setDiagnostics(view: WorldView): boolean {
+    const unlocked = diagnosticsUnlocked(view) ? 1 : 0;
+    const rows: BleedRow[] = unlocked === 1 ? rankBleeds(view) : [];
+
+    const previous = this.diagnostics;
+    if (previous.unlocked === unlocked && sameBleeds(previous.rows, rows)) return false;
+
+    this.diagnostics = Object.freeze({
+      version: previous.version + 1,
+      unlocked,
+      rows: Object.freeze(rows.map((row) => Object.freeze(row))),
+    });
+    return true;
+  }
+
+  /**
    * Products the lot can write a contract for: whatever its machines actually make.
    *
    * Rebuilt only when the machine census changes shape, because the list is stable for
@@ -645,6 +677,27 @@ const ITEM_LABELS: Readonly<Record<number, string>> = {
   16: 'Chili seed',
   17: 'Chili pepper',
   18: 'Day-old chili',
+  // The soda era and everything after it. The table stopped at 18 while `ItemId` marched to
+  // 69, so a contract for kola powder read "Item 22" — a receipt naming its own line item
+  // by number, which is the exact credibility leak this vocabulary exists to prevent. Boxed
+  // machines are deliberately absent: no contract ships one and no dawn card sells one.
+  19: 'Rustic-style chips',
+  20: 'Repair kit',
+  21: 'Kola nut',
+  22: 'Kola powder',
+  23: 'Empty bottle',
+  24: 'Bottled soda',
+  25: 'Six-pack',
+  26: 'Snack combo',
+  50: 'Gold potato seed',
+  51: 'Gold potato',
+  52: 'Day-old gold potato',
+  53: 'Orange',
+  54: 'Lemon',
+  55: 'Fertilizer',
+  56: 'Push scythe',
+  57: 'Crate',
+  66: 'Drone part',
 };
 
 export function itemLabel(item: number): string {
@@ -654,6 +707,16 @@ export function itemLabel(item: number): string {
 /** A destination name for a new contract. Flavour only; every one of them pays list. */
 export function destinationFor(contractCount: number): string {
   return DESTINATIONS[contractCount % DESTINATIONS.length] ?? DESTINATIONS[0]!;
+}
+
+function sameBleeds(a: readonly BleedRow[], b: readonly BleedRow[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (x.id !== y.id || x.bleedCents !== y.bleedCents || x.label !== y.label) return false;
+  }
+  return true;
 }
 
 function sameCarts(a: readonly CartRow[], b: readonly CartRow[]): boolean {

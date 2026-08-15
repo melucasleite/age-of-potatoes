@@ -25,15 +25,19 @@ import { useEffect, useState } from 'react';
 import { BoardsPanel } from './BoardsPanel';
 import { CommercePanel } from './CommercePanel';
 import { DawnCard } from './DawnCard';
+import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { ShiftReport } from './ShiftReport';
 import { r, cx } from './styles';
 
-type Tab = 'shift' | 'boards' | 'dispatch';
+type Tab = 'shift' | 'boards' | 'dispatch' | 'diagnostics';
 
 const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   { id: 'shift', label: 'Shift' },
   { id: 'boards', label: 'Bests' },
   { id: 'dispatch', label: 'Dispatch' },
+  // Present even before its node is researched — the panel renders its locked state, for
+  // the same reason a locked build-menu row stays visible ([[039]], `DiagnosticsPanel`).
+  { id: 'diagnostics', label: 'Diagnostics' },
 ];
 
 /** The one key this layer claims. The game does not use it; see the header. */
@@ -96,6 +100,7 @@ export default function ReportsLayer() {
         {open === 'shift' ? <ShiftReport /> : null}
         {open === 'boards' ? <BoardsPanel /> : null}
         {open === 'dispatch' ? <CommercePanel /> : null}
+        {open === 'diagnostics' ? <DiagnosticsPanel /> : null}
       </div>
     </div>
   );

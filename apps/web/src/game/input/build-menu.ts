@@ -55,6 +55,8 @@ const TECH_LABELS: Readonly<Record<string, string>> = {
   'logistics-belts-express': 'Express Belts',
   'logistics-splitters': 'Splitters',
   'commerce-upgrade-bench': 'Upgrade Bench',
+  'fabrication-diagnostics': 'Diagnostics',
+  'commerce-repair-drones': 'Repair Drones',
 };
 
 function machineEntry(group: string, tool: ToolMode): BuildEntry {
@@ -131,6 +133,15 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
 
   machineEntry('Storage', ToolMode.PlaceHandCart),
   machineEntry('Storage', ToolMode.PlaceRootCellar),
+
+  // The maintenance chain ([[039]]), in supply-chain order: the station that spends kits, the
+  // bay that spends parts, the bench that makes them. A group of its own rather than three
+  // rows scattered by kind, because what the player is shopping for here is not a machine —
+  // it is the idea that repair can be a line like any other, and the menu should say so by
+  // putting the whole argument in one place.
+  machineEntry('Maintenance', ToolMode.PlaceMaintenanceStation),
+  machineEntry('Maintenance', ToolMode.PlaceDroneBay),
+  machineEntry('Maintenance', ToolMode.PlacePartsBench),
 
   // The one row whose price is not a constant. See `dynamicCostCents` below.
   { tool: ToolMode.BuyDeed, group: 'Land', requiresTech: null, costCents: 0, perTile: false },

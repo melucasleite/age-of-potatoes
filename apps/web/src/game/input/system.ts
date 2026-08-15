@@ -17,6 +17,7 @@ import { CropId as Crop, Direction, cropSpec, techSatisfied } from '@snack/sim';
 
 import { InputChrome } from './chrome';
 import type { InputHost } from './context';
+import { firstRunSigns } from './first-run';
 import { KeyboardInput } from './keyboard';
 import { publishLod, viewLod, zoomInIndex, zoomOutIndex } from './lod';
 import { PointerInput } from './pointer';
@@ -87,7 +88,11 @@ export class InputSystem {
     // the frame loop like the band and unlike anything hover-driven — the camera moves while
     // the player walks, and a sign that only updated on pointer moves would drift off its own
     // parcel the moment somebody put the mouse down and used the keyboard.
-    this.chrome.setDeedSigns(this.host.latestView());
+    const view = this.host.latestView();
+    this.chrome.setDeedSigns(view);
+    // The first-run pointers stand on the world exactly as the deed signs do, and retire
+    // themselves by reading the same projection — see `first-run.ts` for the gates.
+    this.chrome.setGuideSigns(firstRunSigns(view));
     this.chrome.setHint(tool, this.host.camera.transform.zoom, this.pointer.rotateAdvertised(tool));
     this.chrome.tick(tool);
   }

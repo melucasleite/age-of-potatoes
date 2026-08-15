@@ -207,6 +207,19 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
       'A bag and a bottle sold together fetch more than the two sold apart, so running both districts beats running either one twice. It needs a finished line on each side.',
   },
 
+  [TechId.Diagnostics]: {
+    title: 'Diagnostics',
+    verb: 'Read where the money bleeds',
+    detail:
+      'A ranked list of what every machine wasted in the last minute, priced in cash — and the Maintenance Station to aim at the worst line on it.',
+  },
+  [TechId.Drones]: {
+    title: 'Repair Drones',
+    verb: 'Let the bay fix the lot',
+    detail:
+      'A drone that flies to any machine on the lot and services it, burning one manufactured part per fix. The bill does not fall — only your hands come off the wrench.',
+  },
+
   [TechId.WorkshopCharter]: {
     title: 'Workshop Charter',
     verb: 'Open the Workshop era',
@@ -384,6 +397,12 @@ export const MACHINE_LABELS: Readonly<Record<number, string>> = {
   [MachineKind.Composter]: 'Composter',
   [MachineKind.HarvesterDock]: 'Harvester Dock',
   [MachineKind.PlanterDock]: 'Planter Dock',
+  // The maintenance chain ([[039]]). Same non-cosmetic reason a third time: a boxed machine
+  // is named by its machine, and the diagnostics list ranks these by name too — a row that
+  // says "Machine — $14 wasted" points the player at nothing.
+  [MachineKind.MaintenanceStation]: 'Maintenance Station',
+  [MachineKind.DroneBay]: 'Drone Bay',
+  [MachineKind.PartsBench]: 'Parts Bench',
 };
 
 export function machineLabel(kind: number): string {

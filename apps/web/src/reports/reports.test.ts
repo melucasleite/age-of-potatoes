@@ -155,6 +155,49 @@ describe('the shift ledger', () => {
     expect(ledger.current.netCents).toBe(0);
   });
 
+  it('adopts sim-owned hour buckets the moment they appear, and stops computing', () => {
+    // Work item 033's endgame, verified: item 062 landed `stats.hours` in the projection,
+    // and the adopt branch must take them verbatim — closed hours become the strip, the
+    // last (short) bucket becomes the hour in progress, and gross/spend arrive split.
+    const ledger = new ShiftLedger();
+    const view = createWorldView();
+    view.tick = TICKS_PER_ACTIVE_HOUR + 500;
+    view.stats.hours = [
+      {
+        hour: 0,
+        grossCents: 12_000,
+        spendCents: 2_000,
+        waterMl: 30_000,
+        itemsSold: 40,
+        ticks: TICKS_PER_ACTIVE_HOUR,
+        wastePermille: -1,
+        spoilagePermille: -1,
+      },
+      {
+        hour: 1,
+        grossCents: 700,
+        spendCents: 100,
+        waterMl: 500,
+        itemsSold: 3,
+        ticks: 500,
+        wastePermille: -1,
+        spoilagePermille: -1,
+      },
+    ];
+
+    expect(ledger.read(view)).toBe(true);
+    expect(ledger.simOwned).toBe(true);
+    expect(ledger.closed).toHaveLength(1);
+    expect(ledger.closed[0]?.grossCents).toBe(12_000);
+    expect(ledger.closed[0]?.spendCents).toBe(2_000);
+    expect(ledger.closed[0]?.netCents).toBe(10_000);
+    // `split` is what lights the Gross and Kit-spend rows; sim buckets always carry it.
+    expect(ledger.closed[0]?.split).toBe(1);
+    expect(ledger.current.hour).toBe(1);
+    expect(ledger.current.netCents).toBe(600);
+    expect(ledger.current.complete).toBe(0);
+  });
+
   it('does not let a three-minute hour set the rolling best', () => {
     const ledger = new ShiftLedger();
     // Join late in hour 0 with a big number, then cross into hour 1. The closed bucket is
@@ -342,6 +385,30 @@ describe('the reports store across a dawn', () => {
     // Priced at what it actually earned while running, not at its rated throughput — see
     // the header of `idle.ts` for why the rated figure is wrong by an order of magnitude.
     expect(flag?.costCents).toBeGreaterThan(0);
+
+    reportsStore.release(token);
+  });
+
+  it('names the best seller from the sim’s per-item sales', () => {
+    // Work item 033's other adopt-when-present seam, verified: `bestSellerFrom` must pick
+    // the product with the largest DAY gross — not lifetime gross, not count — and label it
+    // with the receipts vocabulary.
+    const token = {};
+    reportsStore.claim(token, 616);
+    publish(token, viewWith({ tick: DAWN_TICK_IN_DAY - 60 }));
+
+    const at = viewWith({ tick: DAWN_TICK_IN_DAY + 3 });
+    at.stats.salesByItem = [
+      // More units, more lifetime money — but less money TODAY. Must not win.
+      { item: 2, count: 300, grossCents: 90_000, dayCount: 30, dayGrossCents: 1_200 },
+      { item: 3, count: 8, grossCents: 4_800, dayCount: 8, dayGrossCents: 4_800 },
+    ];
+    publish(token, at);
+
+    const card = reportsStore.getSnapshot().dawn.card;
+    expect(card?.bestSeller?.label).toBe('Bagged chips');
+    expect(card?.bestSeller?.count).toBe(8);
+    expect(card?.bestSeller?.grossCents).toBe(4_800);
 
     reportsStore.release(token);
   });

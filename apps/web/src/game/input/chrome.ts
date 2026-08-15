@@ -30,6 +30,7 @@ import type { Camera } from '../render/camera';
 import { TILE_PX } from '../render/pixel';
 import { buildRows } from './build-menu';
 import type { BuildRow } from './build-menu';
+import type { GuideSign } from './first-run';
 import { TOOL_INFO, ToolMode } from './tools';
 
 const STYLE_ID = 'snack-input-chrome';
@@ -52,6 +53,11 @@ const CSS = `
 .sm-ix-cell[data-tone="belt"] { border-color:rgba(226,190,101,0.95); background:rgba(226,190,101,0.22); }
 .sm-ix-cell[data-tone="box"] { border-color:rgba(122,200,240,0.95); background:rgba(122,200,240,0.22); }
 .sm-ix-cell[data-tone="blocked"] { border-color:rgba(233,124,110,0.9); background:rgba(233,124,110,0.12); }
+/* Coverage mist: the tiles a watering machine will wet, drawn around its footprint. Fainter
+   than every legality tone on purpose — it is information, not a verdict, so it must never
+   shout over the green/red answer on the footprint itself. */
+.sm-ix-cell[data-tone="mist"] { border-color:rgba(122,178,240,0.45); background:rgba(122,178,240,0.12); }
+.sm-ix-band[data-tone="mist"] { border-color:rgba(122,178,240,0.55); background:rgba(122,178,240,0.10); }
 .sm-ix-band[data-tone="box"] { border-color:rgba(122,200,240,0.95); background:rgba(122,200,240,0.18); }
 .sm-ix-chev[data-tone="box"] { background:rgba(122,200,240,0.98); }
 /* The facing chevron. A ROTATED TRIANGLE RATHER THAN A GLYPH: work item 052's whole
@@ -86,6 +92,25 @@ const CSS = `
 .sm-ix-deed b { display:block; font-size:13px; color:#f2e6cf; }
 .sm-ix-deed[data-state="far"] { opacity:0.55; border-color:rgba(216,201,164,0.20); }
 .sm-ix-deed[data-state="broke"] b { color:#e97c6e; }
+/* First-run guide signs (item 040, instruction 2): a gentle pointer standing over the thing
+   a brand-new player should look at next. Same world-anchored-DOM trade as the deed signs,
+   and structurally non-blocking — the chrome root is pointer-events:none, so there is
+   nothing to dismiss and nothing to click through. The bob is margin, not transform: the
+   frame loop owns left/top and the static translate must survive the animation. */
+.sm-ix-guide { position:absolute; display:none; transform:translate(-50%,-100%); white-space:nowrap;
+  text-align:center; padding:4px 10px; border-radius:4px; letter-spacing:0.04em;
+  background:rgba(22,30,20,0.84); border:1px solid rgba(126,214,142,0.55); color:#dff0d6;
+  text-shadow:0 1px 2px rgba(0,0,0,0.9);
+  animation:sm-ix-guide-bob 2.2s ease-in-out infinite; }
+.sm-ix-guide b { display:block; font-size:13px; color:#7ed68e; }
+.sm-ix-guide::after { content:''; position:absolute; left:50%; top:100%; transform:translateX(-50%);
+  border:6px solid transparent; border-top-color:rgba(126,214,142,0.55); }
+/* The below-the-anchor variant: the sign hangs under its target with the arrow on top,
+   for targets whose airspace the HUD already occupies (the field at the spawn camera). */
+.sm-ix-guide[data-place="below"] { transform:translate(-50%,0); }
+.sm-ix-guide[data-place="below"]::after { top:auto; bottom:100%;
+  border-top-color:transparent; border-bottom-color:rgba(126,214,142,0.55); }
+@keyframes sm-ix-guide-bob { 0%,100% { margin-top:0; } 50% { margin-top:-6px; } }
 .sm-ix-menu { position:absolute; right:14px; top:14px; width:296px; display:none;
   pointer-events:auto; padding:8px; border-radius:6px; background:rgba(20,16,25,0.94);
   border:1px solid rgba(255,255,255,0.14); box-shadow:0 8px 28px rgba(0,0,0,0.5);
@@ -123,7 +148,7 @@ function ensureStyle(): void {
  * borrowed from the walk-destination marker rather than invented, because both mean "this is
  * going to end up somewhere else" rather than "this is a problem".
  */
-export type BandTone = 'zone' | 'erase' | 'belt' | 'box' | 'blocked';
+export type BandTone = 'zone' | 'erase' | 'belt' | 'box' | 'blocked' | 'mist';
 
 /**
  * One tile of a band that is not a rectangle.
@@ -197,6 +222,9 @@ export class InputChrome {
   private readonly deedSigns: HTMLElement[] = [];
   /** What each sign currently says, so a frame that changes nothing writes nothing. */
   private readonly deedText: string[] = [];
+  /** First-run guide signs, pooled the same way. One or two, ever. */
+  private readonly guideSigns: HTMLElement[] = [];
+  private readonly guideText: string[] = [];
 
   constructor(
     private readonly container: HTMLElement,
@@ -246,6 +274,8 @@ export class InputChrome {
     this.cells.length = 0;
     this.deedSigns.length = 0;
     this.deedText.length = 0;
+    this.guideSigns.length = 0;
+    this.guideText.length = 0;
     this.open = false;
   }
 
@@ -467,6 +497,65 @@ export class InputChrome {
     for (let i = used; i < this.deedSigns.length; i++) {
       this.deedSigns[i]!.style.display = 'none';
     }
+  }
+
+  // --- the first-run guide signs ---------------------------------------------------------
+
+  /**
+   * At most a couple of gentle pointers standing over the thing a brand-new player should
+   * look at next (item 040, instruction 2). Derivation lives in `first-run.ts` and reads
+   * only the projection, so what to say is decided elsewhere; this only draws it, exactly
+   * as `setDeedSigns` draws the land prices. Called once per frame from the host's loop,
+   * after the camera — same rule, same reason.
+   *
+   * Off screen is hidden, not clamped to the edge: a pointer at a thing you cannot see
+   * would need an edge-of-screen arrow to be honest, and that is more chrome than a hint
+   * deserves. The player who walks toward the field finds the sign standing on it.
+   */
+  setGuideSigns(signs: readonly GuideSign[] | null): void {
+    const root = this.root;
+    if (root === null) return;
+
+    const count = signs === null ? 0 : signs.length;
+    const t = this.camera.transform;
+
+    for (let i = 0; i < count; i++) {
+      const spec = signs![i]!;
+      const sign = this.guideSign(i, root);
+      const anchor = this.camera.worldToScreen(spec.tileX * TILE_PX, spec.tileY * TILE_PX);
+
+      if (anchor.x < 0 || anchor.y < 0 || anchor.x > t.viewWidth || anchor.y > t.viewHeight) {
+        sign.style.display = 'none';
+        continue;
+      }
+
+      const below = spec.below === true;
+      sign.style.display = 'block';
+      sign.style.left = `${anchor.x}px`;
+      sign.style.top = `${anchor.y + (below ? 8 : -4)}px`;
+      const key = `${below ? 'b' : 'a'}|${spec.title}|${spec.body}`;
+      if (this.guideText[i] !== key) {
+        this.guideText[i] = key;
+        sign.dataset.place = below ? 'below' : 'above';
+        sign.innerHTML = `<b>${escapeHtml(spec.title)}</b>${escapeHtml(spec.body)}`;
+      }
+    }
+
+    for (let i = count; i < this.guideSigns.length; i++) {
+      this.guideSigns[i]!.style.display = 'none';
+    }
+  }
+
+  private guideSign(index: number, root: HTMLElement): HTMLElement {
+    const existing = this.guideSigns[index];
+    if (existing !== undefined) return existing;
+
+    const sign = document.createElement('div');
+    sign.className = 'sm-ix-guide';
+    root.appendChild(sign);
+    this.guideSigns[index] = sign;
+    this.guideText[index] = '';
+    return sign;
   }
 
   private deedSign(index: number, root: HTMLElement): HTMLElement {
