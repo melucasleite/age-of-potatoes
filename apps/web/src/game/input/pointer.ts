@@ -713,6 +713,16 @@ export function primaryCommand(
       // guarantee is about the can, not the pond) — and the one place the water-tile gate
       // above could never fire. An empty can there dips on the next pour-click instead of
       // dead-clicking forever; a can with pours left keeps pouring.
+      // A BARREL SPRINKLER UNDER THE CURSOR MEANS "FILL THE BARREL" — the same
+      // tile-says-the-verb rule the shore dip above runs on, and it outranks the pondless
+      // empty-can fallback below because a machine under the cursor is more specific than a
+      // fact about the whole world. Before machines could stand on farmland ([[067]]) this
+      // case could not arise; after it, the pour fell through to `WaterTile` and soaked the
+      // dirt while the barrel stood empty, which is how the owner found it. The sim
+      // re-validates (an already-full barrel refuses the click).
+      if (query.machine !== null && query.machine.kind === MachineKind.Sprinkler) {
+        return { type: 'RefillHopper', machineId: query.machine.id };
+      }
       if (view.reservoirs.length === 0 && view.player.canCharges === 0) {
         return { type: 'RefillCan' };
       }
@@ -1490,6 +1500,17 @@ function handCommand(view: WorldView, machine: MachineView): Command | null {
   }
 
   if (machine.kind === MachineKind.Sprinkler) {
+    return { type: 'RefillHopper', machineId: machine.id };
+  }
+
+  // The seed and parts hoppers ([[038]]/[[039]]): `applyRefillHopper` is the sim's "one door
+  // seeds enter by" for hands, and until now no click ever knocked on it — the planter dock
+  // fell through `machineInputItem`'s chip-line switch to null, so hand-loading seeds was
+  // simply impossible, which is how the owner found it. The sim re-validates everything
+  // (wrong seed, full hopper, nothing in the bag), so this side only knocks. Before the
+  // `outputCount` branch on purpose: these docks produce nothing, but a future one that did
+  // should still prefer taking in what it exists to consume.
+  if (machine.kind === MachineKind.PlanterDock || machine.kind === MachineKind.DroneBay) {
     return { type: 'RefillHopper', machineId: machine.id };
   }
 

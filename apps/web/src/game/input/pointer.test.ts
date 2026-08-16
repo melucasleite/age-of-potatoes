@@ -267,6 +267,36 @@ describe('the sell bin is a counter with two sides', () => {
   });
 });
 
+describe('hoppers answer the door', () => {
+  // Both found by the owner in one play session: the Water tool over a barrel sprinkler
+  // watered the dirt while the barrel stood empty, and a Hand click on the planter dock
+  // fell through `machineInputItem`'s chip-line switch to nothing — the sim's
+  // `applyRefillHopper` door existed for both and no click ever knocked.
+  it('a Water click on a barrel sprinkler fills the barrel, not the dirt under it', () => {
+    const view = withMachine(standingOn(4, 4), 4, 5, MachineKind.Sprinkler, 7);
+    expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Water, Direction.None)).toEqual({
+      type: 'RefillHopper',
+      machineId: 7,
+    });
+  });
+
+  it('a Hand click on the planter dock offers its seed hopper', () => {
+    const view = withMachine(standingOn(4, 4), 4, 5, MachineKind.PlanterDock, 9);
+    expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Hand, Direction.East)).toEqual({
+      type: 'RefillHopper',
+      machineId: 9,
+    });
+  });
+
+  it('a Hand click on the drone bay offers its parts hopper', () => {
+    const view = withMachine(standingOn(4, 4), 4, 5, MachineKind.DroneBay, 11);
+    expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Hand, Direction.East)).toEqual({
+      type: 'RefillHopper',
+      machineId: 11,
+    });
+  });
+});
+
 // The teardown tool is a RECT gesture as of [[060]], so it no longer passes through
 // `primaryCommand` at all — a click reaches it as a one-tile drag. What is worth pinning here
 // is the seam that change could have broken silently: a click on a machine used to walk, and
