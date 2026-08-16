@@ -35,7 +35,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { MilestoneKind } from '@snack/sim';
 
-import { formatCents, formatCentsWhole, formatEta, plural } from './format';
+import { formatCentsWhole, formatEta, plural } from './format';
+import { keepFocus, PanelRow, PanelWindow } from './PanelFrame';
 import { cx, s } from './styles';
 import { hudStore } from './store';
 import { MAX_ERA } from './derive-tech';
@@ -44,14 +45,15 @@ import { useHudSlice } from './use-hud';
 import { usePending } from './use-pending';
 import type { EconomySlice, TechCard } from './types';
 
-/** Keeps focus on the canvas — see the long note in `Toolbelt.tsx` for why it is `mousedown`. */
-function keepFocus(event: React.MouseEvent): void {
-  event.preventDefault();
-}
+// --- the sidebar row -------------------------------------------------------------------
 
-// --- the corner button -----------------------------------------------------------------
-
-export function TechToggle({ onOpen }: { onOpen: () => void }) {
+/**
+ * One of the four ([[093]]) — same shell, same lit rule, same badge slot as the stand, the
+ * bag and build. It lights when the tree is up OR when something in it is affordable, which
+ * is the badge's thirty-second-test job (§8's v0.7 gate: a returning player learns two things
+ * are within reach without opening anything).
+ */
+export function TechToggle({ open, onOpen }: { open: boolean; onOpen: () => void }) {
   const tech = useHudSlice('tech');
   if (tech.cards.length === 0) return null;
 
@@ -59,19 +61,15 @@ export function TechToggle({ onOpen }: { onOpen: () => void }) {
   for (const card of tech.cards) if (card.status === 'ready') ready += 1;
 
   return (
-    <button
-      type="button"
-      className={cx(s.techToggle, ready > 0 && s.techToggleReady)}
+    <PanelRow
+      name="Research"
+      badge={ready > 0 ? `${ready} ready` : `${tech.ownedCount}/${tech.cards.length}`}
+      hotkey="T"
       title="The research tree — what you can build next, and what it costs"
-      onMouseDown={keepFocus}
-      onClick={onOpen}
-    >
-      <span className={s.techToggleName}>Research</span>
-      <span className={s.techToggleBadge}>
-        {ready > 0 ? `${ready} ready` : `${tech.ownedCount}/${tech.cards.length}`}
-      </span>
-      <span className={s.techToggleKey}>T</span>
-    </button>
+      open={open}
+      lit={ready > 0}
+      onToggle={onOpen}
+    />
   );
 }
 
@@ -99,18 +97,10 @@ export function TechPanel({ onClose }: { onClose: () => void }) {
     [pending],
   );
 
-  // Escape closes. The game's own keyboard layer also sees Escape and uses it to close the
-  // build menu or drop the tool — harmless overlap, and the alternative is capturing keys away
-  // from a system that does not know this panel exists.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.code === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
+  // Escape closes — the listener is `PanelWindow`'s now ([[093]]), one copy for all four
+  // panels instead of four identical ones. The game's own keyboard layer also sees Escape
+  // and uses it to drop the tool; harmless overlap, and the alternative is capturing keys
+  // away from a system that does not know this panel exists.
 
   const eras: number[] = [];
   for (let era = 1; era <= MAX_ERA; era++) eras.push(era);
@@ -121,26 +111,30 @@ export function TechPanel({ onClose }: { onClose: () => void }) {
     return new Set(BRANCH_ORDER.filter((branch) => !populated.has(branch)));
   }, [tech.cards]);
 
-  // No scrim any more ([[069]]): the panel renders inside the sidebar's contextual slot,
-  // the lot stays visible and clickable beside it, and closing is the ESC key or button —
-  // there is no backdrop left to click.
+  // A CENTRED FLOATING WINDOW SINCE [[093]], not the sidebar's slot. Item 069 took the scrim
+  // off and docked this into the dock; the owner's consolidation ruling floats it back out
+  // over the canvas, alongside the bag and build — but still with no scrim, because that part
+  // of 069 was right: the lot stays visible and clickable around the window, and closing is
+  // the ESC key or the button. There is no backdrop to click, by design.
+  //
+  // THE HEAD LOST TWO WORDS TO THE SHARED FRAME, and both were already on screen. The tag
+  // was "Era IV · The Corporation"; the era's NAME is the headline of the current era band a
+  // few pixels below, so the head keeps the numeral and lets the band do the flavour. The
+  // count was "32 of 32 researched"; the last word is implied by a window titled RESEARCH.
+  // This head carries the most of the four and is the one that proves the shared geometry is
+  // real — 460px holds a title, a tag, a count, six figures of money and an ESC key, and it
+  // holds them because nothing in here is longer than it needs to be. Measured, not guessed:
+  // before the trim the money and the ESC button rendered OUTSIDE the panel's right edge.
   return (
-    <div className={s.techPanel}>
-      <div className={s.techHead}>
-        <span className={s.techTitle}>Research</span>
-        <span className={s.techEra}>
-          Era {eraCopy(tech.era).numeral} · {eraCopy(tech.era).name}
-        </span>
-        <span className={s.techCount}>
-          {tech.ownedCount} of {tech.cards.length} researched
-        </span>
-        <span className={s.techMoney}>{formatCents(economy.moneyCents)}</span>
-        <button type="button" className={s.techClose} onMouseDown={keepFocus} onClick={onClose}>
-          ESC
-        </button>
-      </div>
-
-      <div className={s.techScroll}>
+    <PanelWindow
+      title="Research"
+      tag={`Era ${eraCopy(tech.era).numeral}`}
+      count={`${tech.ownedCount} of ${tech.cards.length}`}
+      moneyCents={economy.moneyCents}
+      hint="Every node unlocks something you can do · T or ESC closes"
+      onClose={onClose}
+    >
+      <div className={s.winScroll}>
         {eras.map((era) => (
           <EraBand
             key={era}
@@ -162,9 +156,7 @@ export function TechPanel({ onClose }: { onClose: () => void }) {
           onResearch={research}
         />
       )}
-
-      <div className={s.techHint}>Every node unlocks something you can do · T or ESC closes</div>
-    </div>
+    </PanelWindow>
   );
 }
 

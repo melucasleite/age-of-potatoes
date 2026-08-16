@@ -40,15 +40,11 @@ import type { ItemId } from '@snack/sim';
 import { ItemIcon } from './ItemIcon';
 import { formatCents } from './format';
 import { hudStore } from './store';
+import { keepFocus, PanelRow, PanelWindow } from './PanelFrame';
 import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
 import { usePending } from './use-pending';
 import type { ShopRow, ShopSlice } from './types';
-
-/** Keeps focus on the canvas — see the long note in `Toolbelt.tsx` for why it is `mousedown`. */
-function keepFocus(event: React.MouseEvent): void {
-  event.preventDefault();
-}
 
 /** The stack button. One is tedious; ten is the fistful the work item asks for. */
 const STACK = 10;
@@ -66,22 +62,29 @@ const SHOP_ICON = 32;
  * gets. A player who walks to the bin to sell — which is the whole reason they ever walk to
  * the bin — sees the corner change while they are standing there.
  */
-export function ShopToggle({ onOpen }: { onOpen: () => void }) {
+/**
+ * One of the four ([[093]]).
+ *
+ * THE BADGE STOPPED SAYING "OPEN" ABOUT THE TILL. It used to: standing at the counter lit the
+ * row and printed `open`, which was fine while this row was the only one that lit — and became
+ * a lie the moment all four rows agreed that `open` means "this window is on screen". The fact
+ * is worth keeping, so it kept both halves it deserves: the row still LIGHTS when the counter
+ * is in reach, and the badge says so in words that cannot be misread.
+ */
+export function ShopToggle({ open, onOpen }: { open: boolean; onOpen: () => void }) {
   const shop = useHudSlice('shop');
   if (shop.rows.length === 0) return null;
 
   return (
-    <button
-      type="button"
-      className={cx(s.techToggle, shop.atStand === 1 && s.techToggleReady)}
+    <PanelRow
+      name="The Stand"
+      badge={shop.atStand === 1 ? 'at counter' : 'seeds · kit'}
+      hotkey="G"
       title="The roadside stand — seeds and supplies, at list"
-      onMouseDown={keepFocus}
-      onClick={onOpen}
-    >
-      <span className={s.techToggleName}>The Stand</span>
-      <span className={s.techToggleBadge}>{shop.atStand === 1 ? 'open' : 'seeds · kit'}</span>
-      <span className={s.techToggleKey}>G</span>
-    </button>
+      open={open}
+      lit={shop.atStand === 1}
+      onToggle={onOpen}
+    />
   );
 }
 
@@ -118,30 +121,30 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
     [pending, shop.atStand, shop.standTileX, shop.standTileY],
   );
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.code === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
+  // Escape closes — `PanelWindow`'s listener now ([[093]]), not a fourth private copy.
 
-  // No scrim any more ([[069]]): the board renders inside the sidebar's contextual slot,
-  // the lot — and the stand itself — stay visible beside it, and closing is the ESC key
-  // or button. There is no backdrop left to click.
+  // A CENTRED FLOATING WINDOW SINCE [[093]] — the board left the sidebar's slot to sit with
+  // the other three, and `.shopPanel` went with it: it was `.winPanel` byte for byte, kept
+  // apart only so the two could be sized differently, and they no longer are. Still no scrim
+  // ([[069]]): the lot — and the stand itself — stay visible and clickable around the window,
+  // and closing is the ESC key or the button. The old argument for keeping this board NARROW
+  // survives the move intact and is now the shell's: `.floatWin` caps at 460px rather than
+  // filling the canvas, so a list of five things with a price each never makes the eye travel
+  // the width of the screen between a name and the button that buys it.
   return (
-    <div className={s.shopPanel}>
-      <div className={s.techHead}>
-        <span className={s.techTitle}>Roadside Stand</span>
-        <span className={s.shopTag}>bought at list</span>
-        <span className={s.techMoney}>{formatCents(economy.moneyCents)}</span>
-        <button type="button" className={s.techClose} onMouseDown={keepFocus} onClick={onClose}>
-          ESC
-        </button>
-      </div>
-
+    // TITLED "THE STAND", THE SAME WORDS ITS ROW USES ([[093]]). It said "Roadside Stand"
+    // while the row said "THE STAND" — the only one of the four whose window answered to a
+    // different name than the button that opens it, which is a small thing until you have
+    // four of them side by side and one of them renames itself when you click it. It also
+    // happened to be the longest title of the four, and it was eating its own sub-label:
+    // "bought at list" ellipsized at 460px and now has 17px to spare.
+    <PanelWindow
+      title="The Stand"
+      tag="bought at list"
+      moneyCents={economy.moneyCents}
+      hint="The stand sells; it does not haggle · G or ESC closes"
+      onClose={onClose}
+    >
       <Counter shop={shop} />
 
       <div className={s.shopList}>
@@ -157,9 +160,7 @@ export function ShopPanel({ onClose }: { onClose: () => void }) {
           />
         ))}
       </div>
-
-      <div className={s.techHint}>The stand sells; it does not haggle · G or ESC closes</div>
-    </div>
+    </PanelWindow>
   );
 }
 

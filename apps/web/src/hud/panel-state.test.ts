@@ -81,21 +81,44 @@ describe('one float at a time — bag versus build', () => {
   });
 });
 
-describe('float versus slot — one panel anywhere', () => {
-  it('opening the bag closes a slot panel', () => {
-    togglePanel('research');
-    expect(panelSnapshot()).toBe('research');
-    togglePanel('bag');
-    expect(panelSnapshot()).toBe('bag');
-  });
+/**
+ * ALL FOUR, PAIRWISE, IN BOTH DIRECTIONS ([[093]]).
+ *
+ * Item 089's version of this block was called "float versus slot" and tested three of the
+ * twelve orderings, because at the time two panels lived in the sidebar and two floated and
+ * the interesting question was whether the two SPECIES excluded each other. The owner's
+ * consolidation ruling deletes the species — all four are the same floating window now — and
+ * with it the excuse for testing a sample. Twelve orderings, none of them special.
+ *
+ * The table is the point. A fifth panel is one entry here and it inherits eleven new cases.
+ */
+const PANELS = ['research', 'shop', 'bag', 'build'] as const;
+type Panel = (typeof PANELS)[number];
 
-  it('opening a slot panel closes the bag', () => {
-    togglePanel('bag');
-    togglePanel('shop');
-    expect(panelSnapshot()).toBe('shop');
-  });
+/** Open one, through whichever layer owns it — the asymmetry the invariant has to survive. */
+function open(panel: Panel): void {
+  if (panel === 'build') publish(true);
+  else togglePanel(panel);
+}
 
-  it('the build float closes a slot panel too, and closing it restores nothing', () => {
+describe('one panel anywhere — all four, pairwise', () => {
+  for (const first of PANELS) {
+    for (const second of PANELS) {
+      if (first === second) continue;
+      it(`${first} then ${second}: only ${second} is open`, () => {
+        open(first);
+        expect(panelSnapshot()).toBe(first);
+        open(second);
+        expect(panelSnapshot()).toBe(second);
+        // AND THE LOSER LOST FOR REAL. Whichever layer owned the first panel must agree it
+        // is gone: a build menu merely hidden behind the bag needs B pressed twice, and a
+        // local panel merely covered would spring back when the menu closed.
+        expect(buildMenuSnapshot().open).toBe(second === 'build');
+      });
+    }
+  }
+
+  it('closing the build menu never resurrects the panel it evicted', () => {
     togglePanel('shop');
     publish(true);
     expect(panelSnapshot()).toBe('build');

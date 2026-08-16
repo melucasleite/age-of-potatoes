@@ -60,6 +60,7 @@ import { formatCents } from './format';
 import { freshnessBand, freshnessNote, isWarning } from './freshness';
 import { beginHotbarDrag } from './hotbar-drag';
 import { hudStore } from './store';
+import { keepFocus, PanelRow, PanelWindow } from './PanelFrame';
 import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
 import { usePending } from './use-pending';
@@ -80,11 +81,6 @@ const ROUGH_PERMILLE = permille(CONDITION_EFFECT_THRESHOLD, CONDITION_MAX);
 const SLOT_ICON = 48;
 const DETAIL_ICON = 64;
 
-/** Keeps focus on the canvas — see the long note in `Toolbelt.tsx` for why it is `mousedown`. */
-function keepFocus(event: React.MouseEvent): void {
-  event.preventDefault();
-}
-
 // --- the sidebar row (the opener) --------------------------------------------------------
 
 /**
@@ -101,26 +97,21 @@ export function BagToggle({ open, onToggle }: { open: boolean; onToggle: () => v
   const kinds = inventory.rows.length;
 
   return (
-    <button
-      type="button"
-      className={cx(s.techToggle, (open || boxed > 0) && s.techToggleReady)}
+    <PanelRow
+      name="The Bag"
+      badge={
+        boxed > 0
+          ? `${boxed} boxed`
+          : kinds === 0
+            ? 'empty'
+            : `${kinds} ${kinds === 1 ? 'kind' : 'kinds'}`
+      }
+      hotkey="I"
       title="The bag — everything you are carrying, centred over the lot"
-      aria-pressed={open}
-      onMouseDown={keepFocus}
-      onClick={onToggle}
-    >
-      <span className={s.techToggleName}>The Bag</span>
-      <span className={s.techToggleBadge}>
-        {open
-          ? 'open'
-          : boxed > 0
-            ? `${boxed} boxed`
-            : kinds === 0
-              ? 'empty'
-              : `${kinds} ${kinds === 1 ? 'kind' : 'kinds'}`}
-      </span>
-      <span className={s.techToggleKey}>I</span>
-    </button>
+      open={open}
+      lit={boxed > 0}
+      onToggle={onToggle}
+    />
   );
 }
 
@@ -137,23 +128,14 @@ export function BagToggle({ open, onToggle }: { open: boolean; onToggle: () => v
  * Enter-to-place stay gone. The window floats over a live, visible lot and must not stop
  * WASD/arrows from walking. Selection is a click; placing is the pane's button; the drag to
  * the hotbar ([[061]]) is untouched — it hit-tests registered slot rects, so it works from
- * any geometry the bag happens to occupy. Esc closes the window (this listener, plus the
- * ESC button), the same pair every panel offers; the input layer's own Esc — put the tool
- * down — keeps firing underneath, exactly as it does for the shop and the tree.
+ * any geometry the bag happens to occupy. Esc closes the window and so does the ESC button —
+ * both are `PanelWindow`'s now ([[093]]), the same pair all four panels offer because it is
+ * literally the same code; the input layer's own Esc — put the tool down — keeps firing
+ * underneath, exactly as it does for the stand and the tree.
  */
 export function InventoryWindow({ onClose }: { onClose: () => void }) {
   const inventory = useHudSlice('inventory');
   const pending = usePending();
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.code === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
 
   // WHICH SLOT, HELD AS AN ITEM ID RATHER THAN AN INDEX. The rows are rebuilt from the world
   // eight times a second and a stack that runs out disappears from the middle of them; an index
@@ -190,26 +172,26 @@ export function InventoryWindow({ onClose }: { onClose: () => void }) {
   const boxed = inventory.boxCount;
 
   return (
-    <div className={s.techPanel}>
-      <div className={s.techHead}>
-        <span className={s.techTitle}>The Bag</span>
-        <span className={s.shopTag}>everything you are carrying</span>
-        <span className={s.techCount}>
-          {boxed > 0
-            ? `${boxed} boxed`
-            : rows.length === 0
-              ? 'empty'
-              : `${rows.length} ${rows.length === 1 ? 'kind' : 'kinds'}`}
-        </span>
-        <button type="button" className={s.techClose} onMouseDown={keepFocus} onClick={onClose}>
-          ESC
-        </button>
-      </div>
-
+    // `tag` is two words shorter than it was ("everything you are carrying") so that it and
+    // the count both fit the shared head without ellipsis ([[093]]) — the bag is the one
+    // panel with a tag AND a count and no money, so it has the room for exactly this much.
+    <PanelWindow
+      title="The Bag"
+      tag="what you are carrying"
+      count={
+        boxed > 0
+          ? `${boxed} boxed`
+          : rows.length === 0
+            ? 'empty'
+            : `${rows.length} ${rows.length === 1 ? 'kind' : 'kinds'}`
+      }
+      hint="drag a cell onto the hotbar · I or ESC closes"
+      onClose={onClose}
+    >
       {active === null ? (
         <div className={s.invEmpty}>Your pockets are empty.</div>
       ) : (
-        <div className={s.techScroll}>
+        <div className={s.winScroll}>
           <div className={s.invBody}>
             {boxed > 0 ? (
               <div className={cx(s.shopStatus, s.shopStatusOpen)}>
@@ -238,9 +220,7 @@ export function InventoryWindow({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       )}
-
-      <div className={s.techHint}>drag a cell onto the hotbar · I or ESC closes</div>
-    </div>
+    </PanelWindow>
   );
 }
 

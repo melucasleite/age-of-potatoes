@@ -15,7 +15,7 @@ export type StyleName =
   | 'root'
   | 'sidebar'
   | 'sideSection'
-  | 'sideSlot'
+  | 'sideContext'
   | 'sidePapers'
   | 'stage'
   | 'corner'
@@ -84,20 +84,28 @@ export type StyleName =
   | 'cheatLine'
   | 'cheatGranted'
   | 'cheatRejected'
-  // --- research ---
-  | 'techToggle'
-  | 'techToggleName'
-  | 'techToggleKey'
-  | 'techToggleBadge'
-  | 'techToggleReady'
-  | 'techPanel'
-  | 'techHead'
-  | 'techTitle'
-  | 'techEra'
-  | 'techCount'
-  | 'techMoney'
-  | 'techClose'
-  | 'techScroll'
+  // --- the panel family: one row and one window, four times over ([[093]]) ---
+  // The sidebar row and the floating-window chrome that RESEARCH, THE STAND, THE BAG and
+  // BUILD all render through `PanelFrame.tsx`. They used to be named `techToggle*` and
+  // `tech*` because research got there first and the other three borrowed rather than
+  // cloned — right instinct, misleading name. `.shopPanel` and `.techEra` are gone with the
+  // rename: the first was `.winPanel` declaration for declaration, the second was `.winTag`
+  // without its `flex`.
+  | 'panelRow'
+  | 'panelRowName'
+  | 'panelRowKey'
+  | 'panelRowBadge'
+  | 'panelRowLit'
+  | 'winPanel'
+  | 'winHead'
+  | 'winTitle'
+  | 'winTag'
+  | 'winCount'
+  | 'winMoney'
+  | 'winClose'
+  | 'winScroll'
+  | 'winHint'
+  // --- research: the tree itself ---
   | 'eraBand'
   | 'eraBandCurrent'
   | 'eraHead'
@@ -146,12 +154,9 @@ export type StyleName =
   | 'buyButton'
   | 'buyReady'
   | 'buyNote'
-  | 'techHint'
   // --- the roadside stand ---
-  // The corner button borrows `techToggle*` wholesale rather than cloning it: the two
-  // buttons are the same control in the same corner and must not drift apart by a pixel.
-  | 'shopPanel'
-  | 'shopTag'
+  // Its row, its shell, its head and its footer are all in the panel family above now
+  // ([[093]]) — what is left below is only the board itself.
   | 'shopStatus'
   | 'shopStatusOpen'
   | 'shopStatusShut'

@@ -59,7 +59,8 @@
   scrollbar-color: #46392f #14100e;
 }
 
-/* One section of the dock: money, bag, papers. The contextual slot has its own class. */
+/* One section of the dock: the counter and its four rows, the papers. The contextual area
+   below them has its own class. */
 .sideSection {
   flex: 0 0 auto;
   display: flex;
@@ -69,12 +70,14 @@
 }
 
 /*
- * THE ONE CONTEXTUAL SLOT. Shop, research, and the at-the-machine cards swap through it;
- * Esc empties it; the sidebar itself never closes. It takes the free height between the
- * bag and the papers, and a panel too tall for it scrolls inside itself (`.techScroll`,
- * `.shopList`) exactly as it did as a modal.
+ * THE AT-THE-MACHINE AREA — no longer a slot anything queues for ([[093]]). The stand and
+ * the research tree used to swap through here with the bench and the dock card; all four
+ * panels are floating windows now, so the cards own the space outright and appear whenever
+ * the player is standing at something they have an opinion about, INCLUDING while a window
+ * is open. It takes the free height between the rows and the papers, and scrolls if a bench
+ * full of dials outgrows it.
  */
-.sideSlot {
+.sideContext {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -95,9 +98,9 @@
 
 /*
  * What is ALLOWED over the canvas, exhaustively: the hotbar stack (bottom centre), thin
- * transient hints (top centre), the dev overlay — and, by the 089 ruling, the two centred
- * floating windows (`.floatWin`: the bag and the build menu, one at a time, never both).
- * Everything else is in the dock.
+ * transient hints (top centre), the dev overlay — and THE centred floating window
+ * (`.floatWin`), which by the 093 ruling is where all four panels live: research, the
+ * stand, the bag, build, one at a time, never two. Everything else is in the dock.
  */
 .stage {
   position: relative;
@@ -132,17 +135,22 @@
 }
 
 /*
- * THE FLOATING WINDOWS ([[089]]) — the bag and the build menu, and nothing else. Centred
- * over the canvas region because this element lives inside `.stage`, which starts where
- * the sidebar ends; "the middle of the screen", in the owner's words, means the middle of
- * the part of the screen the game owns. The wrapper does the positioning; the panel inside
- * brings its own house bevel (`.techPanel`).
+ * THE FLOATING WINDOW ([[089]], extended to all four panels by [[093]]) — research, the
+ * stand, the bag, build, one at a time and never two. Centred over the canvas region because
+ * this element lives inside `.stage`, which starts where the sidebar ends; "the middle of
+ * the screen", in the owner's words, means the middle of the part of the screen the game
+ * owns. The wrapper does the positioning; the panel inside brings the house bevel
+ * (`.winPanel`), which since 093 is one shell rather than four copies of one.
  *
  * WIDTH: the bag's six-column grid is 390px (`.invGrid`) plus the panel's 20px padding
  * each side — 460 is the first tidy number with slack, and the build grid's 1fr columns
- * take whatever they are given. HEIGHT: capped short of the bottom edge so the hotbar
- * stack stays visible under it — the drag-to-hotbar drop is rect-tested and would survive
- * being covered, but a belt the player cannot see is not a drop target, it is a rumour.
+ * take whatever they are given. IT SUITS THE OTHER TWO FOR THE REASONS THEY ALREADY HAD:
+ * the stand is a list of five priced rows and was kept deliberately narrow so the eye never
+ * travels the screen between a name and its buy button; the research tree reflows to two
+ * branch columns below 440 and this is 460, so it reads exactly as it did in the dock, with
+ * twenty pixels to spare. HEIGHT: capped short of the bottom edge so the hotbar stack stays
+ * visible under it — the drag-to-hotbar drop is rect-tested and would survive being covered,
+ * but a belt the player cannot see is not a drop target, it is a rumour.
  */
 .floatWin {
   position: absolute;
@@ -772,18 +780,25 @@
   color: #46392f;
 }
 
-/* --- research: the toggle ------------------------------------------------------- */
+/* --- the sidebar row: all four openers ------------------------------------------ */
 
 /*
- * The way in, and it sits directly under the Ticker on purpose. The Ticker already answers
- * "how much have I got and how fast is it coming"; this answers "and what is it for". Putting
- * them in the same corner makes the pair read as one thought instead of two panels.
+ * ONE ROW, FOUR TIMES ([[093]]) — research, the stand, the bag, build. It was already one
+ * class (the stand and the bag borrowed the research toggle's rather than cloning it, which
+ * was right); 093 makes it one COMPONENT too (`PanelFrame.tsx`), because a shared class name
+ * could not stop the four from disagreeing about when to light up or what `aria-pressed`
+ * was for. The name lost its `tech` prefix with the same change: a fifth row should not have
+ * to be styled with something called `.techToggle`.
+ *
+ * They sit directly under the Ticker on purpose. The Ticker already answers "how much have I
+ * got and how fast is it coming"; these answer "and what is it for". Putting them in the same
+ * corner makes the group read as one thought instead of five panels.
  *
  * The badge is the thirty-second test's opening move (§8's v0.7 gate: "can a returning player
  * see their next want within 30 seconds?"). A player who comes back after a week does not have
  * to open anything to learn that two things are affordable — the corner already said so.
  */
-.techToggle {
+.panelRow {
   pointer-events: auto;
   cursor: pointer;
   display: flex;
@@ -812,12 +827,12 @@
   transition: transform 70ms steps(2, end);
 }
 
-.techToggle:hover {
+.panelRow:hover {
   transform: translateY(-2px);
   color: #efe2c6;
 }
 
-.techToggleName {
+.panelRowName {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -825,14 +840,14 @@
   flex: 1;
 }
 
-.techToggleKey {
+.panelRowKey {
   font-size: 9px;
   letter-spacing: 0.16em;
   color: #6d5c4d;
 }
 
 /* Nothing affordable: a count, quietly. Something affordable: the gold, loudly. */
-.techToggleBadge {
+.panelRowBadge {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -843,30 +858,36 @@
   box-shadow: inset 0 0 0 1px #46392f;
 }
 
-.techToggleReady {
+.panelRowLit {
   color: #14100e;
   background: linear-gradient(180deg, #f5d382 0%, #d9b475 100%);
   box-shadow:
     inset 0 0 0 2px #14100e,
     inset 0 0 0 3px #8a6234;
 }
-.techToggleReady .techToggleKey {
+.panelRowLit .panelRowKey {
   color: #8a6234;
 }
-.techToggleReady .techToggleBadge {
+.panelRowLit .panelRowBadge {
   color: #f5d382;
   background: #5e1c1a;
   box-shadow: inset 0 0 0 1px #14100e;
 }
 
-/* --- research: the panel -------------------------------------------------------- */
+/* --- the window: shell, head and footer for all four panels ---------------------- */
 
 /*
- * NO SCRIM ANY MORE ([[069]]). The panel docks into the sidebar's contextual slot, the
- * lot stays fully visible and fully clickable beside it, and the panel's height is the
- * slot's — it scrolls inside itself exactly as it did as a modal.
+ * THE HOUSE FRAME ([[093]]) — research, the stand, the bag and build are all this, wrapped
+ * in `.floatWin` and filled by `PanelFrame`'s `PanelWindow`. `.shopPanel` was folded in here
+ * (it was this, declaration for declaration) and the `tech` prefix went with it, since none
+ * of this has been research-specific since item 071 gave the build menu the same head.
+ *
+ * NO SCRIM, STILL ([[069]]). The panel never darkens the lot behind it: the world stays
+ * fully visible and fully clickable around the window, and closing is the ESC key or the
+ * button, because there is no backdrop to click. The panel's height is whatever `.floatWin`
+ * allows and it scrolls inside itself (`.winScroll`) exactly as it did as a modal.
  */
-.techPanel {
+.winPanel {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -891,7 +912,23 @@
   );
 }
 
-.techHead {
+/*
+ * ONE LINE, AND THE RIGHT-HAND GROUP IS UNTOUCHABLE ([[093]]).
+ *
+ * Sharing one head across four panels turned a latent bug into a visible one, which is the
+ * usual reward for consolidating something: the research head carries the most (title, era,
+ * progress, money, ESC) and NOTHING in it was allowed to shrink, so at 460px the money and
+ * the ESC button were simply pushed out through the right edge of the window — the close
+ * affordance, rendered outside the panel it closes. It was equally broken in the 416px
+ * sidebar slot before the move; nobody had looked at Era IV with six figures in hand.
+ *
+ * The rule now: the TITLE, the MONEY and the ESC KEY never shrink and never wrap, because
+ * they are the panel's identity and its two most important numbers. The TAG and the COUNT
+ * absorb whatever is left and ellipsize when it is not enough. A sub-label that trails off
+ * costs the player a word they can read again inside the panel; a close button off the edge
+ * of the window costs them the panel.
+ */
+.winHead {
   display: flex;
   align-items: baseline;
   gap: 14px;
@@ -899,7 +936,9 @@
   flex: 0 0 auto;
 }
 
-.techTitle {
+.winTitle {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.2em;
@@ -907,29 +946,39 @@
   color: #efe2c6;
 }
 
-.techEra {
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #d9b475;
-}
+/*
+ * `.techEra` is gone ([[093]]): it was `.winTag` without the `flex: 1`, and the research
+ * head's era line is now the same tag slot the stand's "bought at list" and the bag's
+ * "everything you are carrying" use. One amber sub-label, one class, one position.
+ */
 
-.techCount {
-  flex: 1;
+/* Second in line for the squeeze, after the tag. Right-aligned so it reads as one group
+   with the money beside it even when there is room to spare. */
+.winCount {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: right;
   font-size: 11px;
   color: #6d5c4d;
   font-variant-numeric: tabular-nums;
 }
 
-.techMoney {
+.winMoney {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: 15px;
   font-weight: 700;
   color: #f5d382;
   font-variant-numeric: tabular-nums;
 }
 
-.techClose {
+/* `flex: 0 0 auto` is the load-bearing declaration here ([[093]]) — see `.winHead`. The one
+   control that closes the window must never be the thing that gets squeezed out of it. */
+.winClose {
+  flex: 0 0 auto;
   pointer-events: auto;
   cursor: pointer;
   border: 0;
@@ -941,12 +990,12 @@
   background: #14100e;
   box-shadow: inset 0 0 0 2px #46392f;
 }
-.techClose:hover {
+.winClose:hover {
   color: #efe2c6;
   background: #5e1c1a;
 }
 
-.techScroll {
+.winScroll {
   flex: 1 1 auto;
   /*
    * REQUIRED, not tidiness. A flex item's `min-height` defaults to `auto`, which resolves to
@@ -1460,7 +1509,7 @@
  * that tells the player how to close the panel, and the dev overlay's near-invisible hint
  * colour is the wrong borrow for a line that has a job.
  */
-.techHint {
+.winHint {
   flex: 0 0 auto;
   padding: 0 20px 12px;
   font-size: 9px;
@@ -1473,43 +1522,29 @@
 /* --- the roadside stand --------------------------------------------------------- */
 
 /*
- * Narrower than the research panel on purpose. Research is a map you read across — four
- * branches, three eras, and the point is seeing them beside each other. The stand is a list
- * of five things with a price each, and a list stretched to 1060px makes the player's eye
- * travel the width of the screen between a name and the button that buys it.
- *
- * Everything else — the head, the money, the ESC key, the footer hint — is the research
- * panel's, class for class. Two panels in one dock that are laid out differently read as
- * two games.
+ * `.shopPanel` IS GONE ([[093]]). It was `.winPanel` declaration for declaration — the same
+ * gradient, the same bevel, the same nine-pixel clip — kept as a separate name only so the
+ * stand could one day be sized differently from the research tree. It never was, and the
+ * consolidation ruling settles that it never will be: both are the same window now, and the
+ * one thing the old comment argued for (a board of five priced rows must not stretch the
+ * width of the screen) is enforced where it belongs, on `.floatWin`'s 460px cap.
  */
-.shopPanel {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-height: 100%;
-  min-height: 0;
-  flex: 0 1 auto;
-  background: linear-gradient(180deg, #2b2119 0%, #1c1610 100%);
-  box-shadow:
-    inset 0 0 0 2px #14100e,
-    inset 0 0 0 4px #46392f,
-    inset 0 6px 0 -4px #6d5c4d;
-  clip-path: polygon(
-    9px 0,
-    calc(100% - 9px) 0,
-    100% 9px,
-    100% calc(100% - 9px),
-    calc(100% - 9px) 100%,
-    9px 100%,
-    0 calc(100% - 9px),
-    0 9px
-  );
-}
 
-/* Takes the free space so the money and the ESC key sit hard right, the way they do on the
-   research panel's head — which is the same head, reused class for class. */
-.shopTag {
-  flex: 1;
+/*
+ * THE ONE FLEXIBLE THING IN THE HEAD. It takes the free space, so the count, the money and
+ * the ESC key sit hard right on all four panels — and `PanelFrame` renders this span even
+ * when a panel has no sub-label, precisely so that the right-hand group does not slide left
+ * on the panels that don't.
+ */
+.winTag {
+  flex: 1 1 auto;
+  /* First to give ground, and it gives it as an ellipsis rather than as a second line: a
+     head that grew taller on one panel and not another would break the one promise the
+     shared window makes, which is that all four are the same window ([[093]]). */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1538,7 +1573,7 @@
 
 .shopList {
   flex: 1 1 auto;
-  /* Same reason as `.techScroll`: `min-height: auto` would refuse to shrink and push the
+  /* Same reason as `.winScroll`: `min-height: auto` would refuse to shrink and push the
      footer out through the bottom of the panel. */
   min-height: 0;
   overflow-y: auto;

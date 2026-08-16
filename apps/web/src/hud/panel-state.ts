@@ -12,9 +12,13 @@
 //  bag" a plain function call a test can pin.
 // ────────────────────────────────────────────────────────────────────────────────────
 //
-// STILL ONE NAME, NEVER A FLAG PER PANEL. Four things can be open — research, shop
-// (the slot), bag (a float) — plus build, whose truth stays in the INPUT layer
-// (`build-panel.ts`) because B, the arrows and the walk-stop are modal there ([[071]]).
+// STILL ONE NAME, NEVER A FLAG PER PANEL. Four things can be open — research, shop and bag,
+// plus build, whose truth stays in the INPUT layer (`build-panel.ts`) because B, the arrows
+// and the walk-stop are modal there ([[071]]). SINCE [[093]] ALL FOUR ARE THE SAME FLOATING
+// WINDOW, by the owner's consolidation ruling, which changes nothing here and is worth
+// saying anyway: this module never knew where a panel rendered, only that no two of them
+// could be up at once, and that is precisely why moving research and the shop out of the
+// sidebar was a presentation change rather than a state-machine rewrite.
 // This module holds the one local name and folds build in at read time: build simply
 // wins while it is up. The invariant is kept at every door:
 //
@@ -31,10 +35,13 @@
 // tsconfig path that Next resolves and vitest does not, and this file has a test.
 import { buildMenuClose, buildMenuSnapshot, subscribeBuildMenu } from '../game/input/build-panel';
 
-/** The two occupants of the sidebar's contextual slot. */
-export type SlotPanel = 'research' | 'shop';
-/** Everything this module owns directly — the slot panels plus the floating bag. */
-export type LocalPanel = SlotPanel | 'bag';
+/**
+ * Everything this module owns directly. `SlotPanel` is gone ([[093]]): it named research and
+ * the shop as "the two occupants of the sidebar's contextual slot", and there is no slot any
+ * more — all four panels are the same centred floating window, so the only distinction left
+ * is which LAYER holds the truth, not which part of the screen it lands in.
+ */
+export type LocalPanel = 'research' | 'shop' | 'bag';
 /** Everything `panelSnapshot` can answer — the build float's truth lives in the input layer. */
 export type PanelName = LocalPanel | 'build';
 
@@ -96,7 +103,7 @@ export function closeLocalPanel(): void {
 }
 
 // THE EVICTION, registered once at module scope for the life of the page — this module is
-// a singleton exactly as the seam it watches is. B pressed while the shop, the tree or the
+// a singleton exactly as the seam it watches is. B pressed while the stand, the tree or the
 // bag is open: the menu opens in the input layer and the local panel must yield, as a real
 // state change rather than a render-time preference.
 subscribeBuildMenu(() => {

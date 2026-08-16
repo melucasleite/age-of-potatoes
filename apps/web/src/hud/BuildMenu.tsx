@@ -37,15 +37,10 @@ import {
 } from '@/game/input/build-panel';
 import { ToolMode } from '@/game/input/tools';
 
-import { formatCents } from './format';
 import { paintIcon, resolveFrameIcon } from './item-art';
+import { keepFocus, PanelWindow } from './PanelFrame';
 import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
-
-/** Keeps focus on the canvas — see the long note in `Toolbelt.tsx` for why it is `mousedown`. */
-function keepFocus(event: React.MouseEvent): void {
-  event.preventDefault();
-}
 
 /**
  * The cell's icon box. Machine frames are 32×32 and draw at 1×; tiles and items are 16×16
@@ -82,23 +77,25 @@ export function BuildMenuPanel() {
     }
   }
 
+  // `closeOnEsc={false}` IS LOAD-BEARING ([[093]]). Every other panel lets `PanelWindow`
+  // listen for Escape; this one must not, because the input layer's Escape is a strict
+  // cascade (`keyboard.ts`: close the menu, ELSE the debug panel, ELSE abandon the drag,
+  // ELSE put the tool down). A HUD listener closing the menu first would leave that cascade
+  // looking at a shut menu and falling through, so one press would close the menu AND
+  // disarm the player's tool. The ESC BUTTON still works — it calls `onClose` directly.
   return (
-    <div className={s.techPanel}>
-      <div className={s.techHead}>
-        <span className={s.techTitle}>Build</span>
-        <span className={s.shopTag}>everything that goes on the lot</span>
-        <span className={s.techMoney}>{formatCents(economy.moneyCents)}</span>
-        <button
-          type="button"
-          className={s.techClose}
-          onMouseDown={keepFocus}
-          onClick={buildMenuClose}
-        >
-          ESC
-        </button>
-      </div>
-
-      <div className={s.techScroll}>
+    // `tag` was "everything that goes on the lot" — thirty-one characters into a slot that
+    // holds seventeen beside six figures of money, so it ellipsized ([[093]]). Trimmed to
+    // what the row badge already promises rather than left trailing off mid-sentence.
+    <PanelWindow
+      title="Build"
+      tag="placeable, priced"
+      moneyCents={economy.moneyCents}
+      hint="arrows move · Enter build · B or ESC closes"
+      onClose={buildMenuClose}
+      closeOnEsc={false}
+    >
+      <div className={s.winScroll}>
         {groups.map((group) => (
           <div key={group.name}>
             <div className={s.buildGroup}>{group.name}</div>
@@ -151,9 +148,7 @@ export function BuildMenuPanel() {
           </>
         )}
       </div>
-
-      <div className={s.techHint}>arrows move · Enter build · B or ESC closes</div>
-    </div>
+    </PanelWindow>
   );
 }
 
