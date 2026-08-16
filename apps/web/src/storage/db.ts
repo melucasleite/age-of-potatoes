@@ -176,6 +176,18 @@ export interface WorldRecord {
   lastPlayedAt: number;
   summary: WorldSummary;
   /**
+   * Which farmer walks this lot ([[079]]): 1..5 for a picked avatar, absent for the legacy
+   * farmer — which is what every record written before the picker existed correctly reads
+   * as, with no registry migration.
+   *
+   * ENVELOPE METADATA, NEVER WORLD STATE. The avatar is cosmetic identity, and it lives
+   * here — beside the lot's name and timestamps — precisely because everything in this
+   * record is banned from `WorldState`, the trace, and `hashState()` (§12). Replays and
+   * golden fixtures are avatar-agnostic by construction; the renderer reads the id at boot
+   * (`render/avatar.ts`) and the sim never hears about it.
+   */
+  avatar?: number;
+  /**
    * When the player deleted it, or null.
    *
    * A TOMBSTONE, NOT A DELETE. The record and its envelopes stay exactly where they are until

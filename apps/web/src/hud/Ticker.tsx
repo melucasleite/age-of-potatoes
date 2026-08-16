@@ -1,24 +1,20 @@
 'use client';
 
-// The Ticker — the one panel the design doc calls out by name (§2):
+// The Ticker — the money on hand, the $/min, and the in-game clock. That is all of it now.
 //
-//   "always-on $/min plus an unlock ETA — 'Sprinkler: $150 — at $36/min, ready in ~4 min.'
-//    Converts the stable economy into a countdown."
+// THE NEXT-PURCHASE CARD IS GONE, BY RULING ([[076]], owner, 2026-08-15, from play: "This box
+// can go away. I don't think it's adding any value, and it's taking too much space"). The
+// countdown surface — "Sprinkler: $150 · ready in ~4 min", the progress track, the ETA — was
+// item 013's lineage and §2's retention device, and the owner watched it earn nothing. The ON
+// HAND line above it stays exactly as it was; only the promo card went, and the `unlock`
+// slice went with it (this panel was its only reader — see the item's log).
 //
-// That last sentence is the whole reason this panel exists, and it is worth being precise
-// about the mechanism. A stable economy is a number that sits there. A stable economy with
-// an ETA on it is a number that FINISHES — the player is no longer watching money
-// accumulate, they are watching a clock run out on something they want. Same economy, same
-// numbers, entirely different reason to stay for four more minutes.
-//
-// Which is also why the failure modes matter more than they look. If the rate is zero or
-// unknown, this renders an em dash. It never renders `Infinity`, never a negative
-// countdown, and never a number it cannot stand behind — a countdown that lies once is a
-// countdown nobody reads again.
+// The failure modes on the rate line still matter: if the rate is zero or unknown, this
+// renders an em dash. Never `Infinity`, never a number it cannot stand behind.
 
 import { useEffect, useRef } from 'react';
 
-import { formatCents, formatCentsWhole, formatEta, formatRate } from './format';
+import { formatCents, formatRate } from './format';
 import { cx, s } from './styles';
 import { hudStore } from './store';
 import { useHudSlice } from './use-hud';
@@ -26,7 +22,6 @@ import { useLiveText } from './use-live-text';
 
 export function Ticker() {
   const economy = useHudSlice('economy');
-  const unlock = useHudSlice('unlock');
 
   const moneyRef = useRef<HTMLSpanElement | null>(null);
   const deltaRef = useRef<HTMLSpanElement | null>(null);
@@ -38,9 +33,6 @@ export function Ticker() {
 
   const rateClass =
     economy.rateSettled === 0 ? s.rateIdle : economy.rateCentsPerMin < 0 ? s.rateDown : s.rate;
-
-  const progress =
-    unlock.priceCents <= 0 ? 0 : Math.min(1, Math.max(0, economy.moneyCents / unlock.priceCents));
 
   return (
     <div className={`${s.card} ${s.ticker}`}>
@@ -58,43 +50,8 @@ export function Ticker() {
         </span>
         <span className={s.clock} ref={clockRef} />
       </div>
-
-      {unlock.id === null ? null : (
-        <>
-          <div className={s.rule} />
-          <div className={s.unlockHead}>
-            <span className={s.unlockName}>{unlock.label}</span>
-            <span className={s.unlockPrice}>{formatCentsWhole(unlock.priceCents)}</span>
-          </div>
-          <div className={s.unlockBlurb}>{unlock.blurb}</div>
-
-          <div className={s.track}>
-            <div
-              className={cx(s.fill, unlock.affordable === 1 && s.fillReady)}
-              style={{ width: `${(progress * 100).toFixed(1)}%` }}
-            />
-          </div>
-
-          <div className={s.etaRow}>
-            <span className={etaClass(unlock.affordable, unlock.etaSeconds)}>
-              {unlock.affordable === 1
-                ? 'affordable now'
-                : `ready in ${formatEta(unlock.etaSeconds)}`}
-            </span>
-            <span className={s.owned}>
-              {unlock.owned === 0 ? 'none on the lot' : `${unlock.owned} already`}
-            </span>
-          </div>
-        </>
-      )}
     </div>
   );
-}
-
-function etaClass(affordable: number, etaSeconds: number): string {
-  if (affordable === 1) return cx(s.eta, s.etaReady);
-  if (etaSeconds < 0) return cx(s.eta, s.etaUnknown);
-  return s.eta;
 }
 
 /**

@@ -535,8 +535,15 @@ export async function activateWorld(id: string): Promise<WorldRecord | null> {
 /**
  * Mint a world and make it active. It has no save on disk until the first autosave lands —
  * `bootWorld` creates the state from `record.seed`.
+ *
+ * `avatar` is which farmer walks the lot ([[079]]) — cosmetic envelope metadata, stored on
+ * the record and nowhere near `WorldState` (see `WorldRecord.avatar`). The picker passes
+ * the chosen id; the default is avatar 1 so the Enter-through-it new game costs no clicks.
+ * Existing records simply lack the field and keep the legacy farmer.
  */
-export async function createWorldRecord(options: { name?: string } = {}): Promise<WorldRecord> {
+export async function createWorldRecord(
+  options: { name?: string; avatar?: number } = {},
+): Promise<WorldRecord> {
   const registry = await readRegistry();
   const now = Date.now();
   const world: WorldRecord = {
@@ -546,6 +553,7 @@ export async function createWorldRecord(options: { name?: string } = {}): Promis
     createdAt: now,
     lastPlayedAt: now,
     summary: { tick: 0, moneyCents: null, formatVersion: 0 },
+    avatar: options.avatar ?? 1,
     deletedAt: null,
   };
   await writeRegistry({

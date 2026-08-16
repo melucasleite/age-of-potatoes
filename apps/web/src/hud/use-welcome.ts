@@ -102,7 +102,14 @@ export function useWelcomeBack(): WelcomeState {
   return { show, awayLabel, dismiss };
 }
 
-/** Tests only. Drops the memoised read and the dismissal, so a case can set up its own. */
+/**
+ * Drop the memoised read and the dismissal, so the next mount reads fresh.
+ *
+ * Two callers: tests setting up their own world, and `play-client` on every in-page world
+ * change ([[078]]) — the memo's scope was "the page load" back when a world switch WAS a
+ * page load, and its honest scope is "the visit to one world". Without this, the second lot
+ * of a session would be greeted (or not) off the first lot's last-played record.
+ */
 export function resetWelcomeMemo(): void {
   firstRead = null;
   dismissedThisSession = false;

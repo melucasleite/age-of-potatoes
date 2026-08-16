@@ -263,80 +263,42 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* --- the unlock countdown ------------------------------------------------------- */
+/* THE UNLOCK COUNTDOWN'S STYLES LIVED HERE (unlockHead/Name/Price/Blurb, track, fill,
+   fillReady, etaRow, eta, etaReady, etaUnknown, owned) and went with the card ([[076]]). */
 
-.unlockHead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
+/* --- exit game ([[078]]) --------------------------------------------------------- */
 
-.unlockName {
-  font-size: 14px;
-  font-weight: 700;
-  color: #efe2c6;
-}
-
-.unlockPrice {
-  font-size: 14px;
-  font-weight: 700;
-  color: #d9b475;
-  font-variant-numeric: tabular-nums;
-}
-
-.unlockBlurb {
-  margin-top: 3px;
-  font-size: 11px;
-  color: #9a8873;
-}
-
-.track {
-  position: relative;
-  height: 10px;
-  margin-top: 8px;
-  background: #14100e;
-  box-shadow: inset 0 0 0 1px #46392f;
-  overflow: hidden;
-}
-
-.fill {
-  height: 100%;
-  background: repeating-linear-gradient(90deg, #d9b475 0px, #d9b475 3px, #b58b4d 3px, #b58b4d 4px);
-  box-shadow: inset 0 2px 0 #f5d382;
-  transition: width 220ms linear;
-}
-
-.fillReady {
-  background: repeating-linear-gradient(90deg, #74a340 0px, #74a340 3px, #4e7c2e 3px, #4e7c2e 4px);
-  box-shadow: inset 0 2px 0 #a3c65c;
-}
-
-.etaRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 6px;
-}
-
-.eta {
-  font-size: 13px;
-  font-weight: 700;
-  color: #9fdcef;
-}
-.etaReady {
-  color: #5fd44a;
-}
-.etaUnknown {
-  color: #6d5c4d;
-}
-
-.owned {
+/* Modest, not alarming — the note's words. House chrome at whisper volume: the tab's own
+   colours, small caps, no red anywhere, because pressing it loses nothing. */
+.exitButton {
+  align-self: flex-start;
+  cursor: pointer;
+  border: 0;
+  font: inherit;
   font-size: 10px;
-  color: #6d5c4d;
-  letter-spacing: 0.1em;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+  padding: 4px 10px 5px;
+  color: #9a8873;
+  background: linear-gradient(180deg, #2b2119 0%, #211a13 100%);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #46392f;
+  clip-path: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+}
+
+.exitButton:hover {
+  color: #efe2c6;
 }
 
 /* --- the pouch ------------------------------------------------------------------ */
@@ -637,60 +599,9 @@
   white-space: nowrap;
 }
 
-/* --- the Clipboard -------------------------------------------------------------- */
-
-/*
- * Paper, not a panel. It is the one warm-light surface in a dark HUD, which is what makes
- * three lines of small text read as something worth reading rather than more telemetry.
- */
-.clipboard {
-  position: relative;
-  width: 100%;
-  padding: 18px 14px 12px;
-  color: #46392f;
-  background:
-    repeating-linear-gradient(
-      180deg,
-      rgba(109, 92, 77, 0) 0px,
-      rgba(109, 92, 77, 0) 21px,
-      rgba(109, 92, 77, 0.22) 21px,
-      rgba(109, 92, 77, 0.22) 22px
-    ),
-    linear-gradient(180deg, #efe2c6 0%, #cbb99b 100%);
-  box-shadow:
-    inset 0 0 0 2px #9a8873,
-    inset 0 0 0 4px #efe2c6;
-  clip-path: polygon(
-    5px 0,
-    calc(100% - 5px) 0,
-    100% 5px,
-    100% calc(100% - 5px),
-    calc(100% - 5px) 100%,
-    5px 100%,
-    0 calc(100% - 5px),
-    0 5px
-  );
-  transform: rotate(-0.5deg);
-}
-
-.clip {
-  position: absolute;
-  top: -7px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 62px;
-  height: 13px;
-  background: linear-gradient(180deg, #d94f36 0%, #9e2f27 100%);
-  box-shadow: inset 0 0 0 2px #5e1c1a;
-}
-
-.clipboardLabel {
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #6d5c4d;
-  margin-bottom: 6px;
-}
+/* THE CLIPBOARD'S PAPER LIVED HERE (clipboard, clip, clipboardLabel) and went with the
+   surface ([[076]]). The note styles below survive: the Welcome Back card reads the same
+   observations and draws them with the same dots. */
 
 .notes {
   margin: 0;
@@ -765,6 +676,76 @@
 .perfOver {
   color: #d94f36;
   font-weight: 700;
+}
+
+/* --- the debug panel ([[075]]) --------------------------------------------------- */
+
+/* The perf card and the cheat console stacked as one surface. Terminal-green like the
+   overlay it grew from, and exactly as unobtrusive: nothing here draws until backtick. */
+.debugPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  pointer-events: auto;
+}
+
+.cheatRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 11px;
+  color: #a3c65c;
+  background: rgba(20, 16, 14, 0.88);
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #35571f;
+  clip-path: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+}
+
+.cheatPrompt {
+  color: #6d5c4d;
+  font-weight: 700;
+}
+
+.cheatInput {
+  flex: 1;
+  min-width: 90px;
+  border: 0;
+  outline: none;
+  padding: 2px 0;
+  font: inherit;
+  color: #efe2c6;
+  background: transparent;
+  caret-color: #a3c65c;
+}
+
+.cheatInput::placeholder {
+  color: #46392f;
+}
+
+.cheatLine {
+  white-space: nowrap;
+  color: #6d5c4d;
+}
+
+.cheatGranted {
+  color: #5fd44a;
+  font-weight: 700;
+}
+
+.cheatRejected {
+  color: #9a8873;
 }
 
 .perfHint {

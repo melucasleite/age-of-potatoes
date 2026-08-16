@@ -88,27 +88,35 @@
 /* --- the docked panels ----------------------------------------------------------- */
 
 /*
- * Docked to the right edge and vertically centred rather than to a corner: the four corners
- * are spoken for (Ticker, perf overlay, clipboard, toolbelt), and a report is a thing you
- * open, read, and close rather than a thing you glance at while playing.
+ * Pinned to the TOP edge of the canvas region now ([[076]], owner: "put shifts, bests,
+ * dispatch and diagnostics all the way to the top and opening below the buttons, make sure
+ * it doesn't clip up"). The old tool hint bar owned this airspace and is gone in the same
+ * ruling, so the tab row inherits it: buttons first, panels opening DOWNWARD under them.
+ * The left offset is inline in `ReportsLayer.tsx`, computed from `SIDEBAR_WIDTH_PX` — the
+ * one number the HUD and the canvas agree on, kept in exactly one home.
+ *
+ * NOTHING MAY CLIP: the dock is anchored to the top (so it cannot extend above the
+ * viewport by construction) and the panel's max-height is viewport-derived with the tab
+ * row's height budgeted in, so the tallest panel (diagnostics' eight rows, bests' six
+ * boards) fits fully and scrolls internally past that.
  */
 .dock {
   position: absolute;
-  top: 50%;
-  right: 14px;
-  transform: translateY(-50%);
+  top: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  align-items: flex-end;
-  max-height: calc(100% - 28px);
+  align-items: flex-start;
+  max-height: calc(100% - 20px);
   pointer-events: none;
 }
 
 .panel {
   pointer-events: auto;
   width: 336px;
-  max-height: 46vh;
+  /* Viewport height minus the dock's top inset, the tab row, and a breath at the bottom —
+     the "fits fully on screen at its tallest" guarantee, with internal scroll past it. */
+  max-height: calc(100vh - 88px);
   overflow-y: auto;
   /* A pixel-game scrollbar is a lost cause; hide the track and keep the overflow. */
   scrollbar-width: thin;

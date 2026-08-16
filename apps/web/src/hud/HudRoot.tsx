@@ -29,13 +29,14 @@ import { buildMenuClose, buildMenuSnapshot, subscribeBuildMenu } from '@/game/in
 import { onPanelRequest } from '@/game/input/panels';
 
 import { BuildMenuPanel } from './BuildMenu';
-import { Clipboard } from './Clipboard';
+import { toggleBuildPanel } from './build-row';
+import { DebugPanel } from './DebugPanel';
 import { DockCard } from './DockCard';
+import { requestExit } from './exit';
 import { FieldCard } from './FieldCard';
 import { InventorySection } from './Inventory';
 import { SIDEBAR_WIDTH_PX } from './layout';
 import { cx, s } from './styles';
-import { PerfOverlay } from './PerfOverlay';
 import { Pouch } from './Pouch';
 import { SaveNotices } from './SaveNotices';
 import { ShopPanel, ShopToggle } from './Shop';
@@ -46,13 +47,6 @@ import { Toolbelt } from './Toolbelt';
 import { UpgradeBench } from './UpgradeBench';
 import { WelcomeBack } from './WelcomeBack';
 import { useHudSlice } from './use-hud';
-
-/**
- * Inlined by the bundler to a literal, so the branch below is dead code in a production
- * build and the overlay goes with it. Verified by grepping `.next` for a string that only
- * exists inside the overlay.
- */
-const DEV = process.env.NODE_ENV !== 'production';
 
 export default function HudRoot() {
   // Nothing has published yet — no world, or a save the client refused to overwrite. An
@@ -76,15 +70,27 @@ export default function HudRoot() {
       */}
         <div className={s.sidebar} style={{ width: SIDEBAR_WIDTH_PX }}>
           {/*
-          Ticker, Research, the Stand — the counter. The two buttons are the only places
-          money leaves the player's hands without them walking somewhere, so they hang off
-          the number that says how much money there is ([[051]]). The Bag no longer needs a
-          button in this column: it is permanently open one section down.
+          EXIT GAME first, top-left, modest ([[078]]). It ASKS (`requestExit`) — the ordered
+          save-then-teardown runs where the world and its autosave live (`GameCanvas`), and
+          there is no "are you sure": the save IS the confirmation, because nothing is lost.
+        */}
+          <button type="button" className={s.exitButton} onClick={requestExit}>
+            exit game
+          </button>
+
+          {/*
+          Ticker, Research, the Stand, Build — the counter. The buttons hang off the number
+          that says how much money there is ([[051]]). The Bag no longer needs a button in
+          this column: it is permanently open one section down. BUILD is the newest row
+          ([[076]], owner: "just like how you have the bag stand — add at the bottom for the
+          build menu") and it is wired to the SAME toggle B uses, through the item-071 seam —
+          one open-panel invariant, two doors.
         */}
           <div className={s.sideSection}>
             <Ticker />
             <TechToggle onOpen={panels.toggleResearch} />
             <ShopToggle onOpen={panels.toggleShop} />
+            <BuildToggle open={panels.open === 'build'} />
           </div>
 
           {/*
@@ -118,14 +124,15 @@ export default function HudRoot() {
           </div>
 
           {/*
-          Field card above the clipboard, deliberately. Both are read at a glance from the
-          same stretch of dock, but the clipboard is paper you catch up on and the field
-          card is the only thing in the HUD with a clock running on it ([[021]]) — so it
-          sits where the eye arrives first rather than underneath three lines of observation.
+          The field card, alone at the bottom now. THE CLIPBOARD IS GONE BY RULING ([[076]],
+          owner: "Get rid of the clipboard as well. It's taking space and it's not adding
+          much value") — the observation surface item 040 built. Its derive logic survives
+          (`deriveClipboard`, the promotion whisper, the slice) because the Welcome Back
+          card still reads the same notes; only the always-on paper unmounted. Noted in item
+          040's log, which the ruling supersedes.
         */}
           <div className={cx(s.sideSection, s.sidePapers)}>
             <FieldCard />
-            <Clipboard />
           </div>
         </div>
 
@@ -155,14 +162,44 @@ export default function HudRoot() {
             <WelcomeBack />
           </div>
 
-          {DEV ? (
-            <div className={cx(s.corner, s.topRight)}>
-              <PerfOverlay />
-            </div>
-          ) : null}
+          {/*
+          The debug panel ([[075]]): perf rows + the cheat console, in every build — the
+          owner wants his cheat in production, so the old DEV gate is gone and the panel
+          pays its rent by rendering null until the backtick asks for it.
+        */}
+          <div className={cx(s.corner, s.topRight)}>
+            <DebugPanel />
+          </div>
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * The BUILD row ([[076]]): same chrome as RESEARCH / THE STAND, wired to the same toggle B
+ * uses. Highlighted while the menu holds the slot — the research row's active treatment,
+ * class for class. `onMouseDown` keeps focus off the button exactly as the other rows do,
+ * so Space keeps meaning "pan" rather than "press the last button again".
+ */
+function BuildToggle({ open }: { open: boolean }) {
+  return (
+    <button
+      type="button"
+      className={cx(s.techToggle, open && s.techToggleReady)}
+      title="The build menu — everything placeable, priced"
+      aria-pressed={open}
+      onMouseDown={(event) => {
+        event.preventDefault();
+      }}
+      onClick={() => {
+        toggleBuildPanel();
+      }}
+    >
+      <span className={s.techToggleName}>Build</span>
+      <span className={s.techToggleBadge}>{open ? 'open' : 'place · buy'}</span>
+      <span className={s.techToggleKey}>B</span>
+    </button>
   );
 }
 

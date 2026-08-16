@@ -42,9 +42,8 @@ import {
   deriveClipboard,
   derivePouch,
   deriveTools,
-  deriveUnlock,
 } from './derive';
-import type { CanFields, MachineCounts, UnlockFields } from './derive';
+import type { CanFields, MachineCounts } from './derive';
 import { createDockFields, deriveDock } from './derive-dock';
 import type { DockFields } from './derive-dock';
 import { createInventoryFields, deriveInventory } from './derive-inventory';
@@ -78,7 +77,6 @@ import type {
   TechSlice,
   ToolSlice,
   ToolSlot,
-  UnlockSlice,
   ZoneRow,
 } from './types';
 import {
@@ -93,7 +91,6 @@ import {
   ZERO_SNAPSHOT,
   ZERO_TECH,
   ZERO_TOOLS,
-  ZERO_UNLOCK,
 } from './types';
 
 /**
@@ -109,7 +106,6 @@ export class HudStore {
   private readonly listeners = new Set<() => void>();
 
   private economy: EconomySlice = ZERO_ECONOMY;
-  private unlock: UnlockSlice = ZERO_UNLOCK;
   private pouch: PouchSlice = ZERO_POUCH;
   private tools: ToolSlice = ZERO_TOOLS;
   private clipboard: ClipboardSlice = ZERO_CLIPBOARD;
@@ -135,15 +131,6 @@ export class HudStore {
   private readonly inventoryScratch: InventoryFields = createInventoryFields();
   private readonly riskWatch = new RiskWatch();
   private readonly harvestPace = new HarvestPace();
-  private readonly unlockScratch: UnlockFields = {
-    id: null,
-    label: '',
-    blurb: '',
-    priceCents: 0,
-    owned: 0,
-    affordable: 0,
-    etaSeconds: -1,
-  };
   private clipboardDueTick = -(2 ** 30);
 
   /**
@@ -175,7 +162,6 @@ export class HudStore {
   /** Stable per-slice getters, built once. A closure per render would allocate per render. */
   readonly getters: { readonly [K in SliceName]: () => HudSnapshot[K] } = {
     economy: () => this.snapshot.economy,
-    unlock: () => this.snapshot.unlock,
     pouch: () => this.snapshot.pouch,
     tools: () => this.snapshot.tools,
     clipboard: () => this.snapshot.clipboard,
@@ -194,7 +180,6 @@ export class HudStore {
    */
   readonly serverGetters: { readonly [K in SliceName]: () => HudSnapshot[K] } = {
     economy: () => ZERO_SNAPSHOT.economy,
-    unlock: () => ZERO_SNAPSHOT.unlock,
     pouch: () => ZERO_SNAPSHOT.pouch,
     tools: () => ZERO_SNAPSHOT.tools,
     clipboard: () => ZERO_SNAPSHOT.clipboard,
@@ -249,7 +234,6 @@ export class HudStore {
 
   private resetSlices(): void {
     this.economy = ZERO_ECONOMY;
-    this.unlock = ZERO_UNLOCK;
     this.pouch = ZERO_POUCH;
     this.tools = ZERO_TOOLS;
     this.clipboard = ZERO_CLIPBOARD;
@@ -278,16 +262,9 @@ export class HudStore {
     const rate = this.meter.read(view);
 
     let changed = false;
-    if (this.setEconomy(view.moneyCents, view.stats.netWorthCents, rate)) changed = true;
-
-    const unlock = deriveUnlock(
-      view,
-      this.counts,
-      rate.centsPerMin,
-      rate.settled,
-      this.unlockScratch,
-    );
-    if (this.setUnlock(unlock)) changed = true;
+    if (this.setEconomy(view.moneyCents, view.stats.netWorthCents, rate, view.stats.cheatsUsed)) {
+      changed = true;
+    }
     if (this.setPouch(derivePouch(view), deriveCan(view))) changed = true;
 
     // The bag is read BEFORE the toolbelt, and the order is load-bearing rather than tidy: a
@@ -386,7 +363,6 @@ export class HudStore {
   private rebuildSnapshot(): void {
     this.snapshot = {
       economy: this.economy,
-      unlock: this.unlock,
       pouch: this.pouch,
       tools: this.tools,
       clipboard: this.clipboard,
@@ -409,13 +385,15 @@ export class HudStore {
     moneyCents: number,
     netWorthCents: number,
     rate: { centsPerMin: number; settled: number },
+    cheatsUsed: number,
   ): boolean {
     const current = this.economy;
     if (
       current.moneyCents === moneyCents &&
       current.netWorthCents === netWorthCents &&
       current.rateCentsPerMin === rate.centsPerMin &&
-      current.rateSettled === rate.settled
+      current.rateSettled === rate.settled &&
+      current.cheatsUsed === cheatsUsed
     ) {
       return false;
     }
@@ -425,34 +403,7 @@ export class HudStore {
       netWorthCents,
       rateCentsPerMin: rate.centsPerMin,
       rateSettled: rate.settled,
-    });
-    return true;
-  }
-
-  private setUnlock(next: UnlockFields): boolean {
-    const current = this.unlock;
-    // The ETA is quantised to whole seconds before comparison. Unquantised it changes on
-    // literally every publish, which would re-render the Ticker 6.7 times a second to
-    // redraw the same rounded string.
-    const eta = next.etaSeconds < 0 ? -1 : Math.round(next.etaSeconds);
-    if (
-      current.id === next.id &&
-      current.priceCents === next.priceCents &&
-      current.owned === next.owned &&
-      current.affordable === next.affordable &&
-      current.etaSeconds === eta
-    ) {
-      return false;
-    }
-    this.unlock = Object.freeze({
-      version: current.version + 1,
-      id: next.id,
-      label: next.label,
-      blurb: next.blurb,
-      priceCents: next.priceCents,
-      owned: next.owned,
-      affordable: next.affordable,
-      etaSeconds: eta,
+      cheatsUsed,
     });
     return true;
   }

@@ -1,21 +1,26 @@
 'use client';
 
-// The front door ([[055]]): Continue, New Game, and the list of lots.
+// The front door ([[055]]): Continue, New Game with its five farmers ([[079]]), and the lots.
 //
 // IT NEVER MOUNTS THE GAME. Not the canvas, not `GameHost`, not the HUD store, not the reports
 // layer. That is the whole reason it is a screen rather than a panel: `GameHost` owns a Pixi
 // application, an rAF loop and two store ownership tokens, and the honest way to switch worlds
 // is to not have two of any of those in one page. Picking a lot sets the registry's active id
-// and then performs a REAL navigation — the document is torn down and rebuilt. The item says a
-// plain navigation is acceptable; it is also the only version of this that cannot leak.
+// FIRST — `bootWorld()` reads it on the far side, and there is exactly one right answer at
+// that moment — and only then does anything mount.
 //
-// WHY `location.assign` AND NOT THE ROUTER. `next/navigation`'s router would keep this React
-// tree alive and swap the search params under it, which is exactly the hot-swap the paragraph
-// above rules out — same route, same tree, a `GameCanvas` mounting beside a front door that is
-// still holding the registry it read a moment ago. A document navigation is the honest one.
+// HOW THE GAME MOUNTS CHANGED WITH THE ROAD BACK ([[078]]). When `play-client` renders this
+// door it passes `onEnter`, and entering a lot is an in-page state flip over there — no
+// document navigation, because Exit Game's whole contract is "no reload anywhere in the
+// flow", and the leak-free property the old navigation bought is now bought by the full
+// unmount/remount of a keyed `GameCanvas` plus the stores' ownership tokens. Rendered with
+// no callback (a direct visit, some future embed), the door still does the honest
+// `location.assign` — never `next/navigation`'s router, which would swap search params under
+// a live tree and hot-swap exactly what must not be hot-swapped.
 //
 // KEYBOARD FIRST. Continue is auto-focused, so a returning player presses Enter without reading
-// anything. N starts a new lot. Everything else is reachable by Tab in the order it is read.
+// anything. N opens the farmer picker with the default focused, so N-then-Enter starts a new
+// lot exactly as fast as it used to. Everything else is reachable by Tab in reading order.
 
 import { useCallback, useEffect, useState } from 'react';
 import { CURRENT_FORMAT_VERSION } from '@snack/sim';
@@ -40,7 +45,9 @@ import {
 import { dayNumber } from '@/reports/day';
 import { isCloudSyncConfigured } from '@/supabase/env';
 
+import { AVATAR_COUNT, DEFAULT_AVATAR, avatarPortrait } from './avatars';
 import { formatCentsWhole } from './format';
+import { paintIcon } from './item-art';
 import raw from './FrontDoor.module.css';
 
 type StyleName =
@@ -78,7 +85,14 @@ type StyleName =
   | 'deletedWhen'
   | 'empty'
   | 'loading'
-  | 'note';
+  | 'note'
+  | 'picker'
+  | 'pickerHead'
+  | 'pickerRow'
+  | 'pickerCell'
+  | 'portrait'
+  | 'portraitBlank'
+  | 'pickerHint';
 
 // The same trick `hud/styles.ts` documents: Next types a CSS module as an index signature and
 // this workspace runs `noUncheckedIndexedAccess`, so every class would otherwise be
@@ -102,12 +116,23 @@ function whenLabel(at: number, now: number): string {
   return `${formatTimeAway(away)} ago`;
 }
 
-export default function FrontDoor() {
+export interface FrontDoorProps {
+  /**
+   * Enter a lot IN PAGE ([[078]]): the world is already active when this is called, and the
+   * caller mounts the game without a navigation. Absent, the door document-navigates as it
+   * always did.
+   */
+  onEnter?: (worldId: string) => void;
+}
+
+export default function FrontDoor({ onEnter }: FrontDoorProps = {}) {
   const [registry, setRegistry] = useState<WorldRegistry | null>(null);
   const [busy, setBusy] = useState(false);
   /** Which card is showing step two of its delete. One at a time, by construction. */
   const [confirming, setConfirming] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  /** The farmer picker ([[079]]): open between pressing NEW GAME and choosing who farms. */
+  const [picking, setPicking] = useState(false);
 
   // Read once per mount. StrictMode's second mount awaits the same memoised promise inside
   // `readRegistry`, so the adoption migration cannot run twice and mint two ids for one world.
@@ -121,30 +146,48 @@ export default function FrontDoor() {
     };
   }, []);
 
-  const enter = useCallback(async (id: string) => {
-    setBusy(true);
-    // Await the activation before navigating: `bootWorld()` reads the active id on the far
-    // side of the navigation, and there is exactly one right answer at that moment.
-    const world = await activateWorld(id);
-    if (world === null) {
-      setBusy(false);
-      setRegistry(await readRegistry());
-      return;
-    }
-    window.location.assign(`/play?world=${encodeURIComponent(id)}`);
-  }, []);
+  const enter = useCallback(
+    async (id: string) => {
+      setBusy(true);
+      // Await the activation before entering: `bootWorld()` reads the active id on the far
+      // side, and there is exactly one right answer at that moment. True for the in-page
+      // entry exactly as it was for the navigation.
+      const world = await activateWorld(id);
+      if (world === null) {
+        setBusy(false);
+        setRegistry(await readRegistry());
+        return;
+      }
+      if (onEnter !== undefined) {
+        onEnter(id);
+        return;
+      }
+      window.location.assign(`/play?world=${encodeURIComponent(id)}`);
+    },
+    [onEnter],
+  );
 
-  const startNew = useCallback(async () => {
-    setBusy(true);
-    const world = await createWorldRecord();
-    window.location.assign(`/play?world=${encodeURIComponent(world.id)}`);
-  }, []);
+  /** Mint the lot with its farmer and walk in. The picker is the only caller ([[079]]). */
+  const startNew = useCallback(
+    async (avatar: number) => {
+      setBusy(true);
+      const world = await createWorldRecord({ avatar });
+      if (onEnter !== undefined) {
+        onEnter(world.id);
+        return;
+      }
+      window.location.assign(`/play?world=${encodeURIComponent(world.id)}`);
+    },
+    [onEnter],
+  );
 
   const newest = registry === null ? null : newestWorld(registry);
 
-  // N for a new lot. Ignored while a text field has the caret, or the first letter of a rename
-  // would start a different game — which is the kind of bug that only bites the one player who
-  // names a world "Nettles".
+  // N for a new lot — it opens the farmer picker now ([[079]]), whose default cell takes
+  // focus, so N-then-Enter still starts a game without reading anything. Ignored while a
+  // text field has the caret, or the first letter of a rename would open a picker — which
+  // is the kind of bug that only bites the one player who names a world "Nettles". Esc
+  // closes the picker from the same listener.
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (busy || event.metaKey || event.ctrlKey || event.altKey) return;
@@ -152,14 +195,16 @@ export default function FrontDoor() {
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
       if (event.key === 'n' || event.key === 'N') {
         event.preventDefault();
-        void startNew();
+        setPicking(true);
+      } else if (event.key === 'Escape') {
+        setPicking(false);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-  }, [busy, startNew]);
+  }, [busy]);
 
   if (registry === null) {
     return (
@@ -205,14 +250,20 @@ export default function FrontDoor() {
           type="button"
           className={s.secondary}
           disabled={busy}
-          onClick={() => void startNew()}
+          onClick={() => {
+            setPicking((was) => !was);
+          }}
         >
           NEW GAME
         </button>
 
-        <p className={s.hint}>
-          {newest === null ? 'N starts a new lot.' : 'Enter continues. N starts a new lot.'}
-        </p>
+        {picking ? (
+          <AvatarPicker busy={busy} onPick={(avatar) => void startNew(avatar)} />
+        ) : (
+          <p className={s.hint}>
+            {newest === null ? 'N starts a new lot.' : 'Enter continues. N starts a new lot.'}
+          </p>
+        )}
 
         {lots.length === 0 ? (
           <p className={s.empty}>
@@ -303,6 +354,73 @@ export default function FrontDoor() {
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * The five farmers ([[079]]): a range of skin tones and masculine/feminine/androgynous
+ * presentations, none of them named, none of them gendered by the copy — the button says
+ * which farmer by NUMBER and lets the picture say the rest. Picking one starts the game.
+ *
+ * KEYBOARD FLOW, PRESERVED BY FOCUS: the default cell auto-focuses when the picker opens,
+ * so N-then-Enter is still the two-keystroke new game — with the default farmer, which is
+ * what a default is for. Arrow-free by design: five buttons Tab in reading order, and a
+ * picker this small does not need a cursor of its own.
+ *
+ * A portrait the atlas cannot supply degrades to a numbered chip, never magenta ([[037]]).
+ */
+function AvatarPicker({ busy, onPick }: { busy: boolean; onPick: (avatar: number) => void }) {
+  const ids = Array.from({ length: AVATAR_COUNT }, (_, i) => i + 1);
+  return (
+    <div className={s.picker}>
+      <div className={s.pickerHead}>Who farms it?</div>
+      <div className={s.pickerRow}>
+        {ids.map((id) => (
+          <button
+            key={id}
+            type="button"
+            className={s.pickerCell}
+            disabled={busy}
+            autoFocus={id === DEFAULT_AVATAR}
+            aria-label={`Farmer ${String(id)}`}
+            onClick={() => {
+              onPick(id);
+            }}
+          >
+            <Portrait avatar={id} />
+          </button>
+        ))}
+      </div>
+      <p className={s.pickerHint}>Enter takes the first. Esc changes your mind. Looks only.</p>
+    </div>
+  );
+}
+
+/** The pixel farmer at 3×, cut from the same atlas the world dresses them from. */
+const PORTRAIT_PX = 48;
+
+function Portrait({ avatar }: { avatar: number }) {
+  const source = avatarPortrait(avatar);
+  if (source === null) {
+    return (
+      <span className={cx(s.portrait, s.portraitBlank)} aria-hidden="true">
+        {avatar}
+      </span>
+    );
+  }
+  const paint = paintIcon(source, PORTRAIT_PX);
+  return (
+    <span
+      className={s.portrait}
+      style={{
+        width: PORTRAIT_PX,
+        height: PORTRAIT_PX,
+        backgroundImage: paint.backgroundImage,
+        backgroundPosition: paint.backgroundPosition,
+        backgroundSize: paint.backgroundSize,
+      }}
+      aria-hidden="true"
+    />
   );
 }
 

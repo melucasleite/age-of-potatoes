@@ -15,7 +15,7 @@
 // Money is in CENTS everywhere below. `packages/sim` never divides by 100; formatting to
 // dollars is `apps/web`'s job and lives in `format.ts`.
 
-/** Cash on hand, net worth, and the rate the Ticker counts down against. */
+/** Cash on hand, net worth, and the money-rate line. */
 export interface EconomySlice {
   readonly version: number;
   readonly moneyCents: number;
@@ -27,27 +27,17 @@ export interface EconomySlice {
   readonly rateCentsPerMin: number;
   /** 1 once the rate window is wide enough to mean something. 0 while warming up. */
   readonly rateSettled: number;
+  /**
+   * `StatsView.cheatsUsed`, copied through for the debug console ([[075]]). A refused cheat
+   * is a no-op the projection never mentions, so "did the sim take that code?" has exactly
+   * one honest answer: watch this counter move. It changes a handful of times per LIFETIME,
+   * so carrying it here costs nothing on the publish path.
+   */
+  readonly cheatsUsed: number;
 }
 
-/**
- * The countdown. This is the single most important retention device in the design (§2):
- * it converts a stable economy — which is otherwise just a number sitting there — into a
- * thing that will finish soon if you keep going.
- */
-export interface UnlockSlice {
-  readonly version: number;
-  /** Machine slug, or null once nothing is left to want. */
-  readonly id: string | null;
-  readonly label: string;
-  /** One line of why you want it. Not a quest; a description. */
-  readonly blurb: string;
-  readonly priceCents: number;
-  /** How many of this thing already stand on the lot. */
-  readonly owned: number;
-  readonly affordable: number;
-  /** Seconds until affordable at the current rate. -1 when that is unknowable. */
-  readonly etaSeconds: number;
-}
+// THE UNLOCK SLICE LIVED HERE — the Ticker's next-purchase countdown ([[013]] lineage) — and
+// is gone by ruling ([[076]]): the card was its only reader.
 
 export interface PouchItem {
   readonly id: number;
@@ -499,7 +489,6 @@ export interface DockSlice {
 
 export interface HudSnapshot {
   readonly economy: EconomySlice;
-  readonly unlock: UnlockSlice;
   readonly pouch: PouchSlice;
   readonly tools: ToolSlice;
   readonly clipboard: ClipboardSlice;
@@ -538,17 +527,7 @@ export const ZERO_ECONOMY: EconomySlice = Object.freeze({
   netWorthCents: 0,
   rateCentsPerMin: 0,
   rateSettled: 0,
-});
-
-export const ZERO_UNLOCK: UnlockSlice = Object.freeze({
-  version: 0,
-  id: null,
-  label: '',
-  blurb: '',
-  priceCents: 0,
-  owned: 0,
-  affordable: 0,
-  etaSeconds: -1,
+  cheatsUsed: 0,
 });
 
 export const ZERO_POUCH: PouchSlice = Object.freeze({
@@ -650,7 +629,6 @@ export const ZERO_INVENTORY: InventorySlice = Object.freeze({
 
 export const ZERO_SNAPSHOT: HudSnapshot = Object.freeze({
   economy: ZERO_ECONOMY,
-  unlock: ZERO_UNLOCK,
   pouch: ZERO_POUCH,
   tools: ZERO_TOOLS,
   clipboard: ZERO_CLIPBOARD,

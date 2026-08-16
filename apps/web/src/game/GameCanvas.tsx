@@ -18,20 +18,31 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-// A leaf module, not the `@/hud` barrel — one integer, no React tree ([[069]]). The HUD
-// draws its sidebar at this width; the canvas starts where the sidebar stops, so the two
-// can never overlap and the renderer's container is `calc(100vw - sidebar)` by geometry
-// rather than by coordination.
+// Leaf modules, not the `@/hud` barrel — no React tree ([[069]]). The HUD draws its sidebar
+// at this width; the canvas starts where the sidebar stops, so the two can never overlap and
+// the renderer's container is `calc(100vw - sidebar)` by geometry rather than by
+// coordination. `exit.ts` is the same kind of leaf: the EXIT GAME button's one-shot signal.
+import { onExitRequest } from '@/hud/exit';
 import { SIDEBAR_WIDTH_PX } from '@/hud/layout';
-import { bootWorld, startAutosave } from '@/storage';
+import { type AutosaveHandle, bootWorld, performExit, startAutosave } from '@/storage';
 
 import { GameHost } from './GameHost';
+// The renderer's avatar seam ([[079]]): the boot path publishes which farmer this world
+// dresses, and 0 — the legacy farmer — when no world is up. Pure module, no Pixi.
+import { publishAvatar } from './render/avatar';
 
 export interface GameCanvasProps {
   seed?: number;
+  /**
+   * Called when an EXIT GAME request has finished its save-and-verify and the world may be
+   * unmounted ([[078]]). The parent switches back to the front door, which unmounts this
+   * component and runs the ordinary cleanup below — teardown is REACHED through React
+   * rather than duplicated beside it. Absent on routes with nowhere to go back to.
+   */
+  onExited?: () => void;
 }
 
-export default function GameCanvas({ seed }: GameCanvasProps) {
+export default function GameCanvas({ seed, onExited }: GameCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
 
@@ -43,7 +54,10 @@ export default function GameCanvas({ seed }: GameCanvasProps) {
     // await re-checks it, for the same reason `GameHost` re-checks `destroyed`.
     let cancelled = false;
     let host: GameHost | null = null;
-    let autosave: { flush: () => void; stop: () => void } | null = null;
+    let autosave: AutosaveHandle | null = null;
+    let offExit: (() => void) | null = null;
+    /** One exit at a time — a double-click must not race two flushes at one teardown. */
+    let exiting = false;
 
     void (async () => {
       const boot = await bootWorld(seed === undefined ? {} : { seed });
@@ -61,23 +75,56 @@ export default function GameCanvas({ seed }: GameCanvasProps) {
         return;
       }
 
+      // Which farmer walks this world — envelope metadata, never world state ([[079]]).
+      // Absent (every save that predates the picker) is the legacy farmer, id 0.
+      publishAvatar(boot.world?.avatar ?? 0);
+
       host = new GameHost(container, { initialState: boot.state });
       host.start();
 
-      autosave = startAutosave(() => host!.getState(), { sinceTick: boot.state.tick });
+      const handle = startAutosave(() => host!.getState(), { sinceTick: boot.state.tick });
+      autosave = handle;
+
+      // EXIT GAME ([[078]]). The order is the whole feature: flush through the
+      // write-then-verify machinery, CHECK the save landed, and only then let the parent
+      // unmount us — at which point the cleanup below runs the teardown that already knows
+      // how to die cleanly (StrictMode built it). A failed save cancels the exit and the
+      // storage layer's notice card says why.
+      offExit = onExitRequest(() => {
+        if (exiting || cancelled) return;
+        exiting = true;
+        void performExit(
+          {
+            tickNow: () => host!.getState().tick,
+            flush: () => handle.flush('manual'),
+            lastSavedTick: () => handle.lastSavedTick,
+          },
+          () => {
+            if (!cancelled) onExited?.();
+          },
+        ).then((left) => {
+          if (!left) exiting = false;
+        });
+      });
     })();
 
     return () => {
       cancelled = true;
-      // Flush before stopping so the last few seconds of play survive a navigation.
-      autosave?.flush();
+      offExit?.();
+      // Flush before stopping so the last few seconds of play survive a navigation. On the
+      // exit path this is the second, best-effort write — the guaranteed one already
+      // resolved before `onExited` was allowed to fire.
+      void autosave?.flush();
       autosave?.stop();
+      // No world on stage: the next scene build dresses the legacy farmer unless a boot
+      // publishes otherwise. Harmless under StrictMode — the remount re-publishes.
+      publishAvatar(0);
       // `dispose()` is async and safe to fire and forget: it sets `destroyed` FIRST, so
       // everything still in flight inside `start()` bails at its next await. React does
       // not wait for cleanup, and it does not need to.
       void host?.dispose();
     };
-  }, [seed]);
+  }, [seed, onExited]);
 
   if (refusal !== null) {
     return (

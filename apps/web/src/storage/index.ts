@@ -78,6 +78,10 @@ export {
 export type { PresenceHandle } from './session';
 export { requestPersistentStorage } from './persist';
 export type { PersistenceResult } from './persist';
+// The ordered exit ([[078]]): save → verify → only then tear down. `GameCanvas` is the one
+// game caller; the types are public so its deps object stays honest.
+export { performExit, saveBeforeExit } from './exit';
+export type { ExitDeps } from './exit';
 export { CONFLICT_KEY, adoptCloudEnvelope, readConflictEnvelope } from './cloudHandoff';
 export type { AdoptOutcome } from './cloudHandoff';
 export {

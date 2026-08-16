@@ -36,103 +36,9 @@ import { freshnessBand } from './freshness';
 import { itemName } from './item-copy';
 import type { ClipboardNote, PouchItem, ToolSlot } from './types';
 
-// --- the unlock ladder -------------------------------------------------------------
-
-interface CatalogueEntry {
-  readonly kind: MachineKind;
-  readonly id: string;
-  readonly label: string;
-  readonly blurb: string;
-}
-
-/**
- * Order is want-order, not price-order, and the sprinkler leads deliberately even though
- * the Chip Kitchen is cheaper. The v0.1 design gate is a player grinning when the
- * sprinkler waters for them and immediately wanting a second one (AGENTS.md) — so the
- * sprinkler is what the Ticker counts down to, first and by name.
- */
-const CATALOGUE: readonly CatalogueEntry[] = [
-  {
-    kind: MachineKind.Sprinkler,
-    id: 'sprinkler',
-    label: 'Sprinkler',
-    blurb: 'Waters the 5×5 patch around it every five seconds. It never forgets.',
-  },
-  {
-    kind: MachineKind.ChipKitchen,
-    id: 'chip-kitchen',
-    label: 'Chip Kitchen',
-    blurb: 'Turns two-dollar russets into twenty-dollar bags of chips.',
-  },
-];
-
-export interface UnlockFields {
-  id: string | null;
-  label: string;
-  blurb: string;
-  priceCents: number;
-  owned: number;
-  affordable: number;
-  etaSeconds: number;
-}
-
-/**
- * The next thing to want: the first unowned entry in want-order, or — once the lot has one
- * of everything — the cheapest one again, because "another sprinkler" is a real ambition
- * and a Ticker with nothing on it is a Ticker that stops working.
- */
-export function deriveUnlock(
-  view: WorldView,
-  counts: MachineCounts,
-  rateCentsPerMin: number,
-  rateSettled: number,
-  out: UnlockFields,
-): UnlockFields {
-  let chosen: CatalogueEntry | null = null;
-  for (const entry of CATALOGUE) {
-    if (ownedOf(counts, entry.kind) === 0) {
-      chosen = entry;
-      break;
-    }
-  }
-  if (chosen === null) {
-    for (const entry of CATALOGUE) {
-      const price = priceOf(entry.kind);
-      if (chosen === null || price < priceOf(chosen.kind)) chosen = entry;
-    }
-  }
-
-  if (chosen === null) {
-    out.id = null;
-    out.label = '';
-    out.blurb = '';
-    out.priceCents = 0;
-    out.owned = 0;
-    out.affordable = 0;
-    out.etaSeconds = -1;
-    return out;
-  }
-
-  const price = priceOf(chosen.kind);
-  const deficit = price - view.moneyCents;
-
-  out.id = chosen.id;
-  out.label = chosen.label;
-  out.blurb = chosen.blurb;
-  out.priceCents = price;
-  out.owned = ownedOf(counts, chosen.kind);
-  out.affordable = deficit <= 0 ? 1 : 0;
-  // Pure display arithmetic on two sim-owned integers. A non-positive or unsettled rate
-  // yields -1 and the panel renders an em dash — never `Infinity`, never a countdown that
-  // runs backwards.
-  out.etaSeconds =
-    deficit <= 0
-      ? 0
-      : rateSettled === 1 && rateCentsPerMin > 0
-        ? (deficit * 60) / rateCentsPerMin
-        : -1;
-  return out;
-}
+// THE UNLOCK LADDER LIVED HERE and is gone by ruling ([[076]]): the Ticker's next-purchase
+// card was its only reader, and the owner cut the card. `priceOf` below survives because the
+// Clipboard's afford-sprinkler observation still asks what a sprinkler costs.
 
 function priceOf(kind: MachineKind): number {
   const spec = machineSpec(kind);
@@ -200,12 +106,6 @@ export function censusMachines(view: WorldView, out: MachineCounts): MachineCoun
     }
   }
   return out;
-}
-
-function ownedOf(counts: MachineCounts, kind: MachineKind): number {
-  if (kind === MachineKind.Sprinkler) return counts.sprinklers;
-  if (kind === MachineKind.ChipKitchen) return counts.kitchens;
-  return 0;
 }
 
 // --- the pouch ---------------------------------------------------------------------

@@ -29,10 +29,13 @@ import type { WorldRecord, WorldRegistry } from './db';
 import { loadWorld, memorySaveStore, saveWorld } from './saves';
 import {
   WORLD_TOMBSTONE_MS,
+  createWorldRecord,
   currentKeyFor,
   emptyRegistry,
   expiredTombstones,
+  findWorld,
   freshSeed,
+  invalidateRegistry,
   liveWorlds,
   milestoneKeyFor,
   newestWorld,
@@ -292,5 +295,47 @@ describe('two worlds on one machine', () => {
     const store = memorySaveStore();
     await saveWorld(createWorld(111), { worldId: 'alpha', store });
     expect((await loadWorld({ worldId: 'beta', store })).status).toBe('empty');
+  });
+});
+
+describe('the avatar on the record ([[079]])', () => {
+  // The one rule under test: the avatar is ENVELOPE METADATA. It lives on the registry
+  // record beside the lot's name, it round-trips with the registry, and it never comes
+  // anywhere near `WorldState` — which is why these tests never open a save.
+
+  it('a new game carries the picked avatar, and defaults to avatar 1', async () => {
+    // In this environment there is no IndexedDB, so the registry write is in-memory only —
+    // which is exactly the layer under test: the RECORD carries the field. (The write path
+    // itself is the same `writeRegistry` every other field already rides.)
+    invalidateRegistry();
+    const picked = await createWorldRecord({ avatar: 4 });
+    expect(picked.avatar).toBe(4);
+
+    const defaulted = await createWorldRecord();
+    expect(defaulted.avatar).toBe(1);
+  });
+
+  it('survives the patches a played world accumulates', () => {
+    // `touchWorld` (every save) and `renameWorld` go through `withWorld` — a patch that
+    // dropped the field would undress the farmer on the first autosave.
+    const registry = registryOf(world({ id: 'a', avatar: 3 }));
+    const touched = withWorld(registry, 'a', {
+      summary: { tick: 99, moneyCents: 5, formatVersion: 7 },
+      lastPlayedAt: NOW + 1,
+    });
+    expect(findWorld(touched, 'a')?.avatar).toBe(3);
+  });
+
+  it('an adopted pre-registry world has no avatar: the legacy farmer, by absence', () => {
+    const plan = planLegacyAdoption(
+      {
+        current: envelopeAt(7, 10, 100),
+        previous: undefined,
+        hasConflict: false,
+        legacySession: null,
+      },
+      { now: NOW, id: 'w1' },
+    );
+    expect(plan.adopted?.avatar).toBeUndefined();
   });
 });

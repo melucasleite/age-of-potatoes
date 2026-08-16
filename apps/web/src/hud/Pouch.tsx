@@ -22,10 +22,16 @@
 import { Fragment } from 'react';
 
 import { ToolMode } from '@/game/input/tools';
+// THE one threshold ([[073]]): full/half/empty is decided in `render/can-state.ts` and
+// nowhere else — the chip, the hotbar slot and the held sprite must flip on the same pour,
+// so the HUD imports the render lane's helper rather than owning a second opinion. The
+// module is pure (no Pixi), which is what makes the import legal from a DOM component.
+import { canFrame } from '@/game/render/can-state';
 
 import { ItemIcon } from './ItemIcon';
 import { formatCentsWhole } from './format';
 import { formatFreshness, freshnessBand, isWarning } from './freshness';
+import { paintIcon, resolveFrameIcon } from './item-art';
 import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
 import type { PouchItem, PouchSlice } from './types';
@@ -78,13 +84,19 @@ export function Pouch() {
 }
 
 /**
- * The watering can's chip: pours left, against the eight it holds ([[009]]).
+ * The watering can's chip: pours left, against the twenty it holds ([[009]], recapped by
+ * [[073]] — the owner's 20), with the can's own face beside the count.
  *
  * DRAWN ONLY WHILE THE WATER TOOL IS ARMED — the can is the thing in your hand at that
  * moment, and a permanent gauge would be one more number the eye learns to skip. While it IS
  * armed the chip is always there, so "why did my pour do nothing" has a visible answer at
  * the moment the question is asked: the sim refuses an empty can as a silent no-op (nothing
  * spent, nothing lost), which means the STATE is the only tell the HUD can give.
+ *
+ * THE SPRITE FLIPS ON THE SHARED THRESHOLD ([[073]]): `canFrame` in `render/can-state.ts`
+ * decides full/half/empty for every surface at once, so the chip, the hotbar slot and the
+ * farmer's hand can never disagree about which can this is. A build whose atlas predates the
+ * new frames draws the count alone — degraded honestly, never magenta ([[037]]).
  *
  * At zero it turns red and points at the water — gently, with a direction rather than a
  * klaxon, because an empty can is not a failure. There is no fail state here (§4): the
@@ -96,6 +108,7 @@ function CanChip({ pouch, divide }: { pouch: PouchSlice; divide: boolean }) {
   return (
     <>
       <span className={cx(s.canChip, empty && s.canChipEmpty)}>
+        <CanFace charges={pouch.canCharges} chargesMax={pouch.canChargesMax} />
         {empty ? <span className={s.stackFreshMark} /> : null}
         <span className={s.stackCount}>
           {pouch.canCharges}/{pouch.canChargesMax}
@@ -104,6 +117,26 @@ function CanChip({ pouch, divide }: { pouch: PouchSlice; divide: boolean }) {
       </span>
       {divide ? <span className={s.pouchDivider} /> : null}
     </>
+  );
+}
+
+/** The can drawn as itself, at the pouch's own icon size. Null when the atlas lacks it. */
+function CanFace({ charges, chargesMax }: { charges: number; chargesMax: number }) {
+  const source = resolveFrameIcon(canFrame(charges, chargesMax));
+  if (source === null) return null;
+  const paint = paintIcon(source, POUCH_ICON);
+  return (
+    <span
+      className={cx(s.icon, s.pouchIcon)}
+      style={{
+        width: POUCH_ICON,
+        height: POUCH_ICON,
+        backgroundImage: paint.backgroundImage,
+        backgroundPosition: paint.backgroundPosition,
+        backgroundSize: paint.backgroundSize,
+      }}
+      aria-hidden="true"
+    />
   );
 }
 

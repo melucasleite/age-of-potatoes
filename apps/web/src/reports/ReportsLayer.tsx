@@ -22,6 +22,10 @@
 
 import { useEffect, useState } from 'react';
 
+// A leaf module, not the `@/hud` barrel — one integer, no React tree. The dock sits at the
+// top of the CANVAS region ([[076]]), and "where the canvas starts" has exactly one home.
+import { SIDEBAR_WIDTH_PX } from '@/hud/layout';
+
 import { BoardsPanel } from './BoardsPanel';
 import { CommercePanel } from './CommercePanel';
 import { DawnCard } from './DawnCard';
@@ -77,7 +81,12 @@ export default function ReportsLayer() {
     <div className={r.layer}>
       <DawnCard />
 
-      <div className={r.dock}>
+      {/*
+        Top of the canvas region, just right of the sidebar ([[076]]). The offset is inline
+        because a CSS module cannot import `SIDEBAR_WIDTH_PX`, and a hand-copied 440 here is
+        exactly the drift the constant exists to prevent.
+      */}
+      <div className={r.dock} style={{ left: SIDEBAR_WIDTH_PX + 14 }}>
         <div className={r.tabs}>
           {TABS.map((tab) => (
             <button

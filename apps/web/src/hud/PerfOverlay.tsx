@@ -24,16 +24,15 @@ import { BUDGET_FRAME_MS, BUDGET_RENDER_MS, BUDGET_SIM_MS, createPerfReading, pe
 
 const REFRESH_MS = 250;
 
-export function PerfOverlay() {
-  const visible = useSyncExternalStore(
-    perf.subscribeVisible,
-    perf.getVisible,
-    perf.getServerVisible,
-  );
-  return visible ? <PerfPanel /> : null;
+/** The one subscription to the overlay's visibility. `DebugPanel` gates on it ([[075]]). */
+export function usePerfVisible(): boolean {
+  return useSyncExternalStore(perf.subscribeVisible, perf.getVisible, perf.getServerVisible);
 }
 
-function PerfPanel() {
+// `PerfOverlay` — the standalone visible-gated wrapper — is gone: the panel mounts inside
+// `DebugPanel` now ([[075]]), which owns the gate and adds the cheat console under it.
+
+export function PerfPanel() {
   const frameRef = useRef<HTMLSpanElement | null>(null);
   const simRef = useRef<HTMLSpanElement | null>(null);
   const renderRef = useRef<HTMLSpanElement | null>(null);
