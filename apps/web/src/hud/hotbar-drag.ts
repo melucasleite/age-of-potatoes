@@ -11,10 +11,12 @@
 // Toolbelt's spec-trap comment), and unsuppressing it would reopen the focus bug to gain a
 // clumsier ghost. Pointer events compose with the existing discipline instead of fighting it.
 //
-// THE DROP IS HIT-TESTED AGAINST REGISTERED SLOT RECTS, not `elementFromPoint`, because the
-// bag is a full-screen scrim: while it is open the belt is *raised above it* to stay visible
-// (`bottomRaised`), but a rect test keeps working even if stacking shifts — the drop lands
-// where the eye says the slot is, not where the paint order says the topmost element is.
+// THE DROP IS HIT-TESTED AGAINST REGISTERED SLOT RECTS, not `elementFromPoint`, and the
+// bag's travels are the argument for it: the bag has been a full-screen scrim, a docked
+// sidebar section ([[069]]), and is now a floating window over the canvas ([[089]]), and
+// this module never changed — a rect test keeps working wherever the cells are and however
+// the stacking shifts, because the drop lands where the eye says the slot is, not where
+// the paint order says the topmost element is.
 //
 // A CLICK IS NOT A DRAG. Nothing happens until the pointer has moved `DRAG_THRESHOLD_PX`;
 // under that, this module cleans up silently and the ordinary `click` handler fires. That is

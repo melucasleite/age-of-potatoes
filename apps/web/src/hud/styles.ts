@@ -15,12 +15,11 @@ export type StyleName =
   | 'root'
   | 'sidebar'
   | 'sideSection'
-  | 'sideBag'
-  | 'sideBagBody'
   | 'sideSlot'
   | 'sidePapers'
   | 'stage'
   | 'corner'
+  | 'floatWin'
   | 'topRight'
   | 'bottomCentre'
   | 'card'
@@ -200,10 +199,10 @@ export type StyleName =
   | 'icon'
   | 'iconBlank'
   // --- the bag ---
-  // A persistent dock section now ([[069]]); its header borrows `techToggle*` and its
-  // status line and buttons are the stand's, class for class — same dock, same chrome,
-  // and two lists laid out differently read as two games. Only what a boxed machine adds
-  // is new below.
+  // A centred floating window now ([[089]], retiring [[069]]'s dock section); its shell,
+  // head and footer are the tech tree's classes and its status line and buttons are the
+  // stand's, class for class — same chrome everywhere, because two lists laid out
+  // differently read as two games. Only what a boxed machine adds is new below.
   | 'invEmpty'
   | 'invBody'
   | 'invGrid'

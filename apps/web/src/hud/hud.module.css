@@ -68,19 +68,6 @@
   padding: 12px 12px 0;
 }
 
-/* The persistent bag. It may shrink (its grid scrolls) but it never leaves the dock. */
-.sideBag {
-  flex: 0 1 auto;
-  min-height: 0;
-}
-
-.sideBagBody {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  min-height: 0;
-}
-
 /*
  * THE ONE CONTEXTUAL SLOT. Shop, research, and the at-the-machine cards swap through it;
  * Esc empties it; the sidebar itself never closes. It takes the free height between the
@@ -108,7 +95,9 @@
 
 /*
  * What is ALLOWED over the canvas, exhaustively: the hotbar stack (bottom centre), thin
- * transient hints (top centre), and the dev overlay. Everything else is in the dock.
+ * transient hints (top centre), the dev overlay — and, by the 089 ruling, the two centred
+ * floating windows (`.floatWin`: the bag and the build menu, one at a time, never both).
+ * Everything else is in the dock.
  */
 .stage {
   position: relative;
@@ -140,6 +129,33 @@
   transform: translateX(-50%);
   align-items: center;
   gap: 8px;
+}
+
+/*
+ * THE FLOATING WINDOWS ([[089]]) — the bag and the build menu, and nothing else. Centred
+ * over the canvas region because this element lives inside `.stage`, which starts where
+ * the sidebar ends; "the middle of the screen", in the owner's words, means the middle of
+ * the part of the screen the game owns. The wrapper does the positioning; the panel inside
+ * brings its own house bevel (`.techPanel`).
+ *
+ * WIDTH: the bag's six-column grid is 390px (`.invGrid`) plus the panel's 20px padding
+ * each side — 460 is the first tidy number with slack, and the build grid's 1fr columns
+ * take whatever they are given. HEIGHT: capped short of the bottom edge so the hotbar
+ * stack stays visible under it — the drag-to-hotbar drop is rect-tested and would survive
+ * being covered, but a belt the player cannot see is not a drop target, it is a rumour.
+ */
+.floatWin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 460px;
+  max-width: calc(100% - 32px);
+  max-height: min(620px, calc(100% - 170px));
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  z-index: 5;
 }
 
 /* --- the card ------------------------------------------------------------------- */
@@ -1917,10 +1933,11 @@
   color: #6d5c4d;
 }
 
-/* Grid above, pane below ([[069]]). The bag is a persistent 440px dock section now, and six
-   columns of sprites plus a 300px pane do not sit side by side in it — so the pane moved
-   under the grid, which is also the order the eye reads them in: find the thing, then read
-   about the thing. `min-height: 0` for the same reason `.shopList` needs it. */
+/* Grid above, pane below ([[069]], and the floating window ([[089]]) keeps the stack). Six
+   columns of sprites plus a 300px pane do not sit side by side in a 460px window any more
+   than they did in the dock — and under-the-grid is also the order the eye reads them in:
+   find the thing, then read about the thing. `min-height: 0` for the same reason
+   `.shopList` needs it. */
 .invBody {
   flex: 0 1 auto;
   min-height: 0;
@@ -1938,8 +1955,8 @@
   flex: 0 1 auto;
   min-width: 0;
   min-height: 0;
-  /* Four rows of cells before the grid scrolls — the dock section may not grow forever,
-     because the contextual slot below it owns the free height. */
+  /* Four rows of cells before the grid scrolls — the window may not grow forever, because
+     the detail pane below the grid must stay on screen without a second scroll. */
   max-height: 258px;
   overflow-y: auto;
   display: grid;

@@ -16,10 +16,12 @@
 // its doors — `buildMenuArmAt` is the same code path Enter takes, so there is exactly one
 // way a cell can arm a tool.
 //
-// It renders inside the sidebar's contextual slot ([[069]]), claiming the slot through
-// `usePanels` in `HudRoot.tsx` exactly as the shop and the tech tree do. No scrim, no
-// fixed width, no Esc listener of its own — the input layer already owns Esc while the
-// menu is up, which is one better than a listener: it also keeps Esc from reaching the
+// It renders as a centred floating window over the canvas ([[089]] — it lived in the
+// sidebar's contextual slot from [[069]] until the owner ruled the floats in), claiming
+// its place through the same one-panel-anywhere invariant as everything else
+// (`panel-state.ts`): opening it closes the bag, the shop or the tree, and vice versa.
+// No scrim, no Esc listener of its own — the input layer already owns Esc while the menu
+// is up, which is one better than a listener: it also keeps Esc from reaching the
 // put-the-tool-down fallthrough.
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';

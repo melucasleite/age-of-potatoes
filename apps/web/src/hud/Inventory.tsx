@@ -43,11 +43,12 @@
 //   of sell buttons would teach the player that the walk to the stand is optional.
 //
 //   IT DOES NOT PLACE ANYTHING ITSELF. "Place" arms the build cursor; the machine goes down
-//   where the player clicks, on a lot that is fully visible beside the docked bag ([[069]]).
-//   Placement is a gesture on the world, and a panel that put a Fryer down for you would have
-//   to invent a tile to put it on.
+//   where the player clicks, on a lot that stays visible around the floating bag ([[089]] —
+//   the window is centred and the canvas owns everything behind and beside it). Placement is
+//   a gesture on the world, and a panel that put a Fryer down for you would have to invent a
+//   tile to put it on.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { CONDITION_EFFECT_THRESHOLD, CONDITION_MAX, UPGRADE_MAX_LEVEL, permille } from '@snack/sim';
 import type { ItemId } from '@snack/sim';
@@ -69,10 +70,11 @@ import type { InventoryBox, InventoryRow } from './types';
  * would start lying silently the day somebody rescaled one of them. */
 const ROUGH_PERMILLE = permille(CONDITION_EFFECT_THRESHOLD, CONDITION_MAX);
 
-// THE GRID IS SIX FIXED COLUMNS, declared in `.invGrid` — and that number is now the widest
-// thing the whole sidebar is sized around (`layout.ts`'s SIDEBAR_WIDTH_PX). The arrow-key
-// cursor that used to share the constant went with the modal ([[069]]): arrows walk the
-// farmer again, so nothing in this file does column arithmetic any more.
+// THE GRID IS SIX FIXED COLUMNS, declared in `.invGrid`. It sized the whole sidebar while
+// the bag lived there (`layout.ts` keeps the history); the floating window ([[089]]) sizes
+// itself around the same 390px grid via `.floatWin`. The arrow-key cursor that used to
+// share the constant went with the modal ([[069]]): arrows walk the farmer, so nothing in
+// this file does column arithmetic any more.
 
 /** Sprite box sizes. Bigger in the pane, because that is the one you are actually looking at. */
 const SLOT_ICON = 48;
@@ -83,25 +85,75 @@ function keepFocus(event: React.MouseEvent): void {
   event.preventDefault();
 }
 
-// --- the persistent dock section ([[069]]) ---------------------------------------------
+// --- the sidebar row (the opener) --------------------------------------------------------
 
 /**
- * The bag as an always-open sidebar section. The header is a collapsible toggle — never a
- * close button — and it lights up when there is a boxed machine inside, which is the only
- * teaching the feature gets: a player who boxes their first Fryer sees the dock change while
- * they are still standing where the Fryer was.
- *
- * WHAT THE MOVE OUT OF THE MODAL COST, ON PURPOSE: the arrow-key grid cursor and
- * Enter-to-place are gone. They were captured away from the walk keys, and that was
- * defensible exactly as long as the bag was a full-screen scrim the player could not see the
- * lot through — a docked bag beside a live, visible lot must not stop WASD/arrows from
- * walking. Selection is a click; placing is the pane's button; the drag to the hotbar
- * ([[061]]) is untouched. Esc no longer closes anything here because there is nothing to
- * close — it falls through to the input layer, which uses it to put the tool down.
+ * THE BAG row, under RESEARCH and THE STAND ([[089]]): item 069's always-open dock section
+ * retires, and the row that was its header becomes a plain opener for the floating window —
+ * same chrome as the other rows, wired to the same toggle I uses. It still lights up when
+ * there is a boxed machine inside, which is the only teaching the feature gets: a player who
+ * boxes their first Fryer sees the row change while they are still standing where the Fryer
+ * was — and it lights while the window is up, exactly as the BUILD row does.
  */
-export function InventorySection({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+export function BagToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  const inventory = useHudSlice('inventory');
+  const boxed = inventory.boxCount;
+  const kinds = inventory.rows.length;
+
+  return (
+    <button
+      type="button"
+      className={cx(s.techToggle, (open || boxed > 0) && s.techToggleReady)}
+      title="The bag — everything you are carrying, centred over the lot"
+      aria-pressed={open}
+      onMouseDown={keepFocus}
+      onClick={onToggle}
+    >
+      <span className={s.techToggleName}>The Bag</span>
+      <span className={s.techToggleBadge}>
+        {open
+          ? 'open'
+          : boxed > 0
+            ? `${boxed} boxed`
+            : kinds === 0
+              ? 'empty'
+              : `${kinds} ${kinds === 1 ? 'kind' : 'kinds'}`}
+      </span>
+      <span className={s.techToggleKey}>I</span>
+    </button>
+  );
+}
+
+// --- the floating window ([[089]]) -------------------------------------------------------
+
+/**
+ * The bag as a centred floating window over the canvas — the owner's ruling, amending item
+ * 069's dock section knowingly: "Inventory and build should show as a floating window in
+ * the middle of the screen." It claims the one-panel-anywhere invariant through
+ * `panel-state.ts` exactly as the slot panels do, so opening it closes the build menu, the
+ * shop or the tree, and vice versa.
+ *
+ * WHAT DID NOT COME BACK FROM THE MODAL DAYS, ON PURPOSE: the arrow-key grid cursor and
+ * Enter-to-place stay gone. The window floats over a live, visible lot and must not stop
+ * WASD/arrows from walking. Selection is a click; placing is the pane's button; the drag to
+ * the hotbar ([[061]]) is untouched — it hit-tests registered slot rects, so it works from
+ * any geometry the bag happens to occupy. Esc closes the window (this listener, plus the
+ * ESC button), the same pair every panel offers; the input layer's own Esc — put the tool
+ * down — keeps firing underneath, exactly as it does for the shop and the tree.
+ */
+export function InventoryWindow({ onClose }: { onClose: () => void }) {
   const inventory = useHudSlice('inventory');
   const pending = usePending();
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.code === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
 
   // WHICH SLOT, HELD AS AN ITEM ID RATHER THAN AN INDEX. The rows are rebuilt from the world
   // eight times a second and a stack that runs out disappears from the middle of them; an index
@@ -138,42 +190,34 @@ export function InventorySection({ open, onToggle }: { open: boolean; onToggle: 
   const boxed = inventory.boxCount;
 
   return (
-    <div className={cx(s.sideSection, s.sideBag)}>
-      <button
-        type="button"
-        aria-expanded={open}
-        className={cx(s.techToggle, boxed > 0 && s.techToggleReady)}
-        title={
-          open
-            ? 'The bag — everything you are carrying. Collapses; never closes.'
-            : 'The bag — collapsed. I or a click reopens it.'
-        }
-        onMouseDown={keepFocus}
-        onClick={onToggle}
-      >
-        <span className={s.techToggleName}>The Bag</span>
-        <span className={s.techToggleBadge}>
+    <div className={s.techPanel}>
+      <div className={s.techHead}>
+        <span className={s.techTitle}>The Bag</span>
+        <span className={s.shopTag}>everything you are carrying</span>
+        <span className={s.techCount}>
           {boxed > 0
             ? `${boxed} boxed`
             : rows.length === 0
               ? 'empty'
               : `${rows.length} ${rows.length === 1 ? 'kind' : 'kinds'}`}
         </span>
-        <span className={s.techToggleKey}>I</span>
-      </button>
+        <button type="button" className={s.techClose} onMouseDown={keepFocus} onClick={onClose}>
+          ESC
+        </button>
+      </div>
 
-      {!open ? null : active === null ? (
+      {active === null ? (
         <div className={s.invEmpty}>Your pockets are empty.</div>
       ) : (
-        <div className={s.sideBagBody}>
-          {boxed > 0 ? (
-            <div className={cx(s.shopStatus, s.shopStatusOpen)}>
-              {boxed} boxed {boxed === 1 ? 'machine' : 'machines'} —{' '}
-              {formatCents(inventory.scrapCents)} if you scrapped every one of them.
-            </div>
-          ) : null}
-
+        <div className={s.techScroll}>
           <div className={s.invBody}>
+            {boxed > 0 ? (
+              <div className={cx(s.shopStatus, s.shopStatusOpen)}>
+                {boxed} boxed {boxed === 1 ? 'machine' : 'machines'} —{' '}
+                {formatCents(inventory.scrapCents)} if you scrapped every one of them.
+              </div>
+            ) : null}
+
             <div className={s.invGrid}>
               {rows.map((row) => (
                 <Slot
@@ -194,6 +238,8 @@ export function InventorySection({ open, onToggle }: { open: boolean; onToggle: 
           </div>
         </div>
       )}
+
+      <div className={s.techHint}>drag a cell onto the hotbar · I or ESC closes</div>
     </div>
   );
 }

@@ -2,14 +2,17 @@
 
 // The HUD tree: a docked sidebar on the left, and thin chrome over the canvas ([[069]]).
 //
-// THE LAYOUT RULE, WHICH IS THE FEATURE: no panel ever overlaps the canvas. The sidebar is
-// a fixed-width opaque column — money and the Ticker at the top, the bag always open under
-// them, ONE contextual slot that the shop, the research tree and the at-the-machine cards
-// swap through, and the papers (field card, clipboard) at the bottom. The canvas owns
-// everything to its right (`GameCanvas` offsets itself by the same `SIDEBAR_WIDTH_PX`), and
-// the only things allowed over it are the hotbar stack, transient hints, and the dev
-// overlay. Opening a panel changes what the sidebar shows, never what the player can see
-// of their lot.
+// THE LAYOUT RULE, AND ITS ONE SANCTIONED EXCEPTION. The sidebar is a fixed-width opaque
+// column — money and the Ticker at the top, the opener rows under them, ONE contextual
+// slot that the shop, the research tree and the at-the-machine cards swap through, and the
+// papers (field card) at the bottom. The canvas owns everything to its right (`GameCanvas`
+// offsets itself by the same `SIDEBAR_WIDTH_PX`), and item 069's rule was that nothing
+// ever covers it. Item 089 amends that rule knowingly, by owner ruling: THE BAG AND THE
+// BUILD MENU float as centred windows over the canvas region — "Inventory and build should
+// show as a floating window in the middle of the screen. Don't let them overlap. If one is
+// already open, close it and open the other one." Exactly one panel can be open ANYWHERE —
+// float or slot — and the invariant lives in `panel-state.ts`. Everything else over the
+// canvas stays thin: the hotbar stack, transient hints, and the dev overlay.
 //
 // NOTE WHAT IS NOT HERE: there is no provider, no context, no `useState` holding world
 // data, and nothing passing sim numbers down as props from a common ancestor. Each panel
@@ -23,9 +26,8 @@
 // its controls opt back in, because a HUD that swallows a click meant for a tile makes the
 // game feel broken in a way the player cannot name.
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
-import { buildMenuClose, buildMenuSnapshot, subscribeBuildMenu } from '@/game/input/build-panel';
 import { onPanelRequest } from '@/game/input/panels';
 
 import { BuildMenuPanel } from './BuildMenu';
@@ -34,8 +36,17 @@ import { DebugPanel } from './DebugPanel';
 import { DockCard } from './DockCard';
 import { requestExit } from './exit';
 import { FieldCard } from './FieldCard';
-import { InventorySection } from './Inventory';
+import { BagToggle, InventoryWindow } from './Inventory';
 import { SIDEBAR_WIDTH_PX } from './layout';
+import {
+  closeLocalPanel,
+  openPanel,
+  panelServerSnapshot,
+  panelSnapshot,
+  subscribePanels,
+  togglePanel,
+} from './panel-state';
+import type { PanelName } from './panel-state';
 import { cx, s } from './styles';
 import { Pouch } from './Pouch';
 import { SaveNotices } from './SaveNotices';
@@ -79,39 +90,33 @@ export default function HudRoot() {
           </button>
 
           {/*
-          Ticker, Research, the Stand, Build — the counter. The buttons hang off the number
-          that says how much money there is ([[051]]). The Bag no longer needs a button in
-          this column: it is permanently open one section down. BUILD is the newest row
-          ([[076]], owner: "just like how you have the bag stand — add at the bottom for the
-          build menu") and it is wired to the SAME toggle B uses, through the item-071 seam —
-          one open-panel invariant, two doors.
+          Ticker, Research, the Stand, the Bag, Build — the counter. The buttons hang off
+          the number that says how much money there is ([[051]]). THE BAG is a row again
+          ([[089]]): item 069's always-open section retired when the bag became a floating
+          window, and the row that was its header is now a plain opener like the others.
+          BUILD stays at the bottom ([[076]], owner: "add at the bottom for the build menu")
+          and is wired to the SAME toggle B uses, through the item-071 seam — one open-panel
+          invariant, many doors.
         */}
           <div className={s.sideSection}>
             <Ticker />
             <TechToggle onOpen={panels.toggleResearch} />
             <ShopToggle onOpen={panels.toggleShop} />
+            <BagToggle open={panels.open === 'bag'} onToggle={panels.toggleBag} />
             <BuildToggle open={panels.open === 'build'} />
           </div>
 
           {/*
-          The bag, always visible — a collapsible section header rather than a removable
-          panel ([[069]]: "perhaps the inventory is always open there as well" — default
-          yes). I collapses and expands it; nothing closes it.
-        */}
-          <InventorySection open={panels.bagOpen} onToggle={panels.toggleBag} />
-
-          {/*
           THE ONE CONTEXTUAL SLOT. Shop and research swap through it on their toggles and
           keys; Esc empties it (each panel's own Esc listener → `panels.close`). When no
-          panel claims it, the at-the-machine cards get it — each decides for itself
+          panel claims it — including while a float is up, because the floats live over the
+          canvas now ([[089]]) — the at-the-machine cards get it: each decides for itself
           whether the player is standing somewhere it has something to say about, and they
           can never both speak: the bench takes machines with a work cycle, the dock card
           takes Agri-Bot docks, disjoint by construction (`derive-dock.ts`).
         */}
           <div className={s.sideSlot}>
-            {panels.open === 'build' ? (
-              <BuildMenuPanel />
-            ) : panels.open === 'research' ? (
+            {panels.open === 'research' ? (
               <TechPanel onClose={panels.close} />
             ) : panels.open === 'shop' ? (
               <ShopPanel onClose={panels.close} />
@@ -138,7 +143,8 @@ export default function HudRoot() {
 
         {/*
         THE STAGE — everything that is allowed over the canvas, exhaustively: the hotbar
-        stack, the rare welcome-back card, and the dev overlay.
+        stack, the rare welcome-back card, the dev overlay, and the two floating windows
+        ([[089]]), of which at most one exists at a time.
       */}
         <div className={s.stage}>
           {/*
@@ -170,6 +176,23 @@ export default function HudRoot() {
           <div className={cx(s.corner, s.topRight)}>
             <DebugPanel />
           </div>
+
+          {/*
+          THE FLOATING WINDOWS ([[089]]): the bag and the build menu, centred over the
+          canvas region — never over the sidebar, which is why they live inside the stage
+          rather than the root. At most one exists, by the `panel-state.ts` invariant, and
+          the wrapper is rendered only while its panel is open: an empty `pointer-events:
+          auto` box parked over the middle of the lot would swallow clicks meant for tiles.
+        */}
+          {panels.open === 'bag' ? (
+            <div className={s.floatWin}>
+              <InventoryWindow onClose={panels.close} />
+            </div>
+          ) : panels.open === 'build' ? (
+            <div className={s.floatWin}>
+              <BuildMenuPanel />
+            </div>
+          ) : null}
         </div>
       </div>
     </>
@@ -203,86 +226,61 @@ function BuildToggle({ open }: { open: boolean }) {
   );
 }
 
-type PanelName = 'research' | 'shop' | 'build';
-
 /**
- * Which panel holds the contextual slot, if any — plus whether the persistent bag section
- * is expanded. UI STATE, and it stays that way.
+ * Which panel is open — anywhere: the slot (research, shop), the floats (bag, build). UI
+ * STATE, and it stays that way: camera pan, hover, tool mode, and menu state are explicitly
+ * not commands and never enter the world (§12) — a replay must not depend on which panels
+ * were open.
  *
- * Camera pan, hover, tool mode, and menu state are explicitly not commands and never enter the
- * world (§12) — a replay must not depend on which panels were open. So this is a `useState` in
- * the HUD and nothing else knows about it.
+ * THE MACHINE ITSELF LIVES IN `panel-state.ts` NOW ([[089]]) — one name, never a flag per
+ * panel, with the build menu's truth still owned by the input layer and folded in at read
+ * time. It moved out of this hook so the exclusion rules (I then B, B then I, float versus
+ * slot) could be pinned by tests that run without a DOM; this hook is the subscription plus
+ * the keys.
  *
- * ONE AT A TIME, held as a name rather than as a flag per panel. The contextual slot is a
- * single region of the sidebar; two booleans would let both panels be true at once and fight
- * over it. A single slot makes that unrepresentable instead of merely unlikely. The bag is a
- * separate boolean precisely because it is NOT in the slot — it is a persistent section that
- * collapses, and expanding it must not evict a panel the player is reading.
- *
- * The keys are bound here rather than in `input/keyboard.ts` because they toggle DOM sections
- * that the input system has no business knowing exist. They are chosen from what that layer
- * leaves free: digits 1–9 and 0 (the hotbar, [[061]]), B, R, C, +, −, Escape, F3, backtick,
- * space and WASD are all spoken for, and an unhandled code falls through its switch untouched.
- * T for the tree, G for goods, I for the bag — the one letter a player will try without being
- * told. Esc is NOT bound here: each panel closes itself on Esc (their own listeners), and the
- * input layer's Esc — put the tool down — keeps working exactly because nobody swallows it.
- *
- * THE BUILD MENU IS THE THIRD OCCUPANT AND THE ODD ONE OUT ([[071]]): its source of truth is
- * the INPUT layer (`build-panel.ts`), because B, the arrows and the walk-stop are modal there
- * and the two sides must agree about `menuOpen`. This hook subscribes to that truth and folds
- * it into `open` — build simply wins while it is up — and keeps the one-occupant invariant by
- * closing the loser on every door: opening build evicts the local panel (the effect below),
- * and every local opener calls `buildMenuClose()` first. Esc for the menu is not bound here
- * either: the input layer's Esc cascade already closes it before anything else fires.
+ * The keys are bound here rather than in `input/keyboard.ts` because they toggle DOM
+ * panels that the input system has no business knowing exist. They are chosen from what
+ * that layer leaves free: digits 1–9 and 0 (the hotbar, [[061]]), B, R, C, +, −, Escape,
+ * F3, backtick, space and WASD are all spoken for, and an unhandled code falls through its
+ * switch untouched. T for the tree, G for goods, I for the bag — the one letter a player
+ * will try without being told. I TOGGLES THE FLOATING BAG now, per the 089 ruling — the
+ * same key that collapsed the old dock section, aimed at the window that replaced it. Esc
+ * is NOT bound here: each panel closes itself on Esc (their own listeners, the bag's
+ * included), and the input layer's Esc — put the tool down — keeps working exactly because
+ * nobody swallows it. Esc for the build menu is the input layer's own cascade, as ever.
  */
 function usePanels(): {
   open: PanelName | null;
-  bagOpen: boolean;
   toggleResearch: () => void;
   toggleShop: () => void;
   toggleBag: () => void;
   close: () => void;
 } {
-  const [localOpen, setLocalOpen] = useState<PanelName | null>(null);
-  // Open by default and expected to stay that way — collapsing is the player's exception.
-  const [bagOpen, setBagOpen] = useState(true);
-  // A primitive snapshot, so every publish that is not an open/close bails on `Object.is`.
-  const buildOpen = useSyncExternalStore(
-    subscribeBuildMenu,
-    () => buildMenuSnapshot().open,
-    () => false,
-  );
+  // A primitive snapshot (a name or null), so every build-seam publish that is not an
+  // open/close — cursor moves, price refreshes — bails on `Object.is`.
+  const open = useSyncExternalStore(subscribePanels, panelSnapshot, panelServerSnapshot);
 
   const toggleResearch = useCallback(() => {
-    buildMenuClose();
-    setLocalOpen((was) => (was === 'research' ? null : 'research'));
+    togglePanel('research');
   }, []);
   const toggleShop = useCallback(() => {
-    buildMenuClose();
-    setLocalOpen((was) => (was === 'shop' ? null : 'shop'));
+    togglePanel('shop');
   }, []);
-  const toggleBag = useCallback(() => setBagOpen((was) => !was), []);
-  const close = useCallback(() => setLocalOpen(null), []);
-
-  // B pressed while the shop or the tree holds the slot: the menu opens in the input layer
-  // and the local panel must yield. Effect rather than render-time logic so the eviction is
-  // a real state change — reopening T later must not resurrect a panel evicted weeks ago.
-  useEffect(() => {
-    if (buildOpen) setLocalOpen(null);
-  }, [buildOpen]);
+  const toggleBag = useCallback(() => {
+    togglePanel('bag');
+  }, []);
+  const close = useCallback(() => {
+    closeLocalPanel();
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       // Auto-repeat is not a state edge — holding the key must not strobe the panel.
       if (event.repeat) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.code === 'KeyT') {
-        buildMenuClose();
-        setLocalOpen((was) => (was === 'research' ? null : 'research'));
-      } else if (event.code === 'KeyG') {
-        buildMenuClose();
-        setLocalOpen((was) => (was === 'shop' ? null : 'shop'));
-      } else if (event.code === 'KeyI') setBagOpen((was) => !was);
+      if (event.code === 'KeyT') togglePanel('research');
+      else if (event.code === 'KeyG') togglePanel('shop');
+      else if (event.code === 'KeyI') togglePanel('bag');
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -290,31 +288,19 @@ function usePanels(): {
     };
   }, []);
 
-  // The input layer's one line to the HUD ([[054]], `input/panels.ts`): a Hand click on the sell
-  // bin with nothing to sell asks for the stand rather than doing nothing at all. It ASKS — this
-  // side still decides, which is why it goes through the same setters as the keys. Not a toggle:
-  // a click on the bin means "open it", and toggling would shut the board in the face of a
-  // player who clicked the bin twice. A request for the bag expands the persistent section,
-  // which is all "open the inventory" can mean now that it has no closed state to open from.
+  // The input layer's one line to the HUD ([[054]], `input/panels.ts`): a Hand click on the
+  // sell bin with nothing to sell asks for the stand rather than doing nothing at all. It
+  // ASKS — this side still decides, which is why it goes through the same module as the
+  // keys. Open, never toggle: a click on the bin means "open it", and toggling would shut
+  // the board in the face of a player who clicked the bin twice. A request for the bag
+  // opens the floating window, which is what "open the inventory" means since [[089]].
   useEffect(
     () =>
       onPanelRequest((panel) => {
-        if (panel === 'inventory') {
-          setBagOpen(true);
-          return;
-        }
-        buildMenuClose();
-        setLocalOpen(panel);
+        openPanel(panel === 'inventory' ? 'bag' : panel);
       }),
     [],
   );
 
-  return {
-    open: buildOpen ? 'build' : localOpen,
-    bagOpen,
-    toggleResearch,
-    toggleShop,
-    toggleBag,
-    close,
-  };
+  return { open, toggleResearch, toggleShop, toggleBag, close };
 }
