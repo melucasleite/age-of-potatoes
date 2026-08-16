@@ -19,6 +19,47 @@
  * 16px-tile pixel game is the fastest way to look bolted on from a component library.
  */
 
+/*
+ * THE BACKDROP ([[092]]). A 384x216 farm, generated at Retro Diffusion's 384px ceiling and
+ * blown up by the browser — `image-rendering: pixelated` is not a garnish here, it is the
+ * entire effect. A smoothly interpolated upscale of a 384px image is a blurry photograph;
+ * a nearest-neighbour one is a huge, hard-edged 8-bit painting, which is what "higher res
+ * but still 8-bit" actually means when the provider caps at 384.
+ *
+ * It is NOT in the atlas. The atlas is a Pixi texture and this is a DOM `background-image`,
+ * so the asset ships standalone out of `public/art/` (`unpacked: true` in art/manifest.json)
+ * and contributes nothing to the atlas layout or its content hash. It is still cooked by the
+ * same pipeline and snapped to the same master palette, minus the three status-lamp accents —
+ * a pasture quantised against the whole palette walks straight into `lamp_running`, which is
+ * the bug art/manifest.json's grass tile already documents.
+ *
+ * THE SCRIM IS LOAD-BEARING, TWO LAYERS OF IT, AND NEITHER IS DECORATION.
+ *
+ * The picture was composed to be quiet in the middle — barn and stand hard left, tree and pond
+ * hard right — but "quiet" is not "dark", and the middle of it is a pale cream field. Every
+ * colour below was chosen against a flat #141019: `.hint` and `.note` are #6d5c4d, deliberately
+ * dim, and dim text on a cream field is not dim, it is gone. So the horizontal layer paints the
+ * 520px column back to very nearly the flat dark it was designed on, and feathers out to
+ * nothing by the edges, where the farm is left bright and legible. The column is targeted in
+ * `calc()` off the centre rather than in percentages so the dark core tracks `.inner`'s actual
+ * width instead of the viewport's; below ~800px the stops go negative and the scrim simply
+ * covers everything, which is the right answer on a phone.
+ *
+ * The vertical layer is the softer one: it seats the wordmark at the top and the fine print at
+ * the bottom, and leaves the band around 40% — the horizon, the barn roof — at its brightest.
+ *
+ * MEASURED IN THE BROWSER at 1440x900, sampling the real composited pixel behind each element
+ * (contrast against the old flat #141019 in brackets): wordmark 11.7 [13.0], NEW GAME 12.2
+ * [14.6], section heads 4.8 [5.5], tagline 4.9 [5.5], `.hint` 2.4 [2.9]. Behind the column the
+ * cream field composites to about rgb(39,35,43) — within twenty levels of the flat screen this
+ * replaced, so every colour below still sits on roughly the value it was picked against.
+ * `.hint` is the floor, and it was already a deliberate whisper. Do not chase it with a darker
+ * core: 0.88 -> 0.94 buys it 2.4 -> 2.7 and costs a third of the art still visible in the
+ * column. The curve is flat and the barn is the point.
+ *
+ * #141019 stays as the background COLOUR beneath all of it, so a missing PNG degrades to
+ * exactly the screen this used to be rather than to white.
+ */
 .door {
   position: absolute;
   inset: 0;
@@ -27,7 +68,32 @@
   flex-direction: column;
   align-items: center;
   padding: 48px 20px 64px;
-  background: #141019;
+  background-color: #141019;
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(20, 16, 25, 0) 0,
+      rgba(20, 16, 25, 0) calc(50% - 400px),
+      rgba(20, 16, 25, 0.88) calc(50% - 230px),
+      rgba(20, 16, 25, 0.88) calc(50% + 230px),
+      rgba(20, 16, 25, 0) calc(50% + 400px),
+      rgba(20, 16, 25, 0) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(20, 16, 25, 0.62) 0%,
+      rgba(20, 16, 25, 0.24) 40%,
+      rgba(20, 16, 25, 0.72) 100%
+    ),
+    url('/art/frontdoor_farm.png');
+  background-repeat: no-repeat;
+  background-position:
+    center,
+    center,
+    center 45%;
+  background-size: cover, cover, cover;
+  /* The whole point of a 384px source at full-screen scale. Nearest-neighbour or nothing. */
+  image-rendering: pixelated;
   color: #efe2c6;
   font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace;
   font-size: 13px;

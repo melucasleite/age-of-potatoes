@@ -71,6 +71,19 @@ export async function pack(args: Args): Promise<number> {
       palettes.subsetFor(entry),
     );
     writeFileSync(resolve(COOKED_DIR, `${entry.id}.png`), result.png);
+    offPaletteTotal += result.palette.totalOffPixels;
+
+    // An unpacked asset ([[092]]) is emitted as its own file and takes no part in the layout.
+    // Returning before `inputs`/`meta` are touched is the whole guarantee that adding one
+    // cannot move a single frame in the atlas or its content hash.
+    if (entry.unpacked === true) {
+      writeFileSync(resolve(WEB_PUBLIC_ART_DIR, `${entry.id}.png`), result.png);
+      console.log(
+        `  cook  ${entry.id.padEnd(24)} ${result.grid.message}; ` +
+          `standalone -> public/art/${entry.id}.png (not in the atlas)`,
+      );
+      continue;
+    }
 
     cooked.set(entry.id, result.png);
     inputs.push({
@@ -85,7 +98,6 @@ export async function pack(args: Args): Promise<number> {
       sourceHeight: entry.height,
     });
 
-    offPaletteTotal += result.palette.totalOffPixels;
     const drift = result.palette.measured
       ? result.palette.offPalette.length === 0
         ? 'palette clean'

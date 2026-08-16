@@ -1929,6 +1929,29 @@
       "frames": 2,
       "sheetCells": [8, 10],
       "seed": 1350534727
+    },
+    {
+      "id": "frontdoor_farm",
+      "provider": "retro-diffusion",
+      "width": 384,
+      "height": 216,
+      "prompt": "a wide pixel art farm landscape at golden hour, distant side-on scenic view with a high horizon, on the far left a small red barn with a shingled roof beside a little wooden roadside produce stand, on the far right a rail fence, one leafy tree and a small still pond, between them a broad open expanse of empty green pasture and long tilled brown crop rows running to the bottom edge, a plain calm sky with a few flat clouds along the top, every interesting feature pushed out to the left and right edges, the whole middle of the picture deliberately plain and quiet and low contrast with nothing to look at there, warm limited farm palette of browns greens and golds, chunky flat blocks of colour, hard pixel edges, no smooth gradients, no dithering, no people, no animals, no vehicles, no machines, no text, no letters, no numbers, no signs, no logos, no border, no frame, no vignette",
+      "promptStyle": "rd_fast__default",
+      "anchor": "top-left",
+      "atlasGroup": "backdrop",
+      "unpacked": true,
+      "removeBg": false,
+      "trim": false,
+      "paletteSubset": [
+        "ramp:neutral",
+        "ramp:soil",
+        "ramp:grass",
+        "ramp:wood",
+        "ramp:metal",
+        "ramp:starch",
+        "ramp:red",
+        "ramp:water"
+      ]
     }
   ]
 }

@@ -238,16 +238,33 @@ plan's answer is better anyway: one tiny sprite, tinted in code.
 
 **No text in sprites, ever.** Bitmap fonts render text at runtime.
 
+### The one way out: `unpacked: true`
+
+Added by item 092 for the front door's farm backdrop, and narrow on purpose. The single-page
+rule exists because Pixi batches belt items through a `ParticleContainer` and every particle
+must share one `TextureSource` — an argument about **canvas** textures. The front door is DOM,
+and a `background-image` cannot be an atlas frame at all; a 384x216 backdrop packed beside 16px
+sprites would also spend most of the page budget on a texture Pixi never binds.
+
+So an unpacked entry travels the **identical** generate and cook path — same `input_palette`,
+same grid verification, same palette snap, same committed original and sidecar — and only the
+emit differs: `pack` writes it to `apps/web/public/art/<id>.png` and returns _before_ touching
+`inputs`/`meta`. That ordering is the guarantee, not a courtesy: an unpacked asset contributes
+nothing to the layout, so adding or rerolling one cannot move a frame or change the atlas
+content hash. `atlasGroup` is still required and still records the family; it just names no
+page. Reach for it only when the consumer is DOM/CSS. Anything Pixi draws belongs in the atlas.
+
 ## Outputs
 
-| Path                                     | Committed? | What                                 |
-| ---------------------------------------- | ---------- | ------------------------------------ |
-| `art/originals/<id>.png` + `.json`       | yes        | provider output + provenance sidecar |
-| `art/local/<id>.png`                     | yes        | hand-authored sources                |
-| `art/cooked/`                            | no         | post-processed intermediates         |
-| `art/review/index.html`                  | no         | contact sheet                        |
-| `apps/web/public/art/atlas.{png,json}`   | yes        | what the game loads                  |
-| `apps/web/src/art/manifest.generated.ts` | yes        | typed manifest the game imports      |
+| Path                                     | Committed? | What                                  |
+| ---------------------------------------- | ---------- | ------------------------------------- |
+| `art/originals/<id>.png` + `.json`       | yes        | provider output + provenance sidecar  |
+| `art/local/<id>.png`                     | yes        | hand-authored sources                 |
+| `art/cooked/`                            | no         | post-processed intermediates          |
+| `art/review/index.html`                  | no         | contact sheet                         |
+| `apps/web/public/art/atlas.{png,json}`   | yes        | what the game loads                   |
+| `apps/web/public/art/<id>.png`           | yes        | an `unpacked: true` asset, standalone |
+| `apps/web/src/art/manifest.generated.ts` | yes        | typed manifest the game imports       |
 
 The sidecar records provider, model, seed, exact prompt and style, declared native size,
 the size actually requested upstream, palette, cost and an ISO timestamp — enough to

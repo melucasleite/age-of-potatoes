@@ -41,6 +41,26 @@ export interface AssetEntry {
   /** `provider: "local"` only — path to a hand-authored PNG, relative to art/. */
   source?: string;
   /**
+   * Ship this asset as a STANDALONE PNG in `apps/web/public/art/<id>.png` instead of packing
+   * it into the atlas ([[092]]).
+   *
+   * Everything the game draws through Pixi belongs in the one atlas page, and that is still
+   * the default — the single-page rule exists because belt items batch through a
+   * `ParticleContainer` and every particle must share one `TextureSource` (plan §13). But the
+   * front door is DOM, not canvas: it wants a `background-image` URL, which a packed frame
+   * cannot be. And a 384x216 backdrop packed alongside 16px sprites would blow the page
+   * budget on a texture Pixi never binds.
+   *
+   * So an unpacked entry travels the IDENTICAL generate + cook path — same `input_palette`,
+   * same grid verification, same palette snap, same committed original and sidecar — and only
+   * the final emit differs. It contributes nothing to the atlas layout, which is what keeps
+   * adding one from churning the atlas content hash.
+   *
+   * `atlasGroup` is still required and still records which family the asset belongs to; it
+   * simply names no page.
+   */
+  unpacked?: boolean;
+  /**
    * Opt-in to Retro Diffusion's ANIMATION endpoint: the strip's native cell count. The plain
    * endpoint cannot draw N plants on an N-cell pitch at strip resolution (measured, wave 8:
    * 26 paid takes, one success — it draws at its own ~45-55px pitch whatever you ask), so
@@ -134,6 +154,7 @@ function parseEntry(raw: unknown, index: number): AssetEntry {
   if (typeof entry.removeBg === 'boolean') parsed.removeBg = entry.removeBg;
   if (typeof entry.trim === 'boolean') parsed.trim = entry.trim;
   if (typeof entry.source === 'string') parsed.source = entry.source;
+  if (typeof entry.unpacked === 'boolean') parsed.unpacked = entry.unpacked;
 
   if (entry.paletteSubset !== undefined) {
     if (
