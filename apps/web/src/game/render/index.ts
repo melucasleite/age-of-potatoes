@@ -40,6 +40,8 @@ import { money } from './hud';
 import { junctionMask, junctionQuarterTurns } from './junction';
 import { LAMP_PX, lampAlpha, lampTint } from './lamps';
 import { liquidName, liquidTint, portHintTint } from './liquids';
+import { fillPulseAlpha } from './machine-motion';
+import type { MotionSample } from './machine-motion';
 import { pipeAtTile } from './pipes';
 import { classifyShore } from './shore';
 import { walkStep } from './strips';
@@ -55,6 +57,9 @@ export interface RenderUiState {
 
 /** Reused so the per-frame camera blend allocates nothing. Renderer-local, write-only. */
 const cameraTarget = { x: 0, y: 0 };
+
+/** Reused per machine per frame, the `cameraTarget` pattern: motion allocates nothing. */
+const motionScratch: MotionSample = { dx: 0, dy: 0, dw: 0, dh: 0, specks: null, fillPulse: false };
 
 /** Subtiles per footfall — the same stride the bots plant (`bots.ts`). A tile is 256. */
 const PLAYER_STRIDE_SUB = 64;
@@ -254,7 +259,13 @@ export function render(
   // 7. Machines, and then the vehicles among them: a cart's own readouts are in the commerce
   //    projection rather than on its `MachineView`, so they are applied as a second pass over
   //    the same pooled sprites.
-  updateMachines(scene, view, nowMs);
+  //
+  //    THE WORK-LOOP MOTION ([[091]]) RIDES THIS PASS: `beginFrame` runs the differs whose
+  //    facts live outside `MachineView` (sales, carts, depots, bots), then each machine's
+  //    working state and whole-pixel offset come out of the motion table inside
+  //    `updateMachines` itself — same `nowMs`, so a row of machines breathes with its lamps.
+  scene.machineMotion.beginFrame(view, nowMs);
+  updateMachines(scene, view, nowMs, deltaMs);
   updateCommerce(scene, view);
 
   // 8. Hover highlight — renderer state, never a command (§12) — and the errand's
@@ -425,7 +436,7 @@ function updateDroplets(scene: WorldScene, deltaMs: number): void {
 
 // --- machines ------------------------------------------------------------------------
 
-function updateMachines(scene: WorldScene, view: WorldView, now: number): void {
+function updateMachines(scene: WorldScene, view: WorldView, now: number, deltaMs: number): void {
   const seen = new Set<number>();
 
   for (let i = 0; i < view.machines.length; i++) {
@@ -443,16 +454,30 @@ function updateMachines(scene: WorldScene, view: WorldView, now: number): void {
     const width = m.tilesWide * TILE_PX;
     const height = m.tilesHigh * TILE_PX;
 
+    // The work-loop motion ([[091]]): whole-pixel offsets while the machine is honestly
+    // working, all-zero the frame it stops. Applied to the BODY and its paint decals only —
+    // the lamp, wrench, bars, pip and ports are instruments and instruments hold still.
+    scene.machineMotion.sample(m, view, now, motionScratch);
+    const bodyLeft = left + motionScratch.dx;
+    const bodyTop = top + motionScratch.dy;
+    const bodyWidth = width + motionScratch.dw;
+    const bodyHeight = height + motionScratch.dh;
+
     if (m.kind === MachineKind.BeltJunction) {
-      updateJunctionBody(scene, view, m, visual, left, top, width, height);
+      updateJunctionBody(scene, view, m, visual, left, top, width, height, motionScratch);
     } else {
-      visual.body.position.set(left, top);
+      visual.body.position.set(bodyLeft, bodyTop);
       visual.body.texture = scene.art.get(ART.machine(m.kind));
       // Pin the body to its FOOTPRINT rather than trusting the frame's own size. Placeholders
       // are generated at the sim's footprint so this is a no-op for them — it is here for the
       // day an atlas ships a 32×32 frame for the 3×2 Bottler, which would otherwise draw a
       // machine two thirds the size of the tiles it occupies and read as a placement bug.
-      visual.body.setSize(width, height);
+      visual.body.setSize(bodyWidth, bodyHeight);
+    }
+
+    // The fryer family's bubbles, the kettle's steam, the carbonator's fizz — one pool.
+    if (motionScratch.specks !== null) {
+      scene.machineMotion.emitSpecks(m.id, motionScratch.specks, left, top, width, height, now);
     }
 
     // The lamp: one white sprite per state, SHAPED and tinted. Assigning `.texture` on an
@@ -516,15 +541,24 @@ function updateMachines(scene: WorldScene, view: WorldView, now: number): void {
       );
     }
 
-    updateDecals(scene, m, visual, left, top, width, height);
+    // Decals are PAINT ON THE BODY, so they ride the motion offsets; the tank column and
+    // the ports are readouts on the footprint and take the un-offset frame.
+    updateDecals(scene, m, visual, bodyLeft, bodyTop, bodyWidth, bodyHeight);
     updateTankFill(scene, m, visual, left, top, width, height);
     updatePorts(scene, m, visual, left, top, width, height);
+
+    // The Tank's named motion is its fill line breathing while liquid actually moves —
+    // alpha only, never a pixel, so the snap discipline has nothing to inspect.
+    visual.tankFill.alpha = motionScratch.fillPulse ? fillPulseAlpha(now, m.id) : 1;
   }
+
+  scene.machineMotion.update(deltaMs);
 
   for (const [id, visual] of scene.machines) {
     if (seen.has(id)) continue;
     destroyMachineVisual(visual);
     scene.machines.delete(id);
+    scene.machineMotion.forget(id);
   }
 }
 
@@ -561,11 +595,15 @@ function updateJunctionBody(
   top: number,
   width: number,
   height: number,
+  motion: MotionSample,
 ): void {
   visual.body.texture = scene.art.get(ART.beltJunction);
   visual.body.anchor.set(0.5, 0.5);
   visual.body.setSize(width, height);
-  visual.body.position.set(left + width / 2, top + height / 2);
+  // The shunt ([[091]]): a whole-pixel nudge on the centre anchor while a good is actually
+  // on the tee. Size deltas are ignored on purpose — a rotated sprite resized off its
+  // footprint is exactly the neighbour-tile spill the centre anchor exists to prevent.
+  visual.body.position.set(left + width / 2 + motion.dx, top + height / 2 + motion.dy);
   visual.body.rotation =
     (junctionQuarterTurns(junctionMask(view.belts, m.tileX, m.tileY)) * Math.PI) / 2;
 }

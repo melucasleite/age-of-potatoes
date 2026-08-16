@@ -16,7 +16,7 @@ import {
   worldTileKey,
 } from '@snack/sim';
 
-import { BeltItemLayer, buildItemPage } from './belt-items';
+import { beltItemAtTile, BeltItemLayer, buildItemPage } from './belt-items';
 import type { ItemPage } from './belt-items';
 import { ArtSheet, artSheetRequested } from './artsheet';
 import { BeltStructureLayer } from './belt-structure';
@@ -27,6 +27,7 @@ import { FarmFx } from './farm-fx';
 import { FieldTiles } from './field-tiles';
 import { installUiFont } from './font';
 import { GrabberLayer } from './grabbers';
+import { MachineMotion } from './machine-motion';
 import { Hud } from './hud';
 import { LandOverlay } from './land';
 import { createLayers, destroyLayers, LAYER_ORDER } from './layers';
@@ -145,6 +146,12 @@ export interface WorldScene {
   /** How many reservoirs the water set was last built from. -1 forces the first sync. */
   reservoirStamp: number;
   readonly machines: Map<number, MachineVisual>;
+  /**
+   * Work-loop motion ([[091]]): the per-machine working detector, the kind→motion table's
+   * runtime, and the shared speck pool. Renderer-local, write-only memory on the pour-signal
+   * precedent — nothing in it is ever read back into the sim or hashed.
+   */
+  readonly machineMotion: MachineMotion;
   readonly player: Sprite;
   /**
    * The armed tool in the avatar's hands ([[065]]) — twice, and only ever one visible.
@@ -374,6 +381,19 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     droplets.push({ sprite, life: 0, vx: 0, vy: 0 });
   }
 
+  // The machine work-loop specks ([[091]]): one bounded pool for every boiling, fizzing,
+  // sizzling machine, on `worldUi` with the droplets — a bubble passes in front of its vat.
+  const machineMotion = new MachineMotion(
+    art.get(ART.uiPixel),
+    (sprite) => {
+      contentRoot.addChild(sprite);
+      layers.worldUi.attach(sprite);
+    },
+    // The junction's shunt probe, injected so `machine-motion.ts` stays loadable by a
+    // test that has no art manifest — the `ceremony.ts` seam, again.
+    (view, tileX, tileY) => beltItemAtTile(view, tileX, tileY) !== null,
+  );
+
   // --- the factory ------------------------------------------------------------------
   //
   // Built here rather than lazily on the first belt, because the item page is a render
@@ -469,6 +489,7 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     shoreTextures,
     reservoirStamp: -1,
     machines: new Map(),
+    machineMotion,
     player,
     heldToolBack,
     heldToolFront,
@@ -574,6 +595,7 @@ export function destroyWorldScene(scene: WorldScene): void {
   // torn-down scene that still answers keystrokes is a leak with a visible symptom.
   scene.ceremony.destroy();
   scene.farmFx.destroy();
+  scene.machineMotion.destroy();
   scene.fieldTiles.destroy();
   // The particle container before the item page: the page owns the shared texture source
   // every particle points at, and freeing it first hands the container dead frames.
