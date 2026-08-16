@@ -67,6 +67,9 @@ export class KeyboardInput {
     // fires a `keyup`, so both have to release everything by hand.
     window.addEventListener('blur', this.releaseAll);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
+    // A text field taking the caret is the third way to stop walking honestly: the player
+    // is typing now, and W means the letter, not north. See the focus guard below.
+    window.addEventListener('focusin', this.onFocusIn);
   }
 
   detach(): void {
@@ -76,6 +79,7 @@ export class KeyboardInput {
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.releaseAll);
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    window.removeEventListener('focusin', this.onFocusIn);
     this.held.length = 0;
     // Do not emit here: the host is going away and the queue drains into nothing.
     this.emitted = Direction.None;
@@ -86,8 +90,21 @@ export class KeyboardInput {
     this.releaseAll();
   }
 
+  /** True while a direction key is genuinely held. The work-queue pump waits on this. */
+  get walking(): boolean {
+    return this.emitted !== Direction.None;
+  }
+
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (event.repeat) return; // Auto-repeat is not a state edge.
+
+    // THE FOCUS GUARD ([[075]]). While a text field has the caret — the cheat input, the
+    // front door's rename box, any future one — every game key is inert: WASD must not walk,
+    // digits must not arm, B must not open the menu, and Space must not be stolen from the
+    // sentence being typed. The same `instanceof` test the front door's own N-shortcut uses.
+    // KEYUP IS DELIBERATELY NOT GUARDED: a key released over the input still releases, so a
+    // held direction can never get stuck walking behind a focused field.
+    if (editableTarget(event.target)) return;
 
     // Space is the camera's modifier. Held, it turns any left-drag into a pan gesture that
     // paints nothing — see the header of `pointer.ts` for why that seat is kept warm.
@@ -104,6 +121,9 @@ export class KeyboardInput {
       event.preventDefault();
       // Arrows drive the menu cursor while it is open, and WASD is stilled with it.
       if (this.system.menuOpen) return;
+      // The work queue hears about the keypress before the walk starts ([[074]]): after the
+      // button is up, grabbing the wheel cancels the queue; mid-hold it stays legal.
+      this.system.noteWalkKey();
       if (!this.held.includes(event.code)) this.held.push(event.code);
       this.syncDirection();
       return;
@@ -144,17 +164,30 @@ export class KeyboardInput {
         this.system.stepZoom(-1);
         return;
       case 'Escape':
-        // Three meanings, in the order the player most likely wants them: close the menu,
-        // abandon the drag, put the tool down. Each step is one press.
+        // Four meanings, in the order the player most likely wants them: close the menu,
+        // close the debug panel, abandon the drag (a working queue counts, [[074]]), put
+        // the tool down. Each step is one press. Esc INSIDE the cheat input never lands
+        // here — the focus guard returns first, and the HUD's input closes through
+        // `debugPanelClose` itself.
         if (this.system.menuOpen) this.system.closeBuildMenu();
+        else if (this.system.debugPanelOpen) this.system.closeDebugPanel();
         else if (this.system.dragging) this.system.cancelDrag();
         else {
           this.host.setTool(ToolMode.Hand);
           publishArmedTool(ToolMode.Hand);
         }
         return;
-      case 'F3':
+      // Backquote grew into the debug panel ([[075]]): the perf overlay still toggles with
+      // it — through the same `host.toggleOverlay()` it always used, inside the system's
+      // open/close — plus the HUD's cheat input on the published seam (`debug-panel.ts`).
       case 'Backquote':
+        event.preventDefault();
+        this.system.toggleDebugPanel();
+        return;
+      // F3 stays the bare overlay toggle it always was — a second, panel-less door for the
+      // player who wants the numbers without the cheat box. Flipping it while the panel is
+      // open can phase the overlay against the panel; the panel's own key puts it right.
+      case 'F3':
         event.preventDefault();
         this.host.toggleOverlay();
         return;
@@ -269,6 +302,15 @@ export class KeyboardInput {
     if (document.visibilityState === 'hidden') this.releaseAll();
   };
 
+  /**
+   * A text field took the caret mid-stride: release everything, exactly as a tab switch
+   * does. Without this, W held while clicking into the cheat input walks the farmer north
+   * forever behind a focused field whose keydowns the guard is (correctly) ignoring.
+   */
+  private readonly onFocusIn = (event: FocusEvent): void => {
+    if (editableTarget(event.target)) this.releaseAll();
+  };
+
   private readonly releaseAll = (): void => {
     this.system.spaceHeld = false;
     if (this.held.length === 0 && this.emitted === Direction.None) return;
@@ -290,4 +332,17 @@ function digitOf(code: string): number | null {
   if (!code.startsWith('Digit')) return null;
   const digit = Number(code.slice(5));
   return Number.isInteger(digit) ? digit : null;
+}
+
+/**
+ * Is the keystroke's target a place where letters mean letters? The front door's N-shortcut
+ * pins the house pattern (`FrontDoor.tsx`); `isContentEditable` is included so a future rich
+ * field does not become a surprise game controller.
+ */
+function editableTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
 }

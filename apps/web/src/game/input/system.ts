@@ -21,6 +21,7 @@ import type { BuildRow, GridDirection } from './build-menu';
 import { publishBuildMenu, registerBuildMenuHooks } from './build-panel';
 import { InputChrome } from './chrome';
 import type { InputHost } from './context';
+import { publishDebugPanel, registerDebugPanelHooks } from './debug-panel';
 import { firstRunSigns } from './first-run';
 import { KeyboardInput } from './keyboard';
 import { publishLod, viewLod, zoomInIndex, zoomOutIndex } from './lod';
@@ -68,6 +69,20 @@ export class InputSystem {
   private menuRefresh = 0;
   private unregisterMenuHooks: (() => void) | null = null;
 
+  // --- the debug panel's state, owned here since [[075]] -----------------------------------
+  //
+  // Backquote's panel follows the build menu's split exactly: the SURFACE is the HUD's
+  // (rendered off `debug-panel.ts`'s snapshot), the key and the command are this layer's.
+  // The verdict counters are observations of `view.stats.cheatsUsed` — see the seam's
+  // header for why input never keeps a code table of its own.
+  private debugVisible = false;
+  private cheatAccepted = 0;
+  private cheatRejected = 0;
+  private lastRejectedCode = '';
+  /** The submitted code whose verdict the next projections will reveal, if any. */
+  private cheatPending: { code: string; before: number; issuedViewTick: number } | null = null;
+  private unregisterDebugHooks: (() => void) | null = null;
+
   constructor(private readonly host: InputHost) {
     this.chrome = new InputChrome(host.overlayRoot, host.camera);
     this.pointer = new PointerInput(host, this);
@@ -84,6 +99,12 @@ export class InputSystem {
       armAt: (index) => this.armMenuIndex(index),
       close: () => this.closeBuildMenu(),
     });
+    // The debug panel's doors, same lifetime discipline as the menu's ([[075]]).
+    this.unregisterDebugHooks = registerDebugPanelHooks({
+      submitCode: (code) => this.submitCheatCode(code),
+      close: () => this.closeDebugPanel(),
+    });
+    this.publishDebug();
     // The camera ships at `DEFAULT_ZOOM_INDEX`; publish it so the renderer's LOD flag is
     // right on frame one rather than on the first scroll wheel notch. Same for the armed
     // tool: the held-tool overlay must be right before the first key is ever pressed.
@@ -93,8 +114,12 @@ export class InputSystem {
 
   detach(): void {
     this.closeBuildMenu();
+    this.closeDebugPanel();
     this.unregisterMenuHooks?.();
     this.unregisterMenuHooks = null;
+    this.unregisterDebugHooks?.();
+    this.unregisterDebugHooks = null;
+    this.cheatPending = null;
     this.pointer.detach();
     this.keyboard.detach();
     this.chrome.unmount();
@@ -127,6 +152,11 @@ export class InputSystem {
     // themselves by reading the same projection — see `first-run.ts` for the gates.
     this.chrome.setGuideSigns(firstRunSigns(view));
     this.chrome.setHint(tool, this.host.camera.transform.zoom, this.pointer.rotateAdvertised(tool));
+    // The work-queue tell ([[074]]): "planting 6 more…" while the farmer marches the row,
+    // the pause reason while the can is dry, one brief "already soaked" ([[081]]).
+    this.chrome.setQueueTell(this.pointer.queueTell());
+    // A submitted cheat's verdict, read off the projection once the sim has spoken.
+    this.judgePendingCheat(view);
 
     // The open menu re-reads the projection a few times a second — prices, locks and the
     // deed's ladder are live while you shop. `publishMenu` compares before it notifies, so
@@ -244,6 +274,82 @@ export class InputSystem {
     publishBuildMenu(this.menuVisible, this.menuCursor, this.host.getTool(), this.menuRows);
   }
 
+  // --- the debug panel ([[075]]) ------------------------------------------------------------
+
+  get debugPanelOpen(): boolean {
+    return this.debugVisible;
+  }
+
+  /**
+   * Backquote. The perf overlay rides the panel — `host.toggleOverlay()` is called on
+   * exactly the open and close edges, so the numbers appear and vanish with the cheat
+   * input. (F3 still flips the overlay alone; see `keyboard.ts`.)
+   */
+  toggleDebugPanel(): void {
+    if (this.debugVisible) {
+      this.closeDebugPanel();
+      return;
+    }
+    this.debugVisible = true;
+    this.host.toggleOverlay();
+    this.publishDebug();
+  }
+
+  closeDebugPanel(): void {
+    if (!this.debugVisible) return;
+    this.debugVisible = false;
+    this.host.toggleOverlay();
+    this.publishDebug();
+  }
+
+  /**
+   * The HUD's input submitted a code. The code becomes a `Cheat` COMMAND — never a direct
+   * mutation, that is the determinism rule the whole item hangs on — and the verdict is
+   * read back off `view.stats.cheatsUsed` by `judgePendingCheat`. A second submit while
+   * one is pending replaces the watch; the sim still applies both, and the counter jump
+   * resolves the newer one accepted, which is the only line the player is still reading.
+   */
+  private submitCheatCode(code: string): void {
+    const trimmed = code.trim();
+    if (trimmed === '') return;
+    const view = this.host.latestView();
+    this.host.queue.push({ type: 'Cheat', code: trimmed });
+    this.cheatPending = {
+      code: trimmed,
+      before: view?.stats.cheatsUsed ?? 0,
+      issuedViewTick: view?.tick ?? -1,
+    };
+  }
+
+  /**
+   * The verdict, one projection at a time. Judged only once the view is TWO ticks past the
+   * submission: the command lands at the next tick boundary and its projection follows a
+   * frame later, and judging a tick early would print a rejection line over money that is
+   * about to jump. 100 ms of patience, at most, for a verdict that cannot lie.
+   */
+  private judgePendingCheat(view: WorldView | null): void {
+    const pending = this.cheatPending;
+    if (pending === null || view === null) return;
+    if (view.tick <= pending.issuedViewTick + 1) return;
+    this.cheatPending = null;
+    if (view.stats.cheatsUsed > pending.before) {
+      this.cheatAccepted += 1;
+    } else {
+      this.cheatRejected += 1;
+      this.lastRejectedCode = pending.code;
+    }
+    this.publishDebug();
+  }
+
+  private publishDebug(): void {
+    publishDebugPanel(
+      this.debugVisible,
+      this.cheatAccepted,
+      this.cheatRejected,
+      this.lastRejectedCode,
+    );
+  }
+
   // --- cursor state ------------------------------------------------------------------------
 
   get dragging(): boolean {
@@ -252,6 +358,16 @@ export class InputSystem {
 
   cancelDrag(): void {
     this.pointer.cancelDrag();
+  }
+
+  /** A direction key genuinely held right now. The work-queue pump waits on this ([[074]]). */
+  get manualWalkHeld(): boolean {
+    return this.keyboard.walking;
+  }
+
+  /** A direction keydown, before it becomes a command — the queue's cancellation edge. */
+  noteWalkKey(): void {
+    this.pointer.walkKeyPressed();
   }
 
   /**

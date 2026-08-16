@@ -29,18 +29,30 @@ import {
 import type { Command, WorldView } from '@snack/sim';
 
 import {
+  PointerInput,
   bestSellable,
   counterPanelFor,
   createHold,
+  createWorkQueue,
   dragCommands,
   holdCommand,
   primaryCommand,
+  pumpWorkQueue,
   reachAdjusted,
+  tileSaturated,
   tillConverts,
   tillModeFor,
   walkFallback,
+  walkKeyInterruptsQueue,
+  workQueueDone,
+  workQueueRemaining,
 } from './pointer';
-import type { HoldState } from './pointer';
+import type { HoldState, WorkQueueState } from './pointer';
+import { CommandQueue } from './commands';
+import type { InputHost } from './context';
+import type { InputSystem } from './system';
+import type { Camera } from '../render/camera';
+import { TILE_PX } from '../render/pixel';
 import { ToolMode, gestureFor } from './tools';
 
 /** Stand the farmer on the centre of a tile. Reach is measured from tile centres. */
@@ -697,6 +709,485 @@ describe('hold-to-paint ([[072]])', () => {
     expect(holdCommand(view, hold, { tileX: 4, tileY: 5 })).toBeNull();
     // And the row continues on the far side of the clip.
     expect(holdCommand(view, hold, { tileX: 5, tileY: 4 })).toMatchObject({ type: 'WaterTile' });
+  });
+});
+
+// The soaked filter ([[081]]): the sim refuses a pour on a tile at its moisture ceiling, so
+// the paint gesture stops offering one — no charge risked, no silent command, one readable
+// flag per gesture for the tell. What is pinned is the silent failure pair: a wet tile that
+// still fires (charge-count drift against the sim's refusal) and a soaked flag that rings
+// per tile instead of once.
+describe('the soaked filter ([[081]])', () => {
+  /** Farmland at (x,y) whose moisture the test sets, in the field's keyed arrays. */
+  function withMoisture(
+    view: WorldView,
+    tiles: readonly (readonly [number, number, number])[],
+  ): WorldView {
+    withFieldTiles(
+      view,
+      tiles.map(([x, y]) => [x, y] as const),
+    );
+    const sorted = [...tiles].sort(
+      (a, b) => a[1] * view.worldTilesWide + a[0] - (b[1] * view.worldTilesWide + b[0]),
+    );
+    sorted.forEach(([, , permille], i) => {
+      view.field.moisturePermille[i] = permille;
+    });
+    return view;
+  }
+
+  it('saturated means literally full — 999 permille still pours', () => {
+    const view = withMoisture(standingOn(4, 4), [
+      [4, 5, 1000],
+      [5, 4, 999],
+    ]);
+    expect(tileSaturated(view, 4, 5)).toBe(true);
+    expect(tileSaturated(view, 5, 4)).toBe(false);
+    // Grass has no moisture to be full of.
+    expect(tileSaturated(view, 6, 6)).toBe(false);
+  });
+
+  it('a held Water skips the wet tiles, waters the dry ones, and flags soaked once', () => {
+    const view = withMoisture(standingOn(4, 4), [
+      [4, 5, 1000],
+      [5, 4, 1000],
+      [5, 5, 200],
+    ]);
+    view.player.canCharges = 10;
+    const pressed = primaryCommand(view, { tileX: 4, tileY: 4 }, ToolMode.Water, Direction.None)!;
+    const hold = createHold(1, 0, 0, view, { tileX: 4, tileY: 4 }, ToolMode.Water, pressed);
+    const queue = createWorkQueue(view, ToolMode.Water, pressed);
+
+    // Two wet tiles: both silent, ONE flag — the tell surface reads it once per gesture.
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 5 }, queue)).toBeNull();
+    expect(queue.soakedTold).toBe(true);
+    expect(holdCommand(view, hold, { tileX: 5, tileY: 4 }, queue)).toBeNull();
+    // The dry tile still fires, and no charge was burned on the wet ones: the press (1)
+    // plus this pour (1) is the whole spend.
+    expect(holdCommand(view, hold, { tileX: 5, tileY: 5 }, queue)).toMatchObject({
+      type: 'WaterTile',
+      tileX: 5,
+      tileY: 5,
+    });
+    expect(hold.watersEmitted).toBe(2);
+    // Not marked fired: fast-draining soil may legitimately want the verb again mid-hold.
+    expect(hold.fired.has('4,5')).toBe(false);
+  });
+
+  it('a wet tile that drains mid-hold becomes pourable again', () => {
+    const view = withMoisture(standingOn(4, 4), [[4, 5, 1000]]);
+    view.player.canCharges = 10;
+    const pressed = primaryCommand(view, { tileX: 4, tileY: 4 }, ToolMode.Water, Direction.None)!;
+    const hold = createHold(1, 0, 0, view, { tileX: 4, tileY: 4 }, ToolMode.Water, pressed);
+
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 5 })).toBeNull();
+    view.field.moisturePermille[0] = 400;
+    expect(holdCommand(view, hold, { tileX: 4, tileY: 5 })).toMatchObject({ type: 'WaterTile' });
+  });
+
+  it('an out-of-reach wet tile is not queued either — no walk to a refusal', () => {
+    const view = withMoisture(standingOn(1, 1), [[14, 14, 1000]]);
+    view.player.canCharges = 10;
+    const pressed = primaryCommand(view, { tileX: 1, tileY: 2 }, ToolMode.Water, Direction.None)!;
+    const hold = createHold(1, 0, 0, view, { tileX: 1, tileY: 2 }, ToolMode.Water, pressed);
+    const queue = createWorkQueue(view, ToolMode.Water, pressed);
+
+    expect(holdCommand(view, hold, { tileX: 14, tileY: 14 }, queue)).toBeNull();
+    expect(queue.tiles).toEqual([]);
+    expect(queue.soakedTold).toBe(true);
+  });
+});
+
+// The out-of-reach work queue ([[074]]): a held paint crosses tiles beyond arm's length,
+// the queue collects them in crossing order, and the pump walks the farmer to each in turn
+// — one WalkAndAct outstanding at a time, resolution read off the view's own errand fields
+// (`player.intentAction`/`intentTileX`/`intentTileY`), never a per-frame respawn.
+describe('the work queue ([[074]])', () => {
+  /** The press edge as `onPointerDown` performs it, returning all three artifacts. */
+  function press(
+    view: WorldView,
+    anchor: readonly [number, number],
+    tool: ToolMode,
+  ): { hold: HoldState; queue: WorkQueueState; dispatched: Command } {
+    const at = { tileX: anchor[0], tileY: anchor[1] };
+    const pressed = primaryCommand(view, at, tool, Direction.None)!;
+    const dispatched = reachAdjusted(view, at, pressed);
+    const hold = createHold(1, 0, 0, view, at, tool, pressed);
+    const queue = createWorkQueue(view, tool, dispatched);
+    return { hold, queue, dispatched };
+  }
+
+  /** One frame of pumping, with the emitted commands collected. */
+  function pump(
+    view: WorldView,
+    queue: WorkQueueState,
+    fired: Set<string> | null = null,
+    walkHeld = false,
+    tool: ToolMode = queue.tool,
+  ): { commands: Command[]; alive: boolean } {
+    const commands: Command[] = [];
+    const alive = pumpWorkQueue(view, queue, tool, fired, walkHeld, (c) => commands.push(c));
+    return { commands, alive };
+  }
+
+  /** The sim resolved (or refused) the errand: the view advances with the intent cleared. */
+  function resolve(view: WorldView): void {
+    view.tick += 1;
+    view.player.intentAction = 0;
+    view.player.intentTileX = 0;
+    view.player.intentTileY = 0;
+  }
+
+  /** The sim took the errand: the view advances showing it live. */
+  function walking(view: WorldView, action: number, tileX: number, tileY: number): void {
+    view.tick += 1;
+    view.player.intentAction = action;
+    view.player.intentTileX = tileX;
+    view.player.intentTileY = tileY;
+  }
+
+  it('queues far crossed tiles in order and pumps them one errand at a time', () => {
+    const view = standingOn(2, 2);
+    const { hold, queue } = press(view, [2, 3], ToolMode.Plant);
+
+    // The hold skips both far tiles — no direct fire, and above all no WalkAndAct from the
+    // hold itself — and queues them in crossing order.
+    expect(holdCommand(view, hold, { tileX: 2, tileY: 8 }, queue)).toBeNull();
+    expect(holdCommand(view, hold, { tileX: 2, tileY: 12 }, queue)).toBeNull();
+    expect(queue.tiles).toEqual([
+      { tileX: 2, tileY: 8 },
+      { tileX: 2, tileY: 12 },
+    ]);
+
+    // Frame 1: exactly ONE errand goes out, for the head tile.
+    const first = pump(view, queue, hold.fired);
+    expect(first.commands).toEqual([
+      {
+        type: 'WalkAndAct',
+        action: IntentAction.Plant,
+        tileX: 2,
+        tileY: 8,
+        item: CropId.RussetPotato,
+        count: 0,
+      },
+    ]);
+    expect(workQueueRemaining(queue)).toBe(2);
+
+    // Frames while the sim walks: the pump is silent — no respawning, no second errand.
+    walking(view, IntentAction.Plant, 2, 8);
+    expect(pump(view, queue, hold.fired).commands).toEqual([]);
+    expect(pump(view, queue, hold.fired).commands).toEqual([]);
+
+    // The errand resolves; the NEXT tile is dispatched, and only then.
+    resolve(view);
+    const second = pump(view, queue, hold.fired);
+    expect(second.commands).toEqual([
+      {
+        type: 'WalkAndAct',
+        action: IntentAction.Plant,
+        tileX: 2,
+        tileY: 12,
+        item: CropId.RussetPotato,
+        count: 0,
+      },
+    ]);
+
+    resolve(view);
+    expect(pump(view, queue, hold.fired).commands).toEqual([]);
+    expect(workQueueDone(queue)).toBe(true);
+  });
+
+  it('seeds the press-edge errand as outstanding, so the anchor is never replaced unworked', () => {
+    const view = standingOn(2, 2);
+    const { hold, queue, dispatched } = press(view, [2, 9], ToolMode.Plant);
+    expect(dispatched).toMatchObject({ type: 'WalkAndAct', tileX: 2, tileY: 9 });
+    expect(queue.outstanding).toMatchObject({ tileX: 2, tileY: 9 });
+
+    // A tile queued mid-hold waits its turn behind the anchor's own errand.
+    holdCommand(view, hold, { tileX: 2, tileY: 12 }, queue);
+    expect(pump(view, queue, hold.fired).commands).toEqual([]);
+
+    resolve(view);
+    expect(pump(view, queue, hold.fired).commands).toMatchObject([
+      { type: 'WalkAndAct', tileX: 2, tileY: 12 },
+    ]);
+  });
+
+  it('a blocked or refused errand is dequeued once and never retried', () => {
+    const view = standingOn(2, 2);
+    const { hold, queue } = press(view, [2, 3], ToolMode.Plant);
+    holdCommand(view, hold, { tileX: 2, tileY: 8 }, queue);
+    holdCommand(view, hold, { tileX: 2, tileY: 12 }, queue);
+
+    const all: Command[] = [];
+    all.push(...pump(view, queue, hold.fired).commands);
+    // The sim REFUSES the errand (say the tile is behind the pond, [[080]]): the intent
+    // never appears. The pump reads that as resolved and moves on.
+    resolve(view);
+    all.push(...pump(view, queue, hold.fired).commands);
+    resolve(view);
+    all.push(...pump(view, queue, hold.fired).commands);
+
+    const to8 = all.filter((c) => c.type === 'WalkAndAct' && c.tileY === 8);
+    expect(to8).toHaveLength(1);
+    expect(workQueueDone(queue)).toBe(true);
+  });
+
+  it('a queued tile that comes into reach fires directly and leaves the queue', () => {
+    const view = standingOn(2, 2);
+    const { hold, queue } = press(view, [2, 3], ToolMode.Plant);
+    holdCommand(view, hold, { tileX: 2, tileY: 8 }, queue);
+
+    // WASD (or the walk) carries the farmer down the row before the pump's errand exists.
+    view.player.ySub = 7 * SUBTILE + SUBTILE / 2;
+    const { commands } = pump(view, queue, hold.fired, true);
+    expect(commands).toEqual([
+      { type: 'PlantTile', tileX: 2, tileY: 8, crop: CropId.RussetPotato },
+    ]);
+    // Marked into the hold's fired set, so the hold cannot fire it a second time.
+    expect(hold.fired.has('2,8')).toBe(true);
+    expect(workQueueDone(queue)).toBe(true);
+  });
+
+  it('release keeps pumping — the queue outlives the button, which is the point', () => {
+    const view = standingOn(2, 2);
+    const { hold, queue } = press(view, [2, 3], ToolMode.Plant);
+    holdCommand(view, hold, { tileX: 2, tileY: 8 }, queue);
+    queue.holdDown = false; // the release edge
+
+    expect(pump(view, queue, null).commands).toMatchObject([
+      { type: 'WalkAndAct', tileX: 2, tileY: 8 },
+    ]);
+  });
+
+  it('dispatches nothing while a direction key is held — the sim would refuse it anyway', () => {
+    const view = standingOn(2, 2);
+    const { hold, queue } = press(view, [2, 3], ToolMode.Plant);
+    holdCommand(view, hold, { tileX: 2, tileY: 8 }, queue);
+
+    expect(pump(view, queue, hold.fired, true).commands).toEqual([]);
+    expect(queue.tiles).toHaveLength(1);
+    // Key released: the row resumes.
+    expect(pump(view, queue, hold.fired, false).commands).toMatchObject([
+      { type: 'WalkAndAct', tileX: 2, tileY: 8 },
+    ]);
+  });
+
+  it('arming another tool cancels the pump (matrix row: tool switch)', () => {
+    const view = standingOn(2, 2);
+    const { hold, queue } = press(view, [2, 3], ToolMode.Plant);
+    holdCommand(view, hold, { tileX: 2, tileY: 8 }, queue);
+    const { commands, alive } = pump(view, queue, hold.fired, false, ToolMode.Harvest);
+    expect(alive).toBe(false);
+    expect(commands).toEqual([]);
+  });
+
+  it('a WASD keypress after release cancels; mid-hold it reclaims the errand in flight', () => {
+    const view = standingOn(2, 2);
+    const { hold, queue } = press(view, [2, 3], ToolMode.Plant);
+    holdCommand(view, hold, { tileX: 2, tileY: 8 }, queue);
+    pump(view, queue, hold.fired);
+    walking(view, IntentAction.Plant, 2, 8);
+
+    // Mid-hold: legal, and the errand the keystroke is about to kill goes back to the head.
+    expect(walkKeyInterruptsQueue(queue, view)).toBe(true);
+    expect(queue.outstanding).toBeNull();
+    expect(queue.tiles[0]).toEqual({ tileX: 2, tileY: 8 });
+
+    // After release: the same keypress is a cancellation.
+    queue.holdDown = false;
+    expect(walkKeyInterruptsQueue(queue, view)).toBe(false);
+  });
+
+  it('mid-hold WASD does not resurrect an errand the view already shows finished', () => {
+    const view = standingOn(2, 2);
+    const { hold, queue } = press(view, [2, 3], ToolMode.Plant);
+    holdCommand(view, hold, { tileX: 2, tileY: 8 }, queue);
+    pump(view, queue, hold.fired);
+    resolve(view); // worked before the keystroke landed
+
+    expect(walkKeyInterruptsQueue(queue, view)).toBe(true);
+    expect(queue.tiles).toEqual([]);
+    expect(queue.outstanding).toBeNull();
+  });
+
+  it('the dry can PAUSES the water queue and a refill resumes it (the documented choice)', () => {
+    const view = standingOn(2, 2);
+    view.player.canCharges = 0;
+    view.reservoirs.push({
+      id: 1,
+      tileX: 30,
+      tileY: 30,
+      tilesWide: 1,
+      tilesHigh: 1,
+    } as WorldView['reservoirs'][number]);
+    const queue = createWorkQueue(view, ToolMode.Water, {
+      type: 'WaterTile',
+      tileX: 2,
+      tileY: 3,
+    });
+    queue.keys.add('2,9');
+    queue.tiles.push({ tileX: 2, tileY: 9 });
+
+    // Dry: nothing dispatched — above all not a walk across the lot to a refused pour —
+    // and the paused flag drives the tell.
+    expect(pump(view, queue, null).commands).toEqual([]);
+    expect(queue.dryPaused).toBe(true);
+    expect(workQueueRemaining(queue)).toBe(1);
+
+    // The refill lands (RefillCan on the same tool, [[009]]): the row resumes untouched.
+    view.player.canCharges = 20;
+    expect(pump(view, queue, null).commands).toMatchObject([
+      { type: 'WalkAndAct', action: IntentAction.Water, tileX: 2, tileY: 9 },
+    ]);
+    expect(queue.dryPaused).toBe(false);
+  });
+
+  it('skips a queued tile that saturated before its turn, raising the soaked flag', () => {
+    const view = standingOn(2, 2);
+    view.player.canCharges = 10;
+    // Two far farm tiles; a sprinkler soaks the first one mid-walk.
+    withFieldTiles(view, [
+      [2, 9],
+      [2, 12],
+    ]);
+    view.field.moisturePermille[0] = 1000; // (2,9) in row-major order
+    const queue = createWorkQueue(view, ToolMode.Water, {
+      type: 'WaterTile',
+      tileX: 2,
+      tileY: 3,
+    });
+    queue.keys.add('2,9').add('2,12');
+    queue.tiles.push({ tileX: 2, tileY: 9 }, { tileX: 2, tileY: 12 });
+
+    const { commands } = pump(view, queue, null);
+    expect(queue.soakedTold).toBe(true);
+    // The wet tile cost nothing and the dry one behind it got the errand the same frame.
+    expect(commands).toMatchObject([
+      { type: 'WalkAndAct', action: IntentAction.Water, tileX: 2, tileY: 12 },
+    ]);
+  });
+});
+
+// The cancellation wiring the pure pump cannot see: Esc, right-click, and a new gesture all
+// pass through `PointerInput` itself. Driven through a stub host — the constructor takes
+// capabilities, not a browser — with synthetic pointer events.
+describe('the work queue’s cancellation wiring ([[074]])', () => {
+  function harness(view: WorldView, tool: ToolMode) {
+    const canvasListeners = new Map<string, (event: unknown) => void>();
+    const canvas = {
+      addEventListener: (name: string, fn: (event: unknown) => void) => {
+        canvasListeners.set(name, fn);
+      },
+      removeEventListener: () => {},
+      setPointerCapture: () => {},
+      releasePointerCapture: () => {},
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 640, height: 640 }),
+    } as unknown as HTMLCanvasElement;
+    const camera = {
+      transform: { viewWidth: 640, viewHeight: 640, zoom: 1 },
+      screenToWorld: (x: number, y: number) => ({ x, y }),
+      worldToScreen: (x: number, y: number) => ({ x, y }),
+    } as unknown as Camera;
+    const queue = new CommandQueue();
+    let armed = tool;
+    const host = {
+      canvas,
+      camera,
+      queue,
+      overlayRoot: undefined as unknown as HTMLElement,
+      latestView: () => view,
+      getTool: () => armed,
+      setTool: (t: ToolMode) => {
+        armed = t;
+      },
+      setHover: () => {},
+      toggleOverlay: () => {},
+    } as unknown as InputHost;
+    const system = {
+      spaceHeld: false,
+      placeDir: Direction.East,
+      zoneCrop: CropId.RussetPotato,
+      manualWalkHeld: false,
+    } as unknown as InputSystem;
+    const pointer = new PointerInput(host, system);
+    pointer.attach();
+    const fire = (name: string, event: Record<string, unknown>) => {
+      canvasListeners.get(name)!({ preventDefault: () => {}, pointerId: 1, ...event });
+    };
+    const pressAt = (tileX: number, tileY: number, button = 0) => {
+      fire('pointerdown', {
+        button,
+        clientX: tileX * TILE_PX + TILE_PX / 2,
+        clientY: tileY * TILE_PX + TILE_PX / 2,
+      });
+    };
+    const releaseAt = (tileX: number, tileY: number, button = 0) => {
+      fire('pointerup', {
+        button,
+        clientX: tileX * TILE_PX + TILE_PX / 2,
+        clientY: tileY * TILE_PX + TILE_PX / 2,
+      });
+    };
+    return { pointer, queue, pressAt, releaseAt, arm: (t: ToolMode) => host.setTool(t) };
+  }
+
+  /** Press a far tile with Plant: the press walks, the queue holds its errand, release. */
+  function workingQueue(view: WorldView) {
+    const h = harness(view, ToolMode.Plant);
+    h.pressAt(2, 12);
+    h.releaseAt(2, 12);
+    expect(h.queue.drain()).toMatchObject([{ type: 'WalkAndAct', tileX: 2, tileY: 12 }]);
+    expect(h.pointer.dragging).toBe(true); // the queue counts as the live gesture
+    return h;
+  }
+
+  it('Esc cancels a working queue (matrix row: Esc)', () => {
+    const h = workingQueue(standingOn(2, 2));
+    h.pointer.cancelDrag();
+    expect(h.pointer.dragging).toBe(false);
+    h.pointer.update();
+    expect(h.queue.drain()).toEqual([]);
+  });
+
+  it('right-click cancels it and does NOT fall through to maintenance', () => {
+    const h = workingQueue(standingOn(2, 2));
+    h.pressAt(2, 12, 2);
+    expect(h.pointer.dragging).toBe(false);
+    expect(h.queue.drain()).toEqual([]);
+  });
+
+  it('a new manual click replaces it — a new gesture means new intent', () => {
+    const h = workingQueue(standingOn(2, 2));
+    // A fresh press on an in-reach tile: its own click dispatches, the OLD queue is gone.
+    h.pressAt(2, 3);
+    h.releaseAt(2, 3);
+    expect(h.queue.drain()).toMatchObject([{ type: 'PlantTile', tileX: 2, tileY: 3 }]);
+    expect(h.pointer.dragging).toBe(false);
+  });
+
+  it('a WASD keypress after release cancels it', () => {
+    const h = workingQueue(standingOn(2, 2));
+    h.pointer.walkKeyPressed();
+    expect(h.pointer.dragging).toBe(false);
+  });
+
+  it('arming a different tool cancels it on the next frame', () => {
+    const h = workingQueue(standingOn(2, 2));
+    h.arm(ToolMode.Harvest);
+    h.pointer.update();
+    expect(h.pointer.dragging).toBe(false);
+  });
+
+  it('the tell reads the queue while it works and clears when it is done', () => {
+    const view = standingOn(2, 2);
+    const h = workingQueue(view);
+    expect(h.pointer.queueTell()).toBe('planting 1 more…');
+    // The errand resolves and the pump retires the finished queue; the tell clears.
+    view.tick += 1;
+    h.pointer.update();
+    h.pointer.update();
+    expect(h.pointer.queueTell()).toBeNull();
   });
 });
 

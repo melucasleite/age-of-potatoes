@@ -82,6 +82,14 @@ const CSS = `
   background:rgba(20,16,25,0.80); border:1px solid rgba(255,255,255,0.10); }
 .sm-ix-hint b { color:#f2e6cf; font-weight:600; }
 .sm-ix-hint span { color:#9c9182; }
+/* The work-queue tell ([[074]]): "planting 6 more…" while the farmer works a queued row, so
+   him marching off is legible as the gesture still running. Bottom-CENTRE — the top centre
+   is the hint strip's and the corners are the HUD's — and amber-bordered because it reports
+   work in progress, not a verdict. */
+.sm-ix-tell { position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
+  display:none; white-space:nowrap; padding:4px 10px; border-radius:4px; letter-spacing:0.04em;
+  background:rgba(20,16,25,0.85); border:1px solid rgba(226,190,101,0.45); color:#f2e6cf;
+  text-shadow:0 1px 2px rgba(0,0,0,0.9); }
 /* The deed sign: one per unowned parcel, standing in the middle of the land it prices.
    ANCHORED IN WORLD SPACE AND DRAWN IN DOM, which is the same trade the band above makes and
    for the same two reasons — text stays crisp at every zoom rung without a font atlas, and the
@@ -189,8 +197,10 @@ export class InputChrome {
   private chev: HTMLElement | null = null;
   private tag: HTMLElement | null = null;
   private hint: HTMLElement | null = null;
+  private tell: HTMLElement | null = null;
 
   private lastHintKey = '';
+  private lastTellText: string | null = null;
   /** One div per tile of a non-rectangular band, grown on demand and reused. */
   private readonly cells: HTMLElement[] = [];
   /** One sign per unowned parcel, grown on demand and reused. Fifteen at the very most. */
@@ -221,8 +231,10 @@ export class InputChrome {
     tag.className = 'sm-ix-tag';
     const hint = document.createElement('div');
     hint.className = 'sm-ix-hint';
+    const tell = document.createElement('div');
+    tell.className = 'sm-ix-tell';
 
-    root.append(band, chev, tag, hint);
+    root.append(band, chev, tag, hint, tell);
     this.container.appendChild(root);
 
     this.root = root;
@@ -230,6 +242,7 @@ export class InputChrome {
     this.chev = chev;
     this.tag = tag;
     this.hint = hint;
+    this.tell = tell;
   }
 
   unmount(): void {
@@ -239,6 +252,8 @@ export class InputChrome {
     this.chev = null;
     this.tag = null;
     this.hint = null;
+    this.tell = null;
+    this.lastTellText = null;
     // The signs and cells are children of `root` and go with it, but the arrays must not
     // survive a StrictMode remount holding nodes that are no longer in the document.
     this.cells.length = 0;
@@ -558,6 +573,25 @@ export class InputChrome {
     hint.innerHTML =
       `<b>${escapeHtml(info.label)}</b> <span>${escapeHtml(info.hint)}</span><br>` +
       `<span>${zoom}× zoom · ${keys.join(' · ')}</span>`;
+  }
+
+  // --- the work-queue tell ([[074]]) ----------------------------------------------------
+
+  /**
+   * One line of running commentary while the out-of-reach queue pumps, or `null` for
+   * nothing to say. Called once per frame from `InputSystem.update()`; the steady state —
+   * no queue, or the same sentence as last frame — is one string comparison and no DOM.
+   */
+  setQueueTell(text: string | null): void {
+    const tell = this.tell;
+    if (tell === null || text === this.lastTellText) return;
+    this.lastTellText = text;
+    if (text === null) {
+      tell.style.display = 'none';
+      return;
+    }
+    tell.textContent = text;
+    tell.style.display = 'block';
   }
 }
 

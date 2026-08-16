@@ -23,7 +23,7 @@ import { BeltTier, Direction, GrabberTier, LampState, MachineKind, SUBTILE } fro
 import type { WorldView } from '@snack/sim';
 import { createWorldView } from '@snack/sim';
 
-import { TeardownOutcome, teardownPlan, teardownTargetAt } from './teardown';
+import { TeardownOutcome, outcomePhrase, teardownPlan, teardownTargetAt } from './teardown';
 
 /** The farmer stands here, so everything nearby is in reach and nothing is refused for range. */
 function view(): WorldView {
@@ -208,6 +208,40 @@ describe('what the player is told before the click', () => {
     const v = withBelt(view(), 3, 40, 40, Direction.East, 4);
     const plan = teardownPlan(v, { x: 40, y: 40, w: 4, h: 1 });
     expect(plan.refusals).toBe(0);
+  });
+});
+
+describe('the sell bin has no box and the tool stops pretending ([[076]])', () => {
+  it('keeps the bin: the Kept outcome, the honest phrase, no refused offer', () => {
+    const v = withMachine(view(), 9, MachineKind.SellBin, 10, 10);
+    const target = teardownTargetAt(v, 10, 10)!;
+    expect(target.outcome).toBe(TeardownOutcome.Kept);
+    // The ribbon reads `${name} · ${outcomePhrase(target)}` — the owner's copy for hovering
+    // the bin with the take-up tool while there is nothing it can take.
+    expect(outcomePhrase(target)).toBe('nothing to pick up');
+    // NOT the refused path: that branch promises "too far, click to walk over", which is a
+    // walk toward a take that can never happen.
+    expect(target.refused).toBe(false);
+  });
+
+  it('a click on the bin emits nothing at all — no command, no errand', () => {
+    const v = withMachine(view(), 9, MachineKind.SellBin, 40, 40);
+    const plan = teardownPlan(v, { x: 40, y: 40, w: 1, h: 1 });
+    expect(plan.commands).toEqual([]);
+    // The lone-machine walk must not single it out either, or a distant click marches the
+    // farmer across the lot to be refused.
+    expect(plan.loneMachineTile).toBeNull();
+    // The ghost still shows the bin, in the refusal tone, so the drag is not invisible.
+    expect(plan.cells).toEqual([{ x: 40, y: 40, tone: 'blocked' }]);
+    expect(plan.label).toBe('the Sell Bin · nothing to pick up');
+  });
+
+  it('a drag over the bin and a belt takes the belt and leaves the bin unoffered', () => {
+    const v = withMachine(view(), 9, MachineKind.SellBin, 10, 10);
+    withBelt(v, 3, 11, 10, Direction.East, 2);
+    const plan = teardownPlan(v, { x: 10, y: 10, w: 3, h: 1 });
+    expect(plan.commands).toEqual([{ type: 'RemoveBelt', beltId: 3 }]);
+    expect(plan.boxCount).toBe(0);
   });
 });
 

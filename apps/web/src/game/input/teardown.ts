@@ -58,6 +58,7 @@ import {
   PIPE_MAX_PATH_TILES,
   PIPE_PRICE_CENTS_PER_TILE,
   beltSpec,
+  boxedItemForMachine,
   grabberSpec,
   machineSpec,
 } from '@snack/sim';
@@ -71,6 +72,15 @@ export const TeardownOutcome = {
   Boxed: 'boxed',
   /** Off the lot, full price back in the pouch. */
   Refunded: 'refunded',
+  /**
+   * Nothing. The machine has no box (`boxedItemForMachine` says so — the sell bin is the
+   * world's gift and the only way to trade), so the tool has nothing to take here and says
+   * so, instead of offering a bagging the sim refuses on every click (item 076's owner
+   * ruling: hovering the bin with this tool reads "nothing to pick up", never an offer).
+   * A `Kept` target contributes its tiles to the ghost in the refusal tone and NOTHING to
+   * the command list — a refused command per drag would be noise the player cannot see.
+   */
+  Kept: 'kept',
 } as const;
 export type TeardownOutcome = (typeof TeardownOutcome)[keyof typeof TeardownOutcome];
 
@@ -123,6 +133,7 @@ export interface TeardownPlan {
 const TONE_BY_OUTCOME: Readonly<Record<TeardownOutcome, BandTone>> = {
   [TeardownOutcome.Boxed]: 'box',
   [TeardownOutcome.Refunded]: 'erase',
+  [TeardownOutcome.Kept]: 'blocked',
 };
 
 /**
@@ -187,6 +198,22 @@ function machineTarget(view: WorldView, machine: MachineView): TeardownTarget {
       tiles.push({ tileX: x, tileY: y });
     }
   }
+
+  // A machine with NO box — the sell bin — cannot be taken at all, so the tool stops
+  // offering to take it ([[076]]). `refused: false` on purpose: the refused branch of the
+  // ribbon says "too far, click to walk over", which promises a walk toward a take that can
+  // never happen. The `Kept` outcome carries its own sentence instead.
+  if (boxedItemForMachine(machine.kind as MachineKind) === null) {
+    return {
+      command: { type: 'DeconstructMachine', machineId: machine.id },
+      outcome: TeardownOutcome.Kept,
+      tiles,
+      name: `the ${machineName(machine.kind)}`,
+      refundCents: 0,
+      refused: false,
+    };
+  }
+
   return {
     command: { type: 'DeconstructMachine', machineId: machine.id },
     outcome: TeardownOutcome.Boxed,
@@ -304,7 +331,10 @@ export function teardownPlan(
     if (target.outcome === TeardownOutcome.Boxed) boxCount += 1;
     if (target.command.type === 'RemoveBelt') beltCount += 1;
     if (target.command.type === 'RemoveGrabber') armCount += 1;
-    // Pipes are re-emitted as paths below; everything else goes through as it stands.
+    // A `Kept` target ships no command at all — the sim refuses it on every click, and a
+    // refusal the player cannot see is noise in the queue ([[076]]). Pipes are re-emitted
+    // as paths below; everything else goes through as it stands.
+    if (target.outcome === TeardownOutcome.Kept) continue;
     if (target.command.type !== 'RemovePipe') commands.push(target.command);
   }
 
@@ -316,7 +346,9 @@ export function teardownPlan(
   }
 
   const loneMachine =
-    targets.length === 1 && targets[0]!.command.type === 'DeconstructMachine'
+    targets.length === 1 &&
+    targets[0]!.command.type === 'DeconstructMachine' &&
+    targets[0]!.outcome !== TeardownOutcome.Kept
       ? (targets[0]!.tiles[0] ?? null)
       : null;
 
@@ -365,6 +397,11 @@ function planLabel(targets: readonly TeardownTarget[], counts: Counts): string {
 
 /** What happens to one target, said in the words the ribbon uses. */
 export function outcomePhrase(target: TeardownTarget): string {
+  if (target.outcome === TeardownOutcome.Kept) {
+    // The owner's copy for the empty-handed hover on the sell bin ([[076]]): the tool has
+    // nothing to take here, and saying so beats offering a take the sim always refuses.
+    return 'nothing to pick up';
+  }
   if (target.outcome === TeardownOutcome.Boxed) {
     return 'into the bag, dials and all — no cash';
   }
@@ -416,9 +453,8 @@ function machineAt(view: WorldView, tileX: number, tileY: number): MachineView |
 /**
  * The machine's name, from the sim's own slug.
  *
- * The sell bin gets no special case here even though `applyDeconstructMachine` refuses it:
- * it is the world's gift and cannot be boxed, the sim says so, and the refusal arrives the
- * same way every other one does.
+ * The sell bin's special case is not here — it is the `Kept` outcome in `machineTarget`,
+ * decided off `boxedItemForMachine` (the sim's own fact) rather than off this name.
  */
 function machineName(kind: number): string {
   const spec = machineSpec(kind as MachineKind);

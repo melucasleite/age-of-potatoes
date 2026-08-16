@@ -152,6 +152,17 @@ export class PointerInput {
   private attached = false;
   private drag: Drag | null = null;
   private hold: HoldState | null = null;
+  /**
+   * The out-of-reach work queue ([[074]]): tiles a paint hold crossed beyond arm's length,
+   * walked to and worked one errand at a time by `stepQueue`. Created on every paint press
+   * and deliberately NOT cleared on release — surviving the button is the point. Cleared by
+   * the cancellation matrix: Esc, a new gesture, arming another tool, WASD after release.
+   */
+  private queue: WorkQueueState | null = null;
+  /** Wall-clock deadline for the transient "already soaked" tell ([[081]]). */
+  private soakedTellUntil = 0;
+  /** The current gesture's soaked flag has been turned into a visible tell already. */
+  private soakedAck = false;
   private hover: HoverTile | null = null;
   /** True while a gesture that belongs to the camera is in progress. Never paints. */
   private panReserved = false;
@@ -187,6 +198,7 @@ export class PointerInput {
     canvas.removeEventListener('wheel', this.onWheel);
     this.drag = null;
     this.hold = null;
+    this.queue = null;
     this.panReserved = false;
     this.hover = null;
     this.host.setHover(null);
@@ -196,23 +208,36 @@ export class PointerInput {
   cancelDrag(): void {
     this.drag = null;
     this.hold = null;
+    // The queue dies with the gesture ([[074]]'s matrix: Esc and right-click cancel it).
+    this.queue = null;
     this.panReserved = false;
   }
 
-  /** A paint hold counts: Esc mid-row means "stop painting", not "disarm the tool". */
+  /**
+   * A paint hold counts: Esc mid-row means "stop painting", not "disarm the tool". So does
+   * a queue still working after release — Esc calls the farmer off, not the tool away.
+   */
   get dragging(): boolean {
-    return this.drag !== null || this.hold !== null;
+    return this.drag !== null || this.hold !== null || this.queueWorking;
+  }
+
+  /** The queue exists and still has anything left to do. */
+  private get queueWorking(): boolean {
+    return this.queue !== null && !workQueueDone(this.queue);
   }
 
   /**
    * Once per frame from `InputSystem.update()`, after the camera is applied. This is what
    * makes HOLDING WHILE WALKING work: the stored client coordinates are re-projected through
    * the transform that actually reached the display, so tiles scroll under a stationary
-   * cursor as the farmer walks, enter reach, and fire — the long-row loop. A frame with no
-   * hold in progress is one null check.
+   * cursor as the farmer walks, enter reach, and fire — the long-row loop. The queue pump
+   * runs after the hold for the same reason: both read the frame's live reach. A frame with
+   * neither in progress is two null checks.
    */
   update(): void {
     this.stepHold();
+    this.stepQueue();
+    this.syncSoakedTell();
   }
 
   /**
@@ -285,9 +310,9 @@ export class PointerInput {
     this.hover = tile;
     this.host.setHover(tile);
 
-    // Right button: cancel a drag (or a paint hold) if there is one, otherwise maintenance.
+    // Right button: cancel a drag, a paint hold, or a working queue, otherwise maintenance.
     if (event.button === 2) {
-      if (this.drag !== null || this.hold !== null || this.panReserved) {
+      if (this.drag !== null || this.hold !== null || this.queueWorking || this.panReserved) {
         this.cancelDrag();
         return;
       }
@@ -296,13 +321,18 @@ export class PointerInput {
       return;
     }
 
-    // The camera's reserved gestures. They paint nothing, ever, in any mode.
+    // The camera's reserved gestures. They paint nothing, ever, in any mode — and they do
+    // not cancel a working queue either: looking around is not a new work intent.
     if (event.button === 1 || this.system.spaceHeld) {
       this.panReserved = true;
       return;
     }
 
     if (event.button !== 0) return;
+
+    // A new manual gesture means new intent, so whatever the last gesture queued is over
+    // ([[074]]'s matrix). A paint press below replaces it with a fresh queue of its own.
+    this.queue = null;
 
     const tool = this.host.getTool();
     const kind = gestureFor(tool);
@@ -314,8 +344,9 @@ export class PointerInput {
       // never per frame, which is what keeps the trace from recording the mouse.
       const command = primaryCommand(view, tile, tool, this.system.placeDir);
       if (command !== null) {
-        this.host.queue.push(reachAdjusted(view, tile, command));
-        if (kind === 'paint') this.beginHold(event, view, tile, tool, command);
+        const pushed = reachAdjusted(view, tile, command);
+        this.host.queue.push(pushed);
+        if (kind === 'paint') this.beginHold(event, view, tile, tool, command, pushed);
         return;
       }
       // Nothing to do here with this tool — which for the sell bin is not "nothing", it is
@@ -349,10 +380,13 @@ export class PointerInput {
     }
 
     // A paint hold simply ENDS on release — every command it had to say was said per tile
-    // while the button was down, so the release edge emits nothing and forgets the fired set.
+    // while the button was down, so the release edge emits nothing and forgets the fired
+    // set. The QUEUE does not end here ([[074]]): releasing the button is how the player
+    // hands the rest of the row to the farmer, so it keeps pumping until worked dry.
     const hold = this.hold;
     if (hold !== null && event.button === 0) {
       this.hold = null;
+      if (this.queue !== null) this.queue.holdDown = false;
       try {
         this.host.canvas.releasePointerCapture(event.pointerId);
       } catch {
@@ -398,6 +432,10 @@ export class PointerInput {
    * to repeat the verb on every new tile while the button stays down. Pointer capture for
    * the same reason a drag takes it: a row that ends past the canvas edge is an ordinary
    * gesture, and losing the `pointerup` would leave the hold painting with the button up.
+   *
+   * The WORK QUEUE is born here too ([[074]]), seeded from what the press became: an
+   * out-of-reach anchor already went out as a WalkAndAct errand, and the pump must treat it
+   * as the errand in flight or its very first dispatch would replace it unworked.
    */
   private beginHold(
     event: PointerEvent,
@@ -405,6 +443,7 @@ export class PointerInput {
     anchor: HoverTile,
     tool: ToolMode,
     pressed: Command,
+    dispatched: Command,
   ): void {
     this.hold = createHold(
       event.pointerId,
@@ -415,6 +454,13 @@ export class PointerInput {
       tool,
       pressed,
     );
+    this.queue = createWorkQueue(view, tool, dispatched);
+    this.soakedAck = false;
+    // The press's own click on a soaked tile is the sim silently refusing ([[081]]), so the
+    // tell that keeps 064's anti-silence promise has to come from here.
+    if (pressed.type === 'WaterTile' && tileSaturated(view, anchor.tileX, anchor.tileY)) {
+      this.queue.soakedTold = true;
+    }
     try {
       this.host.canvas.setPointerCapture(event.pointerId);
     } catch {
@@ -435,8 +481,83 @@ export class PointerInput {
     const view = this.host.latestView();
     if (view === null) return;
     const tile = screenToTile(this.host.canvas, this.host.camera, hold.clientX, hold.clientY);
-    const command = holdCommand(view, hold, tile);
+    const command = holdCommand(view, hold, tile, this.queue);
     if (command !== null) this.host.queue.push(command);
+  }
+
+  /**
+   * The queue pump ([[074]]), once per frame after the hold. `pumpWorkQueue` owns the
+   * rules; this owns the lifetime — a pump that reports the tool changed cancels the queue,
+   * and a queue that has finished with the button up is retired so the tell clears.
+   */
+  private stepQueue(): void {
+    const queue = this.queue;
+    if (queue === null) return;
+    const view = this.host.latestView();
+    if (view === null) return;
+    const alive = pumpWorkQueue(
+      view,
+      queue,
+      this.host.getTool(),
+      this.hold?.fired ?? null,
+      this.system.manualWalkHeld,
+      (command) => this.host.queue.push(command),
+    );
+    // The soaked flag is read BEFORE the queue can be retired below, or a wet tile skipped
+    // on the queue's very last step would lose its tell with the state that carried it.
+    this.syncSoakedTell();
+    if (!alive || (workQueueDone(queue) && !queue.holdDown)) this.queue = null;
+  }
+
+  /**
+   * A direction KEYDOWN, from the keyboard by way of the system ([[074]]'s matrix): after
+   * release it cancels the queue outright — grabbing the wheel is the new intent — and
+   * mid-hold it stays legal, except that the sim is about to kill any errand in flight
+   * (`applySetMoveDirection` clears the intent), so an unworked target is reclaimed to the
+   * head of the queue rather than silently lost.
+   */
+  walkKeyPressed(): void {
+    const queue = this.queue;
+    if (queue === null) return;
+    if (!walkKeyInterruptsQueue(queue, this.host.latestView())) this.queue = null;
+  }
+
+  /**
+   * The sentence over the canvas while queued work is running, or `null` for silence:
+   * "planting 6 more…" while the farmer marches, the pause reason while the can is dry,
+   * and a brief "already soaked" when a wet tile was skipped ([[081]]). Read once per
+   * frame by `InputSystem.update()` into the chrome's tell line.
+   */
+  queueTell(): string | null {
+    if (performance.now() < this.soakedTellUntil) return 'already soaked';
+    const queue = this.queue;
+    if (queue === null) return null;
+    const remaining = workQueueRemaining(queue);
+    if (remaining === 0) return null;
+    if (queue.dryPaused) {
+      return `can is empty — ${remaining} to water`;
+    }
+    const verb =
+      queue.tool === ToolMode.Water
+        ? 'watering'
+        : queue.tool === ToolMode.Harvest
+          ? 'harvesting'
+          : 'planting';
+    return `${verb} ${remaining} more…`;
+  }
+
+  /**
+   * Turn the gesture's once-only soaked flag into a short-lived visible tell. The flag
+   * lives on the queue state (pure, testable); the wall clock lives here, where cosmetic
+   * timing is allowed. At most one tell per hold, by construction: the flag only rises
+   * once and `soakedAck` swallows every later frame of it.
+   */
+  private syncSoakedTell(): void {
+    const queue = this.queue;
+    if (queue !== null && queue.soakedTold && !this.soakedAck) {
+      this.soakedAck = true;
+      this.soakedTellUntil = performance.now() + 1400;
+    }
   }
 
   // --- what R acts on ----------------------------------------------------------------------
@@ -665,18 +786,29 @@ export function createHold(
  *   · Once per tile per hold. A re-crossed tile is silent even if it legally wants the verb
  *     again — predictability outranks thoroughness, and the player can always release and
  *     press again.
- *   · Out of reach is SKIPPED, never walked to. A hold must not emit walk errands per
- *     crossed tile — the sim holds ONE errand at a time ([[050]]) and a drag would thrash
- *     it. But the skip is not a sentence: reach is re-read on every call, so holding while
- *     WASD walks the row fires each tile as it comes into arm's length.
  *   · Only the tile verbs repeat. `primaryCommand`'s other answer on these tools is
  *     `RefillCan` — the Water tool crossing open water — and a drag that clipped the pond
  *     must not dip the can mid-row.
+ *   · A SATURATED tile is skipped, not poured at ([[081]]): the sim now refuses the pour
+ *     without spending, so the command would be pure noise — and the skip raises the
+ *     once-per-hold "already soaked" flag on the queue instead of a tell per wet tile.
+ *     Not marked fired: fast-draining soil can want the verb again seconds later.
+ *   · Out of reach is never fired directly and never walked to FROM HERE — a hold must not
+ *     emit walk errands per crossed tile; the sim holds ONE errand at a time ([[050]]).
+ *     Since [[074]] the tile is QUEUED instead (crossing order, deduped against both the
+ *     fired set and the queue), and the pump walks the farmer to it one errand at a time.
+ *     Reach is still re-read on every call, so holding while WASD walks the row fires each
+ *     tile directly as it comes into arm's length, and it never reaches the queue.
  *   · Per-tile legality is the sim's, same as a click (§12): the command goes and the
  *     reducer judges it. The ONE input-side gate is the dry can, because a refused pour has
  *     an audible tell and a nine-tile drag deserves it once, not nine times.
  */
-export function holdCommand(view: WorldView, hold: HoldState, tile: HoverTile): Command | null {
+export function holdCommand(
+  view: WorldView,
+  hold: HoldState,
+  tile: HoverTile,
+  queue: WorkQueueState | null = null,
+): Command | null {
   // The queue drains at every tick boundary, so a view that has advanced already reflects
   // every pour emitted before it — the local spend guess starts over. Without the guess, a
   // fast drag inside one 50 ms tick would out-pour the can against a stale charge count and
@@ -688,11 +820,26 @@ export function holdCommand(view: WorldView, hold: HoldState, tile: HoverTile): 
 
   const key = holdKey(tile.tileX, tile.tileY);
   if (hold.fired.has(key)) return null;
-  if (!tileWithinReach(view, tile.tileX, tile.tileY)) return null;
 
   const direct = primaryCommand(view, tile, hold.tool, Direction.None);
   if (direct === null) return null;
   if (direct.type !== 'WaterTile' && direct.type !== 'PlantTile' && direct.type !== 'HarvestTile') {
+    return null;
+  }
+
+  // The soaked filter ([[081]]) sits above the reach split on purpose: a wet tile is not
+  // poured at in reach AND not queued out of reach — a walk across the lot to refuse would
+  // be the silent dead click item 050 was filed about, with commuting.
+  if (direct.type === 'WaterTile' && tileSaturated(view, tile.tileX, tile.tileY)) {
+    if (queue !== null) queue.soakedTold = true;
+    return null;
+  }
+
+  if (!tileWithinReach(view, tile.tileX, tile.tileY)) {
+    if (queue !== null && !queue.keys.has(key)) {
+      queue.keys.add(key);
+      queue.tiles.push({ tileX: tile.tileX, tileY: tile.tileY });
+    }
     return null;
   }
 
@@ -717,6 +864,285 @@ export function holdCommand(view: WorldView, hold: HoldState, tile: HoverTile): 
 
 function holdKey(tileX: number, tileY: number): string {
   return `${tileX},${tileY}`;
+}
+
+/**
+ * Is this farm tile at its moisture ceiling? The sim's refusal surface for [[081]]: a pour
+ * refuses exactly when `moisturePermille` reads 1000, so this probe and the reducer cannot
+ * disagree. Only ever true of farmland — bare grass has no moisture to be full of.
+ */
+export function tileSaturated(view: WorldView, tileX: number, tileY: number): boolean {
+  const query = tileAtView(view, tileX, tileY);
+  return query.isField && query.moisturePermille >= 1000;
+}
+
+// --- the out-of-reach work queue ([[074]]) ------------------------------------------------
+//
+// The owner's ruling overrides 072's skip: a held Plant/Water/Harvest covers the WHOLE row,
+// and tiles the cursor crossed beyond arm's length are walked to and worked — during the
+// hold and after release, until the queue runs dry. The sim's single-errand model is
+// load-bearing ([[050]]), so the queue lives HERE, input-side, and feeds the sim exactly
+// one `WalkAndAct` at a time: the next one is dispatched only when the view shows the
+// previous errand gone (`player.intentAction`/`intentTileX`/`intentTileY` — the projection
+// publishes the live errand precisely so nobody has to sniff effects per verb). Everything
+// below is pure in the house sense — a view, a state record, a push callback — so the
+// tests drive whole pump sessions as sequences of calls.
+
+export interface QueuedTile {
+  tileX: number;
+  tileY: number;
+}
+
+/** The one errand the pump currently has walking, matched against the view to detect its end. */
+export interface WorkErrand {
+  tileX: number;
+  tileY: number;
+  /** The `IntentAction` the dispatched WalkAndAct carries. */
+  action: number;
+  /** `view.tick` at dispatch. Resolution is judged only on strictly later ticks. */
+  issuedViewTick: number;
+}
+
+export interface WorkQueueState {
+  /** The verb the whole queue carries. A different armed tool cancels it. */
+  tool: ToolMode;
+  /** Out-of-reach crossed tiles, in crossing order. The pump works the head. */
+  tiles: QueuedTile[];
+  /** Dedupe over `tiles` AND the in-flight errand, as `"x,y"` keys. */
+  keys: Set<string>;
+  /** The button is still down: mid-hold WASD stays legal and does not cancel ([[072]]). */
+  holdDown: boolean;
+  outstanding: WorkErrand | null;
+  /** Charge-budget bookkeeping, mirroring the hold's (`viewTick`/`watersEmitted`). */
+  viewTick: number;
+  watersEmitted: number;
+  /** The once-per-gesture "already soaked" tell has been raised ([[081]]). Never resets. */
+  soakedTold: boolean;
+  /** The pump declined to dispatch dry pours this frame; a refill resumes it. */
+  dryPaused: boolean;
+}
+
+/**
+ * A fresh queue for a paint press. `dispatched` is what the press ACTUALLY sent: when the
+ * anchor was out of reach that is already a `WalkAndAct`, and seeding it as the outstanding
+ * errand is what stops the pump's first dispatch from replacing it unworked — the sim
+ * replaces errands wholesale, and the anchor is owed its turn.
+ */
+export function createWorkQueue(
+  view: WorldView,
+  tool: ToolMode,
+  dispatched: Command,
+): WorkQueueState {
+  const outstanding: WorkErrand | null =
+    dispatched.type === 'WalkAndAct'
+      ? {
+          tileX: dispatched.tileX,
+          tileY: dispatched.tileY,
+          action: dispatched.action,
+          issuedViewTick: view.tick,
+        }
+      : null;
+  return {
+    tool,
+    tiles: [],
+    keys: new Set<string>(
+      outstanding === null ? [] : [holdKey(outstanding.tileX, outstanding.tileY)],
+    ),
+    holdDown: true,
+    outstanding,
+    viewTick: view.tick,
+    watersEmitted: 0,
+    soakedTold: false,
+    dryPaused: false,
+  };
+}
+
+/** Tiles still owed work: the queue plus the errand in flight. Drives the tell's count. */
+export function workQueueRemaining(queue: WorkQueueState): number {
+  return queue.tiles.length + (queue.outstanding === null ? 0 : 1);
+}
+
+export function workQueueDone(queue: WorkQueueState): boolean {
+  return queue.tiles.length === 0 && queue.outstanding === null;
+}
+
+/**
+ * One frame of pumping. Returns `false` when the armed tool no longer matches — the
+ * caller's cue to cancel the queue (arming another tool is a cancellation-matrix row).
+ *
+ * THE PUMP'S CONTRACT, row by row:
+ *   · ONE OUTSTANDING ERRAND, NEVER MORE, and no per-frame respawning: a new `WalkAndAct`
+ *     is dispatched only when the view shows the previous one gone. "Gone" is read off
+ *     `view.player.intentAction/intentTileX/intentTileY` — the completed, refused, timed
+ *     out and blocked-abandoned ([[080]]) cases all end with the intent cleared, so one
+ *     observation covers every way an errand can resolve. Judged only on ticks strictly
+ *     after dispatch, so the tick that has not yet APPLIED the command cannot read as
+ *     "already finished".
+ *   · A resolved errand is NEVER retried: its tile left the queue at dispatch. A blocked
+ *     or refused target therefore costs exactly one attempt.
+ *   · A queued tile that comes INTO reach — the walk itself, or mid-hold WASD — fires
+ *     directly and leaves the queue, marked into the hold's fired set so the hold cannot
+ *     fire it twice.
+ *   · A queued tile that stopped making sense is dropped at its turn: crossed water, a
+ *     saturated tile ([[081]], raising the once-per-gesture soaked flag), anything whose
+ *     verb no longer forms.
+ *   · THE DRY CAN PAUSES WATER'S QUEUE rather than cancelling it (the documented choice on
+ *     item 074): no dispatch, no charge-burning walk, `dryPaused` raised for the tell —
+ *     and the pump re-checks `view.player.canCharges` every frame, so a refill resumes the
+ *     row with no further input. Cancel-outright was the fallback if resume proved fiddly;
+ *     with the charge count already on the view, pause is the simpler of the two.
+ *   · While a direction key is held (`walkHeld`) nothing is dispatched: the sim refuses
+ *     `WalkAndAct` under a held key and kills errands on `SetMoveDirection`, so dispatching
+ *     would burn the queue one refused errand per frame. In-reach tiles still fire — that
+ *     is the mid-hold long-row loop working as designed.
+ */
+export function pumpWorkQueue(
+  view: WorldView,
+  queue: WorkQueueState,
+  armedTool: ToolMode,
+  fired: Set<string> | null,
+  walkHeld: boolean,
+  push: (command: Command) => void,
+): boolean {
+  if (armedTool !== queue.tool) return false;
+
+  if (view.tick !== queue.viewTick) {
+    queue.viewTick = view.tick;
+    queue.watersEmitted = 0;
+  }
+  queue.dryPaused = false;
+
+  // 1. Has the errand in flight resolved? (Completed, refused, died — all read the same.)
+  const outstanding = queue.outstanding;
+  if (outstanding !== null && view.tick > outstanding.issuedViewTick) {
+    const player = view.player;
+    const live =
+      player.intentAction === outstanding.action &&
+      player.intentTileX === outstanding.tileX &&
+      player.intentTileY === outstanding.tileY;
+    if (!live) {
+      queue.outstanding = null;
+      queue.keys.delete(holdKey(outstanding.tileX, outstanding.tileY));
+    }
+  }
+
+  // 2. The sweep: fire whatever reach (the walk, or mid-hold WASD) has brought within
+  //    arm's length, and drop what stopped making sense. Order is preserved for the rest.
+  const remaining: QueuedTile[] = [];
+  for (let i = 0; i < queue.tiles.length; i++) {
+    const tile = queue.tiles[i]!;
+    const key = holdKey(tile.tileX, tile.tileY);
+    if (fired !== null && fired.has(key)) {
+      queue.keys.delete(key);
+      continue;
+    }
+    if (!tileWithinReach(view, tile.tileX, tile.tileY)) {
+      remaining.push(tile);
+      continue;
+    }
+    const direct = primaryCommand(view, tile, queue.tool, Direction.None);
+    if (
+      direct === null ||
+      (direct.type !== 'WaterTile' && direct.type !== 'PlantTile' && direct.type !== 'HarvestTile')
+    ) {
+      queue.keys.delete(key);
+      continue;
+    }
+    if (direct.type === 'WaterTile') {
+      if (tileSaturated(view, tile.tileX, tile.tileY)) {
+        queue.soakedTold = true;
+        queue.keys.delete(key);
+        continue;
+      }
+      if (view.player.canCharges - queue.watersEmitted <= 0) {
+        queue.dryPaused = true;
+        remaining.push(tile);
+        continue;
+      }
+      queue.watersEmitted += 1;
+    }
+    push(direct);
+    fired?.add(key);
+    queue.keys.delete(key);
+  }
+  queue.tiles = remaining;
+
+  // 3. Dispatch the next errand, if the lane is clear and the player is not steering.
+  if (queue.outstanding === null && !walkHeld) {
+    while (queue.tiles.length > 0) {
+      const tile = queue.tiles[0]!;
+      const key = holdKey(tile.tileX, tile.tileY);
+      const direct = primaryCommand(view, tile, queue.tool, Direction.None);
+      if (
+        direct === null ||
+        (direct.type !== 'WaterTile' &&
+          direct.type !== 'PlantTile' &&
+          direct.type !== 'HarvestTile')
+      ) {
+        queue.tiles.shift();
+        queue.keys.delete(key);
+        continue;
+      }
+      if (direct.type === 'WaterTile') {
+        if (tileSaturated(view, tile.tileX, tile.tileY)) {
+          queue.soakedTold = true;
+          queue.tiles.shift();
+          queue.keys.delete(key);
+          continue;
+        }
+        if (view.player.canCharges - queue.watersEmitted <= 0) {
+          queue.dryPaused = true;
+          break;
+        }
+      }
+      const pushed = reachAdjusted(view, tile, direct);
+      queue.tiles.shift();
+      if (pushed.type === 'WalkAndAct') {
+        push(pushed);
+        queue.outstanding = {
+          tileX: pushed.tileX,
+          tileY: pushed.tileY,
+          action: pushed.action,
+          issuedViewTick: view.tick,
+        };
+        break;
+      }
+      // Slipped into reach since the sweep — fire it directly and keep dispatching.
+      if (pushed.type === 'WaterTile') queue.watersEmitted += 1;
+      push(pushed);
+      fired?.add(key);
+      queue.keys.delete(key);
+    }
+  }
+
+  return true;
+}
+
+/**
+ * A direction keydown's effect on the queue. Returns `true` when the queue survives
+ * (mid-hold, [[072]]'s legality kept) and `false` when it is cancelled (after release,
+ * [[074]]'s matrix). Mid-hold, an errand still shown live in the view is reclaimed to the
+ * head of the queue — the `SetMoveDirection` this keystroke becomes will kill it sim-side
+ * before it works its tile — while an errand the view already shows finished is simply
+ * forgotten, so a worked tile is never worked twice.
+ */
+export function walkKeyInterruptsQueue(queue: WorkQueueState, view: WorldView | null): boolean {
+  if (!queue.holdDown) return false;
+  const outstanding = queue.outstanding;
+  if (outstanding !== null) {
+    queue.outstanding = null;
+    const live =
+      view !== null &&
+      view.player.intentAction === outstanding.action &&
+      view.player.intentTileX === outstanding.tileX &&
+      view.player.intentTileY === outstanding.tileY;
+    if (live) {
+      queue.tiles.unshift({ tileX: outstanding.tileX, tileY: outstanding.tileY });
+    } else {
+      queue.keys.delete(holdKey(outstanding.tileX, outstanding.tileY));
+    }
+  }
+  return true;
 }
 
 /**
