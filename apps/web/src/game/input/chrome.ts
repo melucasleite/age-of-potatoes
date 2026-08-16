@@ -77,11 +77,6 @@ const CSS = `
 /* Top-CENTRE, not top-left: the HUD's money panel owns the top-left corner and the
    Clipboard owns the bottom-right, so the strip would sit underneath one of them. The
    HUD belongs to another agent — the polite fix is to stay out of its way. */
-.sm-ix-hint { position:absolute; left:50%; top:10px; transform:translateX(-50%);
-  text-align:center; padding:5px 10px; border-radius:4px; white-space:nowrap;
-  background:rgba(20,16,25,0.80); border:1px solid rgba(255,255,255,0.10); }
-.sm-ix-hint b { color:#f2e6cf; font-weight:600; }
-.sm-ix-hint span { color:#9c9182; }
 /* The work-queue tell ([[074]]): "planting 6 more…" while the farmer works a queued row, so
    him marching off is legible as the gesture still running. Bottom-CENTRE — the top centre
    is the hint strip's and the corners are the HUD's — and amber-bordered because it reports
@@ -196,10 +191,8 @@ export class InputChrome {
   private band: HTMLElement | null = null;
   private chev: HTMLElement | null = null;
   private tag: HTMLElement | null = null;
-  private hint: HTMLElement | null = null;
   private tell: HTMLElement | null = null;
 
-  private lastHintKey = '';
   private lastTellText: string | null = null;
   /** One div per tile of a non-rectangular band, grown on demand and reused. */
   private readonly cells: HTMLElement[] = [];
@@ -229,19 +222,16 @@ export class InputChrome {
     chev.className = 'sm-ix-chev';
     const tag = document.createElement('div');
     tag.className = 'sm-ix-tag';
-    const hint = document.createElement('div');
-    hint.className = 'sm-ix-hint';
     const tell = document.createElement('div');
     tell.className = 'sm-ix-tell';
 
-    root.append(band, chev, tag, hint, tell);
+    root.append(band, chev, tag, tell);
     this.container.appendChild(root);
 
     this.root = root;
     this.band = band;
     this.chev = chev;
     this.tag = tag;
-    this.hint = hint;
     this.tell = tell;
   }
 
@@ -251,7 +241,6 @@ export class InputChrome {
     this.band = null;
     this.chev = null;
     this.tag = null;
-    this.hint = null;
     this.tell = null;
     this.lastTellText = null;
     // The signs and cells are children of `root` and go with it, but the arrays must not
@@ -548,31 +537,6 @@ export class InputChrome {
     this.deedSigns[index] = sign;
     this.deedText[index] = '';
     return sign;
-  }
-
-  // --- the hint strip ------------------------------------------------------------------
-
-  /**
-   * `rotates` is the fix for work item 052's fourth instruction: the strip promised "R rotate"
-   * in every context this game has, including the ones where R does nothing at all, which is
-   * why the feature read as broken rather than as absent. The caller decides — it is the only
-   * layer that knows both what is armed and what is under the cursor — and the flag is part of
-   * the cache key, or the strip would keep the first answer it ever gave.
-   */
-  setHint(tool: ToolMode, zoom: number, rotates: boolean): void {
-    const hint = this.hint;
-    if (hint === null) return;
-    const key = `${tool}:${zoom}:${rotates ? 1 : 0}`;
-    if (key === this.lastHintKey) return;
-    this.lastHintKey = key;
-
-    const info = TOOL_INFO[tool];
-    const keys = ['wheel or +/-', 'B build', rotates ? 'R rotate' : '', 'Esc cancel'].filter(
-      (part) => part !== '',
-    );
-    hint.innerHTML =
-      `<b>${escapeHtml(info.label)}</b> <span>${escapeHtml(info.hint)}</span><br>` +
-      `<span>${zoom}× zoom · ${keys.join(' · ')}</span>`;
   }
 
   // --- the work-queue tell ([[074]]) ----------------------------------------------------

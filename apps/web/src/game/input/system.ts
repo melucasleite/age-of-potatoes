@@ -151,7 +151,6 @@ export class InputSystem {
     // The first-run pointers stand on the world exactly as the deed signs do, and retire
     // themselves by reading the same projection — see `first-run.ts` for the gates.
     this.chrome.setGuideSigns(firstRunSigns(view));
-    this.chrome.setHint(tool, this.host.camera.transform.zoom, this.pointer.rotateAdvertised(tool));
     // The work-queue tell ([[074]]): "planting 6 more…" while the farmer marches the row,
     // the pause reason while the can is dry, one brief "already soaked" ([[081]]).
     this.chrome.setQueueTell(this.pointer.queueTell());
