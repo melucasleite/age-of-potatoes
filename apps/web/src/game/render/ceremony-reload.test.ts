@@ -55,10 +55,19 @@ function worldWithPouredSprinkler(): WorldState {
   expect(sprinkler).toBeDefined();
 
   // Stand beside it and fill the barrel from the pond — the assisted tier's own verbs.
+  //
+  // THE REFILL IS PROVEN BY THE LEDGER, NOT BY THE BARREL, and that changed with item 086.
+  // The barrel holds ten charges now rather than twenty-four, and the head's cooldown is zero
+  // on the tick it is filled — so the fill and the first full cycle land in the same `step()`,
+  // and ten dry tiles under a 5×5 patch drink every drop of it before this line is reached.
+  // `tankMl === 0` here is the feature working, not the refill failing. What actually says the
+  // pond was tapped is `waterDrawnMl`, which is the one place water is counted leaving a
+  // source (item 028), and it cannot be moved by anything else in this fixture.
   state.player.xSub = tileCentreSubtiles(8);
   state.player.ySub = tileCentreSubtiles(12);
+  const drawnBefore = state.stats.waterDrawnMl;
   tick(state, [{ type: 'RefillHopper', machineId: sprinkler!.id }]);
-  expect(sprinkler!.tankMl).toBeGreaterThan(0);
+  expect(state.stats.waterDrawnMl).toBeGreaterThan(drawnBefore);
 
   // Let it reach its first pour. A generous ceiling, and a hard stop if the machine never
   // waters — a sprinkler that cannot pour would make every assertion below vacuous.

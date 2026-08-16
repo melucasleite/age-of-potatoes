@@ -1315,11 +1315,28 @@ function machineStatus(view: WorldView, m: MachineView): string {
   const vehicle = vehicleStatus(view, m);
   if (vehicle !== null) return vehicle;
 
-  // The harvester dock's shelf, in words: item and count, which is the card half of item
+  // The harvester dock's shelves, in words: item and count, which is the card half of item
   // 083's counter. Answered above the lamp switch for the same reason the vehicles are —
   // a dock has no work cycle, so the lamp's grammar has nothing to say about a full shed.
-  if (m.kind === MachineKind.HarvesterDock && m.cargoCount > 0 && m.cargoItem !== 0) {
-    return `${name} — ${m.cargoCount} ${itemName(m.cargoItem)} on the shelf`;
+  //
+  // BOTH SHELVES SINCE ITEM 088, because a dock has two now: produce on one, the seeds the
+  // robot brought back on the other. The seed line is a genuine diagnostic rather than a
+  // decoration — a seed shelf filling up is why an otherwise healthy harvester eventually
+  // stops, and a player who cannot read it has no way to find out. Verified as missing before
+  // it was added: the pip and the hopper column above are driven from the produce pair alone
+  // and were never going to pick a second shelf up on their own.
+  if (m.kind === MachineKind.HarvesterDock) {
+    const shelved = m.cargoCount > 0 && m.cargoItem !== 0;
+    const seeded = m.seedShelfCount > 0 && m.seedShelfItem !== 0;
+    if (shelved && seeded) {
+      return `${name} — ${m.cargoCount} ${itemName(m.cargoItem)} and ${m.seedShelfCount} ${itemName(
+        m.seedShelfItem,
+      )} on the shelves`;
+    }
+    if (shelved) return `${name} — ${m.cargoCount} ${itemName(m.cargoItem)} on the shelf`;
+    if (seeded) {
+      return `${name} — ${m.seedShelfCount} ${itemName(m.seedShelfItem)} on the seed shelf`;
+    }
   }
 
   switch (m.lamp) {

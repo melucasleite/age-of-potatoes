@@ -426,9 +426,22 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   layers.beltItems.attach(beltItems.container);
 
   const grabbers = new GrabberLayer(art, itemPage, (visual) => {
-    contentRoot.addChild(visual.base, visual.hand, visual.cargo, visual.lamp);
-    layers.machines.attach(visual.base);
-    layers.player.attach(visual.hand);
+    // Added in the order they stack: the housing sits under the linkage, the linkage under
+    // the claw, and the cargo on top of the jaws that are holding it ([[094]]).
+    contentRoot.addChild(
+      visual.mount,
+      visual.upper,
+      visual.fore,
+      visual.clawUpper,
+      visual.clawLower,
+      visual.cargo,
+      visual.lamp,
+    );
+    layers.machines.attach(visual.mount);
+    layers.player.attach(visual.upper);
+    layers.player.attach(visual.fore);
+    layers.player.attach(visual.clawUpper);
+    layers.player.attach(visual.clawLower);
     layers.player.attach(visual.cargo);
     // The lamp goes on `worldUi` with every other status light, ABOVE the arm's own hand.
     // A readout the machine can swing in front of is a readout you have to wait for.

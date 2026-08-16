@@ -910,25 +910,39 @@ function beltTile(bed: number, rail: number, shadow: number): Paint {
 }
 
 /**
- * A grabber tier's procedural body: mounting plate, tier-hued pivot, arm reaching east
- * into a two-finger claw. Every rectangle mirrors about the horizontal midline (row 8),
- * which is the property the real frames assert at build time and rotation relies on.
+ * A grabber tier's procedural body: housing, tier-hued core, shaft reaching east into a
+ * two-finger claw. Every rectangle mirrors about the horizontal midline (row 8), which is
+ * the property the real frames assert at build time and rotation relies on.
+ *
+ * ── THE COLUMNS ARE A CONTRACT, NOT A COMPOSITION ([[094]]) ────────────────────────────
+ *
+ * `grabbers.ts` does not draw this tile. It CUTS it into housing (0–6), shaft (7–10) and
+ * claw (11–15) and reassembles the pieces as a jointed arm that sweeps. Those three columns
+ * are exactly where the authored `grabber_mk1` / `grabber_mk2` / `grabber_long` frames put
+ * their own opaque pixels, so one slice table serves the atlas and the grey-box build alike.
+ * Move a rectangle across a boundary here and a build with no art gets an arm chopped in the
+ * wrong place — which is why `ARM_SLICE` is pinned against this paint in `grabbers.test.ts`.
+ *
+ * The shaft is drawn UNIFORM along its length apart from the tier ticks, because it is
+ * stretched to the arm's reach at draw time and anything with structure across x would smear.
  */
 function grabberBodyTile(pivot: number, ticks: number): Paint {
   return (g) => {
-    g.rect(2, 4, 8, 8).fill(PALETTE.metalDark);
-    g.rect(3, 6, 5, 4).fill(PALETTE.metal);
-    g.rect(4, 7, 2, 2).fill(pivot);
-    // The arm, along the midline, wearing the tier's tick count.
-    g.rect(8, 7, 5, 2).fill(PALETTE.metal);
+    // Housing: columns 0–6, rows 4–11.
+    g.rect(0, 4, 7, 8).fill(PALETTE.metalDark);
+    g.rect(1, 6, 5, 4).fill(PALETTE.metal);
+    g.rect(2, 7, 2, 2).fill(pivot);
+    // Shaft: columns 7–10, rows 6–9. Dark rails top and bottom, bright core along the midline.
+    g.rect(7, 6, 4, 4).fill(PALETTE.metalDark);
+    g.rect(7, 7, 4, 2).fill(PALETTE.metal);
     for (let i = 0; i < ticks; i++) {
-      g.rect(8 + i * 2, 7, 1, 2).fill(pivot);
+      g.rect(7 + i, 7, 1, 2).fill(pivot);
     }
-    // The claw: two fingers open toward the pickup tile on the east edge.
-    g.rect(12, 5, 3, 2).fill(PALETTE.metalDark);
-    g.rect(12, 9, 3, 2).fill(PALETTE.metalDark);
-    g.rect(14, 4, 1, 2).fill(PALETTE.metalDark);
-    g.rect(14, 10, 1, 2).fill(PALETTE.metalDark);
+    // Claw: columns 11–15, rows 4–11. A C opening east — back bar, then a jaw either side of
+    // the midline, so a split at row 8 gives two halves that can close on each other.
+    g.rect(11, 4, 2, 8).fill(PALETTE.metalDark);
+    g.rect(13, 4, 3, 2).fill(PALETTE.metalDark);
+    g.rect(13, 10, 3, 2).fill(PALETTE.metalDark);
   };
 }
 
