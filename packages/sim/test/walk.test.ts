@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   type WorldState,
+  CAN_CHARGES_MAX,
   Direction,
   IntentAction,
   createWorld,
@@ -17,8 +18,9 @@ import {
   hashState,
   step,
   toPayload,
+  waterAtSubtile,
 } from '../src/index';
-import { POND_ORIGIN_X, POND_ORIGIN_Y } from '../src/data';
+import { POND_ORIGIN_X, POND_ORIGIN_Y, POND_TILES_HIGH, POND_TILES_WIDE } from '../src/data';
 import { SUBTILE, tileCentreSubtiles } from '../src/units';
 
 const HAND_REACH_SUBTILES = 384;
@@ -140,6 +142,113 @@ describe('the no-op walk errand', () => {
     expect(state.player.intent).not.toBeNull();
     finishIntent(state);
     expect(withinReach(state, 7, 7)).toBe(true);
+  });
+});
+
+// --- item 080: the pond is not a floor ------------------------------------------------
+//
+// Nobody walks on water. WASD stops at the shore the way it stops at the world edge, an
+// errand whose straight line meets the pond stops at the bank and lets go (no pathing —
+// item 050's doctrine stands; the player routes around by hand), and the refill errand
+// keeps working because it aims at the bank-side reach, never at a wet footstep.
+
+describe('the pond is not a floor (item 080)', () => {
+  const pondWest = POND_ORIGIN_X; // 12
+  const pondNorth = POND_ORIGIN_Y; // 13
+  const pondEast = POND_ORIGIN_X + POND_TILES_WIDE - 1; // 14
+  const pondSouth = POND_ORIGIN_Y + POND_TILES_HIGH - 1; // 15
+
+  function standOn(state: WorldState, tileX: number, tileY: number): void {
+    state.player.xSub = tileCentreSubtiles(tileX);
+    state.player.ySub = tileCentreSubtiles(tileY);
+  }
+
+  function holdDirection(state: WorldState, dir: Direction, ticks: number): void {
+    step(state, { tick: state.tick, commands: [{ type: 'SetMoveDirection', dir }] });
+    stepEmpty(state, ticks);
+  }
+
+  it('stops WASD at the shore from every direction, on the last dry subtile', () => {
+    // Four approaches, four banks. 40 ticks at ~51 subtiles a tick is several tiles of
+    // travel — more than enough to hit the water if it were still a floor.
+    const east = createWorld(80);
+    standOn(east, pondWest - 1, pondNorth + 1);
+    holdDirection(east, Direction.East, 40);
+    expect(east.player.xSub).toBe(pondWest * SUBTILE - 1);
+    expect(waterAtSubtile(east, east.player.xSub, east.player.ySub)).toBe(false);
+
+    const west = createWorld(80);
+    standOn(west, pondEast + 1, pondNorth + 1);
+    holdDirection(west, Direction.West, 40);
+    expect(west.player.xSub).toBe((pondEast + 1) * SUBTILE);
+    expect(waterAtSubtile(west, west.player.xSub, west.player.ySub)).toBe(false);
+
+    const south = createWorld(80);
+    standOn(south, pondWest + 1, pondNorth - 1);
+    holdDirection(south, Direction.South, 40);
+    expect(south.player.ySub).toBe(pondNorth * SUBTILE - 1);
+    expect(waterAtSubtile(south, south.player.xSub, south.player.ySub)).toBe(false);
+
+    const north = createWorld(80);
+    standOn(north, pondWest + 1, pondSouth + 1);
+    holdDirection(north, Direction.North, 40);
+    expect(north.player.ySub).toBe((pondSouth + 1) * SUBTILE);
+    expect(waterAtSubtile(north, north.player.xSub, north.player.ySub)).toBe(false);
+  });
+
+  it('lets a player already standing on water walk off it — never trapped', () => {
+    // The legacy-save escape: a world saved before the pond was solid can come back with
+    // the farmer mid-pond. Blocking would trap them forever; walking off must work.
+    const state = createWorld(81);
+    standOn(state, pondWest + 1, pondNorth + 1); // The middle of the pond.
+    expect(waterAtSubtile(state, state.player.xSub, state.player.ySub)).toBe(true);
+    holdDirection(state, Direction.East, 60);
+    expect(waterAtSubtile(state, state.player.xSub, state.player.ySub)).toBe(false);
+  });
+
+  it('stops an errand at the bank when its straight line crosses the pond, without livelock', () => {
+    // Clicking a far tile whose straight line crosses the pond: the walk stops at the
+    // water's edge like it stops at any blocked step, and the errand ends there — quietly,
+    // immediately, not after a timeout. Routing around is the player's job (item 050).
+    const state = createWorld(82);
+    standOn(state, 2, pondNorth + 1);
+    step(state, { tick: state.tick, commands: [walkCommand(pondEast + 1, pondNorth + 1)] });
+    expect(state.player.intent).not.toBeNull();
+
+    const walked = finishIntent(state);
+    // Ends at the shore on its own, well inside the errand timeout — not a livelock.
+    expect(walked).toBeLessThan(200);
+    expect(waterAtSubtile(state, state.player.xSub, state.player.ySub)).toBe(false);
+    // Stopped WEST of the pond: the line was never walked through the water.
+    expect(state.player.xSub).toBeLessThan(pondWest * SUBTILE);
+    expect(withinReach(state, pondEast + 1, pondNorth + 1)).toBe(false);
+  });
+
+  it('still refills the can from the bank — the shore remains exactly reachable', () => {
+    // The care-list item: `reservoirWithinReach` and `nearestPointOfReservoir` aim the walk
+    // at the bank, and arrival-by-reach (384 subtiles) always lands before a wet footstep
+    // (~51 subtiles) could. Walk TO the bank, never INTO the water.
+    const state = createWorld(83);
+    standOn(state, 2, 2);
+    state.player.canCharges = 0;
+    step(state, {
+      tick: state.tick,
+      commands: [
+        {
+          type: 'WalkAndAct',
+          action: IntentAction.RefillCan,
+          tileX: pondWest - 1,
+          tileY: pondNorth,
+          item: 0,
+          count: 0,
+        },
+      ],
+    });
+    expect(state.player.intent).not.toBeNull();
+
+    finishIntent(state);
+    expect(state.player.canCharges).toBe(CAN_CHARGES_MAX);
+    expect(waterAtSubtile(state, state.player.xSub, state.player.ySub)).toBe(false);
   });
 });
 

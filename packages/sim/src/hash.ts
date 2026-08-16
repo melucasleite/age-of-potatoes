@@ -462,6 +462,8 @@ export function hashStateUint32(state: WorldState): number {
   d.num(stats.ticksSinceManualTouch);
   d.num(stats.longestHandsFreeTicks);
   d.num(stats.longestUntouchedMachineTicks);
+  // Item 075: a world that cheated carries the fact in its digest — see `WorldStats.cheatsUsed`.
+  d.num(stats.cheatsUsed);
   d.num(stats.netWorthSamples.length);
   for (let i = 0; i < stats.netWorthSamples.length; i++) {
     d.num(stats.netWorthSamples[i]!);
@@ -699,6 +701,7 @@ export function findNonIntegerFields(state: WorldState): string[] {
   check('stats.automatedGrossCents', stats.automatedGrossCents);
   check('stats.waterDrawnMl', stats.waterDrawnMl);
   check('stats.repairKitSpendCents', stats.repairKitSpendCents);
+  check('stats.cheatsUsed', stats.cheatsUsed);
   check('stats.netWorthCents', stats.netWorthCents);
   check('stats.peakNetWorthCents', stats.peakNetWorthCents);
   for (let i = 0; i < stats.netWorthSamples.length; i++) {

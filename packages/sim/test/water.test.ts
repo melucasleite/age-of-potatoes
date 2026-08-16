@@ -253,10 +253,18 @@ describe('the watering can', () => {
     expect(state.player.canCharges).toBe(CAN_CHARGES_MAX);
   });
 
-  it('spends one charge per pour and refuses the ninth as a gentle no-op', () => {
+  it('holds twenty pours — the owner’s number, over plan §3’s eight', () => {
+    // Owner ruling 2026-08-15 (item 073). Recorded as an equality so a retune is a decision.
+    expect(CAN_CHARGES_MAX).toBe(20);
+  });
+
+  it('spends one charge per pour and refuses the twenty-first as a gentle no-op', () => {
     const state = createWorld(15);
     standOn(state, 6, 6);
     for (let i = 0; i < CAN_CHARGES_MAX; i++) {
+      // Dry the tile between pours: since item 081 a fully saturated tile REFUSES, and on
+      // slow-draining soil a back-to-back pour would meet exactly that refusal.
+      tileAt(state, 6, 6)!.moisture = 0;
       run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
     }
     expect(state.player.canCharges).toBe(0);
@@ -326,10 +334,11 @@ describe('the watering can', () => {
 // --- the pour signal (item 064) ------------------------------------------------------
 
 describe('the pour signal', () => {
-  it('acknowledges a pour on an already-saturated tile, where the moisture diff is blind', () => {
-    // The case this signal exists for: the clamp produces no moisture rise, the charge is
-    // still spent, and the player is owed droplets and a sound. A renderer inferring pours
-    // from moisture diffs is structurally unable to see this one.
+  it('REFUSES a pour on a fully saturated tile: no charge, no water, no pour signal', () => {
+    // Owner ruling 2026-08-15 (item 081), knowingly superseding item 064's "the saturated
+    // pour plays full feedback": the pour does not happen at all. The anti-silence guarantee
+    // 064 bought now lives in the input layer's refusal tell, which reads the reason off the
+    // view (moisturePermille at 1000) exactly as the empty-can refusal reads canCharges.
     const state = createWorld(17);
     standOn(state, 6, 6);
     stepMany(state, 5); // Off tick 0, where a recorded pour and "never" share a value.
@@ -339,16 +348,37 @@ describe('the pour signal', () => {
     const firstPour = tile.lastPouredTick;
     expect(firstPour).toBeGreaterThan(0);
 
-    tile.moisture = MOISTURE_MAX; // Saturate: the next pour cannot raise anything.
+    tile.moisture = MOISTURE_MAX; // Saturate: the next pour has nothing to give this tile.
+    const charges = state.player.canCharges;
+    const touches = state.stats.touches.handWater;
+    const traceLength = state.trace.length;
+    const drawn = state.stats.waterDrawnMl;
+    run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
+    // Refused, house semantics: nothing spent, nothing drawn, nothing marked, no trace entry.
+    expect(state.player.canCharges).toBe(charges);
+    expect(state.stats.touches.handWater).toBe(touches);
+    expect(state.trace.length).toBe(traceLength);
+    expect(state.stats.waterDrawnMl).toBe(drawn);
+    expect(tile.lastPouredTick).toBe(firstPour);
+  });
+
+  it('still pours and clamps one point below max — only a tile with nothing to gain refuses', () => {
+    // The refusal is exact: a 999-out-of-1000 tile takes the pour, costs the charge, and
+    // clamps to max. No overwatering is possible, and no near-full tile is refused.
+    const state = createWorld(19);
+    standOn(state, 6, 6);
+    stepMany(state, 5);
+
+    const tile = tileAt(state, 6, 6)!;
+    tile.moisture = MOISTURE_MAX - 1;
     const charges = state.player.canCharges;
     run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
     expect(state.player.canCharges).toBe(charges - 1);
-    // Soaked, minus the same tick's drain — up to 2 points on sand (1500‰ of 1). The pour
-    // itself raised nothing; that is the whole premise.
+    // Soaked, minus the same tick's drain — up to 2 points on sand (1500‰ of 1).
     expect(tile.moisture).toBeGreaterThanOrEqual(MOISTURE_MAX - 2);
-    expect(tile.lastPouredTick).toBeGreaterThan(firstPour);
+    expect(tile.lastPouredTick).toBe(state.tick - 1);
 
-    // And the view carries it, per tile, in the same row-major order as every field column.
+    // And the view carries the pour signal, per tile, in row-major field order.
     const projected = view(state, createWorldView());
     const idx =
       (6 - projected.field.originY) * projected.field.tilesWide + (6 - projected.field.originX);

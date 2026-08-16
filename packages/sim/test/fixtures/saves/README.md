@@ -169,6 +169,8 @@ clock at all and time does not pass when nobody is playing.
 
 | `format-12.json` | 12 | 2026-08-13, `v0.5.0` | Seed 812812, tick 11,000. The first save with the **eight-pour can** and the **receipt ledgers** in it, caught mid-morning of its second day: the can run EMPTY (the refusal state is the one worth pinning), a fresh crop watered and growing, one `salesByItem` row with its day snapshots taken at the first dawn, the short birth hour already closed in `hours`, and the open hour's mark counting from tick 8,400. |
 
+| `format-14.json` | 14 | 2026-08-15, `v0.5.0` | Seed 750750, tick 700. The first save with a **cheat** in it: `stats.cheatsUsed: 1`, the full 32-node unlock list, $99,650 in cash and two owned parcels on a tick-700 world — a combination no un-cheated save can carry — plus a tech-gated Pump on the pond's north bank, bought with conjured money. |
+
 The 11 → 12 migration adds the can's charge counter to the player and the sales/hour ledgers
 to the stats, and translates almost nothing: the can arrives **full** (an infinite can and a
 full one are indistinguishable at the moment of loading), and the ledgers arrive **empty** —
@@ -177,3 +179,14 @@ invent history. The one computed value is `dawnsSeen`, derived from the saved ti
 frozen calendar constants so that loading is never mistaken for a dawn. The open hour's mark
 is taken at the load tick with the saved lifetime accumulators as its starting line, so the
 first bucket a migrated world closes contains only what happened after the load.
+
+`format-14.json` was recorded by `scripts/record-format-14.ts` (2026-08-15, item 075): a
+scripted session that plays two honest gardener beats, asserts that the unknown code `xyzzy`
+leaves NO trace entry, then applies `klapaucius` and spends the proceeds where the save can
+prove they were real — a Pump on the pond's bank and a second parcel's deed, both unreachable
+at tick ~52 by honest play. Every command in the session is one the sim actually accepted.
+
+The 13 → 14 migration adds `stats.cheatsUsed` and translates nothing: **zero, honestly** — no
+format-13 world could have applied a `Cheat` command, because the command did not exist. (The
+same wave widened the can from 8 to 20 pours with NO migration at all: a saved charge count
+merely loads as a partly full can under the raised cap, per the item-073 owner ruling.)

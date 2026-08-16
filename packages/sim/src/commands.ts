@@ -658,9 +658,35 @@ export interface WalkAndActCommand {
   count: number;
 }
 
+// --- cheats -----------------------------------------------------------------------------
+
+/**
+ * Enter a cheat code (item 075).
+ *
+ * **A CHEAT IS A COMMAND, AND THAT IS THE DETERMINISM RULE, NON-NEGOTIABLE.** It mutates world
+ * state, so it enters the trace, the save, and the hash like any other command — a debug panel
+ * that poked `moneyCents` directly would make seed + trace stop being a complete description
+ * of a session, and every replay and golden fixture would silently diverge. There are no debug
+ * buttons; there is this.
+ *
+ * ONE CODE-CARRYING COMMAND rather than a `CheatGrantMoney` + `CheatUnlockAllTech` pair, so a
+ * future cheat is one branch in the reducer rather than a new command shape each time. The
+ * reducer owns the code table: `klapaucius` grants $100,000 and unlocks every tech node, and
+ * an UNKNOWN code is a refused no-op that never enters the trace — exactly the house refusal
+ * semantics, so a typo in the console leaves no mark on the world or its log.
+ *
+ * Every application bumps the hashed `WorldStats.cheatsUsed`, so surfaces that care (personal
+ * bests, future leaderboards — "fun, lightly validated") can annotate honestly.
+ */
+export interface CheatCommand {
+  type: 'Cheat';
+  code: string;
+}
+
 export type Command =
   | SetMoveDirectionCommand
   | WalkAndActCommand
+  | CheatCommand
   | TillTileCommand
   | WaterTileCommand
   | RefillCanCommand

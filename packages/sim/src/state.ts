@@ -341,8 +341,8 @@ export interface PlayerState {
   towedCartId: number;
 
   /**
-   * Pours left in the watering can, 0..`CAN_CHARGES_MAX` (8 — plan §3's ladder, restored by
-   * the 2026-08-13 ruling on item 009).
+   * Pours left in the watering can, 0..`CAN_CHARGES_MAX` (20 — owner ruling 2026-08-15,
+   * item 073, overriding plan §3's ladder and the 2026-08-13 restoration of it).
    *
    * ON THE PLAYER BECAUSE THE CAN IS THE PLAYER'S HAND, not a machine: it has no position, no
    * condition, and no id — one integer is its entire state. Watering spends one; `RefillCan`

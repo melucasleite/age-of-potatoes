@@ -39,6 +39,7 @@ import {
   type BuyDeedCommand,
   type BuyItemCommand,
   type CancelContractCommand,
+  type CheatCommand,
   type Command,
   type CreateContractCommand,
   type CreateZoneCommand,
@@ -150,7 +151,7 @@ import {
 } from './data';
 import { advanceBelts, advanceGrabbers, advanceJunctions } from './belts';
 import { advanceBots, bayPartCount, dockWantedSeed } from './bots';
-import { stepToward } from './movement';
+import { StepOutcome, stepToward } from './movement';
 import {
   advanceCommerce,
   cartRoomFor,
@@ -242,6 +243,7 @@ import {
   reservoirAdjacentToTile,
   reservoirWithinReach,
   takeWater,
+  waterAtSubtile,
 } from './water';
 import {
   type ManualTouchKind,
@@ -252,7 +254,15 @@ import {
   recordSale,
   recordSpend,
 } from './stats';
-import { TechId, hasTech, milestoneMet, insertUnlocked, prerequisitesMet, techNode } from './tech';
+import {
+  TECH_NODES,
+  TechId,
+  hasTech,
+  milestoneMet,
+  insertUnlocked,
+  prerequisitesMet,
+  techNode,
+} from './tech';
 import {
   acceptsUpgrades,
   effectiveInputCapacity,
@@ -405,6 +415,8 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applyUpgradeMachine(state, command);
     case 'ResearchTech':
       return applyResearchTech(state, command);
+    case 'Cheat':
+      return applyCheat(state, command);
     case 'BuyDeed':
       return applyBuyDeed(state, command);
     case 'LoadCart':
@@ -617,8 +629,8 @@ function applyTillTile(state: WorldState, command: TillTileCommand): boolean {
 /**
  * Pour the can on one tile. One pour is one charge of `CAN_CHARGES_MAX` (item 009, restored
  * by the 2026-08-13 ruling: plan §4's bold clause — "the watering can always fills at any
- * shore at any level" — governs the REFILL, which never fails; the can itself holds 8 pours,
- * §3's ladder, and "refill the can" is a beat of §2's Gardener circuit).
+ * shore at any level" — governs the REFILL, which never fails; the can itself holds 20 pours
+ * since item 073's owner ruling, and "refill the can" is a beat of §2's Gardener circuit).
  *
  * AN EMPTY CAN REFUSES, GENTLY. Nothing is spent, nothing is lost, nothing is punished — the
  * pour simply does not happen, exactly as a plant with no seeds does not. The HUD reads
@@ -627,22 +639,35 @@ function applyTillTile(state: WorldState, command: TillTileCommand): boolean {
  * THE WATER IS DRAWN AT THE REFILL, NOT AT THE POUR. `applyRefillCan` is where the can dips
  * into a reservoir through `takeWater()` — one draw of what the can actually takes — so a
  * pour here moves no reservoir and books no `waterDrawnMl`; that water was already counted
- * when it entered the can. (The starting can's eight pours were filled at home and are the
+ * when it entered the can. (The starting can's twenty pours were filled at home and are the
  * one canful the Dry County meter never sees.)
  *
  * Nothing else about the can changed: still free, still indestructible, still no cooldown and
  * no bonus (plan §1, and §7 ruling 8 bans "trusty tool" bonuses in the other direction), and
- * pouring on an already-wet tile still clamps at no cost — you cannot overwater (§2).
+ * pouring on a NEARLY-wet tile still clamps at no cost above the clamp — you cannot
+ * overwater (§2).
+ *
+ * A FULLY SATURATED TILE REFUSES, GENTLY (owner ruling 2026-08-15, item 081, knowingly
+ * superseding item 064's "the saturated pour plays full feedback"): no charge is spent, no
+ * water moves, and `lastPouredTick` is NOT marked — feedback on nothing happening is the lie
+ * 064 was fixing, inverted. The anti-silence guarantee moves to a refusal tell in the input
+ * layer, which reads the reason off the view exactly as the empty-can refusal does: the tile's
+ * `moisturePermille` is at 1000 (probe: `moisture === moistureMax`). HAND CAN ONLY — the
+ * barrel sprinkler's sloppiness tax and the Irrigation Hub's sensing are design and unchanged.
+ * One point below max still pours and clamps; only a tile with nothing to gain refuses.
  */
 function applyWaterTile(state: WorldState, command: WaterTileCommand): boolean {
   const tile = tileAt(state, command.tileX, command.tileY);
   if (tile === null) return false;
   if (!withinReachOfTile(state, command.tileX, command.tileY)) return false;
   if (state.player.canCharges <= 0) return false;
+  // House refusal semantics: return false, so nothing is spent, nothing is marked, and the
+  // command never enters the trace — exactly the empty-can refusal one line up.
+  if (tile.moisture >= MOISTURE_MAX) return false;
 
   tile.moisture = MOISTURE_MAX;
-  // The pour signal (item 064): a pour on an already-soaked tile clamps to no moisture rise,
-  // and the renderer's droplets and the pour sound must fire anyway — the charge was spent.
+  // The pour signal (item 064): a pour that lands fires the renderer's droplets and sound,
+  // clamp or no clamp. A REFUSED pour never reaches this line — see the header.
   // Non-hashed presentation data; see `CropTile.lastPouredTick`.
   tile.lastPouredTick = state.tick;
   state.player.canCharges -= 1;
@@ -664,7 +689,7 @@ function applyWaterTile(state: WorldState, command: WaterTileCommand): boolean {
  * so the arm that can water a tile can dip the can, and a walk-to errand that stops "within
  * reach" of the shoreline has arrived. In a world with no reservoir at all the refill
  * succeeds anywhere, because §4's guarantee is about the can, not the pond, and a pondless
- * world must not be a world where farming ends after eight pours. Refused rather than
+ * world must not be a world where farming ends after twenty pours. Refused rather than
  * consumed when the can is already full, which is `UseRepairKit`'s rule: a no-op must not
  * spend a trace entry pretending it did something.
  */
@@ -1647,6 +1672,36 @@ function applyResearchTech(state: WorldState, command: ResearchTechCommand): boo
   return insertUnlocked(state.unlocked, node.id);
 }
 
+/** What `klapaucius` pays: $100,000, in cents. */
+const CHEAT_MONEY_CENTS = 10_000_000;
+
+/**
+ * The cheat table (item 075). One code today, one branch per code forever.
+ *
+ * `klapaucius` grants $100,000 and unlocks EVERY tech node — straight through
+ * `insertUnlocked`, the same sorted-array door `applyResearchTech` uses, so the unlock list
+ * stays hashable and a node already owned inserts nothing. An unknown code is a refused
+ * no-op: false out of here means no trace entry, which is exactly what a typo deserves.
+ *
+ * THE MONEY IS CONJURED, NOT EARNED — deliberately no `recordEarnings` and no
+ * `recordSpend`. First Ten and Dry County read lifetime *earnings*, and a cheat that
+ * credited the ledger would fake the boards it feeds; the cash simply appears, net worth
+ * follows on the next tick's recompute, and the hashed `cheatsUsed` counter is what lets any
+ * surface that cares annotate the session honestly. Milestones and prerequisites are
+ * BYPASSED on purpose: a cheat that had to qualify for the Corporate Charter would not be a
+ * cheat, and the owner asked for all of it.
+ */
+function applyCheat(state: WorldState, command: CheatCommand): boolean {
+  if (command.code !== 'klapaucius') return false;
+
+  state.moneyCents += CHEAT_MONEY_CENTS;
+  for (let i = 0; i < TECH_NODES.length; i++) {
+    insertUnlocked(state.unlocked, TECH_NODES[i]!.id);
+  }
+  state.stats.cheatsUsed += 1;
+  return true;
+}
+
 // --- land -------------------------------------------------------------------------
 
 /**
@@ -2191,6 +2246,8 @@ function advancePlayer(state: WorldState): void {
     return;
   }
 
+  const fromXSub = player.xSub;
+  const fromYSub = player.ySub;
   if (player.moveDir === Direction.North) player.ySub -= stepSub;
   else if (player.moveDir === Direction.South) player.ySub += stepSub;
   else if (player.moveDir === Direction.West) player.xSub -= stepSub;
@@ -2198,6 +2255,29 @@ function advancePlayer(state: WorldState): void {
 
   player.xSub = clampInt(player.xSub, 0, WORLD_TILES_WIDE * SUBTILE - 1);
   player.ySub = clampInt(player.ySub, 0, WORLD_TILES_HIGH * SUBTILE - 1);
+
+  // NOBODY WALKS ON WATER (item 080). A held direction stops at the shore the way it stops at
+  // the world edge: the step is clamped back to the last dry subtile before the wet tile, so
+  // the farmer stands ON the bank — exactly reachable for the refill — and never in the pond.
+  // The one softening: a player already standing on water (a save from before the pond was
+  // solid) walks freely so they can get off it, which is the same escape `stepToward` allows.
+  if (
+    waterAtSubtile(state, player.xSub, player.ySub) &&
+    !waterAtSubtile(state, fromXSub, fromYSub)
+  ) {
+    const wetTileX = divFloor(player.xSub, SUBTILE);
+    const wetTileY = divFloor(player.ySub, SUBTILE);
+    if (player.moveDir === Direction.North) player.ySub = (wetTileY + 1) * SUBTILE;
+    else if (player.moveDir === Direction.South) player.ySub = wetTileY * SUBTILE - 1;
+    else if (player.moveDir === Direction.West) player.xSub = (wetTileX + 1) * SUBTILE;
+    else player.xSub = wetTileX * SUBTILE - 1;
+    // A tick's step (~51 subtiles) cannot cross a whole tile (256), so one clamp lands dry —
+    // but a guard against a future speed retune is cheaper than the bug it would cause.
+    if (waterAtSubtile(state, player.xSub, player.ySub)) {
+      player.xSub = fromXSub;
+      player.ySub = fromYSub;
+    }
+  }
   dragTowedCart(state);
 }
 
@@ -2287,18 +2367,24 @@ function advanceErrand(state: WorldState, intent: PlayerIntent): void {
 
   // 4. Still walking.
   //
-  // STRAIGHT AT IT, THROUGH ANYTHING IN THE WAY, AND THROUGH THE ONE MOVER IN THE SIMULATION.
-  // This walk used to be written out here, and it was the only walk there was; item 038 needed
-  // bots to move and item 039 requires its drones to reuse the bots' movement code *verbatim*, so
-  // the arithmetic moved to `movement.ts` and this call is what is left. Nothing about it changed
-  // in the move — the same operations in the same order, so a replay of a pre-bot world walks the
-  // farmer over exactly the same subtiles — and there is now no second implementation to drift.
+  // STRAIGHT AT IT, THROUGH ANYTHING IN THE WAY BUT WATER, AND THROUGH THE ONE MOVER IN THE
+  // SIMULATION. This walk used to be written out here, and it was the only walk there was;
+  // item 038 needed bots to move and item 039 requires its drones to reuse the bots' movement
+  // code *verbatim*, so the arithmetic moved to `movement.ts` and this call is what is left.
+  // Nothing about it changed in the move — the same operations in the same order, so a replay
+  // of a pre-bot world walks the farmer over exactly the same subtiles — and there is now no
+  // second implementation to drift.
   //
-  // Obstacle avoidance is still deliberately absent rather than forgotten: nothing in this world
-  // is solid enough to walk into, so A* would be pathing around obstacles that do not exist. When
-  // something finally blocks a footstep, `stepToward` is the one function that grows a path and
-  // every mover in the game gets it at once.
-  stepToward(player, target.xSub, target.ySub, playerSpeed(state));
+  // A BLOCKED FOOTSTEP IS THE FIFTH ENDING'S QUIET COUSIN (item 080): an errand whose straight
+  // line meets open water stops at the shore and lets go, exactly as one whose target went
+  // stale does. No routing around — the no-pathing doctrine (item 050) stands, and the player
+  // routes around by hand. The refill errand never trips this: it aims at the nearest point of
+  // the water and arrives WITHIN REACH (384 subtiles) long before a footstep (~51 subtiles)
+  // could land wet, because arrival is tested above, before the step.
+  const outcome = stepToward(player, target.xSub, target.ySub, playerSpeed(state), (xSub, ySub) =>
+    waterAtSubtile(state, xSub, ySub),
+  );
+  if (outcome === StepOutcome.Blocked) abandonErrand(player);
 }
 
 /** Drop the errand and the momentum with it. The player stands where they stopped. */

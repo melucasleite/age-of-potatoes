@@ -185,3 +185,47 @@ The barrel sprinkler's tank also grew from 30,000 to 36,000 ml in the same wave 
 a mid-field 5×5 is 24 pours, and a 20-pour barrel would water the same first twenty tiles
 forever) — measured against the fixture set, that change alone moved **no** hashes: no
 recorded session refills a barrel sprinkler.
+
+## 2026-08-15 (wave 11): the solid pond, the polite refusal, the deep can, and the counted cheat
+
+Four sim changes landed in one wave, and every fixture hash moved for at least one of them:
+
+- **Item 073** — `CAN_CHARGES_MAX` 8 → 20 (owner ruling). Every fresh world's hashed
+  `player.canCharges` starts at 20, so ALL nineteen hashes move for this alone. Recorded
+  refills top up a fuller can and draw honestly less; a recorded `RefillCan` on a can the
+  wider cap left full refuses harmlessly (`worn-to-zero` carries three such beats).
+- **Item 075** — the `Cheat` command and the hashed `WorldStats.cheatsUsed` counter (save
+  format 14). The digest gained a field, which moves every hash again. No fixture applies
+  the command — see `GOLDEN_COVERAGE_EXEMPT` in `test/goldens.ts` for why, and what pins it
+  instead.
+- **Item 081** — a fully saturated tile now refuses the hand pour: no charge, no pour
+  signal, no trace entry. Recorded pours that land on a tile at exactly `MOISTURE_MAX`
+  replay as deterministic refusals, spending nothing.
+- **Item 080** — nobody walks on water. A divergence detector replayed all nineteen
+  fixtures and found six whose sessions held a movement key through the pond's corner
+  (`soda-line`, `rotate-and-box`, `depot-run`, `the-farm`, `worn-to-zero`,
+  `junction-loop`). The farmer now stops at the bank, ends those runs displaced, and every
+  errand walked from the displaced spot takes a different number of ticks.
+
+What each diverger needed, on the re-timed-not-replaced precedent:
+
+- **`the-farm`**, **`worn-to-zero`** — nothing but a re-pin: they replay green with their
+  command lists frozen (zero refused beats; worn-to-zero's three full-can refill refusals
+  are item 073's relaxation, kept as recorded refusals).
+- **`depot-run`** — re-timed by re-running the committed `amend-depot-for-armful.ts`
+  machinery against today's sim: the displaced timeline reached its purchases short of
+  money, exactly the armful disease. The hands-off window still contains the runs, the
+  money, and the frozen touch counters, asserted before writing.
+- **`soda-line`**, **`rotate-and-box`**, **`junction-loop`** — re-timed by
+  `scripts/amend-goldens-for-water.ts`, the can amender adapted for water: the same
+  drift-shifted replay, proactive reach walks and refill trips, with every corrective walk
+  SKIRTING the pond (the amender's own dead-reckoning obeys item 080), and deferred arc
+  purchases retried PER-TYPE FIFO so a pipe waiting on a tech node cannot stall the
+  research that legalises it. `soda-line`'s seven pipe beats — dead in the file since the
+  can re-timing recorded them ahead of their deferred research — finally land, and its
+  soda quartet builds again; the amender also buys `logistics-belts`, the prerequisite
+  `hydraulics-soda-mixing` gained in a rebalance after the session was recorded.
+  `rotate-and-box` keeps one unresolved `PlaceMachine` beat as a recorded refusal (its
+  target tile is occupied in the re-timed session); every rotation, upgrade, boxing, and
+  scrap beat the fixture exists to pin landed, and `factory.test.ts`'s watching replay
+  agrees.

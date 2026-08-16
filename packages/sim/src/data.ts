@@ -1387,7 +1387,8 @@ export const FERTILITY_MAX = 3;
 /** One pour from the can. */
 export const HAND_POUR_ML = 2000;
 /**
- * The can holds eight pours (plan §3's ladder, restored by the 2026-08-13 ruling on item 009).
+ * The can holds twenty pours (owner ruling, 2026-08-15, item 073 — overriding plan §3's
+ * "8 pours" figure and the 2026-08-13 restoration of it).
  *
  * §4's bold clause — "the watering can always fills at any shore at any level" — governs
  * REFILL AVAILABILITY, not capacity: `RefillCan` never fails at a shore, at any water level,
@@ -1395,8 +1396,12 @@ export const HAND_POUR_ML = 2000;
  * Gardener circuit rather than a rule nobody meets. Watering on an empty can REFUSES as a
  * gentle no-op — nothing is spent, nothing is punished, and the HUD reads
  * `player.canCharges === 0` as its cue to point at the shore.
+ *
+ * SAVE COMPAT: widening the range needs no format bump — a can saved at 8 under the old cap
+ * simply loads as partly full, and refills at any level are legal. Deliberately NOT topped up
+ * on migrate; leaving it is simpler and honest.
  */
-export const CAN_CHARGES_MAX = 8;
+export const CAN_CHARGES_MAX = 20;
 /** One sprinkler head servicing one tile. Wetting an already-wet tile still costs water. */
 export const SPRINKLER_POUR_ML = 1500;
 

@@ -250,6 +250,7 @@ export {
   reservoirLevelPermille,
   reservoirThrottle,
   takeWater,
+  waterAtSubtile,
 } from './water';
 export {
   BuildRefusal,
@@ -464,7 +465,7 @@ export { BotKind, BotPhase } from './state';
 // --- movement ---------------------------------------------------------------------
 //
 // ONE MOVER, and item 039's drones are required to reuse it verbatim. See `movement.ts`.
-export { resetMomentum, stepToward } from './movement';
+export { StepOutcome, resetMomentum, stepToward } from './movement';
 export type { Mover } from './movement';
 
 // --- Agri-Bots --------------------------------------------------------------------

@@ -204,6 +204,19 @@ export function reservoirAdjacentToTile(
   return best;
 }
 
+/**
+ * Whether a subtile position stands on open water — the movement layer's one question.
+ *
+ * THE PREDICATE ITEM 080 FEEDS TO `stepToward` AND TO THE WASD CLAMP: nobody walks on water.
+ * A position's legality is a fact about the TILE under it, so the shoreline sits exactly at
+ * the tile boundary — the last dry subtile is standable and the first wet one is not, which
+ * is what keeps `reservoirWithinReach` (a reach-radius question) able to put the refill
+ * within arm's length of a farmer standing on the bank.
+ */
+export function waterAtSubtile(state: WorldState, xSub: number, ySub: number): boolean {
+  return reservoirAt(state, divFloor(xSub, SUBTILE), divFloor(ySub, SUBTILE)) !== null;
+}
+
 /** The point of a reservoir's footprint nearest to a position, in subtiles. */
 export function nearestPointOfReservoir(
   reservoir: Reservoir,

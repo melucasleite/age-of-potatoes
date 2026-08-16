@@ -91,6 +91,7 @@ export type FixtureName = (typeof FIXTURE_NAMES)[number];
 export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   SetMoveDirection: true,
   WalkAndAct: true,
+  Cheat: true,
   TillTile: true,
   WaterTile: true,
   RefillCan: true,
@@ -161,6 +162,19 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
  */
 export const GOLDEN_COVERAGE_EXEMPT: ReadonlySet<CommandType> = new Set<CommandType>([
   'SetDockZone',
+
+  /**
+   * `Cheat` — a golden fixture is a canonical honest session, and baking `klapaucius` into
+   * one would make every future fixture-derived comparison a comparison against a cheated
+   * world; the coverage test would pass while pinning a session nobody should be recording.
+   *
+   * **What pins it instead:** the item-075 tests in `sim.test.ts` and `save.test.ts` assert
+   * the exact determinism claim a fixture would — the command round-trips through a save's
+   * trace, and two worlds with the same seed that apply the same cheat on the same tick hash
+   * identically — plus the refusal claim no fixture can hold (an unknown code leaves no trace
+   * entry at all).
+   */
+  'Cheat',
 ]);
 
 /**

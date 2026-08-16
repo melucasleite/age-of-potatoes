@@ -18,6 +18,7 @@ import {
   ItemId,
   LampState,
   MachineKind,
+  TECH_NODES,
   TICKS_PER_IN_GAME_DAY,
   createWorld,
   createWorldView,
@@ -84,7 +85,10 @@ describe('determinism', () => {
     // There is no third option, which is the entire point of the fixture.
     // e97c57ee -> f48076eb with format 13 (item 066): the digest gained the field tiles'
     // coordinates and the soil-memory ledger; the scripted run's behaviour is unchanged.
-    expect(hashState(runScript(1234, 1000))).toBe('f48076eb');
+    // f48076eb -> ea1510a9 in wave 11 (items 073 + 075): the can starts at 20 charges
+    // instead of 8 (`player.canCharges` is hashed), and the digest gained
+    // `stats.cheatsUsed`. The script's behaviour is otherwise unchanged.
+    expect(hashState(runScript(1234, 1000))).toBe('ea1510a9');
   });
 
   it('gives different seeds different worlds', () => {
@@ -455,5 +459,88 @@ describe('the view seam', () => {
     expect(projected.stats.lifetimeNetEarningsCents).toBe(
       projected.stats.lifetimeEarnedCents - projected.stats.lifetimeSpentCents,
     );
+  });
+});
+
+// --- the cheat command (item 075) ---------------------------------------------------
+//
+// A cheat is a COMMAND — it enters the trace, the save, and the hash like any other, which
+// is the only reason a cheated session can still replay. This suite plus the round-trip in
+// `save.test.ts` is what lets `Cheat` sit in `GOLDEN_COVERAGE_EXEMPT`: the determinism claim
+// a fixture would make is asserted here instead.
+
+describe('the cheat command', () => {
+  it('klapaucius grants $100,000 and unlocks every tech node, counting one cheat', () => {
+    const state = createWorld(75);
+    const moneyBefore = state.moneyCents;
+    const earnedBefore = state.stats.lifetimeEarnedCents;
+    const trace = state.trace.length;
+
+    step(state, { tick: state.tick, commands: [{ type: 'Cheat', code: 'klapaucius' }] });
+
+    expect(state.moneyCents).toBe(moneyBefore + 10_000_000);
+    expect(state.unlocked.length).toBe(TECH_NODES.length);
+    for (const node of TECH_NODES) expect(state.unlocked).toContain(node.id);
+    // The unlock list stays sorted — the invariant the hash depends on.
+    expect([...state.unlocked].sort()).toEqual(state.unlocked);
+    expect(state.stats.cheatsUsed).toBe(1);
+    // One trace entry: the cheat is in the log, exactly once, like any applied command.
+    expect(state.trace.length).toBe(trace + 1);
+    expect(state.trace[state.trace.length - 1]!.command.type).toBe('Cheat');
+    // The money was conjured, never earned: First Ten's ledger is not for sale.
+    expect(state.stats.lifetimeEarnedCents).toBe(earnedBefore);
+  });
+
+  it('refuses an unknown code without a trace entry, a counter tick, or any change', () => {
+    // Twin worlds: one is fed the typo, one is fed nothing. If the refusal leaves any mark
+    // at all — a counter, a trace entry, a hashed anything — the twins separate.
+    const typo = createWorld(76);
+    const silent = createWorld(76);
+    stepMany(typo, 3);
+    stepMany(silent, 3);
+
+    step(typo, { tick: typo.tick, commands: [{ type: 'Cheat', code: 'xyzzy' }] });
+    step(silent, { tick: silent.tick, commands: [] });
+
+    expect(typo.trace.length).toBe(silent.trace.length);
+    expect(typo.stats.cheatsUsed).toBe(0);
+    expect(hashState(typo)).toBe(hashState(silent));
+  });
+
+  it('replays deterministically: same seed, same cheat, same hash', () => {
+    const play = (): WorldState => {
+      const state = createWorld(7_500);
+      stepMany(state, 10);
+      step(state, { tick: state.tick, commands: [{ type: 'Cheat', code: 'klapaucius' }] });
+      // Spend the proceeds on something gated, so the unlock is exercised, not just listed.
+      step(state, {
+        tick: state.tick,
+        commands: [{ type: 'PlaceMachine', kind: MachineKind.Pump, tileX: 12, tileY: 12 }],
+      });
+      stepMany(state, 200);
+      return state;
+    };
+
+    const first = play();
+    const second = play();
+    expect(hashState(second)).toBe(hashState(first));
+    expect(first.machines.some((m) => m.kind === MachineKind.Pump)).toBe(true);
+  });
+
+  it('applies twice honestly: money stacks, unlocks stay put, the counter reaches two', () => {
+    const state = createWorld(77);
+    step(state, { tick: state.tick, commands: [{ type: 'Cheat', code: 'klapaucius' }] });
+    const moneyAfterFirst = state.moneyCents;
+    step(state, { tick: state.tick, commands: [{ type: 'Cheat', code: 'klapaucius' }] });
+
+    expect(state.moneyCents).toBe(moneyAfterFirst + 10_000_000);
+    expect(state.unlocked.length).toBe(TECH_NODES.length);
+    expect(state.stats.cheatsUsed).toBe(2);
+  });
+
+  it('publishes the counter on the view, so a surface can annotate a cheated best', () => {
+    const state = createWorld(78);
+    step(state, { tick: state.tick, commands: [{ type: 'Cheat', code: 'klapaucius' }] });
+    expect(view(state, createWorldView()).stats.cheatsUsed).toBe(1);
   });
 });

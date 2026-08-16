@@ -206,6 +206,16 @@ export interface WorldStats {
    */
   salesByItem: ItemSales[];
 
+  /**
+   * Lifetime count of cheat commands that took effect (item 075). HASHED, like every other
+   * accumulator here, and for the same one-way-door reason: the boards are "fun, lightly
+   * validated" (locked decisions), and the honest way to keep them fun is for a world that
+   * typed `klapaucius` to carry the fact in its hash — so a personal best or a future
+   * leaderboard can annotate rather than adjudicate. Refused (unknown) codes count nothing,
+   * because they changed nothing and never entered the trace.
+   */
+  cheatsUsed: number;
+
   /** Closed dawn-aligned hours, oldest first, capped at `HOUR_HISTORY_LIMIT`. */
   hours: ClosedHour[];
 
@@ -255,6 +265,7 @@ export function createStats(): WorldStats {
     longestUntouchedMachineTicks: 0,
     touches: createManualTouchCounts(),
     salesByItem: [],
+    cheatsUsed: 0,
     hours: [],
     hourMark: createHourMark(0, 0),
     dawnsSeen: 0,

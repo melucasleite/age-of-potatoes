@@ -394,6 +394,8 @@ export interface SaveHourMark {
 
 export interface SaveStats {
   automatedGrossCents: number;
+  /** Lifetime cheat commands that took effect (item 075, format 14). Hashed, like the rest. */
+  cheatsUsed: number;
   dawnsSeen: number;
   hourMark: SaveHourMark;
   hours: SaveClosedHour[];
@@ -771,6 +773,7 @@ export function toPayload(state: WorldState): SavePayload {
     soilMemory,
     stats: {
       automatedGrossCents: stats.automatedGrossCents,
+      cheatsUsed: stats.cheatsUsed,
       dawnsSeen: stats.dawnsSeen,
       hourMark: {
         earnedCents: stats.hourMark.earnedCents,
@@ -1592,6 +1595,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     longestUntouchedMachineTicks: int(statsRaw, 'longestUntouchedMachineTicks', 'payload.stats'),
     touches,
     salesByItem,
+    cheatsUsed: int(statsRaw, 'cheatsUsed', 'payload.stats'),
     hours,
     hourMark,
     dawnsSeen: int(statsRaw, 'dawnsSeen', 'payload.stats'),

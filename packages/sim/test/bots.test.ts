@@ -39,8 +39,12 @@ import {
   spawnZone,
   step,
   stepMany,
+  tileAt,
+  tillTile,
   totalManualTouches,
+  waterAtSubtile,
 } from '../src/index';
+import { POND_ORIGIN_X, POND_ORIGIN_Y, POND_TILES_WIDE } from '../src/data';
 
 /** A world with one zone over the first row of the field and a dock bound to it. */
 function farmWithDock(
@@ -307,6 +311,41 @@ describe('bot determinism', () => {
     }
     expect(sawWalking).toBe(true);
     expect(dock.outputCount).toBeGreaterThan(0);
+  });
+});
+
+describe('a bot meeting the pond (item 080)', () => {
+  it('skips a target across the water, stands dry, and never livelocks', () => {
+    // A rolling bot's straight line is allowed to be blocked by the pond — what it is not
+    // allowed to do is walk on it, or spin the tick loop chasing a tile it can never reach.
+    // Dock on the east bank column, one zone tile west of the pond: the line crosses water.
+    const state = createWorld(8080);
+    const zone = spawnZone(state, CropId.RussetPotato);
+    const tilled = tillTile(state, POND_ORIGIN_X - 2, POND_ORIGIN_Y + 1);
+    const tile = tilled ?? tileAt(state, POND_ORIGIN_X - 2, POND_ORIGIN_Y + 1)!;
+    tile.zone = zone.id;
+    const spec = cropSpec(CropId.RussetPotato)!;
+    plantCrop(state, tile, spec);
+    tile.growth = tile.growthTarget;
+
+    const dock = spawnMachine(
+      state,
+      MachineKind.HarvesterDock,
+      POND_ORIGIN_X + POND_TILES_WIDE,
+      POND_ORIGIN_Y + 1,
+    )!;
+    dock.boundZone = zone.id;
+    spawnBot(state, BotKind.Harvester, dock);
+
+    for (let i = 0; i < 2_000; i++) {
+      step(state, { tick: state.tick, commands: [] });
+      const bot = state.bots[0]!;
+      expect(waterAtSubtile(state, bot.xSub, bot.ySub), 'the bot walked on water').toBe(false);
+    }
+    // The tile across the pond was never harvested: the target is skipped like a blocked
+    // one, not fished out of the water. Manual routing (a dock re-site) is the fix, by design.
+    expect(tile.crop).toBe(CropId.RussetPotato);
+    expect(tile.growth).toBe(tile.growthTarget);
   });
 });
 

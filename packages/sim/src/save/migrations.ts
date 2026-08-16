@@ -45,7 +45,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 13;
+export const CURRENT_FORMAT_VERSION = 14;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -921,6 +921,34 @@ const migrateFormat12To13: SaveMigration = (payload) => {
 };
 
 /**
+ * Format 13 → 14: the cheat counter (item 075). `stats.cheatsUsed` joins `WorldStats`,
+ * hashed like every accumulator beside it.
+ *
+ * **ZERO, HONESTLY.** No format-13 world could have applied a `Cheat` command — the command
+ * did not exist — so zero is not a default, it is the truth about every save this migration
+ * will ever touch. Nothing else changes; the can's wider capacity (item 073, shipped in the
+ * same wave) needs no migration at all, because a saved charge count merely loads as a
+ * partly full can under the raised cap.
+ */
+const migrateFormat13To14: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-13 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const statsRaw = p['stats'];
+  if (typeof statsRaw !== 'object' || statsRaw === null || Array.isArray(statsRaw)) {
+    throw new SaveCorruptError('Cannot migrate: `payload.stats` is not an object.');
+  }
+
+  return {
+    ...p,
+    stats: { ...(statsRaw as Record<string, unknown>), cheatsUsed: 0 },
+    version: 14,
+  };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -938,6 +966,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   10: migrateFormat10To11,
   11: migrateFormat11To12,
   12: migrateFormat12To13,
+  13: migrateFormat13To14,
 };
 
 export interface MigrationOutcome {

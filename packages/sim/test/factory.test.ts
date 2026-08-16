@@ -780,8 +780,11 @@ describe('wear and repair', () => {
     // Wave 8's rough edge: every other verb walked when clicked out of reach; the armed kit
     // refused. `IntentAction.UseRepairKit` wires it exactly as `RefillCan` was — one click,
     // one trace entry, and the arrival runs the same reducer a standing click would.
+    // The cell sits due east rather than at (20,20): since item 080 the pond is solid, and
+    // the old diagonal crossed it — the walk would stop at the bank, which is its own test
+    // (walk.test.ts), not this one.
     const state = createWorld(87);
-    const machine = spawnMachine(state, MachineKind.Washer, 20, 20)!;
+    const machine = spawnMachine(state, MachineKind.Washer, 20, 4)!;
     machine.condition = 200;
     addItem(state, ItemId.RepairKit, 1);
     standOn(state, 4, 4); // Sixteen tiles away: far outside hand reach.
@@ -792,7 +795,7 @@ describe('wear and repair', () => {
         type: 'WalkAndAct',
         action: IntentAction.UseRepairKit,
         tileX: 20,
-        tileY: 20,
+        tileY: 4,
         item: 0,
         count: 0,
       },

@@ -48,7 +48,7 @@ import {
   cropSpec,
   machineSpec,
 } from './data';
-import { resetMomentum, stepToward } from './movement';
+import { StepOutcome, resetMomentum, stepToward } from './movement';
 import {
   type Bot,
   type CropTile,
@@ -70,6 +70,7 @@ import {
 } from './state';
 import { effectiveOutputCapacity } from './upgrades';
 import { clampInt, tileCentreSubtiles } from './units';
+import { waterAtSubtile } from './water';
 
 /** True for the two dock kinds. A dock is where a bot sleeps and what it fills. */
 export function isBotDock(machine: Machine): boolean {
@@ -260,7 +261,8 @@ function advanceRepairDrone(state: WorldState, bot: Bot, bay: Machine): void {
         bot.targetTile = -1;
         return;
       }
-      if (walkToMachine(bot, machine)) {
+      // No water predicate: the drone flies, and the pond is not an obstacle to the air.
+      if (walkToMachine(bot, machine) === StepOutcome.Arrived) {
         bot.phase = BotPhase.Working;
         bot.workTicks = BOT_WORK_TICKS;
       }
@@ -280,7 +282,7 @@ function advanceRepairDrone(state: WorldState, bot: Bot, bay: Machine): void {
 
     case BotPhase.Returning:
     default: {
-      if (walkToMachine(bot, bay)) bot.phase = BotPhase.Idle;
+      if (walkToMachine(bot, bay) === StepOutcome.Arrived) bot.phase = BotPhase.Idle;
       return;
     }
   }
@@ -365,7 +367,16 @@ function advanceHarvester(state: WorldState, bot: Bot, dock: Machine): void {
         bot.targetTile = -1;
         return;
       }
-      if (walkToTile(bot, bot.targetTile)) {
+      const outcome = walkToTile(bot, bot.targetTile, groundBlocked(state));
+      // A wet footstep skips the target exactly as a stale one does (item 080): back to Idle
+      // with the cursor already one past it, so the scan moves on rather than marching a
+      // rolling bot into the pond — and never livelocks against it.
+      if (outcome === StepOutcome.Blocked) {
+        bot.phase = BotPhase.Idle;
+        bot.targetTile = -1;
+        return;
+      }
+      if (outcome === StepOutcome.Arrived) {
         bot.phase = BotPhase.Working;
         bot.workTicks = BOT_WORK_TICKS;
       }
@@ -385,7 +396,10 @@ function advanceHarvester(state: WorldState, bot: Bot, dock: Machine): void {
 
     case BotPhase.Returning:
     default: {
-      if (!walkToMachine(bot, dock)) return;
+      // A blocked walk home is a STALL, not a loss: the bot stands at the shore holding its
+      // armful — visible from ten tiles up, like every other stall — and retries; ponds do
+      // not move, but the player can hand-repair the situation by re-siting the dock.
+      if (walkToMachine(bot, dock, groundBlocked(state)) !== StepOutcome.Arrived) return;
       if (bot.carryCount <= 0) {
         bot.phase = BotPhase.Idle;
         return;
@@ -421,7 +435,14 @@ function advancePlanter(state: WorldState, bot: Bot, dock: Machine): void {
         bot.targetTile = -1;
         return;
       }
-      if (walkToTile(bot, bot.targetTile)) {
+      const outcome = walkToTile(bot, bot.targetTile, groundBlocked(state));
+      // Wet footstep: skip the target like a stale one (item 080). See the harvester.
+      if (outcome === StepOutcome.Blocked) {
+        bot.phase = BotPhase.Idle;
+        bot.targetTile = -1;
+        return;
+      }
+      if (outcome === StepOutcome.Arrived) {
         bot.phase = BotPhase.Working;
         bot.workTicks = BOT_WORK_TICKS;
       }
@@ -441,7 +462,9 @@ function advancePlanter(state: WorldState, bot: Bot, dock: Machine): void {
 
     case BotPhase.Returning:
     default: {
-      if (walkToMachine(bot, dock)) bot.phase = BotPhase.Idle;
+      if (walkToMachine(bot, dock, groundBlocked(state)) === StepOutcome.Arrived) {
+        bot.phase = BotPhase.Idle;
+      }
       return;
     }
   }
@@ -596,23 +619,44 @@ function scanZone(
 // Both of these are one line of intent over `stepToward`. They exist so that "where is the middle
 // of a tile" and "where is the middle of a dock" are answered in one place each rather than at
 // four call sites, and so a drone reusing this file gets the same answers.
+//
+// GROUND BOTS DO NOT WALK ON WATER (item 080); THE DRONE FLIES OVER IT. The harvester and the
+// planter roll along the dirt, so they pass `stepToward` the same water predicate the player's
+// errand does and get the same edge-stop. The repair drone "rises out of its bay" and crosses
+// the lot in the air, so it passes nothing and the pond never blocks it — which is also why
+// `walkToMachine` takes the predicate as a parameter rather than assuming one.
 
-function walkToTile(bot: Bot, key: number): boolean {
+/** The item-080 footstep predicate for a bot that rolls rather than flies. */
+function groundBlocked(state: WorldState): (xSub: number, ySub: number) => boolean {
+  return (xSub, ySub) => waterAtSubtile(state, xSub, ySub);
+}
+
+function walkToTile(
+  bot: Bot,
+  key: number,
+  blockedAt?: (xSub: number, ySub: number) => boolean,
+): StepOutcome {
   return stepToward(
     bot,
     tileCentreSubtiles(worldKeyTileX(key)),
     tileCentreSubtiles(worldKeyTileY(key)),
     BOT_SPEED_SUBTILES_PER_100_TICKS,
+    blockedAt,
   );
 }
 
-function walkToMachine(bot: Bot, machine: Machine): boolean {
-  if (atDock(bot, machine)) return true;
+function walkToMachine(
+  bot: Bot,
+  machine: Machine,
+  blockedAt?: (xSub: number, ySub: number) => boolean,
+): StepOutcome {
+  if (atDock(bot, machine)) return StepOutcome.Arrived;
   return stepToward(
     bot,
     tileCentreSubtiles(machine.tileX),
     tileCentreSubtiles(machine.tileY),
     BOT_SPEED_SUBTILES_PER_100_TICKS,
+    blockedAt,
   );
 }
 

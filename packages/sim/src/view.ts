@@ -558,6 +558,11 @@ export interface StatsView {
    * bar that wants the fraction between two days has the numerator it needs.
    */
   longestUntouchedMachineTicks: number;
+  /**
+   * Lifetime cheat commands that took effect (item 075). Published so any surface that shows
+   * a personal best can annotate a cheated session honestly rather than adjudicate it.
+   */
+  cheatsUsed: number;
   /** Per-item sales, sparse, ascending by item id. Empty until something sells. */
   salesByItem: ItemSaleView[];
   /** Closed dawn-aligned hours oldest-first, then the hour in progress as the last entry. */
@@ -878,6 +883,7 @@ export function createWorldView(): WorldView {
       totalManualTouches: 0,
       longestHandsFreeTicks: 0,
       longestUntouchedMachineTicks: 0,
+      cheatsUsed: 0,
       salesByItem: [],
       hours: [],
     },
@@ -1844,6 +1850,7 @@ function projectStats(state: WorldState, out: WorldView): void {
   s.totalManualTouches = totalManualTouches(stats.touches);
   s.longestHandsFreeTicks = stats.longestHandsFreeTicks;
   s.longestUntouchedMachineTicks = stats.longestUntouchedMachineTicks;
+  s.cheatsUsed = stats.cheatsUsed;
 
   // The per-item ledger, with "today" subtracted here so the Dawn Report's card reads two
   // integers instead of doing arithmetic. Reused rows, truncated with `.length =`, like every
