@@ -14,6 +14,12 @@ import raw from './hud.module.css';
 export type StyleName =
   | 'root'
   | 'sidebar'
+  // The fold ([[096]]): the sidebar is a row of two now — the scrolling body, and a handle
+  // rail that outlives it when the body is collapsed away.
+  | 'sidebarBody'
+  | 'sidebarHandle'
+  | 'sidebarChevron'
+  | 'sidebarHandleWord'
   | 'sideSection'
   | 'sideContext'
   | 'sidePapers'

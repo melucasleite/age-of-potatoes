@@ -217,7 +217,7 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
     title: 'Repair Drones',
     verb: 'Let the bay fix the lot',
     detail:
-      'A drone that flies to any machine on the lot and services it, burning one manufactured part per fix. The bill does not fall — only your hands come off the wrench.',
+      'A drone that flies to any machine on the lot and services it — no parts, no belt, no hopper. Buy the bay once and the wrench is somebody else\u2019s problem forever.',
   },
 
   [TechId.WorkshopCharter]: {
@@ -402,6 +402,10 @@ export const MACHINE_LABELS: Readonly<Record<number, string>> = {
   // says "Machine — $14 wasted" points the player at nothing.
   [MachineKind.MaintenanceStation]: 'Maintenance Station',
   [MachineKind.DroneBay]: 'Drone Bay',
+  // The Parts Bench is RETIRED ([[090]]) and its row stays for exactly the reason stated three
+  // times above: a boxed machine in the bag is named by its machine. A player who owned one
+  // when the bench retired still has the box, and a box that reads "Machine — scrap for $448"
+  // is the row this table exists to prevent.
   [MachineKind.PartsBench]: 'Parts Bench',
 };
 

@@ -16,14 +16,21 @@
 //   - NO SIM STATE IN REACT CONTEXT, ever (§13). The HUD reads through the projection
 //     seam ([[013]]), not through the component tree.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 // Leaf modules, not the `@/hud` barrel — no React tree ([[069]]). The HUD draws its sidebar
 // at this width; the canvas starts where the sidebar stops, so the two can never overlap and
 // the renderer's container is `calc(100vw - sidebar)` by geometry rather than by
 // coordination. `exit.ts` is the same kind of leaf: the EXIT GAME button's one-shot signal.
+// Since [[096]] `layout.ts` also owns WHETHER the sidebar is showing, as a module-scope store
+// with a subscription — so this side reads the fold without importing any of the HUD's React.
 import { onExitRequest } from '@/hud/exit';
-import { SIDEBAR_WIDTH_PX } from '@/hud/layout';
+import {
+  sidebarCollapsed,
+  sidebarServerSnapshot,
+  sidebarWidth,
+  subscribeSidebar,
+} from '@/hud/layout';
 import { type AutosaveHandle, bootWorld, performExit, startAutosave } from '@/storage';
 
 import { GameHost } from './GameHost';
@@ -45,6 +52,13 @@ export interface GameCanvasProps {
 export default function GameCanvas({ seed, onExited }: GameCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+
+  // The fold ([[096]]). A boolean, so a toggle re-renders this component and NOTHING re-runs
+  // the boot effect below — its deps are `[seed, onExited]` and stay that way, because a
+  // player collapsing a panel must not tear down and re-boot their world. All this render
+  // changes is one number in the `inset` string; the renderer finds out the way it has always
+  // found out about a resize, from the ResizeObserver on this element.
+  const collapsed = useSyncExternalStore(subscribeSidebar, sidebarCollapsed, sidebarServerSnapshot);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -126,9 +140,11 @@ export default function GameCanvas({ seed, onExited }: GameCanvasProps) {
     };
   }, [seed, onExited]);
 
+  const inset = `0 0 0 ${sidebarWidth(collapsed)}px`;
+
   if (refusal !== null) {
     return (
-      <div style={REFUSAL_STYLE}>
+      <div style={{ ...REFUSAL_STYLE, inset }}>
         <strong style={{ display: 'block', marginBottom: '0.75rem' }}>
           Your saved lot was left untouched.
         </strong>
@@ -139,15 +155,24 @@ export default function GameCanvas({ seed, onExited }: GameCanvasProps) {
 
   // The sidebar's column is left out of the container entirely, so the Pixi renderer sizes
   // itself to the visible region and NOTHING else: `GameHost.resize()` reads this element's
-  // rect through its ResizeObserver, and because the offset is a constant the observer fires
-  // once per real layout change, never per frame. Picking survives untouched — it subtracts
-  // the canvas's own `getBoundingClientRect()` before inverting the camera (`picking.ts`).
+  // rect through its ResizeObserver, and because the offset is a constant BETWEEN toggles the
+  // observer fires once per real layout change, never per frame. Picking survives untouched —
+  // it subtracts the canvas's own `getBoundingClientRect()` before inverting the camera
+  // (`picking.ts`), so a canvas that starts somewhere new needs no picking change at all.
+  //
+  // HOW THE RENDERER LEARNS ABOUT THE FOLD, in full, because the answer is "it already did"
+  // ([[096]]): the store publishes → React re-renders this div with a new `inset` → the
+  // browser lays out once → the ResizeObserver fires once → `GameHost.resize()` reads the
+  // SETTLED rect and calls `renderer.resize` and `camera.setViewport`. There is no new
+  // plumbing and no imperative "the sidebar moved" call, and there must not be: a second path
+  // into `resize()` would be a second source of truth for the stage's size, and the one the
+  // camera's snap arithmetic trusts is the rect the browser actually laid out.
   return (
     <div
       ref={containerRef}
       style={{
         position: 'absolute',
-        inset: `0 0 0 ${SIDEBAR_WIDTH_PX}px`,
+        inset,
         overflow: 'hidden',
         cursor: 'crosshair',
       }}
@@ -155,9 +180,9 @@ export default function GameCanvas({ seed, onExited }: GameCanvasProps) {
   );
 }
 
+/** `inset` is spread in at render time — it is the one property that moves with the fold. */
 const REFUSAL_STYLE: React.CSSProperties = {
   position: 'absolute',
-  inset: `0 0 0 ${SIDEBAR_WIDTH_PX}px`,
   display: 'grid',
   placeItems: 'center',
   padding: '2rem',

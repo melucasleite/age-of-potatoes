@@ -202,7 +202,7 @@ export function resolveMachineIcon(kind: number): IconSource | null {
  * as `belt_junction`, and a menu cell should degrade exactly as the bag's crate does.
  *
  * `null` falls to the same neutral chip every other missing frame gets — never magenta
- * ([[037]]). Today that is the Drone Bay and the Parts Bench, which have no world sprite
+ * ([[037]]). Today that is the Drone Bay and the retired Parts Bench, which have no world sprite
  * either (`render/textures.ts` draws them procedurally); the mapping test in
  * `build-menu.test.ts` pins that list so a new frameless entry fails loudly.
  */

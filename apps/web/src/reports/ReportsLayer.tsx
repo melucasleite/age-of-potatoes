@@ -20,11 +20,19 @@
 // keystroke aimed at a form control — so it cannot swallow a keystroke meant for the lot, and
 // it cannot break the select elements in its own panel.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 // A leaf module, not the `@/hud` barrel — one integer, no React tree. The dock sits at the
-// top of the CANVAS region ([[076]]), and "where the canvas starts" has exactly one home.
-import { SIDEBAR_WIDTH_PX } from '@/hud/layout';
+// top of the CANVAS region ([[076]]), and "where the canvas starts" has exactly one home —
+// which since [[096]] is a function of whether the sidebar is folded, so this subscribes
+// rather than reading a constant. A dock that stayed at 440 while the canvas started at 24
+// would be the drift the single source of truth exists to prevent, just with an extra step.
+import {
+  sidebarCollapsed,
+  sidebarServerSnapshot,
+  sidebarWidth,
+  subscribeSidebar,
+} from '@/hud/layout';
 
 import { BoardsPanel } from './BoardsPanel';
 import { CommercePanel } from './CommercePanel';
@@ -49,6 +57,7 @@ const TOGGLE_CODE = 'KeyP';
 
 export default function ReportsLayer() {
   const [open, setOpen] = useState<Tab | null>(null);
+  const collapsed = useSyncExternalStore(subscribeSidebar, sidebarCollapsed, sidebarServerSnapshot);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -83,10 +92,11 @@ export default function ReportsLayer() {
 
       {/*
         Top of the canvas region, just right of the sidebar ([[076]]). The offset is inline
-        because a CSS module cannot import `SIDEBAR_WIDTH_PX`, and a hand-copied 440 here is
-        exactly the drift the constant exists to prevent.
+        because a CSS module cannot import `sidebarWidth()`, and a hand-copied 440 here is
+        exactly the drift the constant exists to prevent — which is also why this tracks the
+        fold ([[096]]) rather than parking at the expanded width.
       */}
-      <div className={r.dock} style={{ left: SIDEBAR_WIDTH_PX + 14 }}>
+      <div className={r.dock} style={{ left: sidebarWidth(collapsed) + 14 }}>
         <div className={r.tabs}>
           {TABS.map((tab) => (
             <button

@@ -5,8 +5,11 @@
 // THE LAYOUT RULE, AND ITS ONE SANCTIONED EXCEPTION. The sidebar is a fixed-width opaque
 // column — money and the Ticker at the top, the four opener rows under them, the
 // at-the-machine cards below those, and the papers (field card) at the bottom. The canvas
-// owns everything to its right (`GameCanvas` offsets itself by the same `SIDEBAR_WIDTH_PX`),
-// and item 069's rule was that nothing ever covers it. Item 089 amended that rule knowingly,
+// owns everything to its right (`GameCanvas` offsets itself by the same `sidebarWidth()`),
+// and item 069's rule was that nothing ever covers it. IT FOLDS SINCE [[096]] — two fixed
+// widths and a handle rail, never an animated one, for the renderer reasons `layout.ts`'s
+// header sets out — and folding does not bend 069's rule: collapsed, the dock is 24px wide
+// and the lot is still entirely uncovered. Item 089 amended that rule knowingly,
 // by owner ruling, for the bag and the build menu; ITEM 093 FINISHES THE JOB for all four —
 // "The stand and research should also be buttons that open a menu, just like the build and
 // the bag. Consolidate those. They should have the same feeling to them." So RESEARCH, THE
@@ -48,7 +51,16 @@ import { DockCard } from './DockCard';
 import { requestExit } from './exit';
 import { FieldCard } from './FieldCard';
 import { BagToggle, InventoryWindow } from './Inventory';
-import { SIDEBAR_WIDTH_PX } from './layout';
+import {
+  SIDEBAR_HANDLE_PX,
+  SIDEBAR_TOGGLE_CODE,
+  SIDEBAR_TOGGLE_LABEL,
+  sidebarCollapsed,
+  sidebarServerSnapshot,
+  sidebarWidth,
+  subscribeSidebar,
+  toggleSidebar,
+} from './layout';
 import { PanelRow } from './PanelFrame';
 import {
   closeLocalPanel,
@@ -77,6 +89,7 @@ export default function HudRoot() {
   // subscribed. Showing a confident "$0.00" over a boot failure would be a small lie.
   const tools = useHudSlice('tools');
   const panels = usePanels();
+  const collapsed = useSidebar();
 
   // Still the tell for "no world" — but the save notices outlive it. A world that came back
   // from its backup copy, or one whose browser is out of room, has something to say before the
@@ -88,20 +101,32 @@ export default function HudRoot() {
       <SaveNotices />
       <div className={s.root}>
         {/*
-        THE DOCK. Fixed width from `layout.ts` — inline so the number has exactly one home
-        and `GameCanvas` computes its own edge from the same constant, never from this DOM.
+        THE DOCK. Width from `layout.ts`'s `sidebarWidth()` — inline so the number has exactly
+        one home and `GameCanvas` computes its own edge from the same function, never from
+        this DOM. TWO WIDTHS SINCE [[096]], and the switch between them is a discrete layout
+        change with no transition on it: the renderer's ResizeObserver sees one settled rect
+        per toggle rather than one per animation frame, which is the whole of the trap that
+        item guarded against.
       */}
-        <div className={s.sidebar} style={{ width: SIDEBAR_WIDTH_PX }}>
+        <div className={s.sidebar} style={{ width: sidebarWidth(collapsed) }}>
           {/*
+          THE BODY, UNMOUNTED WHEN FOLDED rather than hidden ([[096]]). A `display: none`
+          column still owns focusable children, so a player tabbing through a collapsed HUD
+          would travel the whole dock without seeing it; and every panel in here subscribes to
+          the projection, so unmounting is also the only version that stops the work.
+        */}
+          {collapsed ? null : (
+            <div className={s.sidebarBody}>
+              {/*
           EXIT GAME first, top-left, modest ([[078]]). It ASKS (`requestExit`) — the ordered
           save-then-teardown runs where the world and its autosave live (`GameCanvas`), and
           there is no "are you sure": the save IS the confirmation, because nothing is lost.
         */}
-          <button type="button" className={s.exitButton} onClick={requestExit}>
-            exit game
-          </button>
+              <button type="button" className={s.exitButton} onClick={requestExit}>
+                exit game
+              </button>
 
-          {/*
+              {/*
           THE FOUR ROWS ([[093]]) — Research, the Stand, the Bag, Build, hanging off the
           number that says how much money there is ([[051]]). They are one component now
           (`PanelRow`), so a fifth is four props and no markup, and the ordering rules that
@@ -111,15 +136,15 @@ export default function HudRoot() {
           uses — build through the item-071 input seam, the other three through
           `panel-state.ts`. One invariant, many doors.
         */}
-          <div className={s.sideSection}>
-            <Ticker />
-            <TechToggle open={panels.open === 'research'} onOpen={panels.toggleResearch} />
-            <ShopToggle open={panels.open === 'shop'} onOpen={panels.toggleShop} />
-            <BagToggle open={panels.open === 'bag'} onToggle={panels.toggleBag} />
-            <BuildToggle open={panels.open === 'build'} />
-          </div>
+              <div className={s.sideSection}>
+                <Ticker />
+                <TechToggle open={panels.open === 'research'} onOpen={panels.toggleResearch} />
+                <ShopToggle open={panels.open === 'shop'} onOpen={panels.toggleShop} />
+                <BagToggle open={panels.open === 'bag'} onToggle={panels.toggleBag} />
+                <BuildToggle open={panels.open === 'build'} />
+              </div>
 
-          {/*
+              {/*
           THE AT-THE-MACHINE CARDS, and nothing else queues for this space any more
           ([[093]]). Each decides for itself whether the player is standing somewhere it has
           something to say about, and they can never both speak: the bench takes machines
@@ -127,12 +152,12 @@ export default function HudRoot() {
           (`derive-dock.ts`). On the vast majority of frames both return null and this is an
           empty flex box that costs nothing.
         */}
-          <div className={s.sideContext}>
-            <UpgradeBench onOpenResearch={panels.toggleResearch} />
-            <DockCard />
-          </div>
+              <div className={s.sideContext}>
+                <UpgradeBench onOpenResearch={panels.toggleResearch} />
+                <DockCard />
+              </div>
 
-          {/*
+              {/*
           The field card, alone at the bottom now. THE CLIPBOARD IS GONE BY RULING ([[076]],
           owner: "Get rid of the clipboard as well. It's taking space and it's not adding
           much value") — the observation surface item 040 built. Its derive logic survives
@@ -140,9 +165,13 @@ export default function HudRoot() {
           card still reads the same notes; only the always-on paper unmounted. Noted in item
           040's log, which the ruling supersedes.
         */}
-          <div className={cx(s.sideSection, s.sidePapers)}>
-            <FieldCard />
-          </div>
+              <div className={cx(s.sideSection, s.sidePapers)}>
+                <FieldCard />
+              </div>
+            </div>
+          )}
+
+          <SidebarHandle collapsed={collapsed} />
         </div>
 
         {/*
@@ -212,6 +241,70 @@ export default function HudRoot() {
 }
 
 /**
+ * THE HANDLE ([[096]]) — the sidebar's one always-mounted control, and the only thing left of
+ * the dock when it is folded.
+ *
+ * It is a rail rather than a tab, and it is inside the sidebar rather than floating over the
+ * canvas, which is the detail that keeps item 069's rule intact through a collapse: nothing
+ * ever covers the lot. Collapsed, the rail IS the sidebar — the canvas starts 24px in — so
+ * the handle is not an exception to the rule, it is the smallest the dock can be.
+ *
+ * The chevron points where the panel is going, so the same glyph reads as both states of one
+ * switch, and the accessible name says what it does rather than what it looks like. The key
+ * is in the tooltip because that is where a player looks for one; `layout.ts` owns which key
+ * it is, so this never has to be kept in step by hand.
+ */
+function SidebarHandle({ collapsed }: { collapsed: boolean }) {
+  return (
+    <button
+      type="button"
+      className={s.sidebarHandle}
+      style={{ width: SIDEBAR_HANDLE_PX }}
+      aria-expanded={!collapsed}
+      aria-label={collapsed ? 'Show the panel' : 'Hide the panel'}
+      title={`${collapsed ? 'Show' : 'Hide'} the panel  ·  ${SIDEBAR_TOGGLE_LABEL}`}
+      onClick={toggleSidebar}
+    >
+      <span className={s.sidebarChevron} aria-hidden="true">
+        {collapsed ? '›' : '‹'}
+      </span>
+      {collapsed ? <span className={s.sidebarHandleWord}>menu</span> : null}
+    </button>
+  );
+}
+
+/**
+ * The fold, subscribed ([[096]]). A primitive snapshot, so the only re-render is the one that
+ * actually changed the width — and `layout.ts` holds the flag, not this tree, because
+ * `GameCanvas` has to read the same boolean from the other side of the seam without
+ * importing the HUD's React.
+ *
+ * THE KEY IS BOUND HERE, beside the panel keys, from the same free space and by the same
+ * rules: no auto-repeat (holding `[` must not strobe the panel), and nothing while a
+ * modifier is down. No guard for form controls is needed, unlike `ReportsLayer`'s — the one
+ * text field in the HUD is the cheat console, and it stops keydown propagation before any
+ * window listener sees it. No `preventDefault()` either: the browser does nothing with a
+ * bare `[`, and a HUD that swallows keys is one bug from swallowing one the game needed.
+ */
+function useSidebar(): boolean {
+  const collapsed = useSyncExternalStore(subscribeSidebar, sidebarCollapsed, sidebarServerSnapshot);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.code === SIDEBAR_TOGGLE_CODE) toggleSidebar();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, []);
+
+  return collapsed;
+}
+
+/**
  * The BUILD row ([[076]]) — the fourth of four, and the one that proves the shape: it lives
  * in a different file from its panel, its truth lives in a different LAYER (the input seam,
  * [[071]]), and it is still just a `PanelRow` with four props ([[093]]). It is the only row
@@ -254,8 +347,10 @@ function BuildToggle({ open }: { open: boolean }) {
  * The keys are bound here rather than in `input/keyboard.ts` because they toggle DOM
  * panels that the input system has no business knowing exist. They are chosen from what
  * that layer leaves free: digits 1–9 and 0 (the hotbar, [[061]]), B, R, C, +, −, Escape,
- * F3, backtick, space and WASD are all spoken for, and an unhandled code falls through its
- * switch untouched. T for the tree, G for goods, I for the bag — the one letter a player
+ * F3, backtick, space and WASD are all spoken for, P belongs to the reports layer, and an
+ * unhandled code falls through its switch untouched. `[` folds the sidebar ([[096]]) and is
+ * bound in `useSidebar` below rather than here, because it is chrome rather than a panel.
+ * T for the tree, G for goods, I for the bag — the one letter a player
  * will try without being told. I TOGGLES THE FLOATING BAG now, per the 089 ruling — the
  * same key that collapsed the old dock section, aimed at the window that replaced it. Esc
  * is NOT bound here: each panel closes itself on Esc (their own listeners, the bag's

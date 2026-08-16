@@ -37,26 +37,102 @@
 /* --- the docked sidebar ([[069]]) ------------------------------------------------ */
 
 /*
- * The only place panels live. Opaque ink, fixed width (`SIDEBAR_WIDTH_PX`, set inline by
+ * The only place panels live. Opaque ink, fixed width (`sidebarWidth()`, set inline by
  * `HudRoot` so the number has one home), and the canvas gets everything to its right —
  * opening a panel changes what this column shows, never what the player can see of the lot.
  *
  * `pointer-events: auto` on the whole box is deliberate and NEW: the old floating corners
  * had to let clicks fall through to tiles underneath, but nothing is underneath this — an
  * opaque dock that swallowed a click would only be swallowing a click on itself.
+ *
+ * A ROW OF TWO SINCE [[096]]: the scrolling column (`.sidebarBody`) and the handle rail
+ * (`.sidebarHandle`), which is present in BOTH states and is the whole of the sidebar in the
+ * collapsed one. The column properties that used to be here moved down to the body, because
+ * this box now stacks its two children across rather than down.
+ *
+ * NO `transition` ON `width`, HERE OR ANYWHERE BELOW, and that omission is load-bearing
+ * rather than an oversight — see `layout.ts`'s header. An animated fold would fire
+ * `GameHost`'s ResizeObserver on every frame of the animation and re-snap the camera against
+ * a viewport that was still moving; item 026's pixel-snap arithmetic would be chasing a
+ * target and the world would judder for the length of the transition. The column snaps
+ * between its two widths in one layout pass.
  */
 .sidebar {
   flex: 0 0 auto;
   pointer-events: auto;
   display: flex;
+  flex-direction: row;
+  min-height: 0;
+  background: #14100e;
+  box-shadow: inset -2px 0 0 #2b2119;
+}
+
+/* Everything the dock actually shows. Unmounted entirely while collapsed — not hidden, not
+   zero-width: a display-none column still owns its scroll position and its focusable
+   children, and a tabbing player would have travelled through a panel that is not there. */
+.sidebarBody {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   min-height: 0;
   /* Backstop for short windows: sections flex first, and only then does the column scroll. */
   overflow-y: auto;
-  background: #14100e;
-  box-shadow: inset -2px 0 0 #2b2119;
   scrollbar-width: thin;
   scrollbar-color: #46392f #14100e;
+}
+
+/*
+ * THE HANDLE ([[096]]) — the one control that is never not on screen.
+ *
+ * Full height rather than a tab, because the requirement is that a player who folded the
+ * panel away can FIND it again, and a 24px stripe running the height of the screen is not
+ * something you have to hunt for. Width is inline from `SIDEBAR_HANDLE_PX` for the same
+ * reason the column's is: one home for the number.
+ *
+ * Quiet by default and gold on hover — house chrome at the exit button's volume, since
+ * pressing it costs nothing and is instantly undone. The chevron points the way the panel
+ * will move, so it is the same control read twice: `‹` folds it away, `›` brings it back.
+ */
+.sidebarHandle {
+  flex: 0 0 auto;
+  align-self: stretch;
+  pointer-events: auto;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #6d5c4d;
+  background: linear-gradient(90deg, #211a13 0%, #14100e 100%);
+  box-shadow: inset 2px 0 0 #2b2119;
+}
+
+.sidebarHandle:hover {
+  color: #f5d382;
+  background: linear-gradient(90deg, #2b2119 0%, #211a13 100%);
+}
+
+.sidebarChevron {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Collapsed only: the word, set down the rail. The chevron alone says "something opens
+   here"; the word says what, which is the difference between a control a returning player
+   recognises and one they have to try. */
+.sidebarHandleWord {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
 }
 
 /* One section of the dock: the counter and its four rows, the papers. The contextual area
