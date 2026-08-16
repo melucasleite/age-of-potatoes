@@ -481,10 +481,21 @@ function updateMachines(scene: WorldScene, view: WorldView, now: number): void {
       visual.progress.scale.set(((width - 2) * m.progressPermille) / 1000, 1);
     }
 
+    // THE HARVESTER DOCK'S SHELF IS CARGO, NOT AN OUTPUT BUFFER (item 083): its spec makes
+    // nothing, so the generic readouts below would hide a stocked shed entirely — which is
+    // exactly the invisible stranding the item fixed in the sim. The shelf borrows the same
+    // pip and the same column, driven from the cargo pair, against the shelf's own capacity.
+    const shelf = m.kind === MachineKind.HarvesterDock && m.cargoCount > 0 && m.cargoItem !== 0;
+
     // Input buffer as a column up the left edge: an amber lamp says "starved", and this
     // says how nearly. Grows upward, because a filling hopper that drains downward reads
-    // as the wrong thing entirely.
-    const hopper = m.inputCapacity > 0 ? Math.min(1, m.inputCount / m.inputCapacity) : 0;
+    // as the wrong thing entirely. The dock's shelf level rides the same column.
+    const hopper =
+      m.inputCapacity > 0
+        ? Math.min(1, m.inputCount / m.inputCapacity)
+        : shelf && m.outputCapacity > 0
+          ? Math.min(1, m.cargoCount / m.outputCapacity)
+          : 0;
     visual.hopper.visible = hopper > 0;
     if (hopper > 0) {
       const bar = Math.max(1, Math.round((height - 4) * hopper));
@@ -493,11 +504,12 @@ function updateMachines(scene: WorldScene, view: WorldView, now: number): void {
     }
 
     // What is waiting in the output buffer, so a red lamp names its own cargo. Bobs, so a
-    // full output catches the eye from across the yard.
-    const holding = m.outputCount > 0 && m.outputItem !== 0;
+    // full output catches the eye from across the yard. A stocked dock shelf bobs the same
+    // pip, wearing the item the bot actually delivered.
+    const holding = (m.outputCount > 0 && m.outputItem !== 0) || shelf;
     visual.outputPip.visible = holding;
     if (holding) {
-      visual.outputPip.texture = scene.itemPage.texture(m.outputItem);
+      visual.outputPip.texture = scene.itemPage.texture(shelf ? m.cargoItem : m.outputItem);
       visual.outputPip.position.set(
         left + width / 2,
         top - 3 + Math.round(Math.sin(now / 300 + m.id) * 1.5),
@@ -1264,6 +1276,13 @@ function machineStatus(view: WorldView, m: MachineView): string {
   // the thing that has no answer for them.
   const vehicle = vehicleStatus(view, m);
   if (vehicle !== null) return vehicle;
+
+  // The harvester dock's shelf, in words: item and count, which is the card half of item
+  // 083's counter. Answered above the lamp switch for the same reason the vehicles are —
+  // a dock has no work cycle, so the lamp's grammar has nothing to say about a full shed.
+  if (m.kind === MachineKind.HarvesterDock && m.cargoCount > 0 && m.cargoItem !== 0) {
+    return `${name} — ${m.cargoCount} ${itemName(m.cargoItem)} on the shelf`;
+  }
 
   switch (m.lamp) {
     case LampState.Jammed:

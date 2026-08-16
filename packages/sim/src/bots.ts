@@ -532,21 +532,35 @@ function plantUnderBot(state: WorldState, bot: Bot, dock: Machine): void {
 }
 
 /**
- * Put what the bot is carrying on the dock's floor, where a belt or a grabber can take it.
+ * Put what the bot is carrying on the dock's shelf, where a belt, a grabber, or a hand can
+ * take it — WITH ITS NAME ON IT.
  *
- * A FULL DOCK IS A STALL, NOT A LOSS. The bot stands there holding its armful — the same "look
- * downstream" stall a blocked grabber gives — rather than dropping goods on the ground or
- * quietly deleting them. Nothing vanishes (plan §4), and the diagnostic is a robot standing at a
- * full shed, which is a thing the player can see from ten tiles up.
+ * The shelf is the dock's CARGO, the same `cargoItem`/`cargoCount` pair the planter keeps
+ * seeds in and the cart keeps goods in (item 083). It used to be `outputCount`, and that was
+ * the bug: the output buffer's identity comes from the machine SPEC, and the dock's spec
+ * honestly says it produces nothing — so every armful a bot delivered became anonymous, and
+ * anonymous goods can never leave. Cargo carries its own identity, so what the bot put down
+ * is what the grabber picks up.
+ *
+ * A FULL DOCK IS A STALL, NOT A LOSS — and so is a MISMATCHED one. The shelf holds one product
+ * at a time, like every cargo pair in the game, and a bot arriving with chili while the shelf
+ * still holds potatoes stands there holding its armful (the house "look downstream" stall)
+ * until the shelf drains. That trip is real, not theoretical: a zone that wilts mid-round sends
+ * the same bot home with fresh goods on one trip and Day-Old on the next. Nothing vanishes
+ * (plan §4), and the diagnostic is a robot standing at a full shed, visible from ten tiles up.
  */
 function unloadIntoDock(bot: Bot, dock: Machine): void {
   const spec = machineSpec(dock.kind);
-  if (spec === null) return;
-  const room = effectiveOutputCapacity(spec, dock) - dock.outputCount;
+  if (spec === null || bot.carryItem === 0) return;
+  if (dock.cargoItem !== 0 && dock.cargoItem !== bot.carryItem) return;
+  // The shelf is sized by `outputCapacity` — the harvester dock's one buffer number, scaled by
+  // the same Capacity dial the old path honoured. Its `inputCapacity` is 0 and stays unused.
+  const room = effectiveOutputCapacity(spec, dock) - dock.cargoCount;
   if (room <= 0) return;
 
   const moved = bot.carryCount < room ? bot.carryCount : room;
-  dock.outputCount += moved;
+  dock.cargoItem = bot.carryItem;
+  dock.cargoCount += moved;
   bot.carryCount -= moved;
   if (bot.carryCount <= 0) {
     bot.carryItem = 0;

@@ -190,3 +190,22 @@ The 13 → 14 migration adds `stats.cheatsUsed` and translates nothing: **zero, 
 format-13 world could have applied a `Cheat` command, because the command did not exist. (The
 same wave widened the can from 8 to 20 pours with NO migration at all: a saved charge count
 merely loads as a partly full can under the raised cap, per the item-073 owner ruling.)
+
+| `format-15.json` | 15 | 2026-08-15, `v0.5.0` | Seed 830083, tick 2,814. The first save with an **identified dock shelf** in it (item 083): a harvester dock holding `cargoItem: 2 × 10` — ten Russet Potatoes a bot delivered, named — which is the one state no earlier format can express. Format 14 wrote the same moment as an anonymous `outputCount` nothing could ever unload. |
+
+`format-15.json` was recorded by `scripts/record-format-15.ts` (2026-08-15, item 083): a
+scripted session that cheats through the Corporate Charter gate exactly as the format-14
+recorder did, paints a three-tile potato zone, plants and waters it by hand, places a
+Harvester Dock, binds it — and then touches nothing while the bot harvests and hands the row
+over. Every command is one the sim accepted, and the recorder asserts the shelf's name, the
+empty legacy buffer, and the untouched Hands-Free ledger before writing.
+
+The 14 → 15 migration is the first in the chain that GUESSES, and it says so in its comment:
+a stranded `outputCount` on a harvester dock becomes shelf cargo whose identity was never
+recorded, so the migration reconstructs it from the bound zone's crop (its fresh yield, from
+a frozen table), defaulting to RussetPotato. A wrong name on real goods beats deleting them —
+nothing vanishes. `format-11.json` is the real save that exercises it: its dock carries nine
+anonymous units on a potato zone, and `save.test.ts` asserts they come back as nine named
+Russet Potatoes. The step also deliberately does NOT rewrite `payload.version` — that field
+is hashed world state, and stamping the format number onto it would make a migrated world
+hash differently from the identical world built fresh.

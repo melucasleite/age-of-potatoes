@@ -45,7 +45,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 14;
+export const CURRENT_FORMAT_VERSION = 15;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -949,6 +949,117 @@ const migrateFormat13To14: SaveMigration = (payload) => {
 };
 
 /**
+ * `MachineKind.HarvesterDock` AS IT WAS WHEN FORMAT 15 ARRIVED, frozen for the reason every
+ * `FORMAT_N_*` literal is: the id space is permanent save surface, and a migration that
+ * imported today's enum would start rewriting whatever a future table calls a dock.
+ */
+const FORMAT_14_HARVESTER_DOCK_KIND = 31;
+
+/**
+ * Crop id → the FRESH item that crop yields, as both tables stood when format 15 arrived.
+ *
+ * This is the migration's one guess and its whole vocabulary. A format-14 harvester dock's
+ * shelf was an anonymous `outputCount` — the identity was discarded at the moment the bot
+ * unloaded, so no save on earth records what those goods were. The zone the dock is bound to
+ * records what the zone GROWS, which is the best surviving witness: a dock's bot only ever
+ * harvests its own zone, so the shelf almost certainly holds that crop's fresh yield. "Almost"
+ * is the honest word — the goods could have been Day-Old if the zone wilted before a trip —
+ * and fresh is the deliberate direction to be wrong in: a wrong guess beats deletion (plan §4,
+ * nothing vanishes), and guessing Day-Old would mark down goods that were probably fine.
+ */
+const FORMAT_14_FRESH_ITEM_BY_CROP: Readonly<Record<number, number>> = {
+  1: 2, // RussetPotato -> ItemId.RussetPotato
+  2: 11, // SugarCane -> ItemId.SugarCane
+  3: 14, // Corn -> ItemId.Corn
+  4: 17, // ChiliPepper -> ItemId.ChiliPepper
+  5: 51, // GoldPotato -> ItemId.GoldPotato
+};
+
+/** The guess of last resort: the starter crop's fresh yield, `ItemId.RussetPotato`. */
+const FORMAT_14_DEFAULT_SHELF_ITEM = 2;
+
+/**
+ * Format 14 → 15: the harvester dock's shelf gains an identity (item 083).
+ *
+ * The dock's shelf becomes its CARGO — `cargoItem`/`cargoCount`, the pair the planter dock
+ * already keeps seeds in — because the old shape was a stranding bug in production: goods
+ * lived in `outputCount`, whose identity comes from the machine spec, and the dock's spec
+ * says it makes nothing. A grabber asking "what is next out of this machine" got null, so
+ * NOTHING a bot ever delivered could leave the dock, by arm or by hand.
+ *
+ * For each harvester dock with a stranded `outputCount`, the count moves onto the shelf and
+ * the identity is GUESSED: the bound zone's crop's fresh item, from the frozen table above,
+ * defaulting to RussetPotato when the dock is unbound, the zone is gone, or the zone grows
+ * nothing. The guess is written here rather than hidden: identity was never recorded, so
+ * this is reconstruction, biased fresh on purpose — nothing vanishes, and a wrong name on
+ * real goods beats an honest deletion of them. In the one real stranded-dock save this
+ * repository keeps (`format-11.json`, nine units on a potato zone's dock), the guess is
+ * simply correct.
+ *
+ * Docks whose count is zero, and every other machine, pass through untouched. In particular
+ * `payload.version` is NOT rewritten: that field is `WorldState.version` — hashed world
+ * state that fresh saves write as the world's shape version — and stamping the format number
+ * onto it would make a migrated world hash differently from the identical world built fresh.
+ * The envelope's own `formatVersion` is what `migrate()` advances.
+ */
+const migrateFormat14To15: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-14 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const zoneCrops = new Map<number, number>();
+  const zonesRaw = p['zones'];
+  if (Array.isArray(zonesRaw)) {
+    for (let i = 0; i < zonesRaw.length; i++) {
+      const zone = zonesRaw[i] as Record<string, unknown>;
+      if (typeof zone !== 'object' || zone === null) continue;
+      const id = zone['id'];
+      const crop = zone['crop'];
+      if (typeof id === 'number' && typeof crop === 'number') zoneCrops.set(id, crop);
+    }
+  }
+
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    const machine = oldMachines[i]!;
+    const countRaw = machine['outputCount'];
+    const count = typeof countRaw === 'number' && Number.isInteger(countRaw) ? countRaw : 0;
+    if (machine['kind'] !== FORMAT_14_HARVESTER_DOCK_KIND || count <= 0) {
+      machines.push({ ...machine });
+      continue;
+    }
+
+    const boundZone = machine['boundZone'];
+    const crop = typeof boundZone === 'number' ? zoneCrops.get(boundZone) : undefined;
+    const guessed =
+      crop === undefined
+        ? FORMAT_14_DEFAULT_SHELF_ITEM
+        : (FORMAT_14_FRESH_ITEM_BY_CROP[crop] ?? FORMAT_14_DEFAULT_SHELF_ITEM);
+
+    // No format-14 code path could put cargo on a harvester dock (`inputCapacity` 0, every
+    // door refuses the kind), so the shelf is empty in any save the sim wrote — but a
+    // hand-edited payload that somehow carries cargo keeps it: its own identity wins the
+    // guess, and the counts merge rather than anything being thrown away.
+    const cargoItemRaw = machine['cargoItem'];
+    const cargoCountRaw = machine['cargoCount'];
+    const existingItem = typeof cargoItemRaw === 'number' ? cargoItemRaw : 0;
+    const existingCount =
+      typeof cargoCountRaw === 'number' && Number.isInteger(cargoCountRaw) ? cargoCountRaw : 0;
+
+    machines.push({
+      ...machine,
+      cargoItem: existingItem !== 0 ? existingItem : guessed,
+      cargoCount: existingCount + count,
+      outputCount: 0,
+    });
+  }
+
+  return { ...p, machines };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -967,6 +1078,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   11: migrateFormat11To12,
   12: migrateFormat12To13,
   13: migrateFormat13To14,
+  14: migrateFormat14To15,
 };
 
 export interface MigrationOutcome {

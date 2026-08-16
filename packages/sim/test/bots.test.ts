@@ -18,12 +18,15 @@ import {
   type WorldState,
   BOT_CARRY_CAPACITY,
   BOT_WEAR_PER_OPERATION,
+  BeltTier,
   BotKind,
   BotPhase,
   CONDITION_MAX,
   CeremonyId,
   CropId,
+  Direction,
   FIELD_TILES_WIDE,
+  GrabberTier,
   ItemId,
   MachineKind,
   addItem,
@@ -34,11 +37,14 @@ import {
   hashState,
   itemCount,
   plantCrop,
+  spawnBelt,
   spawnBot,
+  spawnGrabber,
   spawnMachine,
   spawnZone,
   step,
   stepMany,
+  takeDockShelf,
   tileAt,
   tillTile,
   totalManualTouches,
@@ -98,8 +104,12 @@ describe('the harvester bot', () => {
     }
     expect(stillReady, 'the bot left ripe tiles standing').toBe(0);
 
-    // The goods are on the dock's floor, where a belt or a grabber can take them away.
-    expect(dock.outputCount).toBeGreaterThan(0);
+    // The goods are on the dock's shelf WITH THEIR NAME ON THEM (item 083): identified cargo,
+    // where a belt, a grabber, or a hand can actually take them away. The old `outputCount`
+    // buffer had no identity for delivered goods, which stranded every harvest forever.
+    expect(dock.cargoItem).toBe(ItemId.RussetPotato);
+    expect(dock.cargoCount).toBeGreaterThan(0);
+    expect(dock.outputCount).toBe(0);
 
     // AND NOBODY TOUCHED ANYTHING. This is the whole feature, and plan §6's Hands-Free board is
     // unadjudicable if a robot's harvest ever counts as a hand.
@@ -158,7 +168,7 @@ describe('the harvester bot', () => {
     dock.boundZone = 0;
 
     stepMany(state, 5_000);
-    expect(dock.outputCount).toBe(0);
+    expect(dock.cargoCount).toBe(0);
     expect(state.bots[0]!.opCount).toBe(0);
     expect(state.bots[0]!.condition).toBe(CONDITION_MAX);
   });
@@ -310,7 +320,7 @@ describe('bot determinism', () => {
       if (bot.phase === BotPhase.Outbound || bot.phase === BotPhase.Returning) sawWalking = true;
     }
     expect(sawWalking).toBe(true);
-    expect(dock.outputCount).toBeGreaterThan(0);
+    expect(dock.cargoCount).toBeGreaterThan(0);
   });
 });
 
@@ -360,6 +370,11 @@ describe('a dock leaving the lot', () => {
     bot.carryItem = ItemId.RussetPotato;
     bot.carryCount = 3;
     const before = itemCount(state, ItemId.RussetPotato);
+    // The shelf comes back too, now that it has an identity (item 083). Under the old
+    // anonymous buffer, deconstructing a stocked dock silently DELETED everything on it —
+    // the same swallow, one verb further along.
+    const shelf = dock.cargoCount;
+    expect(shelf).toBeGreaterThan(0);
 
     // Stand next to the dock and box it.
     state.player.xSub = 128;
@@ -370,8 +385,192 @@ describe('a dock leaving the lot', () => {
     });
 
     expect(state.bots.length).toBe(0);
-    expect(itemCount(state, ItemId.RussetPotato)).toBe(before + 3);
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(before + 3 + shelf);
     expect(itemCount(state, ItemId.BoxedHarvesterDock)).toBe(1);
+  });
+});
+
+describe('the dock shelf (item 083)', () => {
+  // THE STORY THE OWNER REPORTED, WITH THE ENDING FIXED: bot harvests, returns, unloads —
+  // and then a grabber pointed at the dock actually takes the goods and puts them on a belt,
+  // which is the half that had been broken since item 038 shipped. The dock's shelf is its
+  // CARGO now, so what the bot put down has a name the arm can read.
+  it('bot harvests, delivers, and a grabber drains the shelf onto a belt — goods ride away', () => {
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 4_000);
+
+    expect(dock.cargoItem).toBe(ItemId.RussetPotato);
+    const shelfBefore = dock.cargoCount;
+    expect(shelfBefore).toBeGreaterThan(0);
+    // The bot may be standing at a full shed holding leftovers — the stall working — and it
+    // will top the shelf back up as the arm makes room, so the books below count its armful.
+    const armfulBefore = state.bots[0]!.carryCount;
+
+    // An arm behind the dock, a belt behind the arm. Source (1,1) is the dock's south-east
+    // tile; destination (3,1) is the belt's head.
+    const belt = spawnBelt(state, BeltTier.Basic, 3, 1, Direction.East, 2)!;
+    spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, 0);
+    stepMany(state, 600);
+
+    const grabber = state.grabbers[0]!;
+    const riding = belt.items.length;
+    expect(riding, 'nothing ever left the dock').toBeGreaterThan(0);
+    for (let i = 0; i < belt.items.length; i++) {
+      expect(belt.items[i]!.item).toBe(ItemId.RussetPotato);
+    }
+    // Conservation, one unit per swing: everything that was on the shelf or in the bot's
+    // arms is now on the shelf, in the bot's arms, riding the belt, or in the grabber's
+    // hand. Nothing vanished at any hand-off.
+    const inHand = grabber.held === 0 ? 0 : 1;
+    expect(dock.cargoCount + state.bots[0]!.carryCount + riding + inHand).toBe(
+      shelfBefore + armfulBefore,
+    );
+  });
+
+  it('respects the grabber filter: an arm filtered to another item leaves the shelf alone', () => {
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 4_000);
+    const shelf = dock.cargoCount;
+    expect(shelf).toBeGreaterThan(0);
+
+    spawnBelt(state, BeltTier.Basic, 3, 1, Direction.East, 2)!;
+    spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, ItemId.Corn);
+    stepMany(state, 400);
+    expect(dock.cargoCount, 'a filtered arm took goods its filter refuses').toBe(shelf);
+
+    // Re-aimed at what the shelf actually holds, the same arm starts taking.
+    state.grabbers[0]!.filter = ItemId.RussetPotato;
+    stepMany(state, 400);
+    expect(dock.cargoCount).toBeLessThan(shelf);
+  });
+
+  it('hand-unloads like storage: goods come back identified, fresh-stamped, and touch-counted', () => {
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 4_000);
+    const shelf = dock.cargoCount;
+    expect(shelf).toBeGreaterThan(0);
+
+    const before = itemCount(state, ItemId.RussetPotato);
+    const carryBefore = state.bots[0]!.carryCount;
+    const touchesBefore = state.stats.touches.handCarry;
+    state.player.xSub = 128;
+    state.player.ySub = 128;
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'UnloadMachine', machineId: dock.id, count: 5 }],
+    });
+
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(before + 5);
+    // The bot may immediately restock the freed space from a stalled armful, so the claim is
+    // conservation rather than an exact shelf level: five left the shed system, none vanished.
+    expect(dock.cargoCount + state.bots[0]!.carryCount).toBe(shelf + carryBefore - 5);
+    expect(state.stats.touches.handCarry).toBe(touchesBefore + 1);
+
+    // Freshness is stamped on the way OUT, from this tick, exactly as the Root Cellar does
+    // it: nothing ages inside a machine, and goods back in the player's arms are loose again.
+    const slot = state.inventory.find((entry) => entry.item === ItemId.RussetPotato)!;
+    expect(slot.stacks.length).toBeGreaterThan(0);
+    for (let i = 0; i < slot.stacks.length; i++) {
+      expect(slot.stacks[i]!.spoilAtTick).toBeGreaterThan(state.tick);
+    }
+  });
+
+  it('stalls a bot delivering a different item than the shelf holds — nothing is deleted', () => {
+    // The mismatch trip is real: a zone that wilts mid-round sends the same bot home with
+    // fresh goods on one trip and Day-Old on the next. The shelf holds one product, so the
+    // second trip is the house "look downstream" stall — the bot stands at the shed holding
+    // its armful until the shelf drains, and then the held row walks itself in.
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 8_000);
+
+    expect(dock.cargoItem).toBe(ItemId.RussetPotato);
+    const shelf = dock.cargoCount;
+    expect(shelf).toBeGreaterThan(0);
+
+    const bot = state.bots[0]!;
+    bot.carryItem = ItemId.DayOldPotato;
+    bot.carryCount = 5;
+    bot.phase = BotPhase.Returning;
+    stepMany(state, 600);
+
+    // The stall, visibly: the armful is intact, the shelf is unmixed, nothing went anywhere.
+    expect(bot.carryItem).toBe(ItemId.DayOldPotato);
+    expect(bot.carryCount).toBe(5);
+    expect(dock.cargoItem).toBe(ItemId.RussetPotato);
+    expect(dock.cargoCount).toBe(shelf);
+
+    // Drain the shelf through its one door, and the stall resolves itself: the held row
+    // becomes the shelf's next product. Five in, five on the shelf — nothing was deleted.
+    expect(takeDockShelf(dock, shelf)).toEqual({ item: ItemId.RussetPotato, taken: shelf });
+    stepMany(state, 600);
+    expect(dock.cargoItem).toBe(ItemId.DayOldPotato);
+    expect(dock.cargoCount).toBe(5);
+    expect(bot.carryCount).toBe(0);
+  });
+
+  it('parks the bot when nothing is ripe, and resumes it when the zone ripens again', () => {
+    // The other half of the owner's report: "bot idle" once the dock drains is EXPECTED —
+    // nothing ripe means parked at the dock — and the claim worth testing is that ripeness
+    // wakes it back up rather than that idleness is a bug.
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 10_000);
+
+    // The zone out-yields the 40-slot shelf, so the round ends with the bot stalled at a full
+    // shed holding leftovers. Drain the shelf through its one door until the bot has parked
+    // itself empty-handed — the stall resolving is itself part of the story.
+    for (
+      let i = 0;
+      i < 20 && !(state.bots[0]!.phase === BotPhase.Idle && dock.cargoCount === 0);
+      i++
+    ) {
+      while (takeDockShelf(dock, 40) !== null) {
+        /* the one door, swung until the shelf is bare */
+      }
+      stepMany(state, 200);
+    }
+    while (takeDockShelf(dock, 40) !== null) {
+      /* one last sweep, in case parking dropped a final armful */
+    }
+    expect(state.bots[0]!.phase).toBe(BotPhase.Idle);
+    expect(state.bots[0]!.carryCount).toBe(0);
+    expect(dock.cargoCount).toBe(0);
+
+    // Nothing ripe, empty shelf, parked bot: idle is correct, not a bug. Now the wake-up.
+    ripenZone(state, zoneId);
+    stepMany(state, 6_000);
+
+    expect(dock.cargoItem).toBe(ItemId.RussetPotato);
+    expect(dock.cargoCount, 'the bot never went back to work').toBeGreaterThan(0);
+  });
+
+  it('keeps the planter dock and drone bay grabber-proof: incoming supply is not a source', () => {
+    // Their cargo pairs hold what something PAID to put in — seeds and drone parts — and an
+    // arm that could siphon a hopper would turn a supply line into a leak. The gate is by
+    // kind, in `takeDockShelf` itself, so there is no caller that can forget it.
+    const planter = farmWithDock(MachineKind.PlanterDock, BotKind.Planter);
+    planter.dock.boundZone = 0; // park the bot so the hopper level is the test's own
+    planter.dock.cargoItem = ItemId.PotatoSeed;
+    planter.dock.cargoCount = 12;
+    spawnBelt(planter.state, BeltTier.Basic, 3, 1, Direction.East, 2);
+    spawnGrabber(planter.state, GrabberTier.Mk1, 2, 1, Direction.East, 0);
+    stepMany(planter.state, 600);
+    expect(planter.dock.cargoCount, 'an arm siphoned the seed hopper').toBe(12);
+    expect(planter.state.grabbers[0]!.held).toBe(0);
+
+    const bayWorld = createWorld(9393);
+    const bay = spawnMachine(bayWorld, MachineKind.DroneBay, 0, 0)!;
+    bay.cargoItem = ItemId.DronePart;
+    bay.cargoCount = 6;
+    spawnBelt(bayWorld, BeltTier.Basic, 3, 1, Direction.East, 2);
+    spawnGrabber(bayWorld, GrabberTier.Mk1, 2, 1, Direction.East, 0);
+    stepMany(bayWorld, 600);
+    expect(bay.cargoCount, 'an arm siphoned the parts shelf').toBe(6);
+    expect(bayWorld.grabbers[0]!.held).toBe(0);
   });
 });
 

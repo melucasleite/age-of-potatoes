@@ -420,6 +420,7 @@ export {
   spawnPipe,
   spoilTickFor,
   takeBoxedMachine,
+  takeDockShelf,
   takeHarvest,
   takeOneOutput,
   spawnReservoir,

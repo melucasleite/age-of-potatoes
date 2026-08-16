@@ -227,6 +227,7 @@ import {
   streamFor,
   takeBoxedMachine,
   takeHarvest,
+  takeDockShelf,
   takeOneOutput,
   tileAt,
   tileOccupied,
@@ -1342,6 +1343,20 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
     machine.cargoCount -= taken;
     if (machine.cargoCount === 0) machine.cargoItem = 0;
     addItem(state, item, taken);
+    handsOn(machine);
+    touch(state, 'handCarry');
+    return true;
+  }
+
+  // THE HARVESTER DOCK'S SHELF UNLOADS LIKE STORAGE DOES (item 083): identified cargo, the
+  // ask capped by what the shelf holds, freshness stamped on the way out by `addItem` exactly
+  // as the cellar's is — nothing inside a machine ages, and goods back in the player's arms
+  // are loose again. Routed through `takeDockShelf`, the shelf's one door, so the hand and
+  // the grabber can never disagree about what came off it.
+  if (machine.kind === MachineKind.HarvesterDock) {
+    const took = takeDockShelf(machine, command.count);
+    if (took === null) return false;
+    addItem(state, took.item, took.taken);
     handsOn(machine);
     touch(state, 'handCarry');
     return true;

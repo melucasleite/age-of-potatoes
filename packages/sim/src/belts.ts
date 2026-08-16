@@ -20,6 +20,7 @@
 import {
   BELT_ITEM_SPACING_SUBTILES,
   type ItemId,
+  MachineKind,
   MachineRole,
   beltSpec,
   grabberSpec,
@@ -42,6 +43,7 @@ import {
   directionStepY,
   machineAt,
   nextOutputItem,
+  takeDockShelf,
   takeOneOutput,
 } from './state';
 import { effectiveInputCapacity } from './upgrades';
@@ -339,6 +341,21 @@ function grabberTake(state: WorldState, grabber: Grabber, reachTiles: number): I
 
   const machine = machineAt(state, from.tileX, from.tileY);
   if (machine !== null) {
+    // THE HARVESTER DOCK'S SHELF IS CARGO, NOT AN OUTPUT BUFFER (item 083): its spec honestly
+    // makes nothing, so `nextOutputItem` has no name for what the bot delivered — the identity
+    // lives on the cargo pair. Gated by KIND rather than by dock role, because the planter
+    // dock's seeds and the drone bay's parts are incoming supply an arm must never siphon;
+    // `takeDockShelf` is the one door out and enforces the same gate itself.
+    if (machine.kind === MachineKind.HarvesterDock) {
+      const shelf = machine.cargoItem;
+      if (shelf === 0) return 0;
+      // The filter judges what is actually on the shelf, exactly as it judges the next unit
+      // out of a Fryer: an arm filtered to fresh potatoes leaves a Day-Old shelf alone.
+      if (grabber.filter !== 0 && shelf !== grabber.filter) return 0;
+      const took = takeDockShelf(machine, 1);
+      return took === null ? 0 : took.item;
+    }
+
     const spec = machineSpec(machine.kind);
     if (spec === null || spec.outputItem === null) return 0;
 

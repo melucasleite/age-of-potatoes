@@ -2150,6 +2150,33 @@ export function takeOneOutput(machine: Machine, spec: MachineSpec): ItemId | nul
   return item;
 }
 
+/**
+ * Take up to `count` goods off a harvester dock's shelf and say what they were.
+ *
+ * **THE ONE DOOR OUT OF A DOCK'S SHELF** — the grabber and the player's own hands both come
+ * through here, which is `takeOneOutput`'s law applied to the cargo pair: two code paths that
+ * both decremented `cargoCount` would eventually disagree about what came off the shelf.
+ *
+ * GATED BY KIND, IN THE DOOR ITSELF, and the gate is the safety property rather than a
+ * convenience: the planter dock's seeds and the drone bay's parts are *incoming* supply — cargo
+ * something paid to put IN — and a caller that could drain any dock's cargo by forgetting a
+ * check would let a grabber quietly eat a seed hopper. A door that only exists on the one dock
+ * whose cargo is outgoing cannot be misaimed.
+ */
+export function takeDockShelf(
+  dock: Machine,
+  count: number,
+): { item: ItemId; taken: number } | null {
+  if (dock.kind !== MachineKind.HarvesterDock) return null;
+  if (dock.cargoItem === 0 || dock.cargoCount <= 0 || count <= 0) return null;
+
+  const item = dock.cargoItem;
+  const taken = count < dock.cargoCount ? count : dock.cargoCount;
+  dock.cargoCount -= taken;
+  if (dock.cargoCount === 0) dock.cargoItem = 0;
+  return { item, taken };
+}
+
 export function machineCoversTile(machine: Machine, tileX: number, tileY: number): boolean {
   const spec = machineSpec(machine.kind);
   if (spec === null) return false;
