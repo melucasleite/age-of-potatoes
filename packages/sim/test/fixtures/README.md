@@ -342,3 +342,58 @@ beat further, until the dock holds a named harvest on the produce shelf AND name
 seed shelf — the one state no earlier format can express. Every older format fixture's migrated
 hash moved with the digest and its `steps` array gained the 15 → 16 step; the files themselves
 were not touched, which is the rule that makes them worth keeping.
+
+## 2026-08-16 (wave 12, item 085): an arm looks before it grabs — two hashes, both timing
+
+Owner ruling: _"the grabbers should only be able to take what the machine is able to receive… if
+it grabs something that the machine can't take, it shouldn't grab it."_ Grabbers now ask their
+destination's accept-door before closing the claw, which overturns the deliberate "look
+downstream" stall every accept-door in `belts.ts` and `bots.ts` used to document. Arms that used
+to grab-and-hold now leave the goods where they are.
+
+**Two of nineteen moved. Seventeen replayed byte-identical**, command lists frozen, on the first
+try. Only four fixtures in the set place a grabber at all (`grep '"PlaceGrabber"'`:
+`factory-line` 6, `depot-run` 1, `junction-loop` 1, `rotate-and-box` 1) — and `factory-line`'s
+six, the longest arm chain in the set, did not move a subtile. Every one of them is aimed at
+something that wants what it is carrying, which is what a factory that works looks like.
+
+| Fixture         |        Old |        New | Cause                                                     |
+| --------------- | ---------: | ---------: | --------------------------------------------------------- |
+| `depot-run`     | `710ac94a` | `a44e80a1` | Arm no longer grabs a bag before the depot has a route    |
+| `junction-loop` | `3606bfc7` | `dca65c17` | Arm no longer grabs a bag before the loop's belt has room |
+
+**Both were diagnosed to a single tick before either was re-pinned**, by replaying each fixture
+twice in one process — once with the look-ahead and once without — and stopping at the first tick
+whose hash differed:
+
+- `junction-loop`, tick **36,631**: the arm took a bag off the Chip Kitchen while the belt in
+  front of it already had an item parked at the drop point. Old world: bag in the claw, kitchen
+  output down to 1. New world: bag stays in the kitchen (output 2) and the arm waits for room.
+  The two belt items therefore end the session 28 and 57 subtiles further back — the goods board
+  the loop one swing later, and ride it just as far.
+- `depot-run`, tick **259,883**: the arm took a bag off the Chip Kitchen while the Truck Depot in
+  front of it **had no contract at all yet**. Old world: the arm stood holding it until the route
+  was signed. New world: the bag waits in the kitchen's output buffer instead.
+
+**Neither fixture needed re-timing, and neither was re-recorded.** The bar for that is a beat that
+died, and nothing died: both replayed with every command still applying (identical trace lengths,
+13,396 and 1,958 entries), and both story tests in `factory.test.ts` and `commerce.test.ts` pass
+untouched — the junction cursors still alternate, goods still reach all six belts and are still
+circulating at the end, and the hands-off window still contains its four truck runs and its
+frozen touch counters.
+
+What actually differs at the end of each session is worth writing down, because it is a short
+list and every entry on it is a clock rather than an outcome. Measured, not assumed:
+
+- **Identical in both**: money, `itemsSold`, lifetime earned and spent, `itemsProducedByMachine`,
+  `inputsWastedByMachine`, every machine's `opCount`, `outputCount`, `progress` and `condition`,
+  the depot's `stocked`, the inventory, and the final net worth.
+- **Different in both**: where the goods are along a belt, the depot's `ticksRemaining`
+  (11 ticks), the Shift Report's rolling hour buckets (exactly one production event slid across
+  an hour boundary), and the sampled net-worth curve, which reads the same climb a few ticks
+  earlier.
+
+`depot-run`'s `longestUntouchedMachineTicks` went **up**, 1,140 → 1,200, which is the pleasing
+one: `untouchedTicks` only advances on a tick a machine genuinely moved work forward, and the
+kitchen's last unbroken working streak is sixty ticks longer in a world where its arm is not
+away holding something nobody would take.

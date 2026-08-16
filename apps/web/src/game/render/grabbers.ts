@@ -14,18 +14,21 @@
 //
 // which follows from the sim: a grabber sets `cooldown` at the moment it picks up (holding)
 // and again at the moment it puts down (empty). At rest the permille reads full and the
-// hand parks over its source with the claw open, waiting — so an arm stuck holding an item,
-// clamped shut over a full destination, is plan §5's "look downstream" told without a single
-// word of UI.
+// hand parks over its source with the claw open, waiting.
 //
-// ── AND NOW IT IS TOLD WITH THE SAME LAMP EVERY MACHINE WEARS ──────────────────────────
+// ── THE STALL IS NO LONGER THE DIAGNOSTIC. THE LAMP IS ([[085]]) ───────────────────────
 //
-// "Without a single word of UI" was doing a lot of work above, because reading a stall off an
-// arm's resting pose requires already knowing the rule. `GrabberView.lamp` publishes the same
-// three states the sim's own grammar uses — green mid-swing, amber empty and waiting, red
-// holding with nowhere to put it — and this file draws them with `lamps.ts`'s shapes and
-// `lamps.ts`'s colours. Not a second vocabulary for arms: an amber arm and an amber Fryer mean
-// the identical thing, look upstream, and a player who has learned one has learned both.
+// This header used to say that an arm stuck holding an item, clamped shut over a full
+// destination, was plan §5's "look downstream" told without a word of UI. **That arm barely
+// exists now.** Item 085's owner ruling — "if it grabs something that the machine can't take,
+// it shouldn't grab it" — means a blocked arm stands EMPTY-HANDED with the goods left on the
+// belt, and the only arm still holding one is an arm the world changed under mid-swing.
+//
+// So the whole message rides `GrabberView.lamp`, which is computed in the sim and needs no
+// interpretation here: green mid-swing, amber nothing to take, red — look downstream —
+// whenever the next pickup would be refused, hands full or empty. Drawn with `lamps.ts`'s
+// shapes and colours, not a second vocabulary for arms: an amber arm and an amber Fryer mean
+// the identical thing, and a player who has learned one has learned both.
 //
 // ── THE ARM IS THE AUTHORED FRAME, TAKEN APART ([[094]]) ───────────────────────────────
 //

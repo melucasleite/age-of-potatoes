@@ -13,6 +13,7 @@ import {
   Direction,
   FIELD_ORIGIN_X,
   FIELD_ORIGIN_Y,
+  BeltTier,
   GrabberTier,
   IntentAction,
   ItemId,
@@ -20,6 +21,7 @@ import {
   MachineKind,
   TECH_NODES,
   TICKS_PER_IN_GAME_DAY,
+  beltInsert,
   createWorld,
   createWorldView,
   deriveStream,
@@ -28,6 +30,7 @@ import {
   inGameDays,
   itemCount,
   nextUint32,
+  spawnBelt,
   spawnGrabber,
   step,
   stepMany,
@@ -423,6 +426,11 @@ describe('the view seam', () => {
     // Plan §5's grammar, on the arm — "belt gaps mean look upstream, jams mean look
     // downstream" is only a diagnostic if the two are distinguishable, and a starved arm and a
     // blocked one look identical from ten tiles up without it.
+    //
+    // **AND SINCE ITEM 085 THE LAMP IS THE WHOLE DIAGNOSTIC.** An arm no longer picks up what
+    // its destination will refuse, so the stuck arm holding a hostage — which used to be how a
+    // player spotted a mis-aimed belt — has mostly stopped existing. Red now has to fire on an
+    // EMPTY arm whose next pickup would be refused, or that belt looks merely idle.
     const state = createWorld(77);
 
     // Nothing behind it and nothing in front: it reaches back every tick and finds nothing.
@@ -430,8 +438,7 @@ describe('the view seam', () => {
     stepMany(state, 5);
     expect(view(state, createWorldView()).grabbers[0]!.lamp).toBe(LampState.Starved);
 
-    // Holding something with nowhere to put it. The arm stands there, visibly, which is the
-    // readable version of "look downstream" — now with a lamp on it.
+    // Holding something with nowhere to put it: the mid-swing stall item 085 left standing.
     arm.held = ItemId.PlainChips;
     arm.cooldown = 0;
     stepMany(state, 1);
@@ -440,6 +447,18 @@ describe('the view seam', () => {
     // Mid-swing is a working arm.
     arm.cooldown = 5;
     expect(view(state, createWorldView()).grabbers[0]!.lamp).toBe(LampState.Running);
+
+    // EMPTY-HANDED AND STILL RED: a belt behind it with goods on it, bare ground in front. The
+    // arm holds nothing and never will — and this is the case the old two-field lamp could not
+    // see, because `held === 0` used to mean amber unconditionally.
+    arm.held = 0;
+    arm.cooldown = 0;
+    const feed = spawnBelt(state, BeltTier.Basic, 4, 5, Direction.East, 1)!;
+    beltInsert(feed, 0, ItemId.PlainChips);
+    stepMany(state, 1);
+    expect(view(state, createWorldView()).grabbers[0]!.lamp).toBe(LampState.Blocked);
+    expect(arm.held).toBe(0);
+    expect(feed.items).toHaveLength(1);
   });
 
   it('projects the untouched-line counter the third Charter is read off', () => {
