@@ -231,6 +231,10 @@ export const MACHINE_MOTION: Record<MachineKind, MotionSpec> = {
     periodMs: 700,
   },
   [MachineKind.DroneBay]: { name: 'rotor-whir', driver: 'bot', wave: 'flutter', periodMs: 220 },
+  // RETIRED ([[090]]) and kept, because this table is total over `MachineKind` and its own test
+  // asserts that. No world can contain a Parts Bench after the 16 → 17 migration, so nothing
+  // will ever play this row — but a hole in a keyed-by-enum table is a `undefined.wave` waiting
+  // for whoever loads an old save in a branch, and the row costs four lines.
   [MachineKind.PartsBench]: {
     name: 'tap-tap',
     driver: 'progress',

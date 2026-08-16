@@ -42,6 +42,8 @@ import {
 import type { WorldView } from '@snack/sim';
 
 import { beltLoadPermille } from '../input/lod';
+import { classifyBeltShapes } from './belt-shape';
+import type { BeltShapeKind, BeltShapeTile } from './belt-shape';
 import type { WorldRect } from './camera';
 import { beltSubtilesPerTick, stepX as dirStepX, stepY as dirStepY } from './directions';
 import { LAMP_TINT } from './lamps';
@@ -71,10 +73,54 @@ const NO_TINT = 0xffffff;
 const FLOW_TINT_IDLE = LAMP_TINT[LampState.Off]!;
 const FLOW_TINT_BUSY = LAMP_TINT[LampState.Running]!;
 
+/**
+ * The atlas frame each shape wears, by tier. Total over every kind, `straight` included —
+ * which is not padding: it says out loud that a straight tile's frame IS the scrolling
+ * surface, so nobody later wonders whether the bend table forgot a case.
+ */
+const SHAPE_FRAME: Record<BeltShapeKind, (tier: number) => string> = {
+  straight: ART.beltSurface,
+  corner: ART.beltCorner,
+  tee: ART.beltTee,
+  teeMerge: ART.beltTeeMerge,
+};
+
 export class BeltStructureLayer {
   private readonly tierTextures = new Map<number, Texture>();
   private readonly sprites = new Map<number, TilingSprite>();
   private readonly owned: RenderTexture[] = [];
+
+  /**
+   * The bends and tees, one sprite per tile that is not plain track, keyed by tile ([[095]]).
+   *
+   * Sprites rather than more tiling quads, and drawn OVER the run rather than cut into it. A
+   * tee can land in the MIDDLE of a segment — the sim hands goods into whatever belt covers
+   * the exit tile, at whatever index that is — so cutting the run would mean splitting one
+   * scrolling quad into two and re-deriving both phases from the same number. The frames are
+   * opaque plates covering the whole tile, so laying one on top hides the straight underneath
+   * and leaves every line of the scroll maths alone.
+   *
+   * They do not scroll. A bend is a piece of ironwork the line passes through; the belts
+   * either side carry the motion, exactly as the junction machine's tee already does.
+   *
+   * `shapeTiles` and `shapeSprites` are INDEX-ALIGNED, rebuilt together and only together.
+   */
+  private shapeTiles: readonly BeltShapeTile[] = [];
+  private readonly shapeSprites: Sprite[] = [];
+
+  /**
+   * A signature of the belt TOPOLOGY, so the classification runs on change and not per frame.
+   *
+   * Item 095's budget rule, and the reason the guard is two accumulators rather than one: a
+   * single 32-bit hash colliding would leave a bend undrawn until the next edit, which is a
+   * bug that reproduces once a year and never in front of anyone. Two independent mixes make
+   * that a 64-bit coincidence. What is folded in is exactly what can change a tile's shape —
+   * where each belt starts, which way it runs, how long it is, and what tier it wears. Item
+   * counts and throughput deliberately are not: goods moving cannot bend a track.
+   */
+  private topologyLow = 0;
+  private topologyHigh = 0;
+  private topologyKnown = false;
 
   /**
    * How far each belt's flow tint has scrolled, in source px, kept modulo one tile.
@@ -93,6 +139,7 @@ export class BeltStructureLayer {
     private readonly renderer: Renderer,
     private readonly art: ArtSet,
     private readonly attach: (sprite: TilingSprite) => void,
+    private readonly attachShape: (sprite: Sprite) => void,
   ) {
     for (const spec of BELT_SPECS) {
       this.tierTextures.set(spec.tier, this.bakeTier(spec.tier));
@@ -214,6 +261,101 @@ export class BeltStructureLayer {
       this.sprites.delete(id);
       this.flowPhase.delete(id);
     }
+
+    // AFTER the run loop, never before: the bends read their tint and their culling straight
+    // off the quad of the belt they sit on, and that quad only carries this frame's answers
+    // once the loop above has written them.
+    this.syncShapes(view);
+  }
+
+  /**
+   * Keep the bends and tees in step with the belts.
+   *
+   * TWO SPEEDS, deliberately. Classification — who bends, which way, wearing what — runs only
+   * when the belt topology has actually moved, which is item 095's budget rule: the far view
+   * draws five thousand goods a frame and must not be handed a neighbour scan as well. What
+   * runs every frame is two property writes per BEND (not per belt, and certainly not per
+   * item), and both are copies of a number the run beside it already computed.
+   */
+  private syncShapes(view: WorldView): void {
+    if (this.topologyMoved(view.belts)) this.rebuildShapes(view);
+
+    for (let i = 0; i < this.shapeTiles.length; i++) {
+      const sprite = this.shapeSprites[i]!;
+      const run = this.sprites.get(this.shapeTiles[i]!.beltId);
+      if (run === undefined) {
+        // The belt went away this frame and the reclassification has not run yet. Hide rather
+        // than guess: a bend outliving its line by a frame is a sprite floating on bare ground.
+        sprite.visible = false;
+        continue;
+      }
+      sprite.visible = run.visible;
+      sprite.tint = run.tint;
+    }
+  }
+
+  /** Re-derive every bend and tee, reusing the sprites already on the layer. */
+  private rebuildShapes(view: WorldView): void {
+    const tiles = classifyBeltShapes(view.belts);
+
+    // Pooled rather than rebuilt from nothing: dragging out a run re-enters here once per tile
+    // placed, and destroying twenty untouched elbows to recreate them would churn the batcher
+    // through the exact gesture the player is watching.
+    for (let i = this.shapeSprites.length; i < tiles.length; i++) {
+      // Centre anchor, because these are ROTATED and some are FLIPPED. A top-left anchor puts
+      // a quarter-turned tile in its neighbour's square — the same trap the junction machine's
+      // body already documents.
+      const sprite = new Sprite();
+      sprite.anchor.set(0.5, 0.5);
+      this.shapeSprites.push(sprite);
+      this.attachShape(sprite);
+    }
+    while (this.shapeSprites.length > tiles.length) {
+      this.shapeSprites.pop()!.destroy();
+    }
+
+    for (let i = 0; i < tiles.length; i++) {
+      const tile = tiles[i]!;
+      const sprite = this.shapeSprites[i]!;
+      sprite.texture = this.art.get(SHAPE_FRAME[tile.shape.kind](tile.tier));
+      sprite.setSize(TILE_PX, TILE_PX);
+      // The flip goes on AFTER the size, because `setSize` writes the scale it needs and would
+      // otherwise wipe it. Negative y in local space, so it composes inside the rotation below
+      // — which is exactly the order `belt-shape.ts` derives its turns in.
+      if (tile.shape.mirror) sprite.scale.y = -sprite.scale.y;
+      sprite.rotation = (tile.shape.quarterTurns * Math.PI) / 2;
+      sprite.position.set(tile.tileX * TILE_PX + TILE_PX / 2, tile.tileY * TILE_PX + TILE_PX / 2);
+    }
+
+    this.shapeTiles = tiles;
+  }
+
+  /**
+   * Has anything that can change a tile's SHAPE moved since the last frame?
+   *
+   * Folds in where each belt starts, which way it runs, how far, and what tier it wears — and
+   * nothing else. Item counts and throughput are left out on purpose: goods moving along a
+   * track cannot bend it, and folding them in would defeat the whole guard on every frame of
+   * a running factory.
+   */
+  private topologyMoved(belts: WorldView['belts']): boolean {
+    let low = belts.length | 0;
+    let high = ~belts.length | 0;
+    for (let i = 0; i < belts.length; i++) {
+      const belt = belts[i]!;
+      const shape = belt.tileX * 4096 + belt.tileY * 64 + belt.dir * 8 + belt.tier;
+      low = (Math.imul(low, 31) + belt.id) | 0;
+      low = (Math.imul(low, 31) + shape + belt.lengthTiles) | 0;
+      high = (Math.imul(high, 486187739) + belt.id) | 0;
+      high = (Math.imul(high, 486187739) + shape - belt.lengthTiles) | 0;
+    }
+    if (this.topologyKnown && low === this.topologyLow && high === this.topologyHigh) {
+      return false;
+    }
+    this.topologyLow = low;
+    this.topologyHigh = high;
+    this.topologyKnown = true;
+    return true;
   }
 
   /**
@@ -234,6 +376,10 @@ export class BeltStructureLayer {
   destroy(): void {
     for (const sprite of this.sprites.values()) sprite.destroy();
     this.sprites.clear();
+    for (const sprite of this.shapeSprites) sprite.destroy();
+    this.shapeSprites.length = 0;
+    this.shapeTiles = [];
+    this.topologyKnown = false;
     this.flowPhase.clear();
     for (const texture of this.owned) texture.destroy(true);
     this.owned.length = 0;

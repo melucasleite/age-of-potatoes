@@ -1649,6 +1649,26 @@
       "source": "local/belt_basic_corner.png"
     },
     {
+      "id": "belt_basic_tee",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 yellow basic-tier conveyor belt tee — the side feed: the run passes west to east and a second line joins it from the south — authored by art/tools/make-factory-parts.mjs (work item 095). The tier's 1 chevron(s), spent as the corner's through-run arrows plus exactly one arrow on the south arm pointing north, into the run, because a side feed joins and does not leave. Both its west and east edges are asserted equal to the tier straight's edge, its bottom edge to a vertical run's, and its north face to closed plate — so a tee dropped into the middle of a run seams on neither side.",
+      "anchor": "top-left",
+      "atlasGroup": "belts",
+      "source": "local/belt_basic_tee.png"
+    },
+    {
+      "id": "belt_basic_tee_merge",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 yellow basic-tier conveyor belt tee — the head-on merge: goods arrive from both the west and the east and leave together through the south — authored by art/tools/make-factory-parts.mjs (work item 095). The tier's 1 chevron(s) stacked down the south stem pointing out, and the two feeding arms deliberately bare, because they are interchangeable and an arrow on one would read as the preferred one. Asserted mirror-symmetric left to right on every build, plus the tee's edge and closed-north guarantees.",
+      "anchor": "top-left",
+      "atlasGroup": "belts",
+      "source": "local/belt_basic_tee_merge.png"
+    },
+    {
       "id": "belt_fast",
       "provider": "local",
       "width": 16,
@@ -1670,6 +1690,26 @@
       "source": "local/belt_fast_corner.png"
     },
     {
+      "id": "belt_fast_tee",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 red fast-tier conveyor belt tee — the side feed: the run passes west to east and a second line joins it from the south — authored by art/tools/make-factory-parts.mjs (work item 095). The tier's 2 chevron(s), spent as the corner's through-run arrows plus exactly one arrow on the south arm pointing north, into the run, because a side feed joins and does not leave. Both its west and east edges are asserted equal to the tier straight's edge, its bottom edge to a vertical run's, and its north face to closed plate — so a tee dropped into the middle of a run seams on neither side.",
+      "anchor": "top-left",
+      "atlasGroup": "belts",
+      "source": "local/belt_fast_tee.png"
+    },
+    {
+      "id": "belt_fast_tee_merge",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 red fast-tier conveyor belt tee — the head-on merge: goods arrive from both the west and the east and leave together through the south — authored by art/tools/make-factory-parts.mjs (work item 095). The tier's 2 chevron(s) stacked down the south stem pointing out, and the two feeding arms deliberately bare, because they are interchangeable and an arrow on one would read as the preferred one. Asserted mirror-symmetric left to right on every build, plus the tee's edge and closed-north guarantees.",
+      "anchor": "top-left",
+      "atlasGroup": "belts",
+      "source": "local/belt_fast_tee_merge.png"
+    },
+    {
       "id": "belt_express",
       "provider": "local",
       "width": 16,
@@ -1689,6 +1729,26 @@
       "anchor": "top-left",
       "atlasGroup": "belts",
       "source": "local/belt_express_corner.png"
+    },
+    {
+      "id": "belt_express_tee",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 blue express-tier conveyor belt tee — the side feed: the run passes west to east and a second line joins it from the south — authored by art/tools/make-factory-parts.mjs (work item 095). The tier's 3 chevron(s), spent as the corner's through-run arrows plus exactly one arrow on the south arm pointing north, into the run, because a side feed joins and does not leave. Both its west and east edges are asserted equal to the tier straight's edge, its bottom edge to a vertical run's, and its north face to closed plate — so a tee dropped into the middle of a run seams on neither side.",
+      "anchor": "top-left",
+      "atlasGroup": "belts",
+      "source": "local/belt_express_tee.png"
+    },
+    {
+      "id": "belt_express_tee_merge",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 blue express-tier conveyor belt tee — the head-on merge: goods arrive from both the west and the east and leave together through the south — authored by art/tools/make-factory-parts.mjs (work item 095). The tier's 3 chevron(s) stacked down the south stem pointing out, and the two feeding arms deliberately bare, because they are interchangeable and an arrow on one would read as the preferred one. Asserted mirror-symmetric left to right on every build, plus the tee's edge and closed-north guarantees.",
+      "anchor": "top-left",
+      "atlasGroup": "belts",
+      "source": "local/belt_express_tee_merge.png"
     },
     {
       "id": "grabber_mk1",

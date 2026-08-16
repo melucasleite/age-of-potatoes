@@ -20,6 +20,12 @@ import { RenderLayer } from 'pixi.js';
  *   structure standing on it, so where the two districts meet the belt reads as the nearer
  *   object. They never share a tile, so this only ever settles a tie at the seam.
  * - `beltStructures` becomes a tile layer animated by scrolling UVs (v0.3).
+ * - `beltShapes` is the bends and tees drawn OVER those runs ([[095]]). It is its own slot
+ *   rather than a few more sprites in `beltStructures` for a mechanical reason: a
+ *   `RenderLayer` draws what is attached to it in attach order, and belt segments are
+ *   attached as the player builds them — so an elbow sharing the belt slot would be drawn
+ *   over by the next belt laid anywhere on the map. A separate slot makes "the shape wins on
+ *   its own tile" a property of the z-order table instead of a property of build order.
  * - `beltItems` becomes a single `ParticleContainer` on one shared `TextureSource`
  *   ([[012]]). Particles support no interactivity — picking there is a sim-side tile
  *   lookup, never a hit test.
@@ -33,6 +39,7 @@ export const LAYER_ORDER = [
   'zonePaint',
   'pipes',
   'beltStructures',
+  'beltShapes',
   'beltItems',
   'groundEntities',
   'machines',

@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.fa52bbb9.png';
-export const ATLAS_JSON_URL = '/art/atlas.fa52bbb9.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.7710ddd5.png';
+export const ATLAS_JSON_URL = '/art/atlas.7710ddd5.json';
 
 export const ATLAS_SIZE = { width: 1024, height: 512 } as const;
 
@@ -158,7 +158,7 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'belts',
   },
-  belt_corner: {
+  belt_basic_tee: {
     x: 34,
     y: 0,
     width: 16,
@@ -166,7 +166,7 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'belts',
   },
-  belt_express: {
+  belt_basic_tee_merge: {
     x: 51,
     y: 0,
     width: 16,
@@ -174,7 +174,7 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'belts',
   },
-  belt_express_corner: {
+  belt_corner: {
     x: 68,
     y: 0,
     width: 16,
@@ -182,7 +182,7 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'belts',
   },
-  belt_fast: {
+  belt_express: {
     x: 85,
     y: 0,
     width: 16,
@@ -190,7 +190,7 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'belts',
   },
-  belt_fast_corner: {
+  belt_express_corner: {
     x: 102,
     y: 0,
     width: 16,
@@ -198,7 +198,7 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'belts',
   },
-  belt_junction: {
+  belt_express_tee: {
     x: 119,
     y: 0,
     width: 16,
@@ -206,8 +206,56 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'belts',
   },
-  belt_straight: {
+  belt_express_tee_merge: {
     x: 136,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_fast: {
+    x: 153,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_fast_corner: {
+    x: 170,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_fast_tee: {
+    x: 187,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_fast_tee_merge: {
+    x: 204,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_junction: {
+    x: 221,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_straight: {
+    x: 238,
     y: 0,
     width: 16,
     height: 16,
@@ -367,7 +415,7 @@ export const ATLAS_FRAMES = {
     group: 'decals',
   },
   grabber_arm: {
-    x: 153,
+    x: 255,
     y: 0,
     width: 16,
     height: 16,
@@ -375,7 +423,7 @@ export const ATLAS_FRAMES = {
     group: 'belts',
   },
   grabber_long: {
-    x: 170,
+    x: 272,
     y: 0,
     width: 16,
     height: 16,
@@ -383,7 +431,7 @@ export const ATLAS_FRAMES = {
     group: 'belts',
   },
   grabber_mk1: {
-    x: 187,
+    x: 289,
     y: 0,
     width: 16,
     height: 16,
@@ -391,7 +439,7 @@ export const ATLAS_FRAMES = {
     group: 'belts',
   },
   grabber_mk2: {
-    x: 204,
+    x: 306,
     y: 0,
     width: 16,
     height: 16,

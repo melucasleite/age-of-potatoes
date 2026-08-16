@@ -218,6 +218,14 @@ function beltTierStraight(livery) {
   return grid;
 }
 
+// The entering-arrow phases the tier corner puts on its horizontal leg, keyed by the tier's
+// chevron count: none for Basic, one for Fast, two for Express. Never at x=0 — an arrow
+// touching the entry edge would break the edge-match assertions below (the neutral corner
+// predates that check and keeps its edge-hugging arrow). Shared with the tee further down,
+// so the two frames' through runs are literally the same arrows rather than two lists that
+// have to be kept in step by hand.
+const ENTERING_XS = { 1: [], 2: [1], 3: [1, 6] };
+
 /**
  * A tier corner: the neutral corner's arms, the plate in the tier's hue with a one-pixel
  * shade ring where plate meets band — which is exactly what makes this tile's entry edges
@@ -247,12 +255,9 @@ function beltTierCorner(livery) {
       grid[y][x] = borders ? livery.railDark : livery.rail;
     }
   }
-  // Entering arrows (pointing right) on the horizontal leg: none for Basic, one for Fast,
-  // two for Express — the departing arrow below completes the 1 / 2 / 3 count.
-  // Never at x=0: an arrow touching the entry edge would break the edge-match assertion
-  // below (the neutral corner predates that check and keeps its edge-hugging arrow).
-  const entering = { 1: [], 2: [1], 3: [1, 6] }[livery.chevronXs.length];
-  for (const x0 of entering) {
+  // Entering arrows (pointing right) on the horizontal leg — the departing arrow below
+  // completes the 1 / 2 / 3 count.
+  for (const x0 of ENTERING_XS[livery.chevronXs.length]) {
     for (const [x, y] of chevronCells(x0)) {
       if (x < SIZE) grid[y][x] = livery.chev;
     }
@@ -262,6 +267,120 @@ function beltTierCorner(livery) {
     for (let x = BAND_MID - 3 + dy; x <= BAND_MID + 3 - dy; x++) {
       grid[SIZE - CHEVRON_WIDTH - 1 + dy][x] = livery.chev;
     }
+  }
+  return grid;
+}
+
+// --- the tier tees (work item 095) -----------------------------------------------------
+//
+// A belt network branches two ways, and the neutral junction only draws one of them. Two
+// more frames per tier, and the arrows are the whole difference between them:
+//
+//   belt_<tier>_tee        THE SIDE FEED — goods run west to east straight through the
+//                          tile, and a second line JOINS from the south.
+//   belt_<tier>_tee_merge  THE HEAD-ON MERGE — goods arrive from BOTH west and east and
+//                          leave together through the south.
+//
+// Both take the neutral junction's plate exactly: the through band is open WEST<->EAST
+// (rows ARM_LOW..ARM_HIGH), the branch arm is open SOUTH (cols ARM_LOW..ARM_HIGH from
+// ARM_LOW down), and NORTH is closed plate — so four rotations of these two tiles reach
+// every three-armed tee a grid can contain. The plate is coloured the way beltTierCorner
+// colours it, livery.rail with a one-pixel livery.railDark ring wherever plate meets band,
+// which is what makes a tee sit beside a corner and a straight as the same object rather
+// than a cousin of one. It is also what makes the edge assertions below pass.
+//
+// The chevron count is still the tier count, 1 / 2 / 3 (082's colourblind rule, house law),
+// and the two frames spend it differently on purpose:
+//
+//   * The TEE spends it the way the corner does: the corner's entering arrows on the
+//     through run, plus EXACTLY ONE arrow on the south arm pointing NORTH — up, into the
+//     run. A side feed's whole meaning is "this arm joins; it does not leave", and an arrow
+//     pointing the other way would make it a splitter.
+//   * The MERGE stacks the whole count DOWN the south stem pointing out, and leaves both
+//     the west and the east arm deliberately bare. They are interchangeable feeders, and an
+//     arrow on one of them would read as the preferred one; the precedent for a bare arm is
+//     the basic corner, which carries no entering arrow either. Bare arms are also what let
+//     this tile be asserted MIRROR-SYMMETRIC LEFT-TO-RIGHT below, which is that argument
+//     restated as something the build can fail on.
+//
+// WHY THE STEM ARROW HAS AN EIGHT-PIXEL BASE WHERE THE CORNER'S HAS SEVEN: the corner's
+// departing arrow is chevronCells transposed, so it inherits the horizontal chevron's ODD
+// width and sits centred on BAND_MID, column 7. A 16px tile mirrors about 7.5, so an
+// odd-width arrow is mirror-symmetric at no width at all and the merge's symmetry assertion
+// would be unsatisfiable by construction. The stem arrow is therefore the same triangle
+// widened by one pixel to an even base. It costs nothing — cols 4..11 still clear the arm
+// walls at cols 3 and 12 by a pixel each side — and it keeps the corner's ROWS exactly, so
+// Basic's single merge arrow lands on the same four rows the corner's departing arrow
+// occupies. Rows are the part the eye reads as "same family"; the half-pixel is not.
+
+// Stem arrow row offsets, top to bottom. A tier takes the LAST n of these, so every tier's
+// bottom-most arrow sits on the corner's departing rows and the extras stack upward.
+const STEM_CHEVRON_YS = [3, 7, 11];
+
+/**
+ * The stem arrow: a fat triangle CHEVRON_WIDTH rows tall on an 8-wide base, centred on the
+ * tile's mirror axis. `pointing` is 'south' (apex at the bottom, goods leaving) or 'north'
+ * (apex at the top, goods joining).
+ */
+function stemChevronCells(y0, pointing) {
+  const cells = [];
+  for (let dy = 0; dy < CHEVRON_WIDTH; dy++) {
+    const taper = pointing === 'south' ? dy : CHEVRON_WIDTH - 1 - dy;
+    for (let x = BAND_MID - 3 + taper; x <= BAND_MID + 4 - taper; x++) {
+      cells.push([x, y0 + dy]);
+    }
+  }
+  return cells;
+}
+
+/** The plate both tees share: band through west<->east, arm out south, north closed. */
+function beltTierTeePlate(livery) {
+  const grid = blankGrid();
+  const inArms = (x, y) => {
+    const through = y >= ARM_LOW && y <= ARM_HIGH;
+    const branch = x >= ARM_LOW && x <= ARM_HIGH && y >= ARM_LOW;
+    return through || branch;
+  };
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      if (inArms(x, y)) {
+        grid[y][x] = 'D';
+        continue;
+      }
+      const borders =
+        (x > 0 && inArms(x - 1, y)) ||
+        (x < SIZE - 1 && inArms(x + 1, y)) ||
+        (y > 0 && inArms(x, y - 1)) ||
+        (y < SIZE - 1 && inArms(x, y + 1));
+      grid[y][x] = borders ? livery.railDark : livery.rail;
+    }
+  }
+  return grid;
+}
+
+/** The side feed: the corner's through-run arrows, plus one arrow joining from the south. */
+function beltTierTee(livery) {
+  const grid = beltTierTeePlate(livery);
+  // The through run carries the corner's entering arrows, phase and all, so a tee and a
+  // bend fed by the same belt agree about where the arrows fall.
+  for (const x0 of ENTERING_XS[livery.chevronXs.length]) {
+    for (const [x, y] of chevronCells(x0)) {
+      if (x < SIZE) grid[y][x] = livery.chev;
+    }
+  }
+  // One arrow on the south arm pointing NORTH — the corner's departing arrow transposed and
+  // reversed, on the same rows. Through arrows + this one = the tier count, 1 / 2 / 3.
+  for (const [x, y] of stemChevronCells(STEM_CHEVRON_YS[STEM_CHEVRON_YS.length - 1], 'north')) {
+    grid[y][x] = livery.chev;
+  }
+  return grid;
+}
+
+/** The head-on merge: bare feeding arms, the whole tier count stacked down the south stem. */
+function beltTierTeeMerge(livery) {
+  const grid = beltTierTeePlate(livery);
+  for (const y0 of STEM_CHEVRON_YS.slice(-livery.chevronXs.length)) {
+    for (const [x, y] of stemChevronCells(y0, 'south')) grid[y][x] = livery.chev;
   }
   return grid;
 }
@@ -422,6 +541,61 @@ for (const [tier, livery] of Object.entries(LIVERIES)) {
       throw new Error(`belt_${tier}_corner does not meet a vertical belt at column ${x}.`);
     }
   }
+
+  // The two tees (095) carry the corner's guarantees and one more. A corner only ever meets
+  // a run on ONE side, so it only has to match on the left; a tee is dropped into the MIDDLE
+  // of a horizontal run, so BOTH its edges have to match or every side feed shows a seam on
+  // the side nobody checked.
+  const tierTees = {
+    [`belt_${tier}_tee`]: beltTierTee(livery),
+    [`belt_${tier}_tee_merge`]: beltTierTeeMerge(livery),
+  };
+  for (const [frame, grid] of Object.entries(tierTees)) {
+    for (let y = 0; y < SIZE; y++) {
+      if (grid[y][0] !== tierStraight[y][0]) {
+        throw new Error(`${frame} does not meet a straight belt on the west at row ${y}.`);
+      }
+      if (grid[y][SIZE - 1] !== tierStraight[y][0]) {
+        throw new Error(`${frame} does not meet a straight belt on the east at row ${y}.`);
+      }
+    }
+    // The south arm meets a vertical run, read x-for-y exactly as the corner's exit is.
+    for (let x = 0; x < SIZE; x++) {
+      if (grid[SIZE - 1][x] !== tierStraight[x][0]) {
+        throw new Error(`${frame} does not meet a vertical belt at column ${x}.`);
+      }
+    }
+    // North is closed plate, so row 0 may not contain a band glyph of any kind. This is the
+    // difference between a tee and a cross, and it should not depend on anyone squinting.
+    for (let x = 0; x < SIZE; x++) {
+      if (grid[0][x] === 'D' || grid[0][x] === livery.chev) {
+        throw new Error(`${frame} has band at ${x},0 — its north face is meant to be closed.`);
+      }
+    }
+    // No arrow may touch an edge this tile tiles against: the seam proof, in chevron form.
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        if (grid[y][x] !== livery.chev) continue;
+        if (x === 0 || x === SIZE - 1 || y === SIZE - 1) {
+          throw new Error(`${frame}: chevron pixel at ${x},${y} touches a tile edge.`);
+        }
+      }
+    }
+  }
+
+  // The merge's west and east arms are interchangeable feeders, so the tile has to be
+  // mirror-symmetric left-to-right. Anything asymmetric — a stray pixel, an odd-width stem
+  // arrow — would make one of the two feeding arms look like the preferred one.
+  const tierMerge = tierTees[`belt_${tier}_tee_merge`];
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE / 2; x++) {
+      if (tierMerge[y][x] !== tierMerge[y][SIZE - 1 - x]) {
+        throw new Error(
+          `belt_${tier}_tee_merge is not mirror-symmetric at ${x},${y} — one feeding arm would look preferred.`,
+        );
+      }
+    }
+  }
 }
 
 // A grabber is rotated in quarter-turns about its centre, so it must be mirror-symmetric
@@ -443,6 +617,8 @@ await write('grabber_arm', GRABBER);
 for (const [tier, livery] of Object.entries(LIVERIES)) {
   await write(`belt_${tier}`, beltTierStraight(livery));
   await write(`belt_${tier}_corner`, beltTierCorner(livery));
+  await write(`belt_${tier}_tee`, beltTierTee(livery));
+  await write(`belt_${tier}_tee_merge`, beltTierTeeMerge(livery));
 }
 for (const [name, grid] of Object.entries(GRABBER_TIERS)) {
   await write(name, grid);

@@ -374,7 +374,7 @@
       "anchorMode": "top-left",
       "group": "belts"
     },
-    "belt_corner": {
+    "belt_basic_tee": {
       "frame": {
         "x": 34,
         "y": 0,
@@ -396,7 +396,7 @@
       "anchorMode": "top-left",
       "group": "belts"
     },
-    "belt_express": {
+    "belt_basic_tee_merge": {
       "frame": {
         "x": 51,
         "y": 0,
@@ -418,7 +418,7 @@
       "anchorMode": "top-left",
       "group": "belts"
     },
-    "belt_express_corner": {
+    "belt_corner": {
       "frame": {
         "x": 68,
         "y": 0,
@@ -440,7 +440,7 @@
       "anchorMode": "top-left",
       "group": "belts"
     },
-    "belt_fast": {
+    "belt_express": {
       "frame": {
         "x": 85,
         "y": 0,
@@ -462,7 +462,7 @@
       "anchorMode": "top-left",
       "group": "belts"
     },
-    "belt_fast_corner": {
+    "belt_express_corner": {
       "frame": {
         "x": 102,
         "y": 0,
@@ -484,7 +484,7 @@
       "anchorMode": "top-left",
       "group": "belts"
     },
-    "belt_junction": {
+    "belt_express_tee": {
       "frame": {
         "x": 119,
         "y": 0,
@@ -506,9 +506,141 @@
       "anchorMode": "top-left",
       "group": "belts"
     },
-    "belt_straight": {
+    "belt_express_tee_merge": {
       "frame": {
         "x": 136,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "belts"
+    },
+    "belt_fast": {
+      "frame": {
+        "x": 153,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "belts"
+    },
+    "belt_fast_corner": {
+      "frame": {
+        "x": 170,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "belts"
+    },
+    "belt_fast_tee": {
+      "frame": {
+        "x": 187,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "belts"
+    },
+    "belt_fast_tee_merge": {
+      "frame": {
+        "x": 204,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "belts"
+    },
+    "belt_junction": {
+      "frame": {
+        "x": 221,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "top-left",
+      "group": "belts"
+    },
+    "belt_straight": {
+      "frame": {
+        "x": 238,
         "y": 0,
         "w": 16,
         "h": 16
@@ -948,7 +1080,7 @@
     },
     "grabber_arm": {
       "frame": {
-        "x": 153,
+        "x": 255,
         "y": 0,
         "w": 16,
         "h": 16
@@ -970,7 +1102,7 @@
     },
     "grabber_long": {
       "frame": {
-        "x": 170,
+        "x": 272,
         "y": 0,
         "w": 16,
         "h": 16
@@ -992,7 +1124,7 @@
     },
     "grabber_mk1": {
       "frame": {
-        "x": 187,
+        "x": 289,
         "y": 0,
         "w": 16,
         "h": 16
@@ -1014,7 +1146,7 @@
     },
     "grabber_mk2": {
       "frame": {
-        "x": 204,
+        "x": 306,
         "y": 0,
         "w": 16,
         "h": 16
@@ -3237,7 +3369,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.fa52bbb9.png",
+    "image": "atlas.7710ddd5.png",
     "format": "RGBA8888",
     "size": {
       "w": 1024,
@@ -3249,9 +3381,9 @@
         "group": "belts",
         "x": 0,
         "y": 0,
-        "width": 220,
+        "width": 322,
         "height": 16,
-        "count": 13
+        "count": 19
       },
       {
         "group": "bots",

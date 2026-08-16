@@ -1351,14 +1351,12 @@ function machineStatus(view: WorldView, m: MachineView): string {
     case LampState.Starved:
       return `${name} wants ${itemName(m.inputItem)}`;
     case LampState.UtilityMissing:
-      // The same blue lamp means two different empties: a sprinkler's water barrel, and the
-      // drone bay's parts shelf ([[039]]). The bay's sentence names the real errand — parts
-      // cannot be bought, only made — because "click to refill" on a machine whose whole
-      // design is a supply chain would be a lie about how to fix it. (A click with parts in
-      // the bag still refills; the sentence is for the player who has none.)
-      return m.kind === MachineKind.DroneBay
-        ? 'drone bay out of parts — make them at the parts bench'
-        : 'barrel dry — click to refill';
+      // ONE EMPTY AGAIN, AND ONLY ONE. The blue lamp used to mean two things — a sprinkler's
+      // dry barrel, and a drone bay with no parts on its shelf ([[039]]) — so this branch had
+      // to ask which. Item 090 made drone service free: the bay has no shelf, shows no blue
+      // lamp, and this sentence is back to being about water, which is the only utility in
+      // the game a machine can actually run out of.
+      return 'barrel dry — click to refill';
     case LampState.Running:
       return m.kind === MachineKind.Sprinkler ? 'sprinkler running' : `${name} running`;
     default:

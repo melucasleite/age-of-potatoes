@@ -416,10 +416,21 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     layers.pipes.attach(sprite);
   });
 
-  const beltStructures = new BeltStructureLayer(app.renderer, art, (sprite) => {
-    contentRoot.addChild(sprite);
-    layers.beltStructures.attach(sprite);
-  });
+  const beltStructures = new BeltStructureLayer(
+    app.renderer,
+    art,
+    (sprite) => {
+      contentRoot.addChild(sprite);
+      layers.beltStructures.attach(sprite);
+    },
+    // Bends and tees ([[095]]) go on their own slot, above every run and below every good —
+    // an elbow must cover the straight track it replaces, and the potato riding through it
+    // must pass over the top of it, not under.
+    (sprite) => {
+      contentRoot.addChild(sprite);
+      layers.beltShapes.attach(sprite);
+    },
+  );
 
   const beltItems = new BeltItemLayer(itemPage, WORLD_WIDTH_PX, WORLD_HEIGHT_PX);
   contentRoot.addChild(beltItems.container);

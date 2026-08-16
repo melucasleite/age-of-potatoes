@@ -70,6 +70,24 @@ export const ART = {
   /** The belt surface, one seamless tile scrolled by UV offset — never by moving sprites. */
   beltSurface: (tier: number) => `belt_${BELT_SLUG[tier] ?? 'basic'}`,
   /**
+   * The three shapes a belt tile can be when it is NOT plain track ([[095]]).
+   *
+   * Per tier rather than tinted, for the reason every belt frame is: colour is never the only
+   * signal, so a tier carries its CHEVRON COUNT as well as its hue (1 / 2 / 3), and a runtime
+   * tint can change a hue but can never change how many arrows are on a tile.
+   *
+   * Each is authored in one base orientation and reached by quarter turns plus, for the two
+   * handed ones, a flip about the horizontal midline — `belt-shape.ts` owns that arithmetic
+   * and its header states the authored orientations verbatim.
+   *
+   *   corner   — in from the WEST, out through the SOUTH.
+   *   tee      — the SIDE FEED: the run passes west to east, a second line joins from the south.
+   *   teeMerge — the HEAD-ON MERGE: goods arrive from west AND east, leaving through the south.
+   */
+  beltCorner: (tier: number) => `belt_${BELT_SLUG[tier] ?? 'basic'}_corner`,
+  beltTee: (tier: number) => `belt_${BELT_SLUG[tier] ?? 'basic'}_tee`,
+  beltTeeMerge: (tier: number) => `belt_${BELT_SLUG[tier] ?? 'basic'}_tee_merge`,
+  /**
    * The conveyor tee a `BeltJunction` wears: the run west to east, a branch leaving south.
    *
    * ONE FRAME AND FOUR TURNS, chosen from the belts around it by `junction.ts` — the same
@@ -549,6 +567,27 @@ function grassTile(seed: number): Paint {
   };
 }
 
+/**
+ * Each belt tier's three values — band, rail, shadow — named once so the straight, the bend
+ * and the two tees are unarguably the same belt. Split out of the surface entries below when
+ * item 095 gave a tier four frames instead of one: three colour literals repeated four times
+ * is three chances for an express corner to be a slightly different blue from its own run.
+ */
+const BELT_INK = {
+  1: [0x5a5f68, 0x8f96a2, 0x2f333a],
+  2: [0x5b5340, 0xd8b34a, 0x322d22],
+  3: [0x40505b, 0x62d6e0, 0x222c33],
+} as const satisfies Record<number, readonly [number, number, number]>;
+
+// The belt band's geometry, ABOVE the table that uses it rather than beside the painters
+// below. `PLACEHOLDERS` calls `beltShapeTile` while it is being built, so anything that call
+// reads outside its own closure has to already exist — a `const` declared further down is a
+// blank page at boot, which is exactly how this one was found.
+const BELT_ARM_LOW = 3;
+const BELT_ARM_HIGH = TILE_PX - BELT_ARM_LOW - 1;
+/** Where the through-run's entering arrows sit — the authored frames' own x table. */
+const BELT_ENTERING_XS: readonly number[] = [1, 6];
+
 const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   [ART.groundGrassA]: { paint: grassTile(1) },
   [ART.groundGrassB]: { paint: grassTile(7) },
@@ -660,9 +699,23 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   // in both a horizontal and a vertical belt. The chevrons point along +x in local space,
   // which is "forward" for every belt after the segment is rotated into its direction.
 
-  [ART.beltSurface(1)]: { paint: beltTile(0x5a5f68, 0x8f96a2, 0x2f333a) },
-  [ART.beltSurface(2)]: { paint: beltTile(0x5b5340, 0xd8b34a, 0x322d22) },
-  [ART.beltSurface(3)]: { paint: beltTile(0x40505b, 0x62d6e0, 0x222c33) },
+  [ART.beltSurface(1)]: { paint: beltTile(...BELT_INK[1]) },
+  [ART.beltSurface(2)]: { paint: beltTile(...BELT_INK[2]) },
+  [ART.beltSurface(3)]: { paint: beltTile(...BELT_INK[3]) },
+
+  // The bends and the tees ([[095]]). A belt tile that turns or is joined draws a SHAPE, and
+  // a shape with no grey box behind it is a magenta square sitting in the middle of a working
+  // line — which is precisely the failure `shore.ts` refuses to ship for ponds. So all nine
+  // exist here too, carrying their tier's chevron count exactly as the authored frames do.
+  [ART.beltCorner(1)]: { paint: beltShapeTile(BELT_INK[1], 'corner', 1) },
+  [ART.beltCorner(2)]: { paint: beltShapeTile(BELT_INK[2], 'corner', 2) },
+  [ART.beltCorner(3)]: { paint: beltShapeTile(BELT_INK[3], 'corner', 3) },
+  [ART.beltTee(1)]: { paint: beltShapeTile(BELT_INK[1], 'tee', 1) },
+  [ART.beltTee(2)]: { paint: beltShapeTile(BELT_INK[2], 'tee', 2) },
+  [ART.beltTee(3)]: { paint: beltShapeTile(BELT_INK[3], 'tee', 3) },
+  [ART.beltTeeMerge(1)]: { paint: beltShapeTile(BELT_INK[1], 'teeMerge', 1) },
+  [ART.beltTeeMerge(2)]: { paint: beltShapeTile(BELT_INK[2], 'teeMerge', 2) },
+  [ART.beltTeeMerge(3)]: { paint: beltShapeTile(BELT_INK[3], 'teeMerge', 3) },
   // Painted in the BASIC tier's colours, because a junction has no tier of its own — it is one
   // $8 casting that any belt can be run into, and tinting it after whichever belt happens to
   // touch it first would make an express line's junction change colour when a basic belt was
@@ -943,6 +996,69 @@ function grabberBodyTile(pivot: number, ticks: number): Paint {
     g.rect(11, 4, 2, 8).fill(PALETTE.metalDark);
     g.rect(13, 4, 3, 2).fill(PALETTE.metalDark);
     g.rect(13, 10, 3, 2).fill(PALETTE.metalDark);
+  };
+}
+
+// ── THE BEND AND THE TWO TEES, IN GREY-BOX FORM ([[095]]) ──────────────────────────────
+//
+// Geometry copied from the authored frames rather than invented: the band runs rows 3..12, an
+// arm is 10px wide, and a one-pixel shadow ring sits wherever plate meets band. That is not
+// tidiness — it is the same joinery contract `art/tools/make-factory-parts.mjs` asserts on
+// every build, so a build with no atlas gets bends that still MEET the runs either side of
+// them instead of a jog at every corner.
+//
+// The chevron count is the tier's, here as everywhere: item 082's colourblind rule says a belt
+// is told apart by how many arrows it carries as well as by its hue, and a grey-box belt that
+// dropped the count would be the one place in the game where colour is the only signal.
+
+type BeltShapeArt = 'corner' | 'tee' | 'teeMerge';
+
+/** A right-pointing arrow on the band, its tip at `x0 + 3`. */
+function chevronEast(g: Graphics, x0: number, ink: number): void {
+  for (let i = 0; i < 4; i++) {
+    g.rect(x0 + i, 4 + i, 1, 1).fill(ink);
+    g.rect(x0 + i, 11 - i, 1, 1).fill(ink);
+  }
+}
+
+/** An arrow down the vertical arm. `up` puts the tip at `y0`, otherwise at `y0 + 3`. */
+function chevronVertical(g: Graphics, y0: number, up: boolean, ink: number): void {
+  for (let i = 0; i < 4; i++) {
+    const y = up ? y0 + 3 - i : y0 + i;
+    g.rect(4 + i, y, 1, 1).fill(ink);
+    g.rect(11 - i, y, 1, 1).fill(ink);
+  }
+}
+
+function beltShapeTile(
+  ink: readonly [number, number, number],
+  kind: BeltShapeArt,
+  tier: number,
+): Paint {
+  const [bed, rail, shadow] = ink;
+  const low = BELT_ARM_LOW;
+  const span = BELT_ARM_HIGH - low + 1;
+  // A corner's through-arm stops at the bend; a tee's runs clean out the far side.
+  const runWidth = kind === 'corner' ? BELT_ARM_HIGH + 1 : TILE_PX;
+
+  return (g) => {
+    g.rect(0, 0, TILE_PX, TILE_PX).fill(rail);
+    // Shadow first, band on top: the ring is what is left showing around each arm.
+    g.rect(0, low - 1, runWidth + 1, span + 2).fill(shadow);
+    g.rect(low - 1, low - 1, span + 2, TILE_PX - low + 1).fill(shadow);
+    g.rect(0, low, runWidth, span).fill(bed);
+    g.rect(low, low, span, TILE_PX - low).fill(bed);
+
+    if (kind === 'teeMerge') {
+      // The tier count stacked down the stem, taken nearest-the-exit first, so basic's single
+      // arrow lands on the same rows the corner's departing one does.
+      for (const y0 of [3, 7, 11].slice(3 - tier)) chevronVertical(g, y0, false, rail);
+      return;
+    }
+    // Entering arrows on the run — one fewer than the tier, because the arm arrow completes
+    // the count — then the arm's own: leaving, for a bend; joining, for a side feed.
+    for (const x0 of BELT_ENTERING_XS.slice(0, tier - 1)) chevronEast(g, x0, rail);
+    chevronVertical(g, TILE_PX - 5, kind === 'tee', rail);
   };
 }
 
