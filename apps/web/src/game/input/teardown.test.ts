@@ -12,9 +12,12 @@
 //   · ONE OBJECT, ONE COMMAND. A 2×2 Fryer answers on four tiles and a sixteen-tile belt on
 //     sixteen. Without de-duplication a rectangle emits the same removal over and over; every
 //     copy after the first is refused, so nothing breaks and the trace fills with noise.
-//   · A LONG BELT COMES UP WHOLE. `RemoveBelt` takes a belt by id and there is no partial, so
-//     clipping one tile of a run takes all of it — the ghost has to show that BEFORE release
-//     or the player finds out by watching a belt they wanted vanish.
+//   · A CLIPPED BELT LOSES ONLY ITS CLIPPED TILES (item 084 reversed the original rule
+//     here). Belts are owned tile by tile now: a drag over part of a run sends one
+//     `RemoveBeltTile` per covered tile and the survivors keep standing, while a rect that
+//     covers EVERY tile still ships one id-named `RemoveBelt`. The ghost paints exactly the
+//     covered tiles, so what the click takes is visible BEFORE release — a regression to
+//     whole-run removal would vaporise belt the player meant to keep, silently.
 //
 // Everything under test is pure: a `WorldView` in, plain data out. No DOM, no camera, no Pixi.
 
@@ -69,12 +72,20 @@ describe('one cursor, four verbs', () => {
     expect(target.refundCents).toBe(0);
   });
 
-  it('takes a belt up for a full refund', () => {
+  it('takes ONE TILE of a longer belt, for one tile of refund ([[084]])', () => {
     const v = withBelt(view(), 3, 10, 10, Direction.East, 4);
     const target = teardownTargetAt(v, 12, 10)!;
-    expect(target.command).toEqual({ type: 'RemoveBelt', beltId: 3 });
+    expect(target.command).toEqual({ type: 'RemoveBeltTile', tileX: 12, tileY: 10 });
     expect(target.outcome).toBe(TeardownOutcome.Refunded);
-    expect(target.refundCents).toBe(150 * 4);
+    expect(target.refundCents).toBe(150);
+    expect(target.tiles).toEqual([{ tileX: 12, tileY: 10 }]);
+  });
+
+  it('takes a 1-tile belt whole, by id, like it always has', () => {
+    const v = withBelt(view(), 3, 10, 10, Direction.East, 1);
+    const target = teardownTargetAt(v, 10, 10)!;
+    expect(target.command).toEqual({ type: 'RemoveBelt', beltId: 3 });
+    expect(target.refundCents).toBe(150);
   });
 
   it('takes an arm', () => {
@@ -133,10 +144,22 @@ describe('the rectangle', () => {
     expect(plan.cells).toHaveLength(4);
   });
 
-  it('takes a clipped belt WHOLE, and shows the whole thing in the ghost', () => {
+  it('takes only the covered tiles of a clipped belt, and ghosts exactly those ([[084]])', () => {
     const v = withBelt(view(), 3, 10, 10, Direction.East, 8);
-    // One tile of the run is inside the drag.
-    const plan = teardownPlan(v, { x: 13, y: 10, w: 1, h: 1 });
+    // Two mid-run tiles inside the drag; six survivors outside it.
+    const plan = teardownPlan(v, { x: 12, y: 10, w: 2, h: 1 });
+    expect(plan.commands).toEqual([
+      { type: 'RemoveBeltTile', tileX: 12, tileY: 10 },
+      { type: 'RemoveBeltTile', tileX: 13, tileY: 10 },
+    ]);
+    expect(plan.cells).toHaveLength(2);
+    expect(plan.refundCents).toBe(150 * 2);
+    expect(plan.label).toContain('2 belt tiles');
+  });
+
+  it('still takes a fully covered belt as one id-named command', () => {
+    const v = withBelt(view(), 3, 10, 10, Direction.East, 8);
+    const plan = teardownPlan(v, { x: 10, y: 10, w: 8, h: 1 });
     expect(plan.commands).toEqual([{ type: 'RemoveBelt', beltId: 3 }]);
     expect(plan.cells).toHaveLength(8);
     expect(plan.refundCents).toBe(150 * 8);

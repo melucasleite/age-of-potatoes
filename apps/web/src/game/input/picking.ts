@@ -237,10 +237,11 @@ export function grabberAtView(v: WorldView, tileX: number, tileY: number): Grabb
  * down the segment — a belt is a straight run from an origin, so membership is a multiply and
  * two compares whatever its length.
  *
- * IT RETURNS THE WHOLE SEGMENT, and that is the fact the teardown ghost is built on:
- * `RemoveBelt` names a belt by id and takes all of it, so a drag clipping one tile of a
- * sixteen-tile express run takes the whole run. The preview shows that rather than letting
- * the player find out afterwards.
+ * IT RETURNS THE WHOLE SEGMENT, which is the storage truth rather than the ownership one:
+ * since item 084 belts are owned tile by tile, and the teardown plan clips this segment to
+ * the tiles a drag actually covers (`RemoveBeltTile` splits the run in the sim). Callers
+ * that care about one tile — the rotate seam, the tile teardown target — take the hovered
+ * tile and leave the segment's extent alone.
  */
 export function beltAtView(v: WorldView, tileX: number, tileY: number): BeltView | null {
   for (let i = 0; i < v.belts.length; i++) {

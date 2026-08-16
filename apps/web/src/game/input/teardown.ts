@@ -154,7 +154,13 @@ export function teardownTargetAt(
   if (machine !== null) return machineTarget(view, machine);
 
   const belt = beltAtView(view, tileX, tileY);
-  if (belt !== null) return beltTarget(belt);
+  if (belt !== null) {
+    // ONE TILE, NOT THE WHOLE RUN (item 084): belts are owned individually now, so a click on
+    // a mid-run tile takes that tile and leaves two working survivors. A 1-tile segment is
+    // the whole object anyway, and goes by id like everything else.
+    const tiles = beltTiles(belt);
+    return tiles.length === 1 ? beltTarget(belt, tiles) : beltTileTarget(belt, tileX, tileY);
+  }
 
   const grabber = grabberAtView(view, tileX, tileY);
   if (grabber !== null) {
@@ -238,6 +244,24 @@ function beltTarget(belt: BeltView, tiles = beltTiles(belt)): TeardownTarget {
 }
 
 /**
+ * One tile of a longer belt (item 084): the sim splits the run around it and refunds the
+ * tile. Addressed by TILE rather than id because the drag may cut the same original segment
+ * twice, and after the first cut the id under the second tile is one surgery just minted —
+ * the tile keeps naming the right thing across every intermediate world (see
+ * `RemoveBeltTileCommand`).
+ */
+function beltTileTarget(belt: BeltView, tileX: number, tileY: number): TeardownTarget {
+  return {
+    command: { type: 'RemoveBeltTile', tileX, tileY },
+    outcome: TeardownOutcome.Refunded,
+    tiles: [{ tileX, tileY }],
+    name: 'the belt tile',
+    refundCents: beltSpec(belt.tier as never)?.priceCentsPerTile ?? 0,
+    refused: false,
+  };
+}
+
+/**
  * Everything a rectangle would take, as commands, cells and one sentence.
  *
  * ITERATES THE OBJECTS AND ASKS WHICH ARE IN THE RECTANGLE — never the tiles, asking what is
@@ -253,10 +277,13 @@ function beltTarget(belt: BeltView, tiles = beltTiles(belt)): TeardownTarget {
  * remember what it had already seen or send the same removal a dozen times. Visiting each
  * object once cannot repeat itself.
  *
- * WHOLE OBJECTS, NOT CLIPPED ONES. `RemoveBelt` names a belt by id and takes all of it —
- * there is no partial removal in the sim and inventing one here would be the input layer
- * writing a rule. So a drag that clips one tile of a long belt takes the whole belt, and the
- * ghost paints the whole belt so that is visible while the button is still down.
+ * WHOLE OBJECTS, NOT CLIPPED ONES — FOR EVERYTHING BUT BELTS. A machine's footprint is one
+ * object and comes up whole however the rect clips it. Belts stopped being whole objects
+ * with item 084: the sim owns partial removal now (`RemoveBeltTile` splits the run and the
+ * survivors keep working), so a drag takes exactly the belt tiles it covers, and the ghost
+ * paints exactly those tiles while the button is still down. A rect that covers every tile
+ * of a segment still ships one id-named `RemoveBelt`, because there the old sentence is
+ * still true: it IS one decision about one whole object.
  */
 export function teardownPlan(
   view: WorldView,
@@ -278,10 +305,19 @@ export function teardownPlan(
   for (let i = 0; i < view.belts.length; i++) {
     const belt = view.belts[i]!;
     const tiles = beltTiles(belt);
-    for (let t = 0; t < tiles.length; t++) {
-      if (!overlapsRect(rect, tiles[t]!.tileX, tiles[t]!.tileY, 1, 1)) continue;
+    const covered = tiles.filter((t) => overlapsRect(rect, t.tileX, t.tileY, 1, 1));
+    if (covered.length === 0) continue;
+    // Belts are owned tile by tile (item 084), so a drag takes exactly the tiles it covers:
+    // a clipped run loses its clipped tiles and keeps the rest, standing and working. Only
+    // when the rect covers EVERY tile is the removal one decision about one object again,
+    // and then it ships as one id-named `RemoveBelt` — one trace entry, one refund — exactly
+    // as it always has.
+    if (covered.length === tiles.length) {
       targets.push(beltTarget(belt, tiles));
-      break;
+    } else {
+      for (let t = 0; t < covered.length; t++) {
+        targets.push(beltTileTarget(belt, covered[t]!.tileX, covered[t]!.tileY));
+      }
     }
   }
 
@@ -329,7 +365,10 @@ export function teardownPlan(
     if (target.refused) refusals += 1;
     refundCents += target.refundCents;
     if (target.outcome === TeardownOutcome.Boxed) boxCount += 1;
-    if (target.command.type === 'RemoveBelt') beltCount += 1;
+    // Both belt shapes count in TILES, so a drag over a whole 6-tile run and a drag over six
+    // mid-run tiles read as the same quantity of the same stuff — which they are.
+    if (target.command.type === 'RemoveBelt') beltCount += target.tiles.length;
+    if (target.command.type === 'RemoveBeltTile') beltCount += 1;
     if (target.command.type === 'RemoveGrabber') armCount += 1;
     // A `Kept` target ships no command at all — the sim refuses it on every click, and a
     // refusal the player cannot see is noise in the queue ([[076]]). Pipes are re-emitted
@@ -383,7 +422,7 @@ function planLabel(targets: readonly TeardownTarget[], counts: Counts): string {
   if (targets.length === 1) return `${targets[0]!.name} · ${outcomePhrase(targets[0]!)}`;
 
   const parts: string[] = [];
-  if (counts.beltCount > 0) parts.push(plural(counts.beltCount, 'belt'));
+  if (counts.beltCount > 0) parts.push(plural(counts.beltCount, 'belt tile'));
   if (counts.armCount > 0) parts.push(plural(counts.armCount, 'arm'));
   if (counts.pipeCount > 0) parts.push(plural(counts.pipeCount, 'pipe'));
 

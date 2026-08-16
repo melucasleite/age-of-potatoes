@@ -2287,6 +2287,108 @@ export function beltInsert(belt: Belt, dist: number, item: ItemId): boolean {
   return true;
 }
 
+/** What is left after `splitBeltAtTile` cuts a segment open. Any part can be `null`. */
+export interface BeltSplitResult {
+  /** The tiles upstream of the cut, as their own segment. `null` when the cut was at the start. */
+  before: Belt | null;
+  /** The cut tile itself as a 1-tile segment, or `null` when the tile was removed outright. */
+  mid: Belt | null;
+  /** The tiles downstream of the cut. `null` when the cut was at the end. */
+  after: Belt | null;
+  /**
+   * The goods that rode the cut tile when it was removed (`midDir === null`), re-anchored to
+   * the tile. Empty when `mid` exists — those goods stayed on it. The caller owns these now,
+   * and plan §4 says what it must do: hand them to the player, never the void.
+   */
+  freed: BeltItem[];
+}
+
+/**
+ * Segment surgery: cut a belt open at one of its tiles (item 084).
+ *
+ * BELTS ARE OWNED TILE BY TILE BUT STORED AS SEGMENTS, and this is the primitive that spans
+ * the gap. The original segment leaves the world and up to three parts take its place — the
+ * tiles before the cut, the cut tile itself (when `midDir` names a facing, which is how a
+ * rotate keeps the tile and a teardown does not), and the tiles after. The existing head-of-
+ * belt hand-off in `belts.ts` then decides who feeds whom, exactly as it always has across a
+ * corner: chains of segments are already how long lines work, so nothing downstream of this
+ * function learns anything new.
+ *
+ * GOODS REDISTRIBUTE BY PHYSICAL POSITION, NOTHING TELEPORTS AND NOTHING VANISHES (plan §4):
+ * each item lands on the part that owns the tile it was riding, its `dist` re-anchored to
+ * that part's start. An item on the cut tile keeps its offset within the tile — `dist` is a
+ * scalar along the belt's axis, so on a rotated tile the same number reads along the new
+ * axis and the item visibly swings with the surface it is standing on. Each part inherits
+ * the parent's `moveAccum`, so no part loses the fractional step the original had banked.
+ *
+ * PART IDS ARE FRESH AND ALLOCATED IN PHYSICAL ORDER — before, mid, after — from the same
+ * `nextBeltId` counter as every other belt, which keeps `state.belts` sorted by id and keeps
+ * replays byte-exact: the ids a split mints are a pure function of the world it happened in.
+ */
+export function splitBeltAtTile(
+  state: WorldState,
+  belt: Belt,
+  index: number,
+  midDir: Direction | null,
+): BeltSplitResult {
+  // Partition the goods first, by the tile each one physically rides. The list is sorted by
+  // `dist`, and each part receives a contiguous slice of it shifted by a constant, so every
+  // part's list is born sorted and legally spaced — no re-sort, no re-check.
+  const beforeItems: BeltItem[] = [];
+  const midItems: BeltItem[] = [];
+  const afterItems: BeltItem[] = [];
+  for (let i = 0; i < belt.items.length; i++) {
+    const entry = belt.items[i]!;
+    const tile = beltTileIndexForDist(belt, entry.dist);
+    if (tile < index) beforeItems.push({ dist: entry.dist, item: entry.item });
+    else if (tile === index)
+      midItems.push({ dist: entry.dist - index * SUBTILE, item: entry.item });
+    else afterItems.push({ dist: entry.dist - (index + 1) * SUBTILE, item: entry.item });
+  }
+
+  // The original leaves before any part arrives, so no two belts ever cover one tile.
+  for (let i = 0; i < state.belts.length; i++) {
+    if (state.belts[i]!.id === belt.id) {
+      state.belts.splice(i, 1);
+      break;
+    }
+  }
+
+  const dx = directionStepX(belt.dir);
+  const dy = directionStepY(belt.dir);
+
+  let before: Belt | null = null;
+  if (index > 0) {
+    // `spawnBelt` refuses only an unknown tier, and this tier came off a live belt.
+    before = spawnBelt(state, belt.tier, belt.tileX, belt.tileY, belt.dir, index)!;
+    before.items = beforeItems;
+    before.moveAccum = belt.moveAccum;
+  }
+
+  let mid: Belt | null = null;
+  if (midDir !== null) {
+    mid = spawnBelt(state, belt.tier, belt.tileX + dx * index, belt.tileY + dy * index, midDir, 1)!;
+    mid.items = midItems;
+    mid.moveAccum = belt.moveAccum;
+  }
+
+  let after: Belt | null = null;
+  if (index < belt.lengthTiles - 1) {
+    after = spawnBelt(
+      state,
+      belt.tier,
+      belt.tileX + dx * (index + 1),
+      belt.tileY + dy * (index + 1),
+      belt.dir,
+      belt.lengthTiles - index - 1,
+    )!;
+    after.items = afterItems;
+    after.moveAccum = belt.moveAccum;
+  }
+
+  return { before, mid, after, freed: midDir === null ? midItems : [] };
+}
+
 export function grabberById(state: WorldState, id: number): Grabber | null {
   for (let i = 0; i < state.grabbers.length; i++) {
     const grabber = state.grabbers[i]!;

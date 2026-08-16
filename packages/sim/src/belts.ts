@@ -161,7 +161,10 @@ export function beltTakeFromTile(
 // takes one item per tick off a belt that ends on it and puts it onto a belt that leads away from
 // it, choosing round-robin on both sides. Two belts in and one out is a merger; one in and two
 // out is a splitter; the device does not know which it is and does not need to, because the
-// answer is the belts the player ran into it and those are on screen.
+// answer is the belts the player ran into it and those are on screen. That is also why R
+// still ignores a junction while it now turns a belt tile (item 084's `RotateBelt`): a
+// junction HAS no facing to turn — its behaviour is entirely the belts around it — so a
+// rotate would be a command with nothing to change.
 //
 // THE ALTERNATION IS STATE ON THE MACHINE, NEVER A ROLL AND NEVER THE TICK COUNTER. Item 024's
 // criterion is that the same seed and the same command list produce the same hash across runs, so

@@ -118,6 +118,8 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   CancelContract: true,
   PlaceBelt: true,
   RemoveBelt: true,
+  RemoveBeltTile: true,
+  RotateBelt: true,
   PlaceGrabber: true,
   SetGrabberFilter: true,
   RotateGrabber: true,
@@ -175,6 +177,23 @@ export const GOLDEN_COVERAGE_EXEMPT: ReadonlySet<CommandType> = new Set<CommandT
    * entry at all).
    */
   'Cheat',
+
+  /**
+   * `RotateBelt` and `RemoveBeltTile` (item 084) — every fixture in the set predates belts
+   * being individually ownable, and none of their recorded sessions had a reason to cut a
+   * segment open. Re-timing an old session to smuggle one in would change that fixture's
+   * story and its hash for no guarding gain, and recording a fresh fixture just to tick a
+   * checklist is the SetDockZone argument at a smaller scale.
+   *
+   * **What pins them instead:** `test/belt-tiles.test.ts` asserts the exact claims a fixture
+   * would — two worlds with the same seed applying the same surgery on the same tick hash
+   * identically, goods survive every cut by count and by position, and a chain of 1-tile
+   * segments delivers at the same steady-state rate as the long segment it was cut from.
+   *
+   * When a future fixture's session honestly reaches for R over a belt, delete this entry.
+   */
+  'RemoveBeltTile',
+  'RotateBelt',
 ]);
 
 /**

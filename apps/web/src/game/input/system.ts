@@ -371,8 +371,8 @@ export class InputSystem {
   }
 
   /**
-   * R. One press, one quarter turn — of the arm under the cursor if there is one, and of the
-   * ghost otherwise.
+   * R. One press, one quarter turn — of the arm or belt tile under the cursor if there is
+   * one, and of the ghost otherwise.
    *
    * THE PLACED ARM WINS, AND THE ORDER IS THE FEATURE. Item 052 exists because R only ever
    * meant "cycle a variable that nothing visible reads": rotating an arm you had already put

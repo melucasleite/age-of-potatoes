@@ -596,10 +596,29 @@ export class PointerInput {
    * fine") — so the refusal is the sim's, the band under the cursor goes red before the press,
    * and the ribbon says why. Sending it anyway keeps the authority in one place (§12): a
    * refused command changes nothing and writes nothing to the trace.
+   *
+   * A BELT TILE UNDER THE CURSOR ANSWERS TOO (item 084), after the arm: an arm and a belt
+   * cannot share a tile, so the order is a search rather than a priority, exactly as
+   * `teardownTargetAt`'s is. The payload is the hovered TILE, not a belt id — segment surgery
+   * mints fresh ids, so the tile is the stable name for the thing the player owns (see
+   * `RotateBeltCommand`). A junction is a machine, so neither branch answers on one and R
+   * keeps meaning the ghost there — byte-identical to the old behaviour.
    */
   rotateCommand(): Command | null {
     const grabber = this.grabberUnderCursor();
-    return grabber === null ? null : { type: 'RotateGrabber', grabberId: grabber.id };
+    if (grabber !== null) return { type: 'RotateGrabber', grabberId: grabber.id };
+
+    const belt = this.beltTileUnderCursor();
+    return belt === null ? null : { type: 'RotateBelt', tileX: belt.tileX, tileY: belt.tileY };
+  }
+
+  /** The hovered tile, when a placed belt covers it. The pointer owns hover, so it answers. */
+  private beltTileUnderCursor(): { tileX: number; tileY: number } | null {
+    const view = this.host.latestView();
+    const hover = this.hover;
+    if (view === null || hover === null) return null;
+    if (beltAtView(view, hover.tileX, hover.tileY) === null) return null;
+    return { tileX: hover.tileX, tileY: hover.tileY };
   }
 
   /** True when R would do something the player can see. Drives the hint strip, nothing else. */
@@ -609,7 +628,9 @@ export class PointerInput {
     // ([[059]]). Advertised on the ARMED TOOL rather than only mid-drag, so the player finds
     // out before committing to a corner instead of during one.
     if (toolBeltTier(tool) !== null) return true;
-    return this.grabberUnderCursor() !== null;
+    if (this.grabberUnderCursor() !== null) return true;
+    // A placed belt tile advertises for the same reason a placed arm does: R will turn it.
+    return this.beltTileUnderCursor() !== null;
   }
 
   // --- what the chrome draws -------------------------------------------------------------
@@ -642,9 +663,9 @@ export class PointerInput {
 
     // The teardown ghost outranks the arm-under-the-cursor band, and has to: an arm is one of
     // the four things this tool takes, so "arm → · R turns it" under a cursor that is about to
-    // rip it out would be the wrong sentence about the right object. It outlines the WHOLE
-    // thing under the cursor — all four tiles of a Fryer, all sixteen of a belt — because that
-    // is what one click removes.
+    // rip it out would be the wrong sentence about the right object. It outlines exactly what
+    // one click removes — all four tiles of a Fryer, but only the hovered tile of a longer
+    // belt, because belts come up tile by tile now (item 084).
     if (tool === ToolMode.Deconstruct) {
       return teardownBand(view, { x: hover.tileX, y: hover.tileY, w: 1, h: 1 });
     }

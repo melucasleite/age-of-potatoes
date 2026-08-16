@@ -1235,3 +1235,91 @@ describe('the repair kit cursor ([[009]] tool wiring)', () => {
     expect(reachAdjusted(view, FAR, direct)).toBe(direct);
   });
 });
+
+// R's hover seam, now that belts answer it too ([[084]]). Driven through `PointerInput`
+// with a stub host, exactly as the cancellation wiring above is: hover comes from a
+// synthetic pointermove, and `rotateCommand` is the pure question the R key asks.
+describe('what R acts on, with belts in the world ([[084]])', () => {
+  function harness(view: WorldView) {
+    const canvasListeners = new Map<string, (event: unknown) => void>();
+    const canvas = {
+      addEventListener: (name: string, fn: (event: unknown) => void) => {
+        canvasListeners.set(name, fn);
+      },
+      removeEventListener: () => {},
+      setPointerCapture: () => {},
+      releasePointerCapture: () => {},
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 640, height: 640 }),
+    } as unknown as HTMLCanvasElement;
+    const camera = {
+      transform: { viewWidth: 640, viewHeight: 640, zoom: 1 },
+      screenToWorld: (x: number, y: number) => ({ x, y }),
+      worldToScreen: (x: number, y: number) => ({ x, y }),
+    } as unknown as Camera;
+    const host = {
+      canvas,
+      camera,
+      queue: new CommandQueue(),
+      overlayRoot: undefined as unknown as HTMLElement,
+      latestView: () => view,
+      getTool: () => ToolMode.Hand,
+      setTool: () => {},
+      setHover: () => {},
+      toggleOverlay: () => {},
+    } as unknown as InputHost;
+    const system = {
+      spaceHeld: false,
+      placeDir: Direction.East,
+      zoneCrop: CropId.RussetPotato,
+      manualWalkHeld: false,
+    } as unknown as InputSystem;
+    const pointer = new PointerInput(host, system);
+    pointer.attach();
+    const hoverAt = (tileX: number, tileY: number) => {
+      canvasListeners.get('pointermove')!({
+        preventDefault: () => {},
+        pointerId: 1,
+        clientX: tileX * TILE_PX + TILE_PX / 2,
+        clientY: tileY * TILE_PX + TILE_PX / 2,
+      });
+    };
+    return { pointer, hoverAt };
+  }
+
+  it('means RotateBelt over a placed belt tile, addressed by the hovered TILE', () => {
+    const view = standingOn(2, 2);
+    view.belts.push({ id: 3, tileX: 4, tileY: 2, dir: Direction.East, lengthTiles: 5 } as never);
+    const h = harness(view);
+    h.hoverAt(6, 2);
+    expect(h.pointer.rotateCommand()).toEqual({ type: 'RotateBelt', tileX: 6, tileY: 2 });
+  });
+
+  it('still means RotateGrabber over an arm — the arm cannot share a tile with a belt', () => {
+    const view = standingOn(2, 2);
+    view.grabbers.push({ id: 5, tileX: 4, tileY: 2, dir: Direction.East } as never);
+    const h = harness(view);
+    h.hoverAt(4, 2);
+    expect(h.pointer.rotateCommand()).toEqual({ type: 'RotateGrabber', grabberId: 5 });
+  });
+
+  it('still means the ghost over a junction: a machine, not a belt, and facing-less', () => {
+    const view = standingOn(2, 2);
+    view.machines.push({
+      id: 9,
+      kind: MachineKind.BeltJunction,
+      tileX: 4,
+      tileY: 2,
+      tilesWide: 1,
+      tilesHigh: 1,
+    } as never);
+    const h = harness(view);
+    h.hoverAt(4, 2);
+    expect(h.pointer.rotateCommand()).toBeNull();
+  });
+
+  it('still means the ghost over bare ground', () => {
+    const h = harness(standingOn(2, 2));
+    h.hoverAt(6, 6);
+    expect(h.pointer.rotateCommand()).toBeNull();
+  });
+});

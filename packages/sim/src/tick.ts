@@ -60,11 +60,13 @@ import {
   type PlantTileCommand,
   type RefillHopperCommand,
   type RemoveBeltCommand,
+  type RemoveBeltTileCommand,
   type RemoveGrabberCommand,
   type RemovePipeCommand,
   type RenameZoneCommand,
   type RepairMachineCommand,
   type ResearchTechCommand,
+  type RotateBeltCommand,
   type RotateGrabberCommand,
   type SellBoxedMachineCommand,
   type SellItemCommand,
@@ -188,7 +190,9 @@ import {
   addBoxedMachine,
   addItem,
   addItemFresh,
+  beltAt,
   beltById,
+  beltIndexOfTile,
   clipDestination,
   clipZoneName,
   computeNetWorthCents,
@@ -220,6 +224,7 @@ import {
   soonestSpoilTick,
   spawnBot,
   spawnBelt,
+  splitBeltAtTile,
   spawnGrabber,
   spawnMachine,
   spawnPipe,
@@ -432,6 +437,10 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applyPlaceBelt(state, command);
     case 'RemoveBelt':
       return applyRemoveBelt(state, command);
+    case 'RemoveBeltTile':
+      return applyRemoveBeltTile(state, command);
+    case 'RotateBelt':
+      return applyRotateBelt(state, command);
     case 'PlaceGrabber':
       return applyPlaceGrabber(state, command);
     case 'SetGrabberFilter':
@@ -1988,6 +1997,73 @@ function removeBeltById(state: WorldState, id: number): void {
       return;
     }
   }
+}
+
+/**
+ * Take up one tile of a belt (item 084): one tile's refund, that tile's goods back in the
+ * player's hands, and the rest of the run left standing as two working survivors.
+ *
+ * NOT REACH-GATED, exactly as `applyRemoveBelt` is not: building a belt across the lot and
+ * taking it back up are the same verb in opposite directions, and this is the same verb at a
+ * finer grain. A 1-tile belt short-circuits to plain removal rather than surgery — same
+ * refund, same refund of goods, no id churn for the degenerate cut.
+ */
+function applyRemoveBeltTile(state: WorldState, command: RemoveBeltTileCommand): boolean {
+  const belt = beltAt(state, command.tileX, command.tileY);
+  if (belt === null) return false;
+
+  const spec = beltSpec(belt.tier);
+  if (spec !== null) {
+    state.moneyCents += spec.priceCentsPerTile;
+    recordRefund(state.stats, spec.priceCentsPerTile);
+  }
+
+  if (belt.lengthTiles === 1) {
+    for (let i = 0; i < belt.items.length; i++) {
+      addItem(state, belt.items[i]!.item, 1);
+    }
+    removeBeltById(state, belt.id);
+  } else {
+    const index = beltIndexOfTile(belt, command.tileX, command.tileY);
+    const parts = splitBeltAtTile(state, belt, index, null);
+    for (let i = 0; i < parts.freed.length; i++) {
+      addItem(state, parts.freed[i]!.item, 1);
+    }
+  }
+
+  touch(state, 'handCarry');
+  return true;
+}
+
+/**
+ * Turn one tile of a belt one step clockwise (item 084). See `RotateBeltCommand` for why the
+ * payload is a tile and carries no direction.
+ *
+ * REACH-GATED, exactly as `applyRotateGrabber` is and for the same sentence: the fantasy is
+ * *"I lean over and turn the thing"*, and turning is a hand verb done to a thing in front of
+ * you — unlike placement and teardown, which the sim has never reach-gated. A 1-tile belt
+ * turns in place with no surgery and no id churn, which is also what makes pressing R four
+ * times land you back exactly where you started rather than four ids later; a longer run is
+ * split so the tile can face its own way as a segment of one.
+ */
+function applyRotateBelt(state: WorldState, command: RotateBeltCommand): boolean {
+  const belt = beltAt(state, command.tileX, command.tileY);
+  if (belt === null) return false;
+  if (!withinReachOfTile(state, command.tileX, command.tileY)) return false;
+
+  const turned = rotateDirectionClockwise(belt.dir);
+  // `None` is not a legal facing; refusing keeps the trace's "every applied command changed
+  // the world" contract, exactly as `applyRotateGrabber` refuses.
+  if (turned === Direction.None) return false;
+
+  if (belt.lengthTiles === 1) {
+    belt.dir = turned;
+  } else {
+    splitBeltAtTile(state, belt, beltIndexOfTile(belt, command.tileX, command.tileY), turned);
+  }
+
+  touch(state, 'handCarry');
+  return true;
 }
 
 function applyPlaceGrabber(state: WorldState, command: PlaceGrabberCommand): boolean {

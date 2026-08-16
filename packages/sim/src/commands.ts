@@ -489,10 +489,55 @@ export interface PlaceBeltCommand {
   turnLengthTiles?: number;
 }
 
-/** Take a belt back up. Refunds in full and returns whatever was riding it. */
+/** Take a whole segment back up. Refunds in full and returns whatever was riding it. */
 export interface RemoveBeltCommand {
   type: 'RemoveBelt';
   beltId: number;
+}
+
+/**
+ * Take up ONE TILE of a belt (item 084). Refunds one tile's price, hands back whatever was
+ * riding that tile, and leaves the rest of the run standing: the segment is split around the
+ * gap and the two survivors keep working, each backing up or starving exactly as two belts
+ * that were never joined would.
+ *
+ * TILE-ADDRESSED, NOT ID-ADDRESSED, unlike `RemoveBelt` — and that is load-bearing rather
+ * than stylistic. Segment surgery mints fresh ids (see `splitBeltAtTile`), so the second
+ * tile of a drag may land on a segment that did not exist when the drag was planned. A tile
+ * names the thing the player actually owns now (the owner's ruling on this item); an id
+ * names a storage artefact that surgery is free to replace.
+ *
+ * `RemoveBelt` stays beside it on purpose: a teardown that covers EVERY tile of a segment is
+ * still one decision about one object, one trace entry, and one refund — this command is for
+ * the cuts that leave something behind.
+ */
+export interface RemoveBeltTileCommand {
+  type: 'RemoveBeltTile';
+  tileX: number;
+  tileY: number;
+}
+
+/**
+ * Turn ONE TILE of a belt one step clockwise (item 084): N → E → S → W → N.
+ *
+ * BELTS PLACE AS DRAGS BUT LIVE AS TILES — the owner's ruling on item 084, superseding the
+ * note on `RotateGrabber` below that once excluded them. The drag grammar is unchanged and
+ * still the only way to LAY belt; this is what R means over belt that is already down. The
+ * containing segment is split at the tile (`splitBeltAtTile`), the tile becomes its own
+ * 1-tile segment facing the new way, and the ordinary head-of-belt hand-off decides who
+ * feeds whom afterwards — runs are emergent chains of tiles pointing into each other, not
+ * sacred objects.
+ *
+ * ONE STEP, NO TARGET DIRECTION IN THE PAYLOAD, for `RotateGrabber`'s exact reason: R is a
+ * nudge, the sim owns which way clockwise goes, and each press is one honest trace entry.
+ * TILE-ADDRESSED for `RemoveBeltTile`'s exact reason: surgery replaces segment ids, tiles
+ * are what the player owns. Junctions are machines, not belts, so R keeps ignoring them —
+ * see the junction header in `belts.ts` for why they stay facing-less.
+ */
+export interface RotateBeltCommand {
+  type: 'RotateBelt';
+  tileX: number;
+  tileY: number;
 }
 
 export interface PlaceGrabberCommand {
@@ -524,8 +569,9 @@ export interface SetGrabberFilterCommand {
  *
  * There is no `RotateMachine` beside it because there is nothing to rotate: a machine's
  * ports are typed by LIQUID rather than by geometry (`MachineSpec.ports`), so no machine in
- * this game has a facing to turn. Belts are excluded on purpose too — a belt's direction is
- * the direction it was dragged, and that is its whole grammar.
+ * this game has a facing to turn. Belts were once excluded here too; item 084 reversed that
+ * — see `RotateBelt` above, which turns one TILE of a belt and borrows this command's whole
+ * argument for being a one-step nudge.
  */
 export interface RotateGrabberCommand {
   type: 'RotateGrabber';
@@ -719,6 +765,8 @@ export type Command =
   | CancelContractCommand
   | PlaceBeltCommand
   | RemoveBeltCommand
+  | RemoveBeltTileCommand
+  | RotateBeltCommand
   | PlaceGrabberCommand
   | SetGrabberFilterCommand
   | RotateGrabberCommand
