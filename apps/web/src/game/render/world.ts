@@ -4,8 +4,8 @@
 // `./pixel` first — see the comment block there.
 import { dayPhase, TILE_PX } from './pixel';
 
-import { ColorMatrixFilter, Container, Rectangle, Sprite, Texture } from 'pixi.js';
-import type { Application } from 'pixi.js';
+import { ColorMatrixFilter, Container, Rectangle, RenderTexture, Sprite, Texture } from 'pixi.js';
+import type { Application, Renderer } from 'pixi.js';
 
 import {
   FIELD_ORIGIN_Y,
@@ -33,6 +33,7 @@ import { createLayers, destroyLayers, LAYER_ORDER } from './layers';
 import type { Layers } from './layers';
 import { DevOverlay } from './overlay';
 import { PipeLayer } from './pipes';
+import { SHORE_FRAME, SHORE_VARIANTS } from './shore';
 import { TerrainBaker } from './terrain';
 import type { TerrainSource } from './terrain';
 import { ART } from './textures';
@@ -128,6 +129,19 @@ export interface WorldScene {
    * sync fires when one appears (world load, in practice) and marks its tiles dirty.
    */
   readonly water: Set<number>;
+  /**
+   * The pond's banks ([[077]]): water tile key → index into the baked shore textures.
+   * Rebuilt beside the water set at the reservoir sync — the classification is a static
+   * fact about a world whose reservoirs never move, so it costs one pass per load. Tiles
+   * absent from this map are pond centre and stay `terrain_water`.
+   */
+  readonly shore: Map<number, number>;
+  /**
+   * The twelve shore tiles, pre-turned: `SHORE_VARIANTS` order — three frames × four
+   * quarter-turns, baked once at scene build. Baked rather than rotated at bake-pass time
+   * so `TerrainBaker` keeps its one-sprite-per-tile contract with no rotation plumbing.
+   */
+  readonly shoreTextures: readonly RenderTexture[];
   /** How many reservoirs the water set was last built from. -1 forces the first sync. */
   reservoirStamp: number;
   readonly machines: Map<number, MachineVisual>;
@@ -265,8 +279,22 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
   const farmland = new Set<number>();
   const water = new Set<number>();
 
+  // The pond's banks ([[077]]). ONE map instance for the scene's whole life, closed over
+  // here and refilled in place by the reservoir sync (`render/index.ts`) — replaced
+  // wholesale it would strand this closure on the empty original.
+  const shore = new Map<number, number>();
+  const shoreTextures = bakeShoreTextures(app.renderer, art);
+
   const source: TerrainSource = {
-    ground: (tileX, tileY) => art.get(groundNameAt(farmland, water, tileX, tileY)),
+    ground: (tileX, tileY) => {
+      const tileKey = worldTileKey(tileX, tileY);
+      if (water.has(tileKey)) {
+        const variant = shore.get(tileKey);
+        const baked = variant === undefined ? undefined : shoreTextures[variant];
+        return baked ?? art.get(ART.groundWater);
+      }
+      return art.get(groundNameAt(farmland, water, tileX, tileY));
+    },
     // LAND OUTRANKS ZONES, and the two can never actually meet: zone paint exists only on
     // field tiles and the field is inside the starting parcel, which every world owns. The
     // order is written down anyway, because "these two cannot collide" is exactly the kind of
@@ -437,6 +465,8 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     fieldTiles,
     farmland,
     water,
+    shore,
+    shoreTextures,
     reservoirStamp: -1,
     machines: new Map(),
     player,
@@ -465,6 +495,41 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     primed: false,
     filterOn: false,
   };
+}
+
+/**
+ * Bake the twelve shore tiles ([[077]]): `SHORE_VARIANTS` order, each frame drawn at its
+ * quarter turn about the tile centre into its own 16×16 render texture.
+ *
+ * Baked ONCE at scene build rather than rotated per bake pass, for the belt layer's reason
+ * inverted: `TerrainBaker`'s contract is one axis-aligned sprite per tile, and threading a
+ * rotation through it for three frames would put rotation plumbing on every ground tile in
+ * the game. Twelve 16×16 textures is the whole cost, and the chunk baker never learns
+ * shores exist. The frames come through `art.get`, so a no-atlas build bakes the
+ * procedural shore paints (`PLACEHOLDERS`) exactly as it bakes procedural water.
+ */
+function bakeShoreTextures(renderer: Renderer, art: ArtSet): RenderTexture[] {
+  return SHORE_VARIANTS.map((variant) => {
+    const target = RenderTexture.create({
+      width: TILE_PX,
+      height: TILE_PX,
+      resolution: 1,
+      antialias: false,
+      scaleMode: 'nearest',
+    });
+    const sprite = new Sprite(art.get(SHORE_FRAME[variant.frame]));
+    // Pinned to the tile footprint BEFORE the turn, so a frame the pipeline ships at an
+    // unexpected size still lands on its tile — the machine-body rule, applied to ground.
+    sprite.setSize(TILE_PX, TILE_PX);
+    sprite.anchor.set(0.5, 0.5);
+    sprite.position.set(TILE_PX / 2, TILE_PX / 2);
+    sprite.rotation = (variant.quarterTurns * Math.PI) / 2;
+    const scratch = new Container();
+    scratch.addChild(sprite);
+    renderer.render({ container: scratch, target, clear: true });
+    scratch.destroy({ children: true });
+    return target;
+  });
 }
 
 /**
@@ -519,6 +584,8 @@ export function destroyWorldScene(scene: WorldScene): void {
   scene.bots.destroy();
   scene.itemPage.destroy();
   scene.terrain.destroy();
+  // `true`: the shore bakes own their sources, unlike the atlas windows the art set holds.
+  for (const texture of scene.shoreTextures) texture.destroy(true);
   destroyLayers(scene.layers);
   scene.dayNight.destroy();
   scene.worldRoot.destroy({ children: true });

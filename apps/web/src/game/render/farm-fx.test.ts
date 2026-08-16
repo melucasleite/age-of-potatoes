@@ -106,17 +106,21 @@ describe('drink-bounce', () => {
     expect(fx.bounceAt(1).scaleX).toBe(1);
   });
 
-  // ── THE POUR SIGNAL (item 064) ──────────────────────────────────────────────────────
-  // The pour is read off `FieldView.lastPouredTick`, never inferred from moisture. The
-  // three tests below pin the three ways the old inference got it wrong: silent on a
-  // saturated tile, loud on a rise that was not a pour, and convulsing on a loaded save.
+  // ── THE POUR SIGNAL (item 064, amended by 081) ──────────────────────────────────────
+  // The pour is read off `FieldView.lastPouredTick`, never inferred from moisture — the
+  // signal is the SOLE trigger, in both directions. Signal moved → feedback, even when the
+  // clamp hides it from moisture (a sprinkler's sloppiness tax still pours on soaked tiles
+  // by design). Signal still → silence, even when the player just clicked (the hand can's
+  // saturated pour is now a sim-side REFUSAL that marks nothing, item 081) or when
+  // moisture rose without a pour. Plus the loaded-save priming rule.
 
-  it('plays full feedback for a pour on an already-saturated tile', () => {
+  it('plays full feedback when the signal moves on an already-saturated tile', () => {
+    // A MACHINE pour: the sprinkler deliberately spends on soaked tiles and the sim marks
+    // the signal for it. Soaked before and after — the clamp means moisture cannot move.
+    // Only the pour tick does, and that must be enough for the bounce AND the droplets.
     const fx = makeFx();
     const poured: number[] = [];
 
-    // Soaked before and after — the clamp means moisture cannot move. Only the pour tick
-    // does, and that must be enough for the bounce AND the droplets.
     fx.observe(field({ moisturePermille: [1000, 1000, 1000, 1000] }), (i) => poured.push(i));
     fx.observe(
       field({ moisturePermille: [1000, 1000, 1000, 1000], lastPouredTick: [50, 0, 0, 0] }),
@@ -126,6 +130,24 @@ describe('drink-bounce', () => {
     expect(poured).toEqual([0]);
     advance(fx, 140);
     expect(fx.bounceAt(0).scaleX).not.toBe(1);
+  });
+
+  it('stays fully silent on a refused hand pour ([[081]])', () => {
+    // The sim's refusal marks NOTHING — no charge, no water, no `lastPouredTick` — so the
+    // projection is frame-over-frame identical and this differ must produce no droplets
+    // and no bounce. Feedback on nothing happening is the lie 064 fixed, inverted.
+    const fx = makeFx();
+    const poured: number[] = [];
+
+    const soaked = () => field({ moisturePermille: [1000, 1000, 1000, 1000] });
+    fx.observe(soaked(), (i) => poured.push(i));
+    fx.observe(soaked(), (i) => poured.push(i));
+    fx.observe(soaked(), (i) => poured.push(i));
+
+    expect(poured).toEqual([]);
+    advance(fx, 140);
+    expect(fx.bounceAt(0).scaleX).toBe(1);
+    expect(fx.bounceAt(0).scaleY).toBe(1);
   });
 
   it('does not treat a moisture rise without a pour signal as a pour', () => {

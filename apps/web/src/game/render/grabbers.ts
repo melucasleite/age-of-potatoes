@@ -32,6 +32,7 @@ import type { WorldView } from '@snack/sim';
 import type { ItemPage } from './belt-items';
 import type { WorldRect } from './camera';
 import { stepX as dirStepX, stepY as dirStepY } from './directions';
+import { grabberBodyFrame, grabberBodyRotation } from './grabber-facing';
 import { LAMP_PX, lampAlpha, lampTint } from './lamps';
 import { ART } from './textures';
 import type { ArtSet } from './textures';
@@ -73,6 +74,10 @@ export class GrabberLayer {
           cargo: new Sprite(this.items.texture(g.held)),
           lamp: new Sprite(this.art.get(ART.lamp(g.lamp))),
         };
+        // Centred, because the whole body ROTATES with facing ([[082]]) and a rotation
+        // about a sprite's top-left corner throws the tile into its neighbour — the
+        // junction body's rule, for the junction body's reason.
+        visual.base.anchor.set(0.5, 0.5);
         visual.hand.anchor.set(0.5, 0.5);
         visual.cargo.anchor.set(0.5, 0.5);
         this.visuals.set(g.id, visual);
@@ -98,7 +103,18 @@ export class GrabberLayer {
       visual.lamp.visible = visible && g.lamp !== LampState.Off;
       if (!visible) continue;
 
-      visual.base.position.set(originX, originY);
+      // The tier body ([[082]]): the reskinned frame where the atlas carries it, the old
+      // pedestal where it does not — asked with `isReal` so a stale atlas degrades to the
+      // art it has rather than to a magenta square, the decal rule applied to a body.
+      const bodyName = grabberBodyFrame(g.tier);
+      visual.base.texture = this.art.isReal(bodyName)
+        ? this.art.get(bodyName)
+        : this.art.get(ART.grabberBase);
+      visual.base.position.set(originX + TILE_PX / 2, originY + TILE_PX / 2);
+      // The WHOLE body turns to face the pickup side — the `-dir` tile, see
+      // `grabber-facing.ts` for why that sign is the whole module. The lamp below never
+      // rotates: readouts stay screen-consistent (042's rule), and it is its own sprite.
+      visual.base.rotation = grabberBodyRotation(g.dir);
 
       // Top-right of the pedestal — the same corner of the same footprint a machine's lamp
       // sits in, so the eye finds every status light in the factory in the same place. It

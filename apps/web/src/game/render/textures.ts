@@ -12,6 +12,7 @@ import { BeltTier, CROP_SPECS, ITEM_SPECS, LampState, MACHINE_SPECS } from '@sna
 
 import { ATLAS_FRAMES, ATLAS_JSON_URL } from '@/art/manifest.generated';
 
+import { AVATAR_COUNT } from './avatar';
 import { LAMP_FRAME, LAMP_PX, lampFrame } from './lamps';
 import { stripCells, stripHasWiltCell } from './strips';
 
@@ -272,6 +273,21 @@ for (let step = 1; step <= 2; step++) {
   STRIPS[ART.playerWalk('south', step)] = ['player_walk_down'];
   STRIPS[ART.playerWalk('side', step)] = ['player_walk_side'];
   STRIPS[ART.playerWalk('north', step)] = ['player_walk_up', 'player_walk_side'];
+}
+
+/**
+ * The five pickable avatars ([[079]]) — each the player's exact strip shape under its own
+ * family name (`render/avatar.ts` holds the contract and the selection seam). The up strip
+ * EXISTS for these five (the four-angle sheets shipped whole), so north lists no side
+ * fallback: a missing up strip here would mean a truncated atlas, and the renderer's own
+ * `isReal` fallback to the legacy farmer is the honest degrade for that.
+ */
+for (let avatar = 1; avatar <= AVATAR_COUNT; avatar++) {
+  for (let step = 1; step <= 2; step++) {
+    STRIPS[`avatar${avatar}_walk_south_${step}`] = [`avatar${avatar}_walk_down`];
+    STRIPS[`avatar${avatar}_walk_side_${step}`] = [`avatar${avatar}_walk_side`];
+    STRIPS[`avatar${avatar}_walk_north_${step}`] = [`avatar${avatar}_walk_up`];
+  }
 }
 
 /**
@@ -543,6 +559,44 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   // so this paint only ever shows on a build with no art at all — same rule as the pawns.
   [ART.groundWater]: { paint: (g) => speckle(g, PALETTE.water, 0x4fa3d1, 11) },
 
+  // The shore set's no-atlas fallbacks ([[077]]), in the art lane's authored orientations
+  // and its row convention — rows 0–11 water, shore band rows 12–15 — so the procedural
+  // pond banks the same way the cooked one does. Quarter-turns are baked from these by
+  // `world.ts` exactly as from the real frames.
+  //   edge:  land due SOUTH (water up, sand line, soil below)
+  //   outer: land SOUTH and EAST (the band runs along both edges)
+  //   inner: land ONLY at the SOUTH-EAST diagonal (a corner wedge; the rest stays water)
+  terrain_shore_edge: {
+    paint: (g) => {
+      speckle(g, PALETTE.water, 0x4fa3d1, 13);
+      g.rect(0, 12, TILE_PX, 1).fill(0xd9c9a0);
+      g.rect(0, 13, TILE_PX, 3).fill(PALETTE.soil);
+      g.rect(2, 14, 2, 1).fill(PALETTE.metalDark);
+      g.rect(9, 14, 2, 1).fill(PALETTE.metalDark);
+    },
+  },
+  terrain_shore_outer: {
+    paint: (g) => {
+      speckle(g, PALETTE.water, 0x4fa3d1, 17);
+      g.rect(0, 13, TILE_PX, 3).fill(PALETTE.soil);
+      g.rect(13, 0, 3, TILE_PX).fill(PALETTE.soil);
+      g.rect(0, 12, 13, 1).fill(0xd9c9a0);
+      g.rect(12, 0, 1, 13).fill(0xd9c9a0);
+      g.rect(12, 12, 1, 1).fill(0xd9c9a0);
+      g.rect(3, 14, 2, 1).fill(PALETTE.metalDark);
+      g.rect(14, 4, 1, 2).fill(PALETTE.metalDark);
+    },
+  },
+  terrain_shore_inner: {
+    paint: (g) => {
+      speckle(g, PALETTE.water, 0x4fa3d1, 19);
+      g.rect(13, 13, 3, 3).fill(PALETTE.soil);
+      g.rect(12, 13, 1, 3).fill(0xd9c9a0);
+      g.rect(13, 12, 3, 1).fill(0xd9c9a0);
+      g.rect(12, 12, 1, 1).fill(0xd9c9a0);
+    },
+  },
+
   [ART.groundField]: {
     paint: (g) => {
       g.rect(0, 0, TILE_PX, TILE_PX).fill(PALETTE.soil);
@@ -753,6 +807,15 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
     },
   },
 
+  // The tier bodies ([[082]]), for a build with no atlas at all — the reskin's own rules
+  // restated procedurally: claw opening EAST (the authored base facing), mirror-symmetric
+  // about the horizontal midline so quarter turns cannot wobble, tier told by pivot hue
+  // AND by arm-tick count (042's colour-plus-shape law). The real frames shadow these the
+  // moment the atlas loads.
+  grabber_mk1: { paint: grabberBodyTile(0xf0c93d, 1) },
+  grabber_mk2: { paint: grabberBodyTile(0xd2493f, 2) },
+  grabber_long: { paint: grabberBodyTile(0x62d6e0, 3) },
+
   [ART.grabberHand]: {
     width: 6,
     height: 6,
@@ -843,6 +906,29 @@ function beltTile(bed: number, rail: number, shadow: number): Paint {
         g.rect(ox + i, 11 - i, 1, 1).fill(rail);
       }
     }
+  };
+}
+
+/**
+ * A grabber tier's procedural body: mounting plate, tier-hued pivot, arm reaching east
+ * into a two-finger claw. Every rectangle mirrors about the horizontal midline (row 8),
+ * which is the property the real frames assert at build time and rotation relies on.
+ */
+function grabberBodyTile(pivot: number, ticks: number): Paint {
+  return (g) => {
+    g.rect(2, 4, 8, 8).fill(PALETTE.metalDark);
+    g.rect(3, 6, 5, 4).fill(PALETTE.metal);
+    g.rect(4, 7, 2, 2).fill(pivot);
+    // The arm, along the midline, wearing the tier's tick count.
+    g.rect(8, 7, 5, 2).fill(PALETTE.metal);
+    for (let i = 0; i < ticks; i++) {
+      g.rect(8 + i * 2, 7, 1, 2).fill(pivot);
+    }
+    // The claw: two fingers open toward the pickup tile on the east edge.
+    g.rect(12, 5, 3, 2).fill(PALETTE.metalDark);
+    g.rect(12, 9, 3, 2).fill(PALETTE.metalDark);
+    g.rect(14, 4, 1, 2).fill(PALETTE.metalDark);
+    g.rect(14, 10, 1, 2).fill(PALETTE.metalDark);
   };
 }
 

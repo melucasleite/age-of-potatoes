@@ -33,12 +33,15 @@ import type { HoverTile } from '../input/context';
 import { grabberAtView, tileAtView, tileWithinReach } from '../input/picking';
 import { bestSellable } from '../input/pointer';
 import { outcomePhrase, teardownTargetAt } from '../input/teardown';
+import { avatarIdentity, avatarWalkFrame } from './avatar';
 import { beltItemAtTile } from './belt-items';
+import { canFrame } from './can-state';
 import { money } from './hud';
 import { junctionMask, junctionQuarterTurns } from './junction';
 import { LAMP_PX, lampAlpha, lampTint } from './lamps';
 import { liquidName, liquidTint, portHintTint } from './liquids';
 import { pipeAtTile } from './pipes';
+import { classifyShore } from './shore';
 import { walkStep } from './strips';
 import { ART } from './textures';
 import type { DecalDial } from './textures';
@@ -126,13 +129,24 @@ export function render(
   if (view.reservoirs.length !== scene.reservoirStamp) {
     scene.reservoirStamp = view.reservoirs.length;
     scene.water.clear();
+    const waterTiles: [number, number][] = [];
     for (const r of view.reservoirs) {
       for (let ty = r.tileY; ty < r.tileY + r.tilesHigh; ty++) {
         for (let tx = r.tileX; tx < r.tileX + r.tilesWide; tx++) {
           scene.water.add(worldTileKey(tx, ty));
+          waterTiles.push([tx, ty]);
           scene.terrain.markTileDirty(tx, ty);
         }
       }
+    }
+    // The banks ([[077]]), classified in a second pass because a tile's shore variant reads
+    // the COMPLETE water set — half-built, the far side of the pond would still be land.
+    // Refilled in place: the ground bake's closure holds this exact map (see `world.ts`).
+    scene.shore.clear();
+    for (const [tileKey, variant] of classifyShore(waterTiles, (tx, ty) =>
+      scene.water.has(worldTileKey(tx, ty)),
+    )) {
+      scene.shore.set(tileKey, variant);
     }
   }
   scene.fieldTiles.sync(view.field, scene.farmland, (tileX, tileY) =>
@@ -166,14 +180,24 @@ export function render(
     view.player.ySub,
     PLAYER_STRIDE_SUB,
   );
-  scene.player.texture = scene.art.get(ART.playerWalk(playerPose(view.player.facing), step));
+  // WHICH farmer is walking ([[079]]): the published avatar id picks the strip family —
+  // same poses, same cadence, same mirror rule, only the family name changes. `isReal`
+  // guards the swap so an atlas without the avatar sheets (or no atlas at all) degrades
+  // to the legacy farmer rather than to magenta; avatar 0 IS the legacy farmer.
+  const pose = playerPose(view.player.facing);
+  const avatarFrame = avatarWalkFrame(avatarIdentity.avatarId, pose, step);
+  scene.player.texture = scene.art.get(
+    avatarFrame !== null && scene.art.isReal(avatarFrame)
+      ? avatarFrame
+      : ART.playerWalk(pose, step),
+  );
   scene.player.scale.x = view.player.facing === Direction.West ? -1 : 1;
 
   // The armed tool, in hand ([[065]]), read off input's `armedTool` singleton — the
   // published contract, `viewLod`'s pattern — never off hotbar internals. Input writes it
   // on every arming edge, so switching slots switches the held sprite the same frame the
   // cursor changes, and nothing here is ever a command or a hash input (§12).
-  updateHeldTool(scene, view.player.facing, playerDrawX, playerDrawY);
+  updateHeldTool(scene, view, playerDrawX, playerDrawY);
 
   // 3. Camera follows the interpolated position, then clamps and snaps.
   //
@@ -944,10 +968,21 @@ function playerPose(facing: number): 'north' | 'south' | 'side' {
  * farmer's hands, and his hands are on the far side of him when he faces away. An empty
  * answer — the Hand, every build cursor — hides both: an empty hand IS the "nothing
  * armed" tell. The icon mirrors with the pose so it stays in the leading hand.
+ *
+ * THE WATERING CAN IS THE ONE TOOL WHOSE PICTURE IS STATE ([[073]]): full, half and empty
+ * frames swap on `view.player.canCharges` through the shared threshold in `can-state.ts` —
+ * read HERE, render-side, off the projection, exactly as the item rules: input's
+ * `armedTool` table stays static, and the sim's charge count is never copied into UI
+ * state. Every other tool passes `heldFrame` through untouched.
  */
-function updateHeldTool(scene: WorldScene, facing: number, drawX: number, drawY: number): void {
+function updateHeldTool(scene: WorldScene, view: WorldView, drawX: number, drawY: number): void {
+  const facing = view.player.facing;
   const frame =
-    armedTool.tool === ToolMode.UseRepairKit ? ART.item(ItemId.RepairKit) : armedTool.heldFrame;
+    armedTool.tool === ToolMode.UseRepairKit
+      ? ART.item(ItemId.RepairKit)
+      : armedTool.tool === ToolMode.Water
+        ? canFrame(view.player.canCharges, view.player.canChargesMax)
+        : armedTool.heldFrame;
   if (frame === '') {
     scene.heldToolBack.visible = false;
     scene.heldToolFront.visible = false;
