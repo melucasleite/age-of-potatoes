@@ -45,7 +45,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 15;
+export const CURRENT_FORMAT_VERSION = 16;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -1060,6 +1060,52 @@ const migrateFormat14To15: SaveMigration = (payload) => {
 };
 
 /**
+ * Format 15 → 16: the seed comes home (item 088).
+ *
+ * Every bot gains a SEED POCKET (`seedItem`/`seedCount`) and every machine gains the harvester
+ * dock's SEED SHELF (`seedShelfItem`/`seedShelfCount`). All four land empty, and unlike format
+ * 14 → 15 that is not a guess with a bias — it is the only honest answer.
+ *
+ * NOTHING IS BEING RECONSTRUCTED HERE, and the difference from its predecessor is worth naming.
+ * Format 15's step had to invent an identity for goods whose name had genuinely been thrown
+ * away. The seeds a format-15 world's bots discarded were never anywhere: `harvestUnderBot`
+ * routed through `takeHarvest`, which returns no seed, so the seed was not stored badly — it
+ * did not exist. There is no record to read, no witness to consult, and back-crediting a
+ * plausible number of seeds to a returning player would be inventing inventory, which is a
+ * worse sin than the parity bug it would pretend to have fixed. The bug stops on load; it is
+ * not retroactively unpaid.
+ *
+ * The four fields land on EVERY machine and EVERY bot rather than only on harvester docks and
+ * harvesters, exactly as format 8 → 9's cart fields did: `fromPayload` reads each field by name
+ * and fails on a missing one, which is what makes a corrupt save name its first bad field
+ * instead of loading as a world full of `undefined`.
+ *
+ * `payload.version` is NOT rewritten, for the reason format 14 → 15 spells out: that field is
+ * hashed world state, and stamping the format number onto it would make a migrated world hash
+ * differently from the identical world built fresh.
+ */
+const migrateFormat15To16: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-15 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    machines.push({ ...oldMachines[i]!, seedShelfItem: 0, seedShelfCount: 0 });
+  }
+
+  const bots: Record<string, unknown>[] = [];
+  const oldBots = rows(p, 'bots');
+  for (let i = 0; i < oldBots.length; i++) {
+    bots.push({ ...oldBots[i]!, seedItem: 0, seedCount: 0 });
+  }
+
+  return { ...p, machines, bots };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -1079,6 +1125,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   12: migrateFormat12To13,
   13: migrateFormat13To14,
   14: migrateFormat14To15,
+  15: migrateFormat15To16,
 };
 
 export interface MigrationOutcome {

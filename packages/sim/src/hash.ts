@@ -227,6 +227,10 @@ export function hashStateUint32(state: WorldState): number {
     d.num(machine.cargoItem);
     d.num(machine.cargoCount);
     d.num(machine.runTicksRemaining);
+    // The harvester dock's seed shelf (item 088). Zero on everything else, and counted anyway,
+    // for the reason directly above.
+    d.num(machine.seedShelfItem);
+    d.num(machine.seedShelfCount);
     // The untouched-work clock, and the junction's two round-robin cursors. THE CURSORS ARE IN
     // HERE BECAUSE THAT IS THE POINT OF THEM: a splitter's alternation is world state, so two
     // worlds that differ only in which output is next genuinely differ, and item 024's criterion
@@ -344,6 +348,10 @@ export function hashStateUint32(state: WorldState): number {
     d.num(bot.workTicks);
     d.num(bot.carryItem);
     d.num(bot.carryCount);
+    // The seed pocket (item 088). A bot that pocketed a seed genuinely differs from one that
+    // did not, and a replay that dropped it would diverge only when the seed reached a shelf.
+    d.num(bot.seedItem);
+    d.num(bot.seedCount);
     d.num(bot.condition);
     d.num(bot.opCount);
   }
@@ -616,6 +624,7 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].flowMlPerMinute`, machine.flowMlPerMinute);
     check(`machines[${i}].scanCursor`, machine.scanCursor);
     check(`machines[${i}].cargoCount`, machine.cargoCount);
+    check(`machines[${i}].seedShelfCount`, machine.seedShelfCount);
     check(`machines[${i}].runTicksRemaining`, machine.runTicksRemaining);
     check(`machines[${i}].untouchedTicks`, machine.untouchedTicks);
     check(`machines[${i}].junctionInCursor`, machine.junctionInCursor);
@@ -635,6 +644,7 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`bots[${i}].routeCursor`, bot.routeCursor);
     check(`bots[${i}].workTicks`, bot.workTicks);
     check(`bots[${i}].carryCount`, bot.carryCount);
+    check(`bots[${i}].seedCount`, bot.seedCount);
     check(`bots[${i}].condition`, bot.condition);
     check(`bots[${i}].opCount`, bot.opCount);
   }

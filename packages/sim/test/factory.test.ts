@@ -14,6 +14,7 @@ import {
   type LiquidPortSpec,
   type Machine,
   type WorldState,
+  BELT_ITEM_SPACING_SUBTILES,
   BOXED_MACHINE_ROWS,
   BeltTier,
   BuildRefusal,
@@ -29,6 +30,7 @@ import {
   ITEM_SPECS,
   IntentAction,
   ItemId,
+  LampState,
   LiquidId,
   MACHINE_SPECS,
   MachineKind,
@@ -57,6 +59,7 @@ import {
   effectiveWastePeriod,
   effectiveWear,
   effectiveWorkRate,
+  grabberWouldAccept,
   TICKS_PER_IN_GAME_DAY,
   hashState,
   acceptsUpgrades,
@@ -1076,6 +1079,213 @@ describe('grabbers', () => {
     stepMany(state, 200);
     expect(belt.items).toHaveLength(1);
     expect(sink.items).toHaveLength(0);
+  });
+});
+
+// --- an arm looks before it grabs (item 085) ----------------------------------------
+//
+// **THE RULING THESE TESTS PIN, AND THE ONE THEY OVERTURN.** Owner, 2026-08-15: "the grabbers
+// should only be able to take what the machine is able to receive… if it grabs something that
+// the machine can't take, it shouldn't grab it." Before this, every accept-door in the game
+// documented the opposite as a feature: the arm grabbed, was refused, and stood there holding
+// the goods as a visible "look downstream". The hostage is gone; the diagnostic moved to the
+// lamp, and the last two tests in this block are the ones that keep it honest.
+//
+// The failure mode the whole design guards against is DRIFT — a peek that says yes where the
+// accept says no. That is why `grabberWouldAccept` is exported and why the property test at the
+// bottom exists: it drives the same arm at the same destination and asserts the prediction and
+// the outcome agree, item by item, for every door in the tree.
+
+describe('a grabber only takes what its destination will accept', () => {
+  /** Belt of one tile, an arm over it, and whatever the caller stands in front of the arm. */
+  function armRig(seed: number, filter: ItemId | 0 = 0) {
+    const state = createWorld(seed);
+    const source = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 1)!;
+    const arm = spawnGrabber(state, GrabberTier.Mk1, 1, 0, Direction.East, filter)!;
+    return { state, source, arm };
+  }
+
+  function lampOf(state: WorldState, armId: number): number {
+    return view(state, createWorldView()).grabbers.find((g) => g.id === armId)!.lamp;
+  }
+
+  it('never picks up an item no line of the recipe wants', () => {
+    // A Bagger bags chips. Offered a raw potato it has no line for it, and before this item the
+    // arm would have taken the potato off the belt and held it for the rest of the session.
+    const { state, source, arm } = armRig(8501);
+    const bagger = spawnMachine(state, MachineKind.Bagger, 2, 0)!;
+    beltInsert(source, 0, ItemId.RussetPotato);
+
+    stepMany(state, 400);
+
+    expect(arm.held).toBe(0);
+    expect(arm.opCount).toBe(0);
+    expect(source.items.map((e) => e.item)).toEqual([ItemId.RussetPotato]);
+    expect(bagger.inputCounts.every((n) => n === 0)).toBe(true);
+  });
+
+  it('never picks up for a hopper that is already full, and resumes the moment it drains', () => {
+    const { state, source, arm } = armRig(8502);
+    const bagger = spawnMachine(state, MachineKind.Bagger, 2, 0)!;
+    const spec = machineSpec(MachineKind.Bagger)!;
+    const line = spec.inputs.findIndex((input) => input.item === ItemId.SeasonedChips);
+    bagger.inputCounts[line] = effectiveInputCapacity(spec, bagger);
+    // No condition left, so the machine cannot work its way out of a full hopper and the test
+    // is genuinely about the door rather than about how fast a Bagger bags.
+    bagger.condition = 0;
+    beltInsert(source, 0, ItemId.SeasonedChips);
+
+    stepMany(state, 400);
+    expect(arm.held).toBe(0);
+    expect(source.items).toHaveLength(1);
+    // Red, not amber: there IS something to take, and the thing in front will not have it.
+    expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
+
+    // Room appears. Nothing else changes, and the arm goes back to work on its own.
+    bagger.inputCounts[line] = 0;
+    stepMany(state, 200);
+    expect(source.items).toHaveLength(0);
+    expect(bagger.inputCounts[line]).toBe(1);
+  });
+
+  it('never picks up for a belt with no room at the drop point', () => {
+    const { state, source, arm } = armRig(8503);
+    const sink = spawnBelt(state, BeltTier.Basic, 2, 0, Direction.East, 1)!;
+    // A one-tile belt that leads nowhere, packed nose to tail against its own end: the goods
+    // compact to the far end and the drop point in the middle of the tile has no legal spacing
+    // left, permanently. This is what a backed-up line looks like from the arm's side.
+    beltInsert(sink, SUBTILE - 1, ItemId.PlainChips);
+    beltInsert(sink, SUBTILE - 1 - BELT_ITEM_SPACING_SUBTILES, ItemId.PlainChips);
+    beltInsert(source, 0, ItemId.RussetPotato);
+
+    stepMany(state, 400);
+    expect(arm.held).toBe(0);
+    expect(source.items).toHaveLength(1);
+    expect(sink.items).toHaveLength(2);
+  });
+
+  it('composes with the filter: the filter narrows, the look-ahead narrows again', () => {
+    // The arm is filtered to chips, so the potato was never a candidate; the chips ARE a
+    // candidate and are refused by the destination. Both goods stay on the belt, for two
+    // different reasons, and the arm distinguishes them without holding either.
+    const { state, source, arm } = armRig(8504, ItemId.PlainChips);
+    const bagger = spawnMachine(state, MachineKind.Bagger, 2, 0)!;
+    beltInsert(source, 0, ItemId.RussetPotato);
+    beltInsert(source, SUBTILE - 1, ItemId.PlainChips);
+    const before = source.items.length;
+
+    stepMany(state, 400);
+    expect(arm.held).toBe(0);
+    expect(source.items).toHaveLength(before);
+    expect(bagger.inputCounts.every((n) => n === 0)).toBe(true);
+  });
+
+  it('STILL STALLS MID-SWING when the world changes under an arm already holding something', () => {
+    // The ruling prevents doomed grabs. It does not teleport goods backwards onto the belt they
+    // already left — so an arm whose destination fills up between the grab and the drop keeps
+    // the item in its hand and waits, exactly as it always did. This is the one stall left, and
+    // it is bounded by the swing it was mid-way through.
+    const { state, source, arm } = armRig(8505);
+    const bagger = spawnMachine(state, MachineKind.Bagger, 2, 0)!;
+    const spec = machineSpec(MachineKind.Bagger)!;
+    const line = spec.inputs.findIndex((input) => input.item === ItemId.SeasonedChips);
+    bagger.condition = 0;
+    beltInsert(source, 0, ItemId.SeasonedChips);
+
+    // One tick is enough: the hopper has room, so the claw closes.
+    stepMany(state, 1);
+    expect(arm.held).toBe(ItemId.SeasonedChips);
+
+    // The world changes mid-swing.
+    bagger.inputCounts[line] = effectiveInputCapacity(spec, bagger);
+    stepMany(state, 400);
+
+    // Held, not eaten, and red — the honest stall, with the goods accounted for.
+    expect(arm.held).toBe(ItemId.SeasonedChips);
+    expect(bagger.inputCounts[line]).toBe(effectiveInputCapacity(spec, bagger));
+    expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
+
+    // And it delivers the moment room appears, rather than having thrown the item away.
+    bagger.inputCounts[line] = 0;
+    stepMany(state, 30);
+    expect(arm.held).toBe(0);
+    expect(bagger.inputCounts[line]).toBe(1);
+  });
+
+  it('tells a starved arm from a blocked one: amber is nothing to take, red is nowhere to put it', () => {
+    // **THE DIAGNOSTIC THE HOSTAGE USED TO CARRY.** Same arm, same destination, one difference:
+    // whether there is anything on the belt behind it. If these two ever report the same colour,
+    // item 085 has cost the player the ability to see a mis-aimed belt at all.
+    const { state, source, arm } = armRig(8506);
+    const bagger = spawnMachine(state, MachineKind.Bagger, 2, 0)!;
+    bagger.condition = 0;
+
+    stepMany(state, 5);
+    expect(lampOf(state, arm.id)).toBe(LampState.Starved);
+
+    beltInsert(source, 0, ItemId.RussetPotato);
+    stepMany(state, 5);
+    expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
+
+    // And an arm whose destination WOULD take it is neither: it is working.
+    const spec = machineSpec(MachineKind.Bagger)!;
+    const line = spec.inputs.findIndex((input) => input.item === ItemId.SeasonedChips);
+    source.items.length = 0;
+    beltInsert(source, 0, ItemId.SeasonedChips);
+    stepMany(state, 2);
+    expect(lampOf(state, arm.id)).toBe(LampState.Running);
+    stepMany(state, 60);
+    expect(bagger.inputCounts[line]).toBe(1);
+  });
+
+  it('PREDICTS EXACTLY WHAT IT DOES, at every door in the tree — no drifted second copy', () => {
+    // **THE TEST THE ONE-PREDICATE-PER-DOOR RULE EXISTS FOR.** Every door in `grabberDeliver`
+    // is a pure `canAccept` plus a mutating accept that calls it, and the grep in the item's
+    // notes proves there is no parallel copy — but a grep cannot prove the two are *equivalent*.
+    // This does: for each destination and each item, ask `grabberWouldAccept`, then hand the arm
+    // that item for real and see whether it lands. A drifted predicate shows up as one row where
+    // the prediction and the outcome disagree, and it names the door.
+    const destinations: readonly { name: string; build: (s: WorldState) => void }[] = [
+      { name: 'Bagger hopper', build: (s) => void spawnMachine(s, MachineKind.Bagger, 2, 0) },
+      {
+        name: 'Chip Kitchen hopper',
+        build: (s) => void spawnMachine(s, MachineKind.ChipKitchen, 2, 0),
+      },
+      { name: 'sell bin', build: (s) => void spawnMachine(s, MachineKind.SellBin, 2, 0) },
+      { name: 'truck depot', build: (s) => void spawnMachine(s, MachineKind.TruckDepot, 2, 0) },
+      { name: 'planter dock', build: (s) => void spawnMachine(s, MachineKind.PlanterDock, 2, 0) },
+      { name: 'drone bay', build: (s) => void spawnMachine(s, MachineKind.DroneBay, 2, 0) },
+      { name: 'belt', build: (s) => void spawnBelt(s, BeltTier.Basic, 2, 0, Direction.East, 1) },
+      { name: 'bare ground', build: () => {} },
+    ];
+    const goods: readonly ItemId[] = [
+      ItemId.RussetPotato,
+      ItemId.PlainChips,
+      ItemId.BaggedChips,
+      ItemId.PotatoSeed,
+      ItemId.DronePart,
+    ];
+
+    const disagreements: string[] = [];
+    for (const destination of destinations) {
+      for (const item of goods) {
+        const { state, source, arm } = armRig(8507);
+        destination.build(state);
+        beltInsert(source, 0, item);
+
+        const predicted = grabberWouldAccept(state, arm, item);
+        stepMany(state, 200);
+        // It landed if it left the belt and is not still in the claw. Nothing in this rig can
+        // consume the goods except the destination itself.
+        const landed = source.items.length === 0 && arm.held === 0;
+        if (predicted !== landed) {
+          disagreements.push(
+            `${destination.name} + item ${item}: said ${predicted}, did ${landed}`,
+          );
+        }
+      }
+    }
+    expect(disagreements).toEqual([]);
   });
 });
 

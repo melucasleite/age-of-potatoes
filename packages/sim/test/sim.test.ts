@@ -85,10 +85,14 @@ describe('determinism', () => {
     // There is no third option, which is the entire point of the fixture.
     // e97c57ee -> f48076eb with format 13 (item 066): the digest gained the field tiles'
     // coordinates and the soil-memory ledger; the scripted run's behaviour is unchanged.
+    // ea1510a9 -> f34ea50f in wave 12 (item 088): the digest gained the bot seed pocket and the
+    // harvester dock's seed shelf (save format 16). This script owns no bot and no dock, so all
+    // four fields are zero and the run's behaviour is unchanged — the hash moved because the
+    // digest did, which is the whole reason a format bump moves every world at once.
     // f48076eb -> ea1510a9 in wave 11 (items 073 + 075): the can starts at 20 charges
     // instead of 8 (`player.canCharges` is hashed), and the digest gained
     // `stats.cheatsUsed`. The script's behaviour is otherwise unchanged.
-    expect(hashState(runScript(1234, 1000))).toBe('ea1510a9');
+    expect(hashState(runScript(1234, 1000))).toBe('f34ea50f');
   });
 
   it('gives different seeds different worlds', () => {

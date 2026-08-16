@@ -25,12 +25,16 @@ import {
   FIELD_ORIGIN_X,
   FIELD_ORIGIN_Y,
   ItemId,
+  LampState,
   MachineKind,
   RUN_TICKS_PER_TILE_FROM_ROAD,
   SUBTILE,
   TECH_NODES,
   TechBranch,
   TechId,
+  BeltTier,
+  Direction,
+  GrabberTier,
   addItem,
   cartRunTicks,
   computeNetWorthCents,
@@ -42,6 +46,8 @@ import {
   hashState,
   itemCount,
   listPriceCents,
+  spawnBelt,
+  spawnGrabber,
   spawnMachine,
   step,
   stepMany,
@@ -315,7 +321,7 @@ describe('the truck depot', () => {
     expect(state.ceremonies).toHaveLength(ceremonies);
   });
 
-  it('refuses goods it has no route for, so a mis-aimed arm stalls instead of eating them', () => {
+  it('refuses goods it has no route for, so a mis-aimed arm never picks them up', () => {
     const { state, depot } = worldWithDepot(9203);
     expect(depotAccept(state, depot, ItemId.BaggedChips)).toBe(false);
     run(state, [
@@ -348,6 +354,40 @@ describe('the truck depot', () => {
       if (depotAccept(state, depot, ItemId.BaggedChips)) accepted += 1;
     }
     expect(accepted).toBe(DEPOT_STOCK_CAPACITY);
+  });
+
+  it('IS ASKED BEFORE THE CLAW CLOSES (item 085): no route, no pickup; sign one and it flows', () => {
+    // The depot's door, through the arm rather than through the function. `depotCanAcceptRoute`
+    // is the predicate — one copy, returning the very contract `depotAccept` increments — and
+    // this is the behaviour it buys: a belt pointed at a depot that has not been given a route
+    // leaves its goods on the belt instead of parking one in a claw until the player notices.
+    const { state, depot } = worldWithDepot(9205, 5, 5);
+    const belt = spawnBelt(state, BeltTier.Basic, 2, 5, Direction.East, 1)!;
+    const arm = spawnGrabber(state, GrabberTier.Mk1, 3, 5, Direction.East, 0)!;
+    // The depot covers (5,5) outward, so the arm at (3,5) drops on (4,5) — one tile short. Put
+    // the depot where the arm actually reaches.
+    depot.tileX = 4;
+    depot.tileY = 5;
+    belt.items.push({ dist: 0, item: ItemId.BaggedChips });
+
+    stepMany(state, 400);
+    expect(arm.held).toBe(0);
+    expect(belt.items).toHaveLength(1);
+    expect(depotStockedCount(state, depot.id)).toBe(0);
+
+    // A route is signed. Nothing else changes, and the same goods walk in.
+    run(state, [
+      {
+        type: 'CreateContract',
+        depotId: depot.id,
+        item: ItemId.BaggedChips,
+        quantityPerRun: 100,
+        destination: 'Route 9 Wholesale',
+      },
+    ]);
+    stepMany(state, 100);
+    expect(belt.items).toHaveLength(0);
+    expect(depotStockedCount(state, depot.id)).toBe(1);
   });
 });
 
@@ -618,6 +658,156 @@ describe('the trucking node', () => {
 });
 
 // --- the fixture ----------------------------------------------------------------------
+
+// --- the sell bin's belt door (item 087) ---------------------------------------------
+
+/**
+ * A chip line that ends at the bin, built by hand.
+ *
+ *   Chip Kitchen (6,14) ──arm(6,13)──▶ belt (6,12)→(4,12) ──arm(3,12)──▶ SELL BIN (2,12)
+ *
+ * The bin is the one every world starts with, at `(FIELD_ORIGIN_X - 2, FIELD_ORIGIN_Y + 8)`.
+ * The kitchen's hopper is loaded directly rather than by command, on `depot-run`'s precedent
+ * and for its reason: what is being proved is the last link — production to money — and a
+ * hand-loaded hopper before the window is honest about where the hands were.
+ */
+function soldUnits(state: WorldState, item: ItemId): number {
+  // `salesByItem` is a sparse list sorted by item id, not an array indexed by one.
+  return state.stats.salesByItem.find((row) => row.item === item)?.units ?? 0;
+}
+
+function chipLineToBin(seed: number, potatoes = 12) {
+  const state = createWorld(seed);
+  const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 6, 14)!;
+  kitchen.inputCounts[0] = potatoes;
+  const feeder = spawnGrabber(state, GrabberTier.Mk1, 6, 13, Direction.North, 0)!;
+  const belt = spawnBelt(state, BeltTier.Basic, 6, 12, Direction.West, 3)!;
+  const teller = spawnGrabber(state, GrabberTier.Mk1, 3, 12, Direction.West, 0)!;
+  return { state, kitchen, feeder, belt, teller };
+}
+
+describe('a grabber pointed into the sell bin', () => {
+  it('SELLS THE CHIP LINE HANDS-FREE: money climbs and no touch is counted', () => {
+    // Owner ruling, 2026-08-15: "if I point a picker from a track that has snacks to the trade
+    // post, it should be able to sell." Before item 087 the bin matched none of `grabberPlace`'s
+    // doors, so the arm stood at the counter holding a bag of chips forever.
+    const { state, teller } = chipLineToBin(8701);
+    const moneyBefore = state.moneyCents;
+    const touchesBefore = { ...state.stats.touches };
+
+    // Not one command from here to the end of the test.
+    stepMany(state, 3_000);
+
+    expect(state.moneyCents).toBeGreaterThan(moneyBefore);
+    expect(state.stats.itemsSold).toBeGreaterThan(0);
+    expect(soldUnits(state, ItemId.BaggedChips)).toBeGreaterThan(0);
+    // The arm is not stuck at the counter holding the first bag it ever picked up.
+    expect(teller.opCount).toBeGreaterThan(1);
+    // **ZERO MANUAL TOUCHES.** Belt selling is the hands-free path by construction, which is
+    // what makes plan §6's Hands-Free board count an automated bin correctly for free.
+    expect(state.stats.touches).toEqual(touchesBefore);
+    expect(totalManualTouches(state.stats.touches)).toBe(0);
+  });
+
+  it('books each unit ONCE, at list, through the same door a hand sale walks through', () => {
+    const { state } = chipLineToBin(8702);
+    const purse = state.moneyCents;
+    stepMany(state, 3_000);
+
+    const sold = state.stats.itemsSold;
+    expect(sold).toBeGreaterThan(0);
+    // One multiplication, one credit: gross, money and the per-item row all agree, and none of
+    // them is double-counted. If a second booking ever appears anywhere, two of these three
+    // stop matching.
+    expect(state.moneyCents - purse).toBe(sold * listPriceCents(ItemId.BaggedChips));
+    expect(soldUnits(state, ItemId.BaggedChips)).toBe(sold);
+    expect(state.stats.lifetimeEarnedCents).toBe(state.moneyCents - purse);
+  });
+
+  it('pays a Day-Old bag exactly what a hand sale would pay for it, at the same tick', () => {
+    // ONE PRICE PATH. Day-Old goods are their own item id with their own list price, so the
+    // belt sale and the hand sale are literally the same multiplication — this pins that they
+    // stay so, rather than a freshness rule quietly forking.
+    const { state, belt } = chipLineToBin(8703, 0);
+    belt.items.push({ dist: 0, item: ItemId.DayOldPotato });
+    const before = state.moneyCents;
+    stepMany(state, 600);
+
+    const beltGross = state.moneyCents - before;
+    expect(beltGross).toBe(listPriceCents(ItemId.DayOldPotato));
+
+    // The same bag, sold by hand from the same world.
+    const hand = createWorld(8703);
+    addItem(hand, ItemId.DayOldPotato, 1);
+    standOn(hand, FIELD_ORIGIN_X - 2, FIELD_ORIGIN_Y + 8);
+    const handBefore = hand.moneyCents;
+    run(hand, [{ type: 'SellItem', item: ItemId.DayOldPotato, count: 1 }]);
+    expect(hand.moneyCents - handBefore).toBe(beltGross);
+    // And the hand's sale DID cost a touch, which is the only thing the two doors disagree on.
+    expect(totalManualTouches(hand.stats.touches)).toBe(1);
+  });
+
+  it('REFUSES A SEED at the bin exactly as it refuses one from hands — and never picks it up', () => {
+    // Plan §4's anti-softlock floor: a world can always plant. An arm quietly selling seeds
+    // would break it on a schedule while the player was three screens away — worse than the
+    // misclick `applySellItem` already refuses.
+    //
+    // **REWRITTEN BY ITEM 085, WHOSE RULING THIS TEST USED TO PIN THE OPPOSITE OF.** It asserted
+    // that the arm STALLS holding the seed forever ("the ordinary look-downstream stall"). The
+    // owner overruled that on 2026-08-15 — "if it grabs something that the machine can't take,
+    // it shouldn't grab it" — so the arm now asks the bin BEFORE closing its claw, hears no, and
+    // leaves the seed on the belt. Same refusal, one swing earlier, and the goods stay where
+    // the player put them instead of being held hostage to make the point.
+    const { state, teller, belt } = chipLineToBin(8704, 0);
+    belt.items.push({ dist: 0, item: ItemId.PotatoSeed });
+    const moneyBefore = state.moneyCents;
+
+    stepMany(state, 1_000);
+    expect(state.moneyCents).toBe(moneyBefore);
+    expect(state.stats.itemsSold).toBe(0);
+    // NOT IN ITS HAND, AND NOT EATEN: the seed is still on the belt, a thousand ticks later.
+    expect(teller.held).toBe(0);
+    expect(teller.opCount).toBe(0);
+    expect(belt.items.map((entry) => entry.item)).toEqual([ItemId.PotatoSeed]);
+
+    // The diagnostic moved to the lamp and did not evaporate: red, look downstream — the arm
+    // has something to take and is pointed at a thing that will not have it.
+    const arm = view(state, createWorldView()).grabbers.find((g) => g.id === teller.id)!;
+    expect(arm.lamp).toBe(LampState.Blocked);
+
+    // And the hand's door says the same thing about the same seed.
+    const hand = createWorld(8704);
+    addItem(hand, ItemId.PotatoSeed, 1);
+    standOn(hand, FIELD_ORIGIN_X - 2, FIELD_ORIGIN_Y + 8);
+    const purse = hand.moneyCents;
+    const seeds = itemCount(hand, ItemId.PotatoSeed);
+    run(hand, [{ type: 'SellItem', item: ItemId.PotatoSeed, count: 1 }]);
+    expect(hand.moneyCents).toBe(purse);
+    expect(itemCount(hand, ItemId.PotatoSeed)).toBe(seeds);
+  });
+
+  it('keeps the bin stateless — a sale is instantaneous, nothing accumulates on the machine', () => {
+    const { state } = chipLineToBin(8705);
+    stepMany(state, 3_000);
+    const bin = state.machines.find((m) => m.kind === MachineKind.SellBin)!;
+    expect(bin.cargoItem).toBe(0);
+    expect(bin.cargoCount).toBe(0);
+    expect(bin.inputCounts.every((n) => n === 0)).toBe(true);
+    expect(bin.outputCount).toBe(0);
+    expect(bin.opCount).toBe(0);
+  });
+
+  it("leaves the depot's door alone: a truck sale still books automated gross, a bin sale does not", () => {
+    // `automatedGrossCents` means "gross that left the lot on a cart or a truck" and the
+    // Dispatch panel's header is read off it. A bin sale left on neither. Widening that number
+    // to mean "income I did not carry by hand" is an owner's call, flagged for item 046 —
+    // pinned here so the decision is made deliberately rather than by drift.
+    const { state } = chipLineToBin(8706);
+    stepMany(state, 3_000);
+    expect(state.stats.itemsSold).toBeGreaterThan(0);
+    expect(state.stats.automatedGrossCents).toBe(0);
+  });
+});
 
 describe('the hands-free window', () => {
   it('runs 5,000 ticks of a depot run with the touch counters frozen', () => {

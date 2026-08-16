@@ -1,9 +1,9 @@
 {
   "name": "mid-field",
-  "description": "Machines on farm tiles (item 067): the gardener loop earns $150, the farmer walks to the field centre on a no-op walk errand (item 070), a barrel sprinkler stands ON a hand-watered farm tile, one full cycle waters all 24 farm neighbours — including a growing crop — and never the machine’s own tile, deconstruction hands the tile back with its soil, fertility, and decayed moisture untouched, and the freed ground takes a seed again. Pins the fieldPlaceable footprint rule, the occupied-tile watering skip, the 24-pour barrel, and IntentAction.Walk in the trace and the save shape.",
+  "description": "Machines on farm tiles (item 067): the gardener loop earns $150, the farmer walks to the field centre on a no-op walk errand (item 070), a barrel sprinkler stands ON a hand-watered farm tile, and three hauls from the pond — ten pours, ten, then four — water all 24 farm neighbours, including a growing crop, and never the machine’s own tile, with the second and third cycles walking past the ground the first one wet. Deconstruction hands the tile back with its soil, fertility, and decayed moisture untouched, and the freed ground takes a seed again. Pins the fieldPlaceable footprint rule, the occupied-tile watering skip, item 086’s ten-charge sensing barrel, and IntentAction.Walk in the trace and the save shape.",
   "seed": 670670,
-  "ticks": 5578,
-  "expectedHash": "f042ed59",
+  "ticks": 5779,
+  "expectedHash": "00db6dee",
   "commands": [
     {
       "tick": 0,
@@ -218,17 +218,6 @@
       "tick": 1695,
       "command": {
         "type": "WalkAndAct",
-        "action": 15,
-        "tileX": 12,
-        "tileY": 12,
-        "item": 0,
-        "count": 0
-      }
-    },
-    {
-      "tick": 1736,
-      "command": {
-        "type": "WalkAndAct",
         "action": 1,
         "tileX": 4,
         "tileY": 4,
@@ -237,7 +226,7 @@
       }
     },
     {
-      "tick": 1782,
+      "tick": 1702,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -248,7 +237,7 @@
       }
     },
     {
-      "tick": 1783,
+      "tick": 1703,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -259,7 +248,7 @@
       }
     },
     {
-      "tick": 1784,
+      "tick": 1704,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -270,7 +259,7 @@
       }
     },
     {
-      "tick": 1789,
+      "tick": 1707,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -281,7 +270,7 @@
       }
     },
     {
-      "tick": 1795,
+      "tick": 1713,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -292,7 +281,7 @@
       }
     },
     {
-      "tick": 1801,
+      "tick": 1719,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -303,7 +292,7 @@
       }
     },
     {
-      "tick": 1807,
+      "tick": 1725,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -314,7 +303,7 @@
       }
     },
     {
-      "tick": 1813,
+      "tick": 1731,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -325,7 +314,7 @@
       }
     },
     {
-      "tick": 1835,
+      "tick": 1753,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -336,29 +325,18 @@
       }
     },
     {
-      "tick": 1852,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 3,
-        "tileX": 11,
-        "tileY": 4,
-        "item": 0,
-        "count": 0
-      }
-    },
-    {
-      "tick": 1858,
+      "tick": 1770,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
         "tileX": 2,
         "tileY": 12,
         "item": 2,
-        "count": 9
+        "count": 5
       }
     },
     {
-      "tick": 1908,
+      "tick": 1816,
       "command": {
         "type": "WalkAndAct",
         "action": 2,
@@ -369,7 +347,7 @@
       }
     },
     {
-      "tick": 1938,
+      "tick": 1845,
       "command": {
         "type": "WalkAndAct",
         "action": 2,
@@ -380,29 +358,7 @@
       }
     },
     {
-      "tick": 1964,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 2,
-        "tileX": 11,
-        "tileY": 4,
-        "item": 1,
-        "count": 0
-      }
-    },
-    {
-      "tick": 1970,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 15,
-        "tileX": 12,
-        "tileY": 12,
-        "item": 0,
-        "count": 0
-      }
-    },
-    {
-      "tick": 2008,
+      "tick": 1871,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -413,7 +369,7 @@
       }
     },
     {
-      "tick": 2054,
+      "tick": 1888,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -424,7 +380,7 @@
       }
     },
     {
-      "tick": 2055,
+      "tick": 1889,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -435,7 +391,7 @@
       }
     },
     {
-      "tick": 2056,
+      "tick": 1890,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -446,7 +402,18 @@
       }
     },
     {
-      "tick": 2061,
+      "tick": 1892,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 15,
+        "tileX": 12,
+        "tileY": 12,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 1939,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -457,7 +424,7 @@
       }
     },
     {
-      "tick": 2067,
+      "tick": 1973,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -468,7 +435,7 @@
       }
     },
     {
-      "tick": 2073,
+      "tick": 1974,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -479,7 +446,7 @@
       }
     },
     {
-      "tick": 2079,
+      "tick": 1978,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -490,18 +457,7 @@
       }
     },
     {
-      "tick": 2085,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 3,
-        "tileX": 8,
-        "tileY": 4,
-        "item": 0,
-        "count": 0
-      }
-    },
-    {
-      "tick": 2087,
+      "tick": 1983,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -512,29 +468,29 @@
       }
     },
     {
-      "tick": 2088,
+      "tick": 1984,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 1985,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
         "tileX": 2,
         "tileY": 12,
         "item": 2,
-        "count": 6
+        "count": 8
       }
     },
     {
-      "tick": 2137,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 2,
-        "tileX": 8,
-        "tileY": 4,
-        "item": 1,
-        "count": 0
-      }
-    },
-    {
-      "tick": 2175,
+      "tick": 2033,
       "command": {
         "type": "WalkAndAct",
         "action": 2,
@@ -545,18 +501,18 @@
       }
     },
     {
-      "tick": 2179,
+      "tick": 2074,
       "command": {
         "type": "WalkAndAct",
-        "action": 15,
-        "tileX": 12,
-        "tileY": 12,
-        "item": 0,
+        "action": 2,
+        "tileX": 11,
+        "tileY": 4,
+        "item": 1,
         "count": 0
       }
     },
     {
-      "tick": 2218,
+      "tick": 2084,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -567,7 +523,7 @@
       }
     },
     {
-      "tick": 2264,
+      "tick": 2107,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -578,7 +534,7 @@
       }
     },
     {
-      "tick": 2265,
+      "tick": 2108,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -589,7 +545,7 @@
       }
     },
     {
-      "tick": 2266,
+      "tick": 2109,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -600,7 +556,7 @@
       }
     },
     {
-      "tick": 2271,
+      "tick": 2111,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -611,7 +567,7 @@
       }
     },
     {
-      "tick": 2277,
+      "tick": 2117,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -622,7 +578,7 @@
       }
     },
     {
-      "tick": 2283,
+      "tick": 2123,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -633,7 +589,7 @@
       }
     },
     {
-      "tick": 2289,
+      "tick": 2129,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -644,7 +600,7 @@
       }
     },
     {
-      "tick": 2295,
+      "tick": 2135,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -655,7 +611,7 @@
       }
     },
     {
-      "tick": 2312,
+      "tick": 2152,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -666,18 +622,29 @@
       }
     },
     {
-      "tick": 2313,
+      "tick": 2153,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2155,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
         "tileX": 2,
         "tileY": 12,
         "item": 2,
-        "count": 6
+        "count": 8
       }
     },
     {
-      "tick": 2353,
+      "tick": 2196,
       "command": {
         "type": "WalkAndAct",
         "action": 2,
@@ -688,7 +655,7 @@
       }
     },
     {
-      "tick": 2383,
+      "tick": 2226,
       "command": {
         "type": "WalkAndAct",
         "action": 2,
@@ -699,18 +666,18 @@
       }
     },
     {
-      "tick": 2387,
+      "tick": 2230,
       "command": {
         "type": "WalkAndAct",
-        "action": 15,
-        "tileX": 12,
-        "tileY": 12,
-        "item": 0,
+        "action": 2,
+        "tileX": 8,
+        "tileY": 4,
+        "item": 1,
         "count": 0
       }
     },
     {
-      "tick": 2433,
+      "tick": 2240,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -721,7 +688,7 @@
       }
     },
     {
-      "tick": 2478,
+      "tick": 2247,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -732,7 +699,7 @@
       }
     },
     {
-      "tick": 2479,
+      "tick": 2248,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -743,7 +710,7 @@
       }
     },
     {
-      "tick": 2480,
+      "tick": 2249,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -754,7 +721,7 @@
       }
     },
     {
-      "tick": 2485,
+      "tick": 2251,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -765,7 +732,7 @@
       }
     },
     {
-      "tick": 2491,
+      "tick": 2257,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -776,7 +743,7 @@
       }
     },
     {
-      "tick": 2497,
+      "tick": 2263,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -787,7 +754,7 @@
       }
     },
     {
-      "tick": 2503,
+      "tick": 2269,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -930,7 +897,7 @@
       }
     },
     {
-      "tick": 3619,
+      "tick": 3592,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -941,7 +908,7 @@
       }
     },
     {
-      "tick": 3620,
+      "tick": 3593,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -952,7 +919,7 @@
       }
     },
     {
-      "tick": 3669,
+      "tick": 3643,
       "command": {
         "type": "WalkAndAct",
         "action": 2,
@@ -963,18 +930,7 @@
       }
     },
     {
-      "tick": 3716,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 15,
-        "tileX": 12,
-        "tileY": 12,
-        "item": 0,
-        "count": 0
-      }
-    },
-    {
-      "tick": 3749,
+      "tick": 3691,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -985,7 +941,7 @@
       }
     },
     {
-      "tick": 3796,
+      "tick": 3715,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -996,7 +952,7 @@
       }
     },
     {
-      "tick": 3797,
+      "tick": 3716,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1007,7 +963,7 @@
       }
     },
     {
-      "tick": 3798,
+      "tick": 3717,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1018,7 +974,7 @@
       }
     },
     {
-      "tick": 3803,
+      "tick": 3719,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1029,7 +985,7 @@
       }
     },
     {
-      "tick": 3809,
+      "tick": 3725,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1040,7 +996,7 @@
       }
     },
     {
-      "tick": 3815,
+      "tick": 3731,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1051,7 +1007,7 @@
       }
     },
     {
-      "tick": 3821,
+      "tick": 3737,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1062,7 +1018,7 @@
       }
     },
     {
-      "tick": 3957,
+      "tick": 3864,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -1073,7 +1029,7 @@
       }
     },
     {
-      "tick": 3958,
+      "tick": 3865,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
@@ -1084,7 +1040,7 @@
       }
     },
     {
-      "tick": 4007,
+      "tick": 3914,
       "command": {
         "type": "PlaceMachine",
         "kind": 2,
@@ -1093,7 +1049,7 @@
       }
     },
     {
-      "tick": 4008,
+      "tick": 3915,
       "command": {
         "type": "WalkAndAct",
         "action": 2,
@@ -1104,18 +1060,7 @@
       }
     },
     {
-      "tick": 4052,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 15,
-        "tileX": 12,
-        "tileY": 12,
-        "item": 0,
-        "count": 0
-      }
-    },
-    {
-      "tick": 4087,
+      "tick": 3959,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1126,7 +1071,7 @@
       }
     },
     {
-      "tick": 4133,
+      "tick": 3979,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1137,7 +1082,7 @@
       }
     },
     {
-      "tick": 4134,
+      "tick": 3980,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1148,7 +1093,7 @@
       }
     },
     {
-      "tick": 4135,
+      "tick": 3981,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1159,7 +1104,18 @@
       }
     },
     {
-      "tick": 4140,
+      "tick": 3983,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 15,
+        "tileX": 12,
+        "tileY": 12,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4030,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1170,7 +1126,7 @@
       }
     },
     {
-      "tick": 4146,
+      "tick": 4065,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1181,7 +1137,7 @@
       }
     },
     {
-      "tick": 4152,
+      "tick": 4066,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1192,7 +1148,7 @@
       }
     },
     {
-      "tick": 4158,
+      "tick": 4070,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1203,7 +1159,7 @@
       }
     },
     {
-      "tick": 4164,
+      "tick": 4075,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -1214,7 +1170,7 @@
       }
     },
     {
-      "tick": 4186,
+      "tick": 4098,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -1225,7 +1181,7 @@
       }
     },
     {
-      "tick": 4187,
+      "tick": 4099,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -1236,53 +1192,64 @@
       }
     },
     {
-      "tick": 4194,
+      "tick": 4106,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4112,
       "command": {
         "type": "WalkAndAct",
         "action": 4,
         "tileX": 0,
         "tileY": 0,
         "item": 0,
-        "count": 8
+        "count": 12
+      }
+    },
+    {
+      "tick": 4205,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 5,
+        "tileX": 0,
+        "tileY": 0,
+        "item": 0,
+        "count": 1
+      }
+    },
+    {
+      "tick": 4206,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 9,
+        "tileX": 2,
+        "tileY": 12,
+        "item": 3,
+        "count": 1
+      }
+    },
+    {
+      "tick": 4254,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 1,
+        "count": 0
       }
     },
     {
       "tick": 4283,
       "command": {
         "type": "WalkAndAct",
-        "action": 5,
-        "tileX": 0,
-        "tileY": 0,
-        "item": 0,
-        "count": 1
-      }
-    },
-    {
-      "tick": 4284,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 9,
-        "tileX": 2,
-        "tileY": 12,
-        "item": 3,
-        "count": 1
-      }
-    },
-    {
-      "tick": 4333,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 2,
-        "tileX": 4,
-        "tileY": 4,
-        "item": 1,
-        "count": 0
-      }
-    },
-    {
-      "tick": 4362,
-      "command": {
-        "type": "WalkAndAct",
         "action": 2,
         "tileX": 6,
         "tileY": 4,
@@ -1291,7 +1258,7 @@
       }
     },
     {
-      "tick": 4370,
+      "tick": 4291,
       "command": {
         "type": "WalkAndAct",
         "action": 2,
@@ -1302,18 +1269,18 @@
       }
     },
     {
-      "tick": 4381,
+      "tick": 4301,
       "command": {
         "type": "WalkAndAct",
-        "action": 15,
-        "tileX": 12,
-        "tileY": 12,
-        "item": 0,
+        "action": 2,
+        "tileX": 9,
+        "tileY": 4,
+        "item": 1,
         "count": 0
       }
     },
     {
-      "tick": 4425,
+      "tick": 4307,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1324,7 +1291,7 @@
       }
     },
     {
-      "tick": 4471,
+      "tick": 4319,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1335,7 +1302,7 @@
       }
     },
     {
-      "tick": 4472,
+      "tick": 4320,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1346,7 +1313,7 @@
       }
     },
     {
-      "tick": 4473,
+      "tick": 4321,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1357,7 +1324,7 @@
       }
     },
     {
-      "tick": 4478,
+      "tick": 4323,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1368,7 +1335,7 @@
       }
     },
     {
-      "tick": 4484,
+      "tick": 4329,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1379,7 +1346,7 @@
       }
     },
     {
-      "tick": 4490,
+      "tick": 4335,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1390,7 +1357,7 @@
       }
     },
     {
-      "tick": 4496,
+      "tick": 4341,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1401,7 +1368,7 @@
       }
     },
     {
-      "tick": 4502,
+      "tick": 4347,
       "command": {
         "type": "WalkAndAct",
         "action": 3,
@@ -1412,51 +1379,40 @@
       }
     },
     {
-      "tick": 4519,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 3,
-        "tileX": 9,
-        "tileY": 4,
-        "item": 0,
-        "count": 0
-      }
-    },
-    {
-      "tick": 4526,
+      "tick": 4364,
       "command": {
         "type": "WalkAndAct",
         "action": 4,
         "tileX": 0,
         "tileY": 0,
         "item": 0,
-        "count": 8
+        "count": 4
       }
     },
     {
-      "tick": 4560,
+      "tick": 4393,
       "command": {
         "type": "WalkAndAct",
         "action": 5,
         "tileX": 0,
         "tileY": 0,
         "item": 0,
-        "count": 4
+        "count": 3
       }
     },
     {
-      "tick": 4561,
+      "tick": 4394,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
         "tileX": 2,
         "tileY": 12,
         "item": 3,
-        "count": 4
+        "count": 3
       }
     },
     {
-      "tick": 4609,
+      "tick": 4443,
       "command": {
         "type": "WalkAndAct",
         "action": 2,
@@ -1467,29 +1423,7 @@
       }
     },
     {
-      "tick": 4639,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 2,
-        "tileX": 9,
-        "tileY": 4,
-        "item": 1,
-        "count": 0
-      }
-    },
-    {
-      "tick": 4657,
-      "command": {
-        "type": "WalkAndAct",
-        "action": 15,
-        "tileX": 12,
-        "tileY": 12,
-        "item": 0,
-        "count": 0
-      }
-    },
-    {
-      "tick": 4698,
+      "tick": 4474,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1500,7 +1434,7 @@
       }
     },
     {
-      "tick": 4744,
+      "tick": 4475,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1511,7 +1445,7 @@
       }
     },
     {
-      "tick": 4745,
+      "tick": 4476,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1522,7 +1456,7 @@
       }
     },
     {
-      "tick": 4746,
+      "tick": 4480,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1533,7 +1467,7 @@
       }
     },
     {
-      "tick": 4751,
+      "tick": 4486,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1544,7 +1478,7 @@
       }
     },
     {
-      "tick": 4757,
+      "tick": 4491,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1555,7 +1489,7 @@
       }
     },
     {
-      "tick": 4763,
+      "tick": 4497,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1566,7 +1500,7 @@
       }
     },
     {
-      "tick": 4769,
+      "tick": 4503,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1599,29 +1533,29 @@
       }
     },
     {
-      "tick": 5198,
+      "tick": 5197,
       "command": {
         "type": "WalkAndAct",
         "action": 5,
         "tileX": 0,
         "tileY": 0,
         "item": 0,
-        "count": 11
+        "count": 12
       }
     },
     {
-      "tick": 5199,
+      "tick": 5198,
       "command": {
         "type": "WalkAndAct",
         "action": 9,
         "tileX": 2,
         "tileY": 12,
         "item": 3,
-        "count": 11
+        "count": 12
       }
     },
     {
-      "tick": 5248,
+      "tick": 5247,
       "command": {
         "type": "WalkAndAct",
         "action": 17,
@@ -1632,7 +1566,7 @@
       }
     },
     {
-      "tick": 5271,
+      "tick": 5270,
       "command": {
         "type": "WalkAndAct",
         "action": 11,
@@ -1643,7 +1577,7 @@
       }
     },
     {
-      "tick": 5291,
+      "tick": 5290,
       "command": {
         "type": "WalkAndAct",
         "action": 2,
@@ -1654,7 +1588,7 @@
       }
     },
     {
-      "tick": 5318,
+      "tick": 5317,
       "command": {
         "type": "WalkAndAct",
         "action": 15,
@@ -1665,7 +1599,7 @@
       }
     },
     {
-      "tick": 5347,
+      "tick": 5346,
       "command": {
         "type": "WalkAndAct",
         "action": 1,
@@ -1676,12 +1610,23 @@
       }
     },
     {
-      "tick": 5374,
+      "tick": 5373,
       "command": {
         "type": "PlaceMachine",
         "kind": 3,
         "tileX": 7,
         "tileY": 7
+      }
+    },
+    {
+      "tick": 5374,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 6,
+        "tileX": 7,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
       }
     },
     {
@@ -1696,7 +1641,18 @@
       }
     },
     {
-      "tick": 5376,
+      "tick": 5476,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 6,
+        "tileX": 7,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5577,
       "command": {
         "type": "WalkAndAct",
         "action": 10,
@@ -1707,7 +1663,7 @@
       }
     },
     {
-      "tick": 5377,
+      "tick": 5578,
       "command": {
         "type": "WalkAndAct",
         "action": 2,

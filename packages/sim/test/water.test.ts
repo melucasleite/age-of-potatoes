@@ -33,6 +33,8 @@ import {
   RESERVOIR_LOW_PERMILLE,
   RESERVOIR_RECHARGE_ML_PER_MINUTE,
   ReservoirThrottle,
+  SPRINKLER_CHARGES_MAX,
+  SPRINKLER_PERIOD_TICKS,
   SPRINKLER_POUR_ML,
   SUBTILE,
   TICKS_PER_MINUTE,
@@ -331,6 +333,213 @@ describe('the watering can', () => {
   });
 });
 
+// --- the barrel sprinkler (item 086) -------------------------------------------------
+
+/**
+ * The assisted rung, after the owner's ten-charge ruling.
+ *
+ * Every test here stands the head DEAD-CENTRE at (7,7) on the 8×8 field (x and y both 4..11),
+ * where its 5×5 patch is 25 farm tiles — 24 of them waterable, since item 067 a head never
+ * waters its own feet. That is deliberately more thirsty ground than ten charges can cover,
+ * so "it stopped at ten" is a fact these tests can observe rather than a shape of the field.
+ */
+describe('the barrel sprinkler', () => {
+  /** A full barrel mid-field, and the whole field as dry as it can be. */
+  function thirstyField(seed: number): { state: WorldState; barrel: Machine } {
+    const state = createWorld(seed);
+    const barrel = spawnMachine(state, MachineKind.Sprinkler, 7, 7)!;
+    barrel.tankMl = machineSpec(barrel.kind)!.tankCapacityMl;
+    for (const tile of state.field) tile.moisture = 0;
+    return { state, barrel };
+  }
+
+  it('HOLDS TEN CHARGES, and the capacity is that sentence in millilitres', () => {
+    // Owner ruling 2026-08-15: "the sprinklers should have charges, ten charges". The spec
+    // number is not allowed to be an independent opinion about how big a barrel is.
+    expect(machineSpec(MachineKind.Sprinkler)!.tankCapacityMl).toBe(
+      SPRINKLER_CHARGES_MAX * SPRINKLER_POUR_ML,
+    );
+  });
+
+  it('WATERS EXACTLY TEN THIRSTY TILES on a full barrel, then wants hauling', () => {
+    const { state, barrel } = thirstyField(861);
+
+    stepMany(state, 1);
+    expect(barrel.wateredCount).toBe(SPRINKLER_CHARGES_MAX);
+    expect(barrel.tankMl).toBe(0);
+
+    // Fourteen thirsty tiles are still under the patch and it cannot touch one of them: an
+    // empty barrel halts, which is the existing starved tell and not a new failure mode.
+    stepMany(state, 4 * SPRINKLER_PERIOD_TICKS);
+    expect(barrel.wateredCount).toBe(SPRINKLER_CHARGES_MAX);
+  });
+
+  it('SPENDS NOTHING over saturated ground — no water, no pour signal, no wear', () => {
+    const state = createWorld(862);
+    const barrel = spawnMachine(state, MachineKind.Sprinkler, 7, 7)!;
+    barrel.tankMl = machineSpec(barrel.kind)!.tankCapacityMl;
+    for (const tile of state.field) tile.moisture = MOISTURE_MAX;
+    stepMany(state, 1); // Past tick 0, so a pour mark is distinguishable from "never".
+    for (const tile of state.field) tile.lastPouredTick = 0;
+    const condition = barrel.condition;
+
+    stepMany(state, 4 * SPRINKLER_PERIOD_TICKS);
+    expect(barrel.wateredCount).toBe(0);
+    expect(barrel.tankMl).toBe(machineSpec(barrel.kind)!.tankCapacityMl);
+    // Item 081's rule, one rung up: a skip marks NO pour signal. The renderer would draw a
+    // splash and the audio observer would play one, over water that never left the barrel.
+    expect(state.field.every((tile) => tile.lastPouredTick === 0)).toBe(true);
+    // A cycle that did nothing costs nothing: wear is per operation, and there was none.
+    expect(barrel.condition).toBe(condition);
+    expect(barrel.opCount).toBe(0);
+    // What it DID do is look, and say how much looking saved — the Hub's own counter.
+    expect(barrel.skippedCount).toBeGreaterThan(0);
+  });
+
+  it('spends on the thirsty tiles of a mixed patch and passes over the wet ones', () => {
+    const { state, barrel } = thirstyField(863);
+    // Three dry tiles in a patch that is otherwise soaked.
+    for (const tile of state.field) tile.moisture = MOISTURE_MAX;
+    const thirsty = [tileAt(state, 6, 6)!, tileAt(state, 8, 6)!, tileAt(state, 6, 8)!];
+    for (const tile of thirsty) tile.moisture = MOISTURE_DRY_THRESHOLD - 1;
+    const before = barrel.tankMl;
+
+    stepMany(state, 1);
+    expect(barrel.wateredCount).toBe(3);
+    expect(before - barrel.tankMl).toBe(3 * SPRINKLER_POUR_ML);
+    // Above the threshold and never over the ceiling. Not exactly `MOISTURE_MAX`: the pour
+    // clamps to it and the same tick's drain then takes one point back off, which is the
+    // ordinary order of the day and not the sprinkler's business.
+    for (const tile of thirsty) {
+      expect(tile.moisture).toBeGreaterThan(MOISTURE_DRY_THRESHOLD);
+      expect(tile.moisture).toBeLessThanOrEqual(MOISTURE_MAX);
+    }
+    // Twenty-one wet neighbours looked at and left alone. The head's own tile is NOT among
+    // them: it was never waterable, so passing it over saved nothing and counts as nothing.
+    expect(barrel.skippedCount).toBe(21);
+  });
+
+  it('waters at the SAME threshold the ground is drawn cracked with, not at saturation', () => {
+    // One definition of dry (see `MachineSpec.moistureSensing`). A barrel that poured on
+    // anything below MOISTURE_MAX would be back to a sloppiness tax with extra steps.
+    const { state, barrel } = thirstyField(864);
+    for (const tile of state.field) tile.moisture = MOISTURE_DRY_THRESHOLD;
+    const parched = tileAt(state, 6, 6)!;
+    parched.moisture = MOISTURE_DRY_THRESHOLD - 1;
+
+    stepMany(state, 1);
+    expect(barrel.wateredCount).toBe(1);
+    expect(parched.moisture).toBeGreaterThan(MOISTURE_DRY_THRESHOLD);
+  });
+
+  it('KEEPS THE ONE LEDGER: every millilitre drawn is in the ground or still in the barrel', () => {
+    // Item 028's law. Charges are a projection; this is the thing they are a projection OF,
+    // and if the two ever disagree it is this that is right.
+    const state = createWorld(865);
+    state.moneyCents = 100_000;
+    const barrel = spawnMachine(state, MachineKind.Sprinkler, 7, 7)!;
+    standOn(state, 7, 8);
+    for (const tile of state.field) tile.moisture = 0;
+
+    const drawnBefore = state.stats.waterDrawnMl;
+    for (let i = 0; i < 6; i++) {
+      run(state, [{ type: 'RefillHopper', machineId: barrel.id }]);
+      stepMany(state, SPRINKLER_PERIOD_TICKS);
+    }
+
+    const drawn = state.stats.waterDrawnMl - drawnBefore;
+    expect(drawn).toBe(barrel.wateredCount * SPRINKLER_POUR_ML + barrel.tankMl);
+    // And the refills were real: a head that never drank would satisfy the equation trivially.
+    expect(barrel.wateredCount).toBeGreaterThan(SPRINKLER_CHARGES_MAX);
+  });
+
+  it('projects charges from the ledger at every boundary, and stores none of them', () => {
+    const { state, barrel } = thirstyField(866);
+    const charges = () => view(state).machines.find((m) => m.id === barrel.id)!;
+
+    expect(charges().tankCharges).toBe(SPRINKLER_CHARGES_MAX);
+    expect(charges().tankChargesMax).toBe(SPRINKLER_CHARGES_MAX);
+
+    barrel.tankMl = 0;
+    expect(charges().tankCharges).toBe(0);
+
+    // A part-charge is not a charge: you cannot pour two thirds of a pour, so the readout
+    // floors rather than rounding up into a promise the barrel cannot keep.
+    barrel.tankMl = SPRINKLER_POUR_ML * 3 - 1;
+    expect(charges().tankCharges).toBe(2);
+
+    // The Capacity dial moves the ceiling, because it moves the millilitres.
+    barrel.tankMl = machineSpec(barrel.kind)!.tankCapacityMl;
+    barrel.capacityLevel = 1;
+    expect(charges().tankChargesMax).toBeGreaterThan(SPRINKLER_CHARGES_MAX);
+
+    // Nothing in the world state knows the word: the projection is arithmetic on `tankMl`.
+    expect(Object.keys(barrel)).not.toContain('charges');
+  });
+
+  it('RESUMES WHERE IT RAN DRY, so the far side of the patch is never starved', () => {
+    // THE OWNER'S BUG, 2026-08-16, reported from play against the first cut of item 086:
+    // "they should be watering 5 by 5 around them, but it looks like it's only watering in
+    // front of them." Ten charges cannot cross 24 thirsty neighbours, so a head that restarted
+    // its top-left scan every cycle served the near rows forever and the back row never once.
+    //
+    // SENSING DOES NOT COVER THIS, which is the trap: between hauls the near rows DRY OUT
+    // again, and a dry tile is not a tile sensing will skip. So this test dries the whole
+    // patch before every refill — the worst case, and the one the owner was living in.
+    const state = createWorld(868);
+    const barrel = spawnMachine(state, MachineKind.Sprinkler, 7, 7)!;
+    for (const tile of state.field) tile.moisture = 0;
+    const rowY = (y: number) =>
+      [5, 6, 7, 8, 9].map((x) => tileAt(state, x, y)!).filter((t) => t.lastPouredTick > 0).length;
+
+    // Past tick 0 with an empty barrel, so a pour mark is distinguishable from "never". An
+    // empty barrel halts before the cooldown is set, so the cycle fires the tick it is filled.
+    stepMany(state, 3);
+    barrel.tankMl = machineSpec(barrel.kind)!.tankCapacityMl;
+    stepMany(state, 1);
+    expect(barrel.wateredCount).toBe(SPRINKLER_CHARGES_MAX);
+    // Ten charges reached the first two rows and stopped. So far this is the symptom.
+    expect(rowY(5) + rowY(6)).toBe(10);
+    expect(rowY(8) + rowY(9), 'the far rows should not have been reached yet').toBe(0);
+
+    // The whole patch parched again, and a fresh barrel. A restarting scan would spend all
+    // ten charges back on rows 5 and 6 — which is exactly what the owner saw.
+    for (const tile of state.field) {
+      tile.moisture = 0;
+      tile.lastPouredTick = 0;
+    }
+    barrel.tankMl = machineSpec(barrel.kind)!.tankCapacityMl;
+    stepMany(state, SPRINKLER_PERIOD_TICKS + 1);
+
+    expect(rowY(5) + rowY(6), 'the head went back to the near rows').toBe(0);
+    expect(rowY(7) + rowY(8) + rowY(9)).toBe(SPRINKLER_CHARGES_MAX);
+    // Row 9 is the far edge, and the second haul reached it.
+    expect(rowY(9)).toBeGreaterThan(0);
+  });
+
+  it('leaves the piped head’s fresh-start scan exactly as it was — cursor never written', () => {
+    // Item 086 is the barrel's ruling. The piped head is required to come through it
+    // byte-identical, and its cursor sitting at zero forever is what that looks like in state.
+    const state = createWorld(869);
+    state.unlocked = [TechId.Pumps, TechId.PipedSprinklers];
+    const head = spawnMachine(state, MachineKind.PipedSprinkler, 7, 7)!;
+    head.tankMl = 3 * SPRINKLER_POUR_ML; // Deliberately dry mid-patch, where a barrel would park.
+    for (const tile of state.field) tile.moisture = 0;
+
+    stepMany(state, 2 * SPRINKLER_PERIOD_TICKS);
+    expect(head.wateredCount).toBe(3);
+    expect(head.scanCursor).toBe(0);
+  });
+
+  it('leaves a tank machine out of the charge readout entirely', () => {
+    // A Tank holds a million millilitres and pours none of them: 666 charges would be noise.
+    const { state, tank } = plumbedWorld(867);
+    const tv = view(state).machines.find((m) => m.id === tank.id)!;
+    expect(tv.tankCharges).toBe(0);
+    expect(tv.tankChargesMax).toBe(0);
+  });
+});
+
 // --- the pour signal (item 064) ------------------------------------------------------
 
 describe('the pour signal', () => {
@@ -385,11 +594,17 @@ describe('the pour signal', () => {
     expect(projected.field.lastPouredTick[idx]).toBe(tile.lastPouredTick);
   });
 
-  it('marks sprinkler pours, wet tiles included — a re-wet is still a pour', () => {
+  it('marks piped-head pours, wet tiles included — a dumb re-wet is still a pour', () => {
+    // RE-AIMED AT THE PIPED HEAD BY ITEM 086. Until the owner's ten-charge ruling this test
+    // used the BARREL, which re-wet soaked ground as its signature inefficiency; the barrel
+    // senses now and its skips are pinned in `the barrel sprinkler` above. The piped head is
+    // the dumb one that remains — its water is ledger-fed and its waste is what the Irrigation
+    // Hub is sold against — so the sloppiness-tax pour this test watches moved down one rung.
     const state = createWorld(18);
-    const sprinkler = spawnMachine(state, MachineKind.Sprinkler, 5, 5)!;
+    state.unlocked = [TechId.Pumps, TechId.PipedSprinklers];
+    const head = spawnMachine(state, MachineKind.PipedSprinkler, 5, 5)!;
     stepMany(state, 1); // Past tick 0 so a recorded pour is distinguishable from "never".
-    sprinkler.tankMl = 100_000;
+    head.tankMl = 100_000;
     // A NEIGHBOUR, not the machine's own tile: since item 067 a head standing on farmland
     // never waters its own feet — the occupied tile is outside the watering surface — so the
     // sloppiness-tax pour this test watches lands on the soaked tile beside it.
@@ -793,22 +1008,32 @@ describe('piped sprinklers and the Irrigation Hub', () => {
     expect(state.ceremonies.filter((id) => id === CeremonyId.IrrigationHub).length).toBe(count);
   });
 
-  it('leaves the lower rungs of the ladder exactly as they were', () => {
-    // Plan §1: "manual never rots." The barrel sprinkler pours the same amount over the same
-    // radius on the same period as it always did.
+  it('leaves the lower rung’s reach and pour size exactly as they were', () => {
+    // Plan §1: "manual never rots." The barrel pours the same amount over the same radius on
+    // the same period as it always did — five field tiles from the fence at (2,8).
+    //
+    // WHAT IT NO LONGER DOES IS WATER THEM WHETHER THEY NEEDED IT OR NOT. This test asserted
+    // exactly that until item 086, and the owner's ruling of 2026-08-15 overturned it: "they
+    // only should go watering if the tile needs it". The rung did not rot, it stopped
+    // wasting — so the geometry stays pinned here and the thirst test is pinned in
+    // `the barrel sprinkler` above.
     const state = createWorld(48);
     state.moneyCents = 1_000_000;
     const sprinkler = spawnMachine(state, MachineKind.Sprinkler, 2, 8)!;
-    sprinkler.tankMl = machineSpec(sprinkler.kind)!.tankCapacityMl;
-    for (const tile of state.field) tile.moisture = MOISTURE_MAX;
+    const full = machineSpec(sprinkler.kind)!.tankCapacityMl;
+    sprinkler.tankMl = full;
+    for (const tile of state.field) tile.moisture = 0;
 
     stepMany(state, 1);
-    // Its coverage is the 5x5 patch it has always had; from there that is five field tiles,
-    // and it wets all five whether they needed it or not.
     expect(sprinkler.wateredCount).toBe(5);
-    expect(sprinkler.tankMl).toBe(
-      machineSpec(sprinkler.kind)!.tankCapacityMl - 5 * SPRINKLER_POUR_ML,
-    );
+    expect(sprinkler.tankMl).toBe(full - 5 * SPRINKLER_POUR_ML);
+
+    // Same five tiles, now soaked: same reach, same period, nothing spent.
+    const held = sprinkler.tankMl;
+    for (const tile of state.field) tile.moisture = MOISTURE_MAX;
+    stepMany(state, 2 * SPRINKLER_PERIOD_TICKS);
+    expect(sprinkler.wateredCount).toBe(5);
+    expect(sprinkler.tankMl).toBe(held);
   });
 });
 

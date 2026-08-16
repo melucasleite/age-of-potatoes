@@ -158,11 +158,112 @@ export function depotRouteFor(state: WorldState, depotId: number, item: ItemId):
  * enforces it), so there is never a question of *which* route an item goes to.
  */
 export function depotAccept(state: WorldState, depot: Machine, item: ItemId): boolean {
-  const contract = depotRouteFor(state, depot.id, item);
+  const contract = depotCanAcceptRoute(state, depot, item);
   if (contract === null) return false;
-  if (depotStockedCount(state, depot.id) >= DEPOT_STOCK_CAPACITY) return false;
   contract.stocked += 1;
   return true;
+}
+
+/**
+ * **THE DEPOT'S ACCEPT-DOOR PREDICATE** (item 085): the route that would take this item right
+ * now, or `null` when the depot would refuse it.
+ *
+ * Returns the contract rather than a bare boolean so `depotAccept` above can be *this plus one
+ * increment* — the house single-door rule taken to its conclusion. A parallel `depotCanAccept`
+ * that re-asked "is there a route, is there room" would be a second copy of the refusal rule,
+ * and the day someone adds a third condition to one of them a grabber starts picking up goods
+ * this depot will not take. There is one copy, and it is here.
+ *
+ * Reading it costs one pass over the contracts and one over them again for the count; nothing
+ * is allocated, which is what lets the look-ahead run per arm per swing.
+ */
+export function depotCanAcceptRoute(
+  state: WorldState,
+  depot: Machine,
+  item: ItemId,
+): Contract | null {
+  const contract = depotRouteFor(state, depot.id, item);
+  if (contract === null) return null;
+  if (depotStockedCount(state, depot.id) >= DEPOT_STOCK_CAPACITY) return null;
+  return contract;
+}
+
+/** True when a depot would take this item right now. `depotCanAcceptRoute`, as a yes/no. */
+export function depotCanAccept(state: WorldState, depot: Machine, item: ItemId): boolean {
+  return depotCanAcceptRoute(state, depot, item) !== null;
+}
+
+/**
+ * ONE BIN SALE, AND THE ONLY PLACE A BIN SALE IS BOOKED.
+ *
+ * Hands and belts both end here (item 087). `applySellItem` in `tick.ts` owns the HAND's
+ * preconditions — is it sellable, are you standing near the bin, do you actually have the
+ * goods — and `sellBinAccept` below owns the BELT's; but the money and the ledger are these
+ * four lines, once, for both. Extracted rather than duplicated on the wave-8 single-credit
+ * rule: two places that each did `moneyCents += gross; recordSale(...)` would be a second
+ * booking the day one of them gained a line the other did not, and plan §6 wants the Shift
+ * Report and every board reading one number.
+ *
+ * `recordSale` owns the gross, the unit count, and the per-item row in one write (item 062).
+ *
+ * NO TOUCH IS COUNTED HERE, and that is not an oversight — it is why the split is where it is.
+ * The hand's `handCarry` belongs to the hand's door, because that is where the hands were.
+ * A belt sale passes through this function without touching that counter, so the Hands-Free
+ * board counts an automated bin correctly for free.
+ *
+ * NOR `automatedGrossCents`, DELIBERATELY. That counter's own doc says "gross that left the lot
+ * on a cart or a truck", and the Dispatch panel's header is read off it — a bin sale left on
+ * neither and has no dispatch to report. Widening it to mean "income I did not carry by hand"
+ * is a defensible call and an owner's to make, not this door's; flagged in item 046's balance
+ * pile rather than decided here.
+ */
+export function sellAtBin(state: WorldState, item: ItemId, count: number): number {
+  const gross = listPriceCents(item) * count;
+  state.moneyCents += gross;
+  recordSale(state.stats, item, count, gross);
+  return gross;
+}
+
+/**
+ * The sell bin's door for a grabber arm: one unit, sold on arrival, at list.
+ *
+ * A CHIP LINE CAN END AT THE BIN NOW (owner ruling, 2026-08-15: "if I point a picker from a
+ * track that has snacks to the trade post, it should be able to sell"). Before this the bin
+ * matched none of `grabberPlace`'s doors and the arm stood there holding a bag of chips
+ * forever, which read as a bug because it was one.
+ *
+ * ONE PRICE PATH, so freshness needs no special case: Day-Old goods are their own `ItemId`
+ * with their own list price, and `sellAtBin` prices whatever it is handed. A belt sale and a
+ * hand sale of the same bag at the same tick fetch the same cents by construction, because
+ * they are the same multiplication.
+ *
+ * UNSELLABLES ARE REFUSED AT THE DOOR, exactly as the bin refuses them from hands — plan §4's
+ * anti-softlock floor is that a world can always plant, and an arm quietly selling the seed
+ * shelf would break it faster than a misclick ever could. The arm then STALLS holding the seed,
+ * which is the ordinary "look downstream" stall every other door in `grabberPlace` gives.
+ *
+ * **ITEM 085 MADE THE STALL UNREACHABLE, and left it standing anyway.** An arm now asks
+ * `sellBinCanAccept` before it picks anything up, so no arm aimed at a bin ever closes its claw
+ * on a seed — the trap item 088 named (a belt off a harvester dock's SEED shelf into a bin,
+ * selling nothing and jamming the arm forever) cannot be built now. The refusal below is still
+ * the door: an arm already mid-swing when the world changed under it must still be told no, and
+ * a second caller arriving tomorrow inherits the rule rather than a comment about it.
+ */
+export function sellBinAccept(state: WorldState, item: ItemId): boolean {
+  if (!sellBinCanAccept(item)) return false;
+  sellAtBin(state, item, 1);
+  return true;
+}
+
+/**
+ * **THE SELL BIN'S ACCEPT-DOOR PREDICATE** (item 085). A bin has no capacity and no route
+ * table: the only question it ever asks is whether the thing has a price, so the predicate is
+ * `isSellable` under the bin's own name. Named rather than inlined at the two call sites,
+ * because "what the bin refuses" is a fact about the bin — the day it grows a second rule
+ * (a closed bin, a per-day cap), there is one place it goes.
+ */
+export function sellBinCanAccept(item: ItemId): boolean {
+  return isSellable(item);
 }
 
 // --- the tick -----------------------------------------------------------------------

@@ -1883,6 +1883,22 @@ export const SPRINKLER_PERIOD_TICKS = 5 * TICKS_PER_SECOND;
 export const SPRINKLER_RADIUS_TILES = 2;
 
 /**
+ * The barrel holds ten charges (owner ruling, 2026-08-15, item 086 — "the sprinklers should
+ * have charges, ten charges, and they only should go watering if the tile needs it").
+ *
+ * A CHARGE IS A PROJECTION, NOT A SECOND COUNTER. The barrel's real state stays `tankMl`
+ * under item 028's one-ledger law — millilitres counted where they leave the source — and a
+ * charge IS `SPRINKLER_POUR_ML`. Capacity is derived (`10 × 1,500 = 15,000 ml`), the view
+ * derives charges by division, and nothing stores a number that could drift from the ledger.
+ *
+ * SAVE COMPAT, same shape as the can's widening (item 073) in reverse: no format bump. A
+ * barrel saved fuller than the new capacity simply loads over-full and refuses refills
+ * (`room <= 0`) until honest watering drains it under the line — nothing is deleted, and the
+ * charge readout reports the over-full truth rather than clamping to ten.
+ */
+export const SPRINKLER_CHARGES_MAX = 10;
+
+/**
  * Work rates are all 100/tick and durations are expressed in `workPerOperation`, so an
  * operation costs `workPerOperation / 100` ticks. The scale exists for the Speed dial: at a
  * base rate of 2, "+30%" floors straight back to 2 and the upgrade the player just paid for
@@ -2003,14 +2019,23 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     inputCapacity: 0,
     outputCapacity: 0,
     /**
-     * Exactly one full mid-field cycle (item 067). A 5×5 head standing dead-centre on
-     * farmland has 24 croppable neighbours at `SPRINKLER_POUR_ML` each — 36,000 ml — and a
-     * barrel that held 20 pours would water the same first twenty tiles every cycle and
-     * starve the back row forever, because the dumb scan always starts at the top-left.
-     * At the fence, where at most ~15 covered tiles are farmland, 24 pours changes nothing
-     * but how often the barrel wants hauling.
+     * Ten charges' worth, and not one drop of head-room (item 086's owner ruling; see
+     * `SPRINKLER_CHARGES_MAX`).
+     *
+     * THE OLD 36,000 ML EXISTED TO SOLVE A REAL PROBLEM AND THE PROBLEM DID NOT GO AWAY WITH
+     * IT. It was one full mid-field cycle — 24 croppable neighbours at `SPRINKLER_POUR_ML`
+     * each — precisely so a barrel could not run dry partway through a top-left scan and
+     * water the same near rows every cycle while the back row starved. Ten charges cannot
+     * cross that patch, so a fresh scan each cycle brings the starvation straight back, and
+     * it did: the owner saw it in play as *"only watering in front of them."*
+     *
+     * The answer is `advanceSprinkler`'s resuming `scanCursor`, NOT a bigger barrel and NOT
+     * moisture sensing (sensing skips wet ground; a dry patch has none to skip). Read that
+     * function before changing this number — the two are one design, and raising the
+     * capacity here would silently make the fairness machinery untestable rather than
+     * unnecessary.
      */
-    tankCapacityMl: 36_000,
+    tankCapacityMl: SPRINKLER_CHARGES_MAX * SPRINKLER_POUR_ML,
     wearPerOperation: 1,
     inputs: [],
     outputItem: null,
@@ -2021,7 +2046,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: SPRINKLER_RADIUS_TILES,
-    moistureSensing: false,
+    /**
+     * On since item 086 — the owner's "only water if the tile needs it" ends the barrel's
+     * sloppiness tax the way item 081 ended the hand's. The PIPED dumb head below keeps
+     * `false`: its water is ledger-fed and its inefficiency is what the Hub is sold on.
+     */
+    moistureSensing: true,
     fieldPlaceable: true,
   },
   {
@@ -3639,6 +3669,29 @@ export const BOT_SPEED_SUBTILES_PER_100_TICKS = 3_072;
 export const BOT_CARRY_CAPACITY = 8;
 
 /**
+ * Seeds a harvester's POCKET holds before the pocket is what sends it home (item 088).
+ *
+ * Level with `BOT_CARRY_CAPACITY` on purpose: a one-shot crop returns one seed per tile and an
+ * armful is a handful of tiles, so a bot that filled its arms and a bot that filled its pocket
+ * are the same bot on the same trip. Setting this lower would invent a second, earlier trip
+ * home that the produce cap does not; setting it higher would mean a full pocket is a state the
+ * game only reaches when something downstream is already broken — which is exactly when a stall
+ * needs to be legible rather than novel.
+ */
+export const BOT_SEED_POCKET_CAPACITY = 8;
+
+/**
+ * Seeds the harvester dock's SEED SHELF holds (item 088). One armful-scale slot, not a silo.
+ *
+ * ARMFUL SCALE IS THE POINT. The shelf is a place for seeds to WAIT for a belt, not a place to
+ * keep them: 20 is a few round trips' worth, so a player who builds a harvester and no way for
+ * the seeds to leave finds out within a round or two — a robot standing at a full shed, which
+ * is visible from ten tiles up. A shelf big enough to never fill would hide the missing half of
+ * the loop for an hour and then dump the problem on somebody mid-session.
+ */
+export const HARVESTER_SEED_SHELF_CAPACITY = 20;
+
+/**
  * Condition one completed operation costs a bot. **PER OPERATION, NEVER PER TICK OR PER MINUTE**
  * — §4 names this case explicitly: *"Agri-Bot upkeep is per-harvest-op, not weekly."*
  *
@@ -3829,7 +3882,7 @@ function balanceDigest(): string {
   // mid-way through spending: a hitched cart's next step, a bot's next harvest, a swing's width.
   h = fnv1aString(
     h,
-    `${TOW_SPEED_PENALTY_SUBTILES_PER_100_TICKS}:${SCYTHE_SWATHE_TILES}:${BOT_SPEED_SUBTILES_PER_100_TICKS}:${BOT_CARRY_CAPACITY}:${BOT_WEAR_PER_OPERATION}:${BOT_WORK_TICKS}`,
+    `${TOW_SPEED_PENALTY_SUBTILES_PER_100_TICKS}:${SCYTHE_SWATHE_TILES}:${BOT_SPEED_SUBTILES_PER_100_TICKS}:${BOT_CARRY_CAPACITY}:${BOT_SEED_POCKET_CAPACITY}:${HARVESTER_SEED_SHELF_CAPACITY}:${BOT_WEAR_PER_OPERATION}:${BOT_WORK_TICKS}`,
   );
   return fnv1aToHex(h);
 }

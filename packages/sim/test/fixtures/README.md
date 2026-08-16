@@ -61,7 +61,7 @@ its name to `FIXTURE_NAMES` in `test/goldens.ts`, and generate its hash once.
 | `worn-to-zero.json` | 515151 | 24,024 | Item 034's third wear fixture: a Chip Kitchen driven from full condition to zero by honest work — jams whacked out on the way down, never repaired — until it halts and sits dead losing nothing further, then is restored to full by free hand repair alone (plan §1: "manual never rots"). `factory.test.ts` replays it watching and asserts the floor, the halt, the kit-free restoration. |
 | `junction-loop.json` | 626262 | 39,230 | Item 024 instruction 11: the economy ground honestly up to the Splitters node, then a closed belt circuit through two junctions — one splitting one feed across two branches, one merging them back — with the bags circulating forever and both round-robin cursors advancing in the hash. `factory.test.ts` replays it watching and asserts the alternation and that goods reach every belt in the loop. |
 | `the-till.json` | 660660 | 2,203 | The till tool (item 066): a strip of grass broken in one drag, farmed through a potato cycle, un-tilled, and re-tilled — coming back with identical soil and fertility, because the roll-once ledger remembers every position ever broken. Recorded by `scripts/record-the-till.ts`. |
-| `mid-field.json` | 670670 | 5,578 | Machines on farm tiles (item 067): the gardener loop earns the $150 honestly, the farmer crosses the field on a no-op walk errand (item 070's `IntentAction.Walk`, absorbed here), a barrel sprinkler stands ON a hand-watered farm tile, one cycle waters all 24 farm neighbours and never its own feet, deconstruction hands the tile back untouched, and the freed ground takes a seed again. Recorded by `scripts/record-mid-field.ts`, which asserts every beat — and the refusals (crop tile, non-flagged machine) — before writing. |
+| `mid-field.json` | 670670 | 5,779 | Machines on farm tiles (item 067): the gardener loop earns the $150 honestly, the farmer crosses the field on a no-op walk errand (item 070's `IntentAction.Walk`, absorbed here), a barrel sprinkler stands ON a hand-watered farm tile, and **three hauls from the pond — ten pours, ten, then four** — water all 24 farm neighbours and never its own feet, the second and third cycles walking past the ground the first one wet. Deconstruction hands the tile back untouched and the freed ground takes a seed again. Recorded by `scripts/record-mid-field.ts`, which asserts every beat — and the refusals (crop tile, non-flagged machine) — before writing; re-recorded 2026-08-16 for item 086's ten-charge sensing barrel. |
 
 `depot-run` carries a field no other fixture has: **`handsOffFromTick`**, the tick after which it
 issues nothing. It is not derivable from `commands` — the last command's tick is where the player
@@ -229,3 +229,116 @@ What each diverger needed, on the re-timed-not-replaced precedent:
   target tile is occupied in the re-timed session); every rotation, upgrade, boxing, and
   scrap beat the fixture exists to pin landed, and `factory.test.ts`'s watching replay
   agrees.
+
+## 2026-08-16 (wave 12): the ten-charge sensing barrel
+
+**Item 086** — owner ruling, 2026-08-15: _"the sprinklers should have charges, ten charges,
+and they only should go watering if the tile needs it."_ Two sim changes in one:
+`tankCapacityMl` on the barrel drops from 36,000 ml to `10 × SPRINKLER_POUR_ML` = 15,000, and
+`moistureSensing` turns on for it, so a barrel cycle now skips any tile at or above
+`MOISTURE_DRY_THRESHOLD` — spending nothing, marking no pour signal (item 081's rule), and
+counting the skip the Hub's way. The Irrigation Hub and the piped heads are untouched: the
+piped head keeps `moistureSensing: false` on purpose, because its indifference is what the Hub
+is sold against.
+
+**And a third change, added the same day after the owner played the first two.** Ten charges
+do not cover twenty-four thirsty neighbours, so a barrel that restarted its top-left scan
+every cycle watered the near rows and starved the far ones — reported from play as _"they
+should be watering 5 by 5 around them, but it looks like it's only watering in front of
+them."_ The barrel now resumes its sweep from `machine.scanCursor`, the field the Irrigation
+Hub already owned: hashed, saved, and migrated since the Hub landed, so the fix costs no state
+and no format bump. The piped head keeps the old fresh-start scan (`resumeScan: false`), which
+is why nothing on a pipe moved.
+
+**One hash moved out of nineteen, and it is the only fixture that ever refilled a barrel.**
+
+| Fixture     | Old hash   | New hash   | Cause                                                                   |
+| ----------- | ---------- | ---------- | ----------------------------------------------------------------------- |
+| `mid-field` | `f042ed59` | `78041d16` | Re-recorded: one 24-pour cycle became three hauls of ten, ten and four. |
+
+The other eighteen replay byte-identically with their command lists frozen. That is not luck
+and it is the same fact the 2026-08-15 note recorded from the other direction — **no recorded
+session outside `mid-field` refills a barrel sprinkler**, so a smaller barrel has nothing to
+change: `all-verbs` and `land-deeds` both build one and neither ever hauls water to it.
+
+`mid-field` was re-recorded rather than re-timed, because what item 086 broke was its
+_story_, not its schedule. The fixture existed to watch a single cycle cross a full mid-field
+5×5, and a ten-charge barrel cannot: the scan reaches ten tiles and stops, which is the exact
+problem the 36,000 ml barrel was sized to paper over and which the resuming cursor above is
+the real answer to. **Sensing alone was not**, and the first cut of item 086 claimed it was:
+sensing skips WET tiles, and a patch that has dried out uniformly has none to skip, so the
+head went back to the near rows every time. So the recorder now hauls three barrels and
+asserts the split
+(10, 10, 4), the head still never watering its own feet, and the skips on the books. The new
+fixture is 5,779 ticks and 152 commands, up from 5,578 and 150 — two more `RefillHopper`
+errands, which is precisely what the ruling costs the player.
+
+## 2026-08-16 (wave 12, continued): the sell bin's belt door, and the seed that comes home
+
+Two more sim changes landed in the same wave. One moved nothing at all; the other moved
+everything, and the difference between them is the whole of what a format bump means.
+
+### Item 087 — a grabber can feed the sell bin: **zero hashes moved**
+
+`grabberPlace` gained a sell-bin door, so an arm pointed from a belt into the bin sells one unit
+on arrival at list, through `sellAtBin` — the same money-and-ledger the hand's `SellItem` walks
+through, extracted so a bin sale is booked in exactly one place however it arrived.
+
+All nineteen fixtures replayed green with their command lists frozen BEFORE the seed work below
+landed, which is the enumeration: **no recorded session has ever pointed an arm at the sell bin**,
+so a new door on the bin has nothing to change in any of them. That was the item's own prediction
+and it is confirmed by replay rather than by inspection. The behaviour is pinned instead by a
+hands-free story test in `test/commerce.test.ts` (`a grabber pointed into the sell bin`): a Chip
+Kitchen feeding a belt feeding an arm feeding the bin, stepped three thousand ticks with an empty
+command list, money climbing and every touch counter frozen at zero.
+
+### Item 088 — the auto-harvester brings back the seed: **all nineteen moved, and none of them behaved differently**
+
+Save format 15 → 16. Every bot gained a seed pocket (`seedItem`/`seedCount`) and every machine
+gained the harvester dock's seed shelf (`seedShelfItem`/`seedShelfCount`); all four are in the
+digest, so every world in the repository hashes differently from the one before.
+
+| Fixture          | Old        | New        |
+| ---------------- | ---------- | ---------- |
+| `empty-world`    | `2289b823` | `3966bd25` |
+| `canary-1000`    | `ea1510a9` | `f34ea50f` |
+| `rng-streams`    | `9e44ef68` | `c8a8029e` |
+| `all-verbs`      | `e8df7724` | `1b07a880` |
+| `factory-line`   | `ef3297b5` | `55f97d5d` |
+| `withering`      | `f713bca7` | `30c1bbfd` |
+| `water-works`    | `5033666b` | `e747d0a7` |
+| `walk-errands`   | `82bf0b9c` | `d31b5b26` |
+| `idle-wear`      | `9acfbcb8` | `4c9bb89c` |
+| `maintenance`    | `4db7581f` | `7cb209cf` |
+| `soda-line`      | `fa330702` | `7ff2ebce` |
+| `rotate-and-box` | `b9b89c7e` | `f38c63c8` |
+| `land-deeds`     | `aa334446` | `41e24bb8` |
+| `depot-run`      | `f312adf4` | `710ac94a` |
+| `the-farm`       | `60c29baf` | `f09b7451` |
+| `worn-to-zero`   | `492ab7db` | `2e533b7b` |
+| `junction-loop`  | `9734e50f` | `3606bfc7` |
+| `the-till`       | `2b44adc3` | `03f8a035` |
+| `mid-field`      | `78041d16` | `00db6dee` |
+
+**Cause, for all nineteen: the digest, and nothing else.** Not one fixture in this set builds a
+bot dock of any kind — checked, not assumed — so no recorded session owns a robot, no robot
+pockets a seed, and not a single command in any of these files behaves differently than it did
+yesterday. Nineteen worlds moved by four zeroes each. Every command list stayed frozen and every
+fixture replayed green on the first try after `yarn goldens:regen`.
+
+`mid-field`'s "old" hash above is item 086's re-recording from earlier in this same wave, not the
+`f042ed59` it carried into the day — see the previous section for that half.
+
+Two inline goldens outside this directory moved for the same reason and carry the same note in
+their own comments: `sim.test.ts`'s scripted canary (`ea1510a9` → `f34ea50f`, agreeing with
+`canary-1000` as it must) and `maintenance-automation.test.ts`'s drone story (`ff316263` →
+`b26e8c41` — that world DOES own a robot, but a repair drone harvests nothing and can pocket
+nothing, so its four fields are zero too).
+
+### The save fixtures
+
+`format-16.json` is new, recorded by `scripts/record-format-16.ts`: format 15's session played one
+beat further, until the dock holds a named harvest on the produce shelf AND named seeds on the
+seed shelf — the one state no earlier format can express. Every older format fixture's migrated
+hash moved with the digest and its `steps` array gained the 15 → 16 step; the files themselves
+were not touched, which is the rule that makes them worth keeping.

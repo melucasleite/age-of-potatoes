@@ -202,6 +202,9 @@ export interface SaveMachine {
   /** Ticks until a dispatched cart is back. A COUNTDOWN, never a return tick — see below. */
   runTicksRemaining: number;
   scanCursor: number;
+  /** The harvester dock's seed shelf (item 088). 0/0 on every machine that is not one. */
+  seedShelfCount: number;
+  seedShelfItem: number;
   skippedCount: number;
   speedLevel: number;
   tankMl: number;
@@ -334,6 +337,9 @@ export interface SaveBot {
   opCount: number;
   phase: number;
   routeCursor: number;
+  /** The harvester's seed pocket (item 088). 0/0 on a bot that has pocketed nothing. */
+  seedCount: number;
+  seedItem: number;
   targetTile: number;
   workTicks: number;
   xSub: number;
@@ -561,6 +567,8 @@ export function toPayload(state: WorldState): SavePayload {
       progress: machine.progress,
       runTicksRemaining: machine.runTicksRemaining,
       scanCursor: machine.scanCursor,
+      seedShelfCount: machine.seedShelfCount,
+      seedShelfItem: machine.seedShelfItem,
       skippedCount: machine.skippedCount,
       speedLevel: machine.speedLevel,
       tankMl: machine.tankMl,
@@ -695,6 +703,8 @@ export function toPayload(state: WorldState): SavePayload {
       opCount: bot.opCount,
       phase: bot.phase,
       routeCursor: bot.routeCursor,
+      seedCount: bot.seedCount,
+      seedItem: bot.seedItem,
       targetTile: bot.targetTile,
       workTicks: bot.workTicks,
       xSub: bot.xSub,
@@ -1253,6 +1263,8 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       scanCursor: int(machine, 'scanCursor', path),
       wateredCount: int(machine, 'wateredCount', path),
       skippedCount: int(machine, 'skippedCount', path),
+      seedShelfItem: idInt(machine, 'seedShelfItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
+      seedShelfCount: int(machine, 'seedShelfCount', path),
       untouchedTicks: int(machine, 'untouchedTicks', path),
       junctionInCursor: int(machine, 'junctionInCursor', path),
       junctionOutCursor: int(machine, 'junctionOutCursor', path),
@@ -1284,6 +1296,8 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       targetTile: int(bot, 'targetTile', path),
       routeCursor: int(bot, 'routeCursor', path),
       workTicks: int(bot, 'workTicks', path),
+      seedItem: idInt(bot, 'seedItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
+      seedCount: int(bot, 'seedCount', path),
       carryItem: idInt(bot, 'carryItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
       carryCount: int(bot, 'carryCount', path),
       condition: int(bot, 'condition', path),

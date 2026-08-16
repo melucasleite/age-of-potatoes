@@ -17,6 +17,8 @@ import {
   type Machine,
   type WorldState,
   BOT_CARRY_CAPACITY,
+  BOT_SEED_POCKET_CAPACITY,
+  HARVESTER_SEED_SHELF_CAPACITY,
   BOT_WEAR_PER_OPERATION,
   BeltTier,
   BotKind,
@@ -577,6 +579,393 @@ describe('the dock shelf (item 083)', () => {
 // --- helpers ------------------------------------------------------------------------
 
 /** The belt's door into a dock — the one that must cost no touch. */
+// --- the seed comes home (item 088) --------------------------------------------------
+
+/**
+ * Every item a harvest put into the world, wherever it landed.
+ *
+ * The two paths keep their goods in different places by design — a hand fills the pouch, a bot
+ * fills its arms and its pocket and then two shelves — so parity is a claim about the BAG, not
+ * about the furniture. Everything is counted: pouch, bot, and both shelves, so a test can never
+ * pass by losing something into a slot it forgot to look in.
+ */
+function harvestBag(state: WorldState): Map<number, number> {
+  const bag = new Map<number, number>();
+  const add = (item: number, count: number): void => {
+    if (item === 0 || count <= 0) return;
+    bag.set(item, (bag.get(item) ?? 0) + count);
+  };
+  for (const slot of state.inventory) add(slot.item, slot.count);
+  for (const bot of state.bots) {
+    add(bot.carryItem, bot.carryCount);
+    add(bot.seedItem, bot.seedCount);
+  }
+  for (const machine of state.machines) {
+    if (machine.kind !== MachineKind.HarvesterDock) continue;
+    add(machine.cargoItem, machine.cargoCount);
+    add(machine.seedShelfItem, machine.seedShelfCount);
+  }
+  return bag;
+}
+
+/** The pouch a fresh world starts with, so a harvest's yield can be read as a delta. */
+function bagDelta(after: Map<number, number>, before: Map<number, number>): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const [item, count] of after) {
+    const gained = count - (before.get(item) ?? 0);
+    if (gained !== 0) out.set(item, gained);
+  }
+  return out;
+}
+
+/** One tile, ripe, at the field's north-west corner, harvested by the player standing on it. */
+function handHarvestsOneTile(crop: CropId, seed: number): Map<number, number> {
+  const state = createWorld(seed);
+  const spec = cropSpec(crop)!;
+  const tile = state.field[0]!;
+  plantCrop(state, tile, spec);
+  tile.growth = tile.growthTarget;
+
+  state.player.xSub = tile.tileX * 256 + 128;
+  state.player.ySub = tile.tileY * 256 + 128;
+  const before = harvestBag(state);
+  step(state, {
+    tick: state.tick,
+    commands: [{ type: 'HarvestTile', tileX: tile.tileX, tileY: tile.tileY }],
+  });
+  return bagDelta(harvestBag(state), before);
+}
+
+/** The SAME tile in the same world, pulled by a robot instead. */
+function botHarvestsOneTile(crop: CropId, seed: number): Map<number, number> {
+  const state = createWorld(seed);
+  const spec = cropSpec(crop)!;
+  const zone = spawnZone(state, crop);
+  const tile = state.field[0]!;
+  tile.zone = zone.id;
+  plantCrop(state, tile, spec);
+  tile.growth = tile.growthTarget;
+
+  const dock = spawnMachine(state, MachineKind.HarvesterDock, 0, 0)!;
+  dock.boundZone = zone.id;
+  spawnBot(state, BotKind.Harvester, dock);
+
+  const before = harvestBag(state);
+  // Long enough to walk out, bend down, and walk back — and no longer, so a regrowing crop
+  // cannot come round a second time and make the counts a function of the timeout.
+  for (let i = 0; i < 3_000 && state.bots[0]!.opCount === 0; i++) {
+    step(state, { tick: state.tick, commands: [] });
+  }
+  step(state, { tick: state.tick, commands: [] });
+  return bagDelta(harvestBag(state), before);
+}
+
+describe('the seed comes home (item 088)', () => {
+  it('PARITY, ONE-SHOT: a bot pull of a tile yields exactly what a hand pull of it yields', () => {
+    // The owner's report, as an assertion: "when I harvest manually, the seed always comes
+    // back. The AutoHarvester should get the potatoes and the seed automatically." Both worlds
+    // are the same seed, the same tile, and the first harvest either has ever rolled — so the
+    // yield bonus off the Harvest stream is the same number and the bags must match exactly.
+    const hand = handHarvestsOneTile(CropId.RussetPotato, 8801);
+    const bot = botHarvestsOneTile(CropId.RussetPotato, 8801);
+
+    expect(bot).toEqual(hand);
+    // And the thing that was missing is in there: potatoes AND a seed.
+    expect(hand.get(ItemId.RussetPotato)).toBeGreaterThan(0);
+    expect(hand.get(ItemId.PotatoSeed)).toBe(1);
+    expect(bot.get(ItemId.PotatoSeed)).toBe(1);
+  });
+
+  it('PARITY, REGROWING: neither path returns a seed, because you already own the plant', () => {
+    // The other half of the property, and the one that would catch an over-eager fix: a
+    // regrower keeps its plant, so a seed from it would be a duplication rather than a return.
+    const hand = handHarvestsOneTile(CropId.SugarCane, 8802);
+    const bot = botHarvestsOneTile(CropId.SugarCane, 8802);
+
+    expect(bot).toEqual(hand);
+    expect(hand.get(ItemId.SugarCane)).toBeGreaterThan(0);
+    expect(hand.has(ItemId.CaneSeed)).toBe(false);
+    expect(bot.has(ItemId.CaneSeed)).toBe(false);
+  });
+
+  it('lands the seeds on the dock’s own shelf, beside the produce and under their own name', () => {
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    const planted = ripenZone(state, zoneId);
+    expect(planted).toBeGreaterThan(0);
+
+    stepMany(state, 6_000);
+
+    expect(dock.cargoItem).toBe(ItemId.RussetPotato);
+    expect(dock.cargoCount).toBeGreaterThan(0);
+    // Two shelves, two names. The seeds did not merge into the produce and did not evict it.
+    expect(dock.seedShelfItem).toBe(ItemId.PotatoSeed);
+    expect(dock.seedShelfCount).toBeGreaterThan(0);
+    // And they are the dock's, not the player's: a robot's seed takes a belt or a hand to move.
+    expect(state.stats.itemsHarvestedByHand).toBe(0);
+    expect(totalManualTouches(state.stats.touches)).toBe(0);
+  });
+
+  it('lets a FILTERED arm take seeds, while an unfiltered one still empties the produce first', () => {
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 6_000);
+    expect(dock.seedShelfCount).toBeGreaterThan(0);
+    const produceBefore = dock.cargoCount;
+    const seedsBefore = dock.seedShelfCount;
+
+    // An arm that names the seed takes seeds and leaves the potatoes where they are.
+    const belt = spawnBelt(state, BeltTier.Basic, 3, 1, Direction.East, 2)!;
+    spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, ItemId.PotatoSeed);
+    stepMany(state, 300);
+
+    expect(dock.seedShelfCount).toBeLessThan(seedsBefore);
+    expect(belt.items.some((entry) => entry.item === ItemId.PotatoSeed)).toBe(true);
+    expect(belt.items.every((entry) => entry.item === ItemId.PotatoSeed)).toBe(true);
+
+    // The potatoes were not touched: the arm named a seed and took seeds.
+    expect(dock.cargoCount).toBe(produceBefore);
+  });
+
+  it('keeps the UNFILTERED default produce-first, so an old belt does nothing new', () => {
+    // What keeps a belt somebody ran from a dock to a cellar last week doing exactly what it
+    // did before this item landed: an arm with no filter empties the produce shelf and reaches
+    // the seeds only when there is no produce left.
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 6_000);
+    expect(dock.cargoCount).toBeGreaterThan(0);
+    expect(dock.seedShelfCount).toBeGreaterThan(0);
+    const seedsBefore = dock.seedShelfCount;
+
+    // A long belt, so the arm never stalls against a backed-up head and the test measures the
+    // arm's choice rather than the belt's length.
+    const belt = spawnBelt(state, BeltTier.Basic, 3, 1, Direction.East, 12)!;
+    spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, 0);
+    stepMany(state, 300);
+
+    expect(belt.items.length).toBeGreaterThan(0);
+    expect(
+      belt.items.every((entry) => entry.item === ItemId.RussetPotato),
+      'the unfiltered arm reached past the produce for seeds',
+    ).toBe(true);
+    expect(dock.seedShelfCount).toBe(seedsBefore);
+  });
+
+  it('STALLS RATHER THAN DELETING: a full pocket and a full shelf leave the crop standing', () => {
+    // The house rule, on the one path where a seed could plausibly go missing. A bot that
+    // pulled a tile it had nowhere to put the seed of would have destroyed something the
+    // player owned, silently, forever — so it does not pull the tile at all.
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    const planted = ripenZone(state, zoneId);
+    const bot = state.bots[0]!;
+
+    // Both places a seed could go, filled to the brim before anything moves.
+    bot.seedItem = ItemId.PotatoSeed;
+    bot.seedCount = BOT_SEED_POCKET_CAPACITY;
+    dock.seedShelfItem = ItemId.PotatoSeed;
+    dock.seedShelfCount = HARVESTER_SEED_SHELF_CAPACITY;
+
+    stepMany(state, 6_000);
+
+    let stillReady = 0;
+    for (const tile of state.field) {
+      if (tile.zone === zoneId && tile.crop !== CropId.None && tile.growth >= tile.growthTarget) {
+        stillReady += 1;
+      }
+    }
+    // Every tile is exactly where it was: nothing pulled, nothing lost, and a robot standing
+    // at a full shed where the player can see it.
+    expect(stillReady).toBe(planted);
+    expect(dock.cargoCount).toBe(0);
+    // Not one seed evaporated on the way to the jam.
+    expect(bot.seedCount + dock.seedShelfCount).toBe(
+      BOT_SEED_POCKET_CAPACITY + HARVESTER_SEED_SHELF_CAPACITY,
+    );
+  });
+
+  it('keeps working when only the SEED shelf is full — one jam must not stop the other shelf', () => {
+    // The reason the dock unloads its two shelves independently. A seed shelf nobody drains is
+    // a small mistake; a seed shelf that also stopped the potatoes would turn it into a total
+    // halt and point the player at the wrong belt.
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    dock.seedShelfItem = ItemId.PotatoSeed;
+    dock.seedShelfCount = HARVESTER_SEED_SHELF_CAPACITY;
+
+    stepMany(state, 6_000);
+    // The first armful still landed: produce is on its shelf even though the seeds are jammed.
+    expect(dock.cargoCount).toBeGreaterThan(0);
+    expect(dock.seedShelfCount).toBe(HARVESTER_SEED_SHELF_CAPACITY);
+  });
+
+  it('hand-unloads BOTH shelves with one verb, because the player empties a dock, not a slot', () => {
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 6_000);
+    const potatoes = dock.cargoCount;
+    const seeds = dock.seedShelfCount;
+    expect(potatoes).toBeGreaterThan(0);
+    expect(seeds).toBeGreaterThan(0);
+
+    const potatoesBefore = itemCount(state, ItemId.RussetPotato);
+    const seedsBefore = itemCount(state, ItemId.PotatoSeed);
+    state.player.xSub = dock.tileX * 256 + 128;
+    state.player.ySub = dock.tileY * 256 + 128;
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'UnloadMachine', machineId: dock.id, count: potatoes + seeds }],
+    });
+
+    // Both shelves came off in one armful, each under its own name.
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(potatoesBefore + potatoes);
+    expect(itemCount(state, ItemId.PotatoSeed)).toBe(seedsBefore + seeds);
+    // NOT ASSERTED AS ZERO, and the reason is the stall resolving in front of you: commands run
+    // before machines within a tick, so a bot that had been standing at a full shed unloads its
+    // held armful into the space the player just made, on the very same tick. What the shelves
+    // hold afterwards is whatever the robot was carrying, which is less than it was.
+    expect(dock.cargoCount).toBeLessThan(potatoes);
+    expect(dock.seedShelfCount).toBeLessThan(seeds);
+  });
+
+  it('CLOSES THE LOOP HANDS-FREE: harvester seeds ride a belt into a planter’s hopper', () => {
+    // The acceptance criterion, and the reason the seeds land on a shelf instead of teleporting
+    // into the planter: this is PLAYER-BUILT logistics. Nothing routes seeds across the map —
+    // somebody ran a belt.
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 6_000);
+    expect(dock.seedShelfCount).toBeGreaterThan(0);
+
+    // A planter dock, bound to the same potato zone, with an empty hopper.
+    const planter = spawnMachine(state, MachineKind.PlanterDock, 6, 1)!;
+    planter.boundZone = zoneId;
+    spawnBot(state, BotKind.Planter, planter);
+    expect(planter.cargoCount).toBe(0);
+
+    // Dock ──arm(seed-filtered)──▶ belt ──arm──▶ planter hopper.
+    spawnBelt(state, BeltTier.Basic, 3, 1, Direction.East, 2);
+    spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, ItemId.PotatoSeed);
+    spawnGrabber(state, GrabberTier.Mk1, 5, 1, Direction.East, ItemId.PotatoSeed);
+
+    const touchesBefore = { ...state.stats.touches };
+    // Watched rather than sampled at the end, because the loop CONSUMES its own evidence: the
+    // planter bot takes a seed straight back out of the hopper and puts it in the ground, so a
+    // reading taken afterwards can legitimately be zero on both counts.
+    let hopperEverHeldSeed = false;
+    for (let i = 0; i < 4_000; i++) {
+      step(state, { tick: state.tick, commands: [] });
+      if (planter.cargoItem === ItemId.PotatoSeed && planter.cargoCount > 0) {
+        hopperEverHeldSeed = true;
+      }
+    }
+    expect(hopperEverHeldSeed, 'no seed ever reached the hopper').toBe(true);
+
+    // And the loop closed: ground the harvester cleared is planted again, out of seeds the
+    // harvester itself brought home, with nothing but belts in between.
+    const replanted = state.field.filter(
+      (tile) => tile.zone === zoneId && tile.crop === CropId.RussetPotato,
+    ).length;
+    expect(replanted, 'the seeds never went back into the ground').toBeGreaterThan(0);
+
+    // Not one hand anywhere in the loop.
+    expect(state.stats.touches).toEqual(touchesBefore);
+    expect(totalManualTouches(state.stats.touches)).toBe(0);
+  });
+});
+
+// --- the dock's two doors, looked at before they are opened (item 085) ----------------
+
+describe('an arm at a dock looks before it grabs (item 085)', () => {
+  it('THE TRAP ITEM 088 NAMED: a seed arm pointed at a sell bin never closes its claw', () => {
+    // Item 088's own note flagged this as the interesting failure: an arm filtered to seeds,
+    // taking off a harvester dock's SEED shelf, pointed at a sell bin — which refuses seeds on
+    // plan §4's anti-softlock floor. Under the old rule it took a seed, was refused, and stood
+    // there holding it forever. It is now unbuildable: the bin's predicate answers no while the
+    // seed is still on the shelf.
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 6_000);
+    expect(dock.seedShelfCount).toBeGreaterThan(0);
+
+    // The dock covers (0,0)-(1,1), so an arm at (2,1) reaches back into it and drops at (3,1).
+    spawnMachine(state, MachineKind.SellBin, 3, 1);
+    const arm = spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, ItemId.PotatoSeed)!;
+    const seedsBefore = dock.seedShelfCount;
+    const moneyBefore = state.moneyCents;
+
+    stepMany(state, 1_000);
+
+    expect(arm.held).toBe(0);
+    expect(arm.opCount).toBe(0);
+    expect(dock.seedShelfCount).toBe(seedsBefore);
+    expect(state.moneyCents).toBe(moneyBefore);
+    expect(state.stats.itemsSold).toBe(0);
+
+    // CONTROL, so the assertions above are not a rig that was never going to move: the same arm
+    // over the same dock into the same bin, filtered to the potatoes instead, sells at once.
+    arm.filter = ItemId.RussetPotato;
+    stepMany(state, 200);
+    expect(state.stats.itemsSold).toBeGreaterThan(0);
+    expect(state.moneyCents).toBeGreaterThan(moneyBefore);
+  });
+
+  it('leaves the seeds alone when an unfiltered arm runs out of produce a cellar will take', () => {
+    // THE OTHER HALF OF THE SAME TRAP, and the one that needed the shelf resolution and the
+    // door predicate to agree. An unfiltered arm empties the produce shelf first (item 088's
+    // default) and only then considers seeds — so the moment the potatoes run out it is an arm
+    // about to offer a seed to a machine that has no line for one. It must stop, not jam.
+    const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
+    ripenZone(state, zoneId);
+    stepMany(state, 6_000);
+    expect(dock.cargoCount).toBeGreaterThan(0);
+    expect(dock.seedShelfCount).toBeGreaterThan(0);
+
+    // A Chip Kitchen wants potatoes and has no line for a seed.
+    spawnMachine(state, MachineKind.ChipKitchen, 3, 1);
+    const arm = spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, 0)!;
+    const seedsBefore = dock.seedShelfCount;
+
+    stepMany(state, 4_000);
+
+    // The potatoes went where they were wanted; the seeds are untouched and unheld.
+    expect(arm.opCount).toBeGreaterThan(0);
+    expect(arm.held).toBe(0);
+    expect(dock.seedShelfCount).toBe(seedsBefore);
+  });
+
+  it("refuses the wrong seed at a planter's hopper without lifting it off the belt", () => {
+    // `dockCanAcceptSeed` is the predicate; the arm reads it a swing early. A cane seed aimed at
+    // a potato zone's planter used to end up in a claw that could never open.
+    const { state, dock } = farmWithDock(MachineKind.PlanterDock, BotKind.Planter);
+    const belt = spawnBelt(state, BeltTier.Basic, 2, 3, Direction.East, 1)!;
+    const arm = spawnGrabber(state, GrabberTier.Mk1, 3, 3, Direction.East, 0)!;
+    // The dock sits at (0,0) and is two tiles wide, so the arm's drop tile is its east edge.
+    dock.tileX = 4;
+    dock.tileY = 3;
+    belt.items.push({ dist: 0, item: ItemId.CaneSeed });
+
+    stepMany(state, 500);
+
+    expect(arm.held).toBe(0);
+    expect(belt.items.map((entry) => entry.item)).toEqual([ItemId.CaneSeed]);
+    expect(dock.cargoCount).toBe(0);
+
+    // CONTROL: the seed this zone actually asked for rides the same belt through the same arm
+    // into the same hopper. The refusal above is about the seed, not about the plumbing.
+    belt.items.length = 0;
+    belt.items.push({ dist: 0, item: ItemId.PotatoSeed });
+    // Watched rather than read at the end: the planter's own bot eats out of that hopper, so a
+    // final count of zero would mean "it worked" and "it never arrived" at the same time.
+    let hopperEverHeldSeed = false;
+    for (let i = 0; i < 500; i++) {
+      step(state, { tick: state.tick, commands: [] });
+      if (dock.cargoItem === ItemId.PotatoSeed && dock.cargoCount > 0) hopperEverHeldSeed = true;
+    }
+    expect(hopperEverHeldSeed, 'the seed the zone asked for never reached the hopper').toBe(true);
+    expect(belt.items).toHaveLength(0);
+  });
+});
+
 function dockAccept(state: WorldState, dock: Machine, item: number): boolean {
   return dockAcceptSeed(state, dock, item);
 }

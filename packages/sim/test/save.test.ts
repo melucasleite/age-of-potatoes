@@ -65,6 +65,7 @@ import fixture12 from './fixtures/saves/format-12.json';
 import fixture13 from './fixtures/saves/format-13.json';
 import fixture14 from './fixtures/saves/format-14.json';
 import fixture15 from './fixtures/saves/format-15.json';
+import fixture16 from './fixtures/saves/format-16.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -414,11 +415,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture);
 
     expect(restored.migration.fromVersion).toBe(1);
-    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('6b39661e');
+    expect(hashState(restored.state)).toBe('530ddbf0');
   });
 
   it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
@@ -487,10 +488,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture2);
 
     expect(restored.migration.fromVersion).toBe(2);
-    expect(restored.migration.steps).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('667a19b2');
+    expect(hashState(restored.state)).toBe('e912e84c');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -532,10 +533,10 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture3);
 
     expect(restored.migration.fromVersion).toBe(3);
-    expect(restored.migration.steps).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(21_306);
-    expect(hashState(restored.state)).toBe('b35dd86d');
+    expect(hashState(restored.state)).toBe('6d413453');
   });
 
   it('brings the plumbing back exactly as it was left', () => {
@@ -588,11 +589,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture4);
 
     expect(restored.migration.fromVersion).toBe(4);
-    expect(restored.migration.steps).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(3300);
     expect(restored.state.worldSeed).toBe(90210);
-    expect(hashState(restored.state)).toBe('7c659f2e');
+    expect(hashState(restored.state)).toBe('e0d90610');
   });
 
   it('brings the errand back exactly as it was left', () => {
@@ -637,11 +638,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture5);
 
     expect(restored.migration.fromVersion).toBe(5);
-    expect(restored.migration.steps).toEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(41_837);
     expect(restored.state.worldSeed).toBe(50505);
-    expect(hashState(restored.state)).toBe('cc13de46');
+    expect(hashState(restored.state)).toBe('0b63c1a0');
   });
 
   it('brings the browning basket and the maintenance tallies back as they were', () => {
@@ -687,11 +688,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture6);
 
     expect(restored.migration.fromVersion).toBe(6);
-    expect(restored.migration.steps).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(42_400);
     expect(restored.state.worldSeed).toBe(60606);
-    expect(hashState(restored.state)).toBe('22581f81');
+    expect(hashState(restored.state)).toBe('1c9457ad');
   });
 
   it('brings every typed port back with its own liquid, level, and amber flag', () => {
@@ -738,11 +739,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture7);
 
     expect(restored.migration.fromVersion).toBe(7);
-    expect(restored.migration.steps).toEqual([7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(48_792);
     expect(restored.state.worldSeed).toBe(24_680);
-    expect(hashState(restored.state)).toBe('104b6b4f');
+    expect(hashState(restored.state)).toBe('e3183c03');
   });
 
   it('brings both boxed machines back with their own dials, condition, and invoice', () => {
@@ -815,11 +816,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture8);
 
     expect(restored.migration.fromVersion).toBe(8);
-    expect(restored.migration.steps).toEqual([8, 9, 10, 11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([8, 9, 10, 11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(6_721);
     expect(restored.state.worldSeed).toBe(480_480);
-    expect(hashState(restored.state)).toBe('8fcd8fdf');
+    expect(hashState(restored.state)).toBe('0db09025');
   });
 
   it('brings back the land, and the factory standing on the half that was bought', () => {
@@ -875,11 +876,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture9);
 
     expect(restored.migration.fromVersion).toBe(9);
-    expect(restored.migration.steps).toEqual([9, 10, 11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([9, 10, 11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(17_949);
     expect(restored.state.worldSeed).toBe(320_320);
-    expect(hashState(restored.state)).toBe('b17355d6');
+    expect(hashState(restored.state)).toBe('ad53f240');
   });
 
   // The 9 → 10 migration's whole claim is that a format-9 world had no junctions and had never
@@ -943,11 +944,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture10);
 
     expect(restored.migration.fromVersion).toBe(10);
-    expect(restored.migration.steps).toEqual([10, 11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([10, 11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(22_929);
     expect(restored.state.worldSeed).toBe(320_320);
-    expect(hashState(restored.state)).toBe('f93db3cd');
+    expect(hashState(restored.state)).toBe('035f99b9');
   });
 
   // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
@@ -963,14 +964,14 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture11);
 
     expect(restored.migration.fromVersion).toBe(11);
-    expect(restored.migration.steps).toEqual([11, 12, 13, 14]);
+    expect(restored.migration.steps).toEqual([11, 12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(66_516);
     expect(restored.state.worldSeed).toBe(90_210);
     // 7f902623 until format 15: the 14 → 15 step moves this world's nine stranded dock goods
     // onto the shelf as identified cargo, which legitimately changes the digest. See the
     // rescue test below for the story the new number encodes.
-    expect(hashState(restored.state)).toBe('d5cbb02b');
+    expect(hashState(restored.state)).toBe('ec863aa1');
   });
 
   it('rescues the nine anonymous goods stranded on the format-11 dock — the item-083 guess', () => {
@@ -1018,11 +1019,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture12);
 
     expect(restored.migration.fromVersion).toBe(12);
-    expect(restored.migration.steps).toEqual([12, 13, 14]);
+    expect(restored.migration.steps).toEqual([12, 13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(11_000);
     expect(restored.state.worldSeed).toBe(812_812);
-    expect(hashState(restored.state)).toBe('33e3178e');
+    expect(hashState(restored.state)).toBe('261198a8');
   });
 
   it('brings back the empty can, the sales ledger, and the closed birth hour', () => {
@@ -1111,11 +1112,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture13);
 
     expect(restored.migration.fromVersion).toBe(13);
-    expect(restored.migration.steps).toEqual([13, 14]);
+    expect(restored.migration.steps).toEqual([13, 14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(1_980);
     expect(restored.state.worldSeed).toBe(660_660);
-    expect(hashState(restored.state)).toBe('7aabe164');
+    expect(hashState(restored.state)).toBe('e7d71d56');
   });
 
   it('gives a format-13 world a zero cheat counter — the truth, not a default', () => {
@@ -1143,11 +1144,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture14);
 
     expect(restored.migration.fromVersion).toBe(14);
-    expect(restored.migration.steps).toEqual([14]);
+    expect(restored.migration.steps).toEqual([14, 15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(700);
     expect(restored.state.worldSeed).toBe(750_750);
-    expect(hashState(restored.state)).toBe('554ac901');
+    expect(hashState(restored.state)).toBe('85a49aed');
   });
 
   it('brings back the cheated world exactly: the counter, the unlocks, the conjured money', () => {
@@ -1205,15 +1206,22 @@ describe('the permanent fixture set', () => {
   // `cargoItem`/`cargoCount` — named goods a grabber or a hand can actually take — which is
   // the one state no earlier format can express. Format 14 wrote the same moment as an
   // anonymous `outputCount` that nothing could ever unload.
-  it('loads format-15.json at the current version with no migration', () => {
+  //
+  // The 15 → 16 step (item 088) adds four empty fields and translates nothing, so the migrated
+  // hash is NOT the hash this file loaded at under format 15: the digest itself gained the seed
+  // pocket and the seed shelf, and every world in the repository moved with it. What is worth
+  // pinning is that the world came back with the seeds it actually had, which is none — the
+  // seeds this save's bot discarded were never recorded anywhere, so there is nothing to
+  // restore and back-crediting a plausible number would be inventing inventory.
+  it('migrates format-15.json up to the current version', () => {
     const restored = restoreWorld(fixture15);
 
     expect(restored.migration.fromVersion).toBe(15);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([15]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(2_814);
     expect(restored.state.worldSeed).toBe(830_083);
-    expect(hashState(restored.state)).toBe('eafcf759');
+    expect(hashState(restored.state)).toBe('4286851b');
   });
 
   it('brings the shelf back with its name on it, and no hand in the ledger', () => {
@@ -1224,6 +1232,47 @@ describe('the permanent fixture set', () => {
     expect(dock.cargoCount).toBe(10);
     expect(dock.outputCount).toBe(0);
     // The bot did the harvesting, and the Hands-Free ledger still says so after the reload.
+    expect(state.stats.itemsHarvestedByHand).toBe(0);
+
+    // And the format-16 fields arrived empty on every machine and every bot. Empty is the whole
+    // migration: a format-15 world's discarded seeds left no record to reconstruct from.
+    expect(dock.seedShelfItem).toBe(0);
+    expect(dock.seedShelfCount).toBe(0);
+    expect(state.machines.every((m) => m.seedShelfCount === 0)).toBe(true);
+    expect(state.bots.every((b) => b.seedItem === 0 && b.seedCount === 0)).toBe(true);
+  });
+
+  // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE. format-16 is the first save
+  // in which THE SEED CAME HOME (item 088), recorded by `scripts/record-format-16.ts`: the
+  // format-15 session played one beat further, until the dock holds a named harvest on the
+  // produce shelf AND named seeds on the seed shelf. A robot bringing back what a hand would
+  // have pocketed is the one state no earlier format can express — format 15 wrote that moment
+  // as a harvest and a silence, because the seed was not stored badly, it did not exist.
+  it('loads format-16.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture16);
+
+    expect(restored.migration.fromVersion).toBe(16);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(restored.state.tick).toBe(2_814);
+    expect(restored.state.worldSeed).toBe(880_088);
+    expect(hashState(restored.state)).toBe('a39d4698');
+  });
+
+  it('brings back both shelves, each with its own name on it', () => {
+    const state = restoreWorld(fixture16).state;
+    const dock = state.machines.find((m) => m.kind === MachineKind.HarvesterDock)!;
+
+    expect(dock.cargoItem).toBe(ItemId.RussetPotato);
+    expect(dock.cargoCount).toBe(5);
+    expect(dock.seedShelfItem).toBe(ItemId.PotatoSeed);
+    expect(dock.seedShelfCount).toBe(3);
+    expect(dock.outputCount).toBe(0);
+
+    // The seeds are on the SHELF, not in the pouch. A robot's seed is the robot's to hand over,
+    // and it takes a belt or a hand to move it — which is the loop this game asks the player to
+    // build rather than routing goods across the map by magic.
+    expect(state.inventory.find((slot) => slot.item === ItemId.PotatoSeed)?.count ?? 0).toBe(5);
     expect(state.stats.itemsHarvestedByHand).toBe(0);
   });
 

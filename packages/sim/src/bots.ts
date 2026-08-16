@@ -35,7 +35,9 @@
 
 import {
   BOT_CARRY_CAPACITY,
+  BOT_SEED_POCKET_CAPACITY,
   BOT_SPEED_SUBTILES_PER_100_TICKS,
+  HARVESTER_SEED_SHELF_CAPACITY,
   BOT_WEAR_PER_OPERATION,
   BOT_WORK_TICKS,
   CONDITION_EFFECT_THRESHOLD,
@@ -98,15 +100,29 @@ export function dockSeedCount(dock: Machine): number {
  * that calls `touch('hopperRefill')`.
  */
 export function dockAcceptSeed(state: WorldState, dock: Machine, item: number): boolean {
+  if (!dockCanAcceptSeed(state, dock, item)) return false;
+
+  dock.cargoItem = item as ItemId;
+  dock.cargoCount += 1;
+  return true;
+}
+
+/**
+ * **THE PLANTER HOPPER'S ACCEPT-DOOR PREDICATE** (item 085): every reason a seed bounces off a
+ * planter dock, in one place, asked without touching anything.
+ *
+ * `dockAcceptSeed` above is now this plus two assignments, which is the point: an arm's
+ * look-ahead and the delivery it commits to a tick later read the *same* four refusals. A
+ * second copy would drift — and the symptom would be an arm that picks up a cane seed for a
+ * potato zone, exactly the mistake item 085 exists to stop.
+ */
+export function dockCanAcceptSeed(state: WorldState, dock: Machine, item: number): boolean {
   const spec = machineSpec(dock.kind);
   if (spec === null || spec.role !== MachineRole.BotDock) return false;
   if (dock.kind !== MachineKind.PlanterDock) return false;
   if (!dockSeedIsWanted(state, dock, item)) return false;
   if (dock.cargoItem !== 0 && dock.cargoItem !== item) return false;
   if (dock.cargoCount >= spec.inputCapacity) return false;
-
-  dock.cargoItem = item as ItemId;
-  dock.cargoCount += 1;
   return true;
 }
 
@@ -124,19 +140,39 @@ export function dockAcceptDelivery(state: WorldState, dock: Machine, item: numbe
 }
 
 /**
+ * The same door, asked rather than walked through (item 085's look-ahead).
+ *
+ * THE ROUTING LINE IS THE ONE THING WRITTEN TWICE — deliberately, and it is the same
+ * expression, because the alternative (a shared resolver handing back which hopper) would
+ * allocate on a path that runs per arm per swing. What is NOT written twice is any refusal
+ * rule: both halves bottom out in `bayCanAcceptPart` / `dockCanAcceptSeed`. `bots.test.ts`
+ * pins the pair against each other over every dock kind so the routing cannot drift in silence.
+ */
+export function dockCanAcceptDelivery(state: WorldState, dock: Machine, item: number): boolean {
+  if (dock.kind === MachineKind.DroneBay) return bayCanAcceptPart(dock, item);
+  return dockCanAcceptSeed(state, dock, item);
+}
+
+/**
  * One drone part into the bay's hopper. Refuses anything that is not a part and a hopper that
- * is full, leaving the arm standing there holding it — the same "look downstream" stall every
- * full hopper in the game gives.
+ * is full — and after item 085 an arm aimed at a bay never closes its claw on anything else
+ * in the first place, so the refusal is reached only by an arm that was already mid-swing.
  */
 function bayAcceptPart(bay: Machine, item: number): boolean {
+  if (!bayCanAcceptPart(bay, item)) return false;
+
+  bay.cargoItem = ItemId.DronePart;
+  bay.cargoCount += 1;
+  return true;
+}
+
+/** **THE DRONE BAY HOPPER'S ACCEPT-DOOR PREDICATE** (item 085). Asks, changes nothing. */
+export function bayCanAcceptPart(bay: Machine, item: number): boolean {
   const spec = machineSpec(bay.kind);
   if (spec === null) return false;
   if (item !== ItemId.DronePart) return false;
   if (bay.cargoItem !== 0 && bay.cargoItem !== ItemId.DronePart) return false;
   if (bay.cargoCount >= spec.inputCapacity) return false;
-
-  bay.cargoItem = ItemId.DronePart;
-  bay.cargoCount += 1;
   return true;
 }
 
@@ -339,8 +375,11 @@ function serviceUnderDrone(state: WorldState, bot: Bot, bay: Machine): void {
 function advanceHarvester(state: WorldState, bot: Bot, dock: Machine): void {
   switch (bot.phase) {
     case BotPhase.Idle: {
-      // Full, or holding something after the zone went quiet: take it home.
-      if (bot.carryCount >= BOT_CARRY_CAPACITY) {
+      // Full, or holding something after the zone went quiet: take it home. A FULL POCKET
+      // SENDS IT HOME TOO (item 088) — a bot that kept working with nowhere to put the next
+      // seed would have to choose between stalling in a field and deleting one, and neither is
+      // a thing this game does.
+      if (bot.carryCount >= BOT_CARRY_CAPACITY || bot.seedCount >= BOT_SEED_POCKET_CAPACITY) {
         bot.phase = BotPhase.Returning;
         return;
       }
@@ -348,8 +387,9 @@ function advanceHarvester(state: WorldState, bot: Bot, dock: Machine): void {
       if (target < 0) {
         // Nothing ripe. Walk home if there is anything to drop off or anywhere to be, and
         // otherwise stand still — an idle bot burns no condition and no cursor.
-        if (bot.carryCount > 0 || !atDock(bot, dock)) bot.phase = BotPhase.Returning;
-        else resetMomentum(bot);
+        if (bot.carryCount > 0 || bot.seedCount > 0 || !atDock(bot, dock)) {
+          bot.phase = BotPhase.Returning;
+        } else resetMomentum(bot);
         return;
       }
       bot.targetTile = target;
@@ -388,9 +428,14 @@ function advanceHarvester(state: WorldState, bot: Bot, dock: Machine): void {
         bot.workTicks -= 1;
         return;
       }
-      harvestUnderBot(state, bot);
+      const wantsHome = harvestUnderBot(state, bot);
       bot.targetTile = -1;
-      bot.phase = bot.carryCount >= BOT_CARRY_CAPACITY ? BotPhase.Returning : BotPhase.Idle;
+      bot.phase =
+        wantsHome ||
+        bot.carryCount >= BOT_CARRY_CAPACITY ||
+        bot.seedCount >= BOT_SEED_POCKET_CAPACITY
+          ? BotPhase.Returning
+          : BotPhase.Idle;
       return;
     }
 
@@ -400,7 +445,7 @@ function advanceHarvester(state: WorldState, bot: Bot, dock: Machine): void {
       // armful — visible from ten tiles up, like every other stall — and retries; ponds do
       // not move, but the player can hand-repair the situation by re-siting the dock.
       if (walkToMachine(bot, dock, groundBlocked(state)) !== StepOutcome.Arrived) return;
-      if (bot.carryCount <= 0) {
+      if (bot.carryCount <= 0 && bot.seedCount <= 0) {
         bot.phase = BotPhase.Idle;
         return;
       }
@@ -485,15 +530,33 @@ function advancePlanter(state: WorldState, bot: Bot, dock: Machine): void {
  * ONE PRODUCT AT A TIME, like a cart: a bot holding potatoes that reaches a ripe chili takes the
  * chili home first. That is a zone-assignment problem, not a bot problem, and the zone already
  * has one crop.
+ *
+ * **AND THE SEED COMES HOME (item 088.)** The hand's `harvestOneTile` has always done
+ * `addItem(spec.seedItem, 1)` for a one-shot crop — plan §4's anti-softlock floor — while this
+ * path routed only through `takeHarvest`, which by its own contract returns no seed. So the bot
+ * dropped it, and automation quietly cost a seed a tile: a parity bug since item 038, not a
+ * balance choice anyone made. The test for "does it come back" is `spec.regrowTicks <= 0`, the
+ * SAME expression the hand uses, so the two paths cannot drift apart.
+ *
+ * Returns whether the bot should head home now — either because it refused a tile it could not
+ * pocket the seed of, or because it changed product mid-round.
  */
-function harvestUnderBot(state: WorldState, bot: Bot): void {
+function harvestUnderBot(state: WorldState, bot: Bot): boolean {
   const tile = tileByKey(state, bot.targetTile);
-  if (tile === null) return;
+  if (tile === null) return false;
   const spec = tile.crop === CropId.None ? null : cropSpec(tile.crop);
-  if (spec === null) return;
+  if (spec === null) return false;
+
+  // CHECKED BEFORE THE PULL, BECAUSE AFTER THE PULL IS TOO LATE. A one-shot crop hands back a
+  // seed, and nothing in this game is ever deleted (plan §4). If the pocket cannot take it —
+  // full, or holding a different crop's seed — the tile is LEFT STANDING and the bot walks
+  // home, which is a stall the player can see and fix rather than a seed that silently was not
+  // there. `takeHarvest` would already have the crop out of the ground by the time a check
+  // after it noticed.
+  if (spec.regrowTicks <= 0 && !pocketRoomFor(bot, spec.seedItem)) return true;
 
   const result = takeHarvest(state, tile, spec);
-  if (result === null) return;
+  if (result === null) return false;
 
   if (bot.carryItem !== 0 && bot.carryItem !== result.item) {
     // Two products, one pair of arms. Everything it is already holding goes home first; this
@@ -507,11 +570,25 @@ function harvestUnderBot(state: WorldState, bot: Bot): void {
   }
   bot.carryCount += result.count;
 
+  // One seed, one one-shot tile — the hand's rule, in the hand's words. Regrowers keep the
+  // plant and return nothing, which `takeHarvest` has already decided.
+  if (spec.regrowTicks <= 0) {
+    bot.seedItem = spec.seedItem;
+    bot.seedCount += 1;
+  }
+
   wearBot(bot);
   // Plan §3's Hall of Hands. Marked on the completed harvest rather than on the dock being
   // placed: the moment worth ten seconds of theatre is a crop leaving the ground without a hand
   // on it, which is a thing that has never happened in this game before.
   markCeremony(state, CeremonyId.FirstBot);
+  return false;
+}
+
+/** Whether the seed pocket will take one more of this seed. One seed type at a time. */
+function pocketRoomFor(bot: Bot, seed: ItemId): boolean {
+  if (bot.seedItem !== 0 && bot.seedItem !== seed) return false;
+  return bot.seedCount < BOT_SEED_POCKET_CAPACITY;
 }
 
 /** Sow the tile the bot is standing on from the dock's hopper. */
@@ -551,21 +628,42 @@ function plantUnderBot(state: WorldState, bot: Bot, dock: Machine): void {
  */
 function unloadIntoDock(bot: Bot, dock: Machine): void {
   const spec = machineSpec(dock.kind);
-  if (spec === null || bot.carryItem === 0) return;
-  if (dock.cargoItem !== 0 && dock.cargoItem !== bot.carryItem) return;
-  // The shelf is sized by `outputCapacity` — the harvester dock's one buffer number, scaled by
-  // the same Capacity dial the old path honoured. Its `inputCapacity` is 0 and stays unused.
-  const room = effectiveOutputCapacity(spec, dock) - dock.cargoCount;
-  if (room <= 0) return;
+  if (spec === null) return;
 
-  const moved = bot.carryCount < room ? bot.carryCount : room;
-  dock.cargoItem = bot.carryItem;
-  dock.cargoCount += moved;
-  bot.carryCount -= moved;
-  if (bot.carryCount <= 0) {
-    bot.carryItem = 0;
-    bot.phase = BotPhase.Idle;
+  // TWO SHELVES, TWO INDEPENDENT TRANSFERS (item 088). Neither can block the other: a full
+  // produce shelf must not strand the seeds, and a full seed shelf must not strand the potatoes
+  // — a dock where one jam stops both would turn a small downstream mistake into a total halt,
+  // and it would make the stall say the wrong thing about which belt is missing.
+  if (bot.carryItem !== 0 && (dock.cargoItem === 0 || dock.cargoItem === bot.carryItem)) {
+    // The shelf is sized by `outputCapacity` — the harvester dock's one buffer number, scaled by
+    // the same Capacity dial the old path honoured. Its `inputCapacity` is 0 and stays unused.
+    const room = effectiveOutputCapacity(spec, dock) - dock.cargoCount;
+    if (room > 0) {
+      const moved = bot.carryCount < room ? bot.carryCount : room;
+      dock.cargoItem = bot.carryItem;
+      dock.cargoCount += moved;
+      bot.carryCount -= moved;
+      if (bot.carryCount <= 0) bot.carryItem = 0;
+    }
   }
+
+  // The seed shelf. A FIXED cap rather than the Capacity dial's: the dial buys warehouse for
+  // the thing you sell, and a seed shelf is a place seeds WAIT for a belt (see
+  // `HARVESTER_SEED_SHELF_CAPACITY`). One seed type at a time, like every cargo pair here.
+  if (bot.seedItem !== 0 && (dock.seedShelfItem === 0 || dock.seedShelfItem === bot.seedItem)) {
+    const seedRoom = HARVESTER_SEED_SHELF_CAPACITY - dock.seedShelfCount;
+    if (seedRoom > 0) {
+      const moved = bot.seedCount < seedRoom ? bot.seedCount : seedRoom;
+      dock.seedShelfItem = bot.seedItem;
+      dock.seedShelfCount += moved;
+      bot.seedCount -= moved;
+      if (bot.seedCount <= 0) bot.seedItem = 0;
+    }
+  }
+
+  // Back to work only when BOTH hands are empty. Still holding either is the stall — the robot
+  // standing at a full shed, visible from ten tiles up — and nothing was deleted to reach it.
+  if (bot.carryCount <= 0 && bot.seedCount <= 0) bot.phase = BotPhase.Idle;
 }
 
 /** Condition, per completed operation and never per tick. See the header. */

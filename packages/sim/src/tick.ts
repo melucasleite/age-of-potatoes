@@ -168,6 +168,7 @@ import {
   refundContract,
   releaseDepotContracts,
   removeContractById,
+  sellAtBin,
 } from './commerce';
 import {
   BuildRefusal,
@@ -232,6 +233,7 @@ import {
   streamFor,
   takeBoxedMachine,
   takeHarvest,
+  takeDockSeedShelf,
   takeDockShelf,
   takeOneOutput,
   tileAt,
@@ -257,7 +259,6 @@ import {
   pushNetWorthSample,
   recordManualTouch,
   recordRefund,
-  recordSale,
   recordSpend,
 } from './stats';
 import {
@@ -1363,9 +1364,17 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
   // are loose again. Routed through `takeDockShelf`, the shelf's one door, so the hand and
   // the grabber can never disagree about what came off it.
   if (machine.kind === MachineKind.HarvesterDock) {
+    // BOTH SHELVES, ONE VERB (item 088). The dock has a produce shelf and a seed shelf now, and
+    // "unload the dock" means the dock — a player who had to know which slot a thing was in
+    // before they could pick it up would be doing the machine's filing. Produce comes off
+    // first, and the seeds come with the same armful when the ask is bigger than the produce
+    // shelf held; each shelf goes through its own door, so the hand and the grabber can never
+    // disagree about what came off either.
     const took = takeDockShelf(machine, command.count);
-    if (took === null) return false;
-    addItem(state, took.item, took.taken);
+    const seeds = takeDockSeedShelf(machine, command.count - (took?.taken ?? 0));
+    if (took === null && seeds === null) return false;
+    if (took !== null) addItem(state, took.item, took.taken);
+    if (seeds !== null) addItem(state, seeds.item, seeds.taken);
     handsOn(machine);
     touch(state, 'handCarry');
     return true;
@@ -1596,11 +1605,10 @@ function applySellItem(state: WorldState, command: SellItemCommand): boolean {
   if (!nearSellBin(state)) return false;
   if (!removeItem(state, command.item, command.count)) return false;
 
-  const gross = listPriceCents(command.item) * command.count;
-  state.moneyCents += gross;
-  // `recordSale` owns the gross, the unit count, and the per-item row in one write, here and
-  // in `payForDelivery` — the two doors every sale in the game walks through (item 062).
-  recordSale(state.stats, command.item, command.count, gross);
+  // `sellAtBin` is the money and the ledger, and it is shared with the belt's door (item 087)
+  // so a bin sale is booked in exactly one place however it arrived. The touch stays HERE,
+  // outside it, because that is the difference between the two doors: these were hands.
+  sellAtBin(state, command.item, command.count);
   touch(state, 'handCarry');
   return true;
 }
@@ -2691,7 +2699,9 @@ function advanceMachines(state: WorldState): void {
     // here at all — the pipe ledger already moved their water, and a machine whose whole job
     // is a number in `advancePipes` has nothing left to do on its own.
     if (spec.role === MachineRole.Sprinkler) {
-      advanceSprinkler(state, machine, spec, effectiveWear(spec, machine));
+      // `resumeScan` true: the barrel is the head whose tank predictably runs dry mid-patch,
+      // so it is the one that has to remember where it stopped. See `advanceSprinkler`.
+      advanceSprinkler(state, machine, spec, effectiveWear(spec, machine), true);
       // Marked here rather than inside `advanceSprinkler`, which the piped head shares and
       // which owes a different id. `wateredCount` is lifetime and hashed, so the mark is
       // idempotent and survives a reload — the renderer no longer has to infer "has it ever
@@ -2818,19 +2828,66 @@ function advanceOrchard(machine: Machine, spec: MachineSpec): void {
 }
 
 /**
- * One cycle of a head that wets everything in range, wet or dry.
+ * One cycle of a 5×5 head, sweeping its patch top-left to bottom-right.
  *
  * Shared by the v0.1 barrel sprinkler and the piped head, because they ARE the same machine
  * with different plumbing — plan §1's "manual never rots" cuts both ways, and an automated
  * rung that also watered *better* would make the rung below it a mistake to have bought.
- * Wasting water on a soaked tile is the sloppiness tax showing up on the Dry County board;
- * moisture sensing is the Hub's job and the Hub's alone.
+ *
+ * WHAT THEY NO LONGER SHARE IS THE SLOPPINESS TAX, and the line between them is `spec
+ * .moistureSensing` rather than a check on kind (item 086, owner ruling 2026-08-15: "the
+ * sprinklers should have charges, ten charges, and they only should go watering if the tile
+ * needs it"). The BARREL senses now: it is the rung you fill by hand out of a ten-charge
+ * barrel, and pouring two of those ten onto ground that is already wet was the assisted
+ * tier's signature waste — item 081 ended the hand's version of it, this ends the barrel's.
+ * The PIPED head does not: its water is ledger-fed and its indifference is exactly what the
+ * Irrigation Hub is sold against, so it re-wets soaked ground and the Dry County board says
+ * so. Same function, one flag, no third code path.
+ *
+ * THE PREDICATE IS THE HUB'S, VERBATIM — `MOISTURE_DRY_THRESHOLD`, the same number the
+ * renderer draws cracked earth with. There is one definition of dry in this game (see
+ * `MachineSpec.moistureSensing`), and a barrel that disagreed with the ground it stands on
+ * about whether that ground was thirsty would be unexplainable.
+ *
+ * A SKIPPED TILE IS NOT A POUR: `lastPouredTick` is left alone, item 081's rule — feedback
+ * for water that never left the barrel is a lie the renderer would then have to draw, and
+ * the audio observer would play a splash over a dry cycle. A cycle that skips its whole
+ * patch spends no water, no wear, and no `opCount`: it did nothing, and nothing is what it
+ * should cost.
+ *
+ * **AND THE SCAN RESUMES WHERE IT RAN DRY, WHICH IS THE OTHER HALF OF THE TEN-CHARGE
+ * RULING AND NOT A DETAIL.** Ten charges do not cover twenty-four thirsty neighbours. A
+ * fresh top-left scan every cycle would therefore water the near rows, run out, and do it
+ * again forever — the back row starving in plain sight. That is not a hypothetical: the
+ * comment this replaced predicted it in writing when the barrel was sized at 24 pours ("a
+ * barrel that held 20 pours would water the same first twenty tiles every cycle and starve
+ * the back row forever, because the dumb scan always starts at the top-left"), item 086's
+ * first cut deleted the warning on the theory that a sensing head has no back row, and the
+ * owner found it in play within the hour: *"they should be watering 5 by 5 around them, but
+ * it looks like it's only watering in front of them."*
+ *
+ * SENSING DOES NOT FIX IT, and that is the trap the deleted comment was guarding. Sensing
+ * skips WET tiles; on a patch that is uniformly dry every tile is thirsty and the barrel
+ * still cannot reach past the tenth. The fairness has to come from WHERE the scan starts,
+ * so `machine.scanCursor` — the field the Hub already owns, already hashed, already saved,
+ * already migrated, so this costs no state and no format bump — carries the barrel's place
+ * in its patch between cycles. Three fills walk the whole 5×5 once, in order, with nothing
+ * favoured.
+ *
+ * THE PIPED HEAD KEEPS THE OLD FRESH-START SCAN (`resumeScan` false, its cursor never
+ * written), and that is a scope line rather than a claim that it is better: a head fed by a
+ * pipe normally refills faster than it pours and completes its lap every cycle, so the
+ * cursor would sit at zero anyway — but a THROTTLED network can dry one mid-lap, and such a
+ * head has the same near-row bias. Item 086 is the barrel's ruling and the Hub and the piped
+ * heads are required to stay byte-identical through it; the piped head's version of this is
+ * written up for item 046's pile rather than smuggled in here.
  */
 function advanceSprinkler(
   state: WorldState,
   machine: Machine,
   spec: MachineSpec,
   wearPerCycle: number,
+  resumeScan: boolean,
 ): void {
   if (machine.jammed || machine.condition <= 0) return;
   if (machine.cooldown > 0) {
@@ -2840,27 +2897,51 @@ function advanceSprinkler(
   if (machine.tankMl < SPRINKLER_POUR_ML) return;
 
   const radius = spec.coverageRadiusTiles;
+  const span = radius * 2 + 1;
+  const patch = span * span;
+  if (patch <= 0) return;
+
+  // `% patch` rather than a bare index, the Hub's own guard: a save whose coverage changed
+  // under it lands somewhere legal instead of scanning off the end of the patch.
+  let offset = resumeScan ? machine.scanCursor % patch : 0;
   let watered = 0;
-  for (let dy = -radius; dy <= radius; dy++) {
-    for (let dx = -radius; dx <= radius; dx++) {
-      if (machine.tankMl < SPRINKLER_POUR_ML) break;
-      const tile = tileAt(state, machine.tileX + dx, machine.tileY + dy);
-      if (tile === null) continue;
+
+  for (let visited = 0; visited < patch; visited++) {
+    // Out of water: STOP HERE AND PARK. Not `continue`, and not a reset — the cursor is left
+    // pointing at the tile this cycle could not afford, which is what makes the next cycle
+    // resume rather than restart. Exactly `advanceIrrigationHub`'s rule, for exactly its
+    // reason: a head that skated past a dry tile it could not pay for would forget it.
+    if (machine.tankMl < SPRINKLER_POUR_ML) break;
+
+    const dx = (offset % span) - radius;
+    const dy = divFloor(offset, span) - radius;
+    const tile = tileAt(state, machine.tileX + dx, machine.tileY + dy);
+    if (tile !== null && machineAt(state, machine.tileX + dx, machine.tileY + dy) === null) {
       // A machine-occupied farm tile — including this head's OWN tile, mid-field (item 067) —
       // is not part of the watering surface, exactly as grass is not: no pour, no water spent,
       // no moisture written. The sloppiness tax is re-wetting soaked ground that could grow
       // something; ground that grows nothing is outside the tax, not an exception to it, and
       // the moisture underneath stays whatever it was so deconstruction hands it back honestly.
-      if (machineAt(state, machine.tileX + dx, machine.tileY + dy) !== null) continue;
-      tile.moisture = MOISTURE_MAX;
-      // Non-hashed pour signal; see `CropTile.lastPouredTick`. A dumb head re-wetting a
-      // soaked tile is still a pour — that is its sloppiness tax, and it should look like one.
-      tile.lastPouredTick = state.tick;
-      machine.tankMl -= SPRINKLER_POUR_ML;
-      watered += 1;
+      //
+      // The thirst test, for the heads that have one. `skippedCount` measures what sensing
+      // SAVED, which is why the unwaterable tiles above are not counted in it: they were never
+      // waterable, so skipping them saved nothing. Counted the Hub's way, for the same readout.
+      if (spec.moistureSensing && tile.moisture >= MOISTURE_DRY_THRESHOLD) {
+        machine.skippedCount += 1;
+      } else {
+        tile.moisture = MOISTURE_MAX;
+        // Non-hashed pour signal; see `CropTile.lastPouredTick`. A dumb head re-wetting a
+        // soaked tile is still a pour — that is its sloppiness tax, and it should look like one.
+        tile.lastPouredTick = state.tick;
+        machine.tankMl -= SPRINKLER_POUR_ML;
+        watered += 1;
+      }
     }
+
+    offset = (offset + 1) % patch;
   }
 
+  if (resumeScan) machine.scanCursor = offset;
   machine.cooldown = SPRINKLER_PERIOD_TICKS;
   if (watered > 0) {
     machine.opCount += 1;
@@ -2883,7 +2964,7 @@ function advancePipedSprinkler(state: WorldState, machine: Machine, spec: Machin
     advanceIrrigationHub(state, machine, spec);
     return;
   }
-  advanceSprinkler(state, machine, spec, 0);
+  advanceSprinkler(state, machine, spec, 0, false);
   if (machine.wateredCount > 0) markCeremony(state, CeremonyId.PipedSprinkler);
 }
 

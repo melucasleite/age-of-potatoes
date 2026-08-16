@@ -3,7 +3,7 @@
   "description": "A Chip Kitchen driven from full condition to zero by honest work — jams whacked out on the way down, never repaired — until it halts, sits dead losing nothing further, and is then restored to full by free hand repair alone.",
   "seed": 515151,
   "ticks": 24024,
-  "expectedHash": "492ab7db",
+  "expectedHash": "2e533b7b",
   "commands": [
     {
       "tick": 0,

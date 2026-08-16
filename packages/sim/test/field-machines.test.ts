@@ -15,6 +15,7 @@ import {
   MachineKind,
   MOISTURE_MAX,
   SPRINKLER_PERIOD_TICKS,
+  SPRINKLER_POUR_ML,
   TillMode,
   addItem,
   createWorld,
@@ -140,31 +141,61 @@ describe('the seed hopper skips the obstruction', () => {
 });
 
 describe('watering around the obstruction', () => {
-  it('a mid-field 5×5 sprinkler waters all 24 neighbours in one cycle and never its own feet', () => {
+  it('a mid-field 5×5 sprinkler waters all 24 neighbours across three barrels, never its own feet', () => {
+    // THE SUBJECT IS THE FOOTPRINT, NOT THE BARREL. Item 067's rule is that a head standing on
+    // farmland never waters the tile it occupies, and that the other 24 in its 5×5 all get
+    // served. Item 086 changed only how many trips that takes: ten charges, ten, then four,
+    // because the sensing head skips the ground the previous barrel already wet rather than
+    // restarting the same top-left scan and starving the back row.
     const state = funded(676);
     const sprinkler = spawnMachine(state, MachineKind.Sprinkler, 7, 7)!;
     // A few dry ticks first, so tick 0 — which is also `lastPouredTick`'s "never" — is behind
-    // us before the one pour this test watches.
+    // us before the pours this test watches.
     stepMany(state, 3);
-    sprinkler.tankMl = machineSpec(MachineKind.Sprinkler)!.tankCapacityMl;
-    const pourTick = state.tick;
 
-    stepMany(state, SPRINKLER_PERIOD_TICKS + 2);
-    expect(sprinkler.wateredCount, 'the cycle missed a neighbour or wet its own tile').toBe(24);
+    const poured: number[] = [];
+    for (let haul = 0; haul < 3; haul++) {
+      const before = sprinkler.wateredCount;
+      sprinkler.tankMl = machineSpec(MachineKind.Sprinkler)!.tankCapacityMl;
+      stepMany(state, SPRINKLER_PERIOD_TICKS + 2);
+      poured.push(sprinkler.wateredCount - before);
+    }
+
+    expect(poured, 'the hauls did not spend ten, ten and four').toEqual([10, 10, 4]);
+    expect(sprinkler.wateredCount, 'the cycles missed a neighbour or wet its own tile').toBe(24);
     for (let dy = -2; dy <= 2; dy++) {
       for (let dx = -2; dx <= 2; dx++) {
         const tile = tileAt(state, 7 + dx, 7 + dy)!;
         if (dx === 0 && dy === 0) {
           expect(tile.lastPouredTick, 'the head watered under itself').toBe(0);
         } else {
-          expect(tile.lastPouredTick, `(${String(7 + dx)},${String(7 + dy)}) stayed dry`).toBe(
-            pourTick,
-          );
+          expect(
+            tile.lastPouredTick,
+            `(${String(7 + dx)},${String(7 + dy)}) stayed dry`,
+          ).toBeGreaterThan(0);
         }
       }
     }
-    // 24 pours, not 25: the skipped tile cost no water. The barrel held exactly one cycle.
-    expect(sprinkler.tankMl).toBe(0);
+    // Six charges left in the third barrel, and one more cycle over the patch it has now
+    // finished wetting: 24 tiles looked at and passed over, and NOT 25. The head's own tile is
+    // no more a saving than it was a pour — it was never waterable, so skipping it saved
+    // nothing and is counted as nothing.
+    expect(sprinkler.tankMl).toBe(6 * SPRINKLER_POUR_ML);
+    const skippedBefore = sprinkler.skippedCount;
+    // Stepped to the next cycle rather than for a fixed span: a whole cycle happens inside one
+    // tick, so waiting for the counter to move measures exactly one of them however the
+    // cooldown happens to be phased.
+    for (
+      let i = 0;
+      i < 2 * SPRINKLER_PERIOD_TICKS && sprinkler.skippedCount === skippedBefore;
+      i++
+    ) {
+      stepMany(state, 1);
+    }
+    expect(sprinkler.skippedCount - skippedBefore).toBe(24);
+    expect(sprinkler.tankMl, 'a cycle that watered nothing still spent water').toBe(
+      6 * SPRINKLER_POUR_ML,
+    );
   });
 
   it('the Hub scans past occupied tiles without pouring or counting them as savings', () => {

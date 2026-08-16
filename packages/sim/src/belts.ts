@@ -22,12 +22,13 @@ import {
   type ItemId,
   MachineKind,
   MachineRole,
+  type MachineSpec,
   beltSpec,
   grabberSpec,
   machineSpec,
 } from './data';
-import { dockAcceptDelivery } from './bots';
-import { depotAccept } from './commerce';
+import { dockAcceptDelivery, dockCanAcceptDelivery } from './bots';
+import { depotAccept, depotCanAccept, sellBinAccept, sellBinCanAccept } from './commerce';
 import {
   type Belt,
   Direction,
@@ -35,6 +36,7 @@ import {
   type Machine,
   type WorldState,
   beltAt,
+  beltCanInsert,
   beltEndDist,
   beltIndexOfTile,
   beltInsert,
@@ -43,6 +45,7 @@ import {
   directionStepY,
   machineAt,
   nextOutputItem,
+  takeDockSeedShelf,
   takeDockShelf,
   takeOneOutput,
 } from './state';
@@ -131,28 +134,43 @@ function handOffFromHead(state: WorldState, belt: Belt): void {
 }
 
 /**
- * Take the item furthest along the belt within one tile of it, optionally filtered.
+ * WHICH ITEM ON THIS BELT A CLAW OVER THIS TILE WOULD CLOSE ON — an index into `belt.items`,
+ * or -1 for nothing it wants.
  *
  * Furthest-along rather than nearest, so a grabber unloading a belt pulls from the front of
  * the queue and the line behind it keeps flowing.
+ *
+ * **THE BELT SOURCE'S ONE ANSWER** (item 085). An arm now asks what it *would* pick up before
+ * it decides to pick anything up at all, and the peek and the pull have to name the same
+ * item — not "the same rule, written twice". They call this, and differ only by a splice.
+ * Returns an index rather than the item so the caller can do either without a second scan;
+ * nothing is allocated, which is what lets it run per arm per swing.
  */
+export function beltItemIndexAt(belt: Belt, tileX: number, tileY: number, filter: number): number {
+  const index = beltIndexOfTile(belt, tileX, tileY);
+  if (index < 0) return -1;
+
+  for (let i = belt.items.length - 1; i >= 0; i--) {
+    const entry = belt.items[i]!;
+    if (beltTileIndexForDist(belt, entry.dist) !== index) continue;
+    if (filter !== 0 && entry.item !== filter) continue;
+    return i;
+  }
+  return -1;
+}
+
+/** Take the item furthest along the belt within one tile of it, optionally filtered. */
 export function beltTakeFromTile(
   belt: Belt,
   tileX: number,
   tileY: number,
   filter: number,
 ): ItemId | 0 {
-  const index = beltIndexOfTile(belt, tileX, tileY);
-  if (index < 0) return 0;
-
-  for (let i = belt.items.length - 1; i >= 0; i--) {
-    const entry = belt.items[i]!;
-    if (beltTileIndexForDist(belt, entry.dist) !== index) continue;
-    if (filter !== 0 && entry.item !== filter) continue;
-    belt.items.splice(i, 1);
-    return entry.item;
-  }
-  return 0;
+  const at = beltItemIndexAt(belt, tileX, tileY, filter);
+  if (at < 0) return 0;
+  const item = belt.items[at]!.item;
+  belt.items.splice(at, 1);
+  return item;
 }
 
 // --- junctions --------------------------------------------------------------------
@@ -278,6 +296,34 @@ function placeOnFace(state: WorldState, machine: Machine, face: number, item: It
 }
 
 // --- grabbers ---------------------------------------------------------------------
+//
+// AN ARM LOOKS BEFORE IT GRABS (item 085; owner ruling, 2026-08-15: "the grabbers should only be
+// able to take what the machine is able to receive… if it grabs something that the machine can't
+// take, it shouldn't grab it"). Every pickup is two questions asked in one tick — *what would the
+// source hand me* and *would my destination take that* — and the claw only closes when both
+// answer. An arm whose destination is full, or whose next item is something that destination will
+// never want, leaves the goods where they are.
+//
+// THIS OVERRULES THE OLD "LOOK DOWNSTREAM" HOSTAGE. Until this item every accept-door in this
+// file and `bots.ts` documented the stall as the diagnostic: the arm stood there holding a thing
+// nobody would take, and that was how the player found the jam. The diagnostic did not go away,
+// it MOVED TO THE LAMP — `grabberLamp` in `view.ts` now shows red on an idle empty-handed arm
+// whose next pickup would be refused, and amber keeps meaning "nothing to take". Same two
+// diagnoses, same colours, no goods held hostage to say it.
+//
+// THE MID-SWING STALL SURVIVES, deliberately. A destination that fills up while an arm is already
+// carrying still refuses it, and the arm still waits with the item in its hand. The ruling
+// prevents doomed *grabs*; it does not teleport goods backwards onto a belt they already left.
+// In steady state that is bounded by the one swing the world changed under.
+//
+// THE SHAPE, and the reason it is this shape: `grabberSource` and `grabberDeliver` each take a
+// `commit` flag and are each the ONLY code that knows their half. The look-ahead calls them with
+// `false` and the pickup calls them with `true`, so a peek can never resolve a different shelf,
+// a different belt item, or a different accept-door than the delivery that follows. Two mirrored
+// functions that started identical is exactly the failure this item exists to prevent, and the
+// per-door predicates (`beltCanInsert`, `depotCanAcceptRoute`, `sellBinCanAccept`,
+// `dockCanAcceptDelivery`, `hopperLineFor`) are each called by both halves rather than copied
+// into one. Nothing on either path allocates: it runs per arm per swing.
 
 /** Advance every grabber, in ascending id order. */
 export function advanceGrabbers(state: WorldState): void {
@@ -309,8 +355,8 @@ function advanceGrabber(state: WorldState, grabber: Grabber): void {
     grabber.opCount += 1;
     grabber.cooldown = spec.swingTicks;
   }
-  // Still holding means the destination is full. The arm waits, visibly, with an item in
-  // its hand — which is the readable version of "look downstream".
+  // Still holding means the destination filled up mid-swing — the one stall item 085 left
+  // standing. The arm waits with the item in its hand and its lamp red.
 }
 
 /** The tile a grabber reaches back into. Long arms skip the tile next to them. */
@@ -334,98 +380,255 @@ export function grabberDestTile(
   };
 }
 
+/**
+ * ONE PICKUP: peek, ask the destination, and only then close the claw (item 085).
+ *
+ * The three lines are the whole ruling. `grabberSource(..., false)` names what the source would
+ * hand over; `grabberDeliver(..., false)` asks the destination whether it would take *that*;
+ * `grabberSource(..., true)` repeats the first resolution and this time removes it. Nothing
+ * mutates between the peek and the pull, so the second call cannot resolve a different item
+ * than the first — and because both are the same function, it cannot resolve it by different
+ * rules either.
+ */
 function grabberTake(state: WorldState, grabber: Grabber, reachTiles: number): ItemId | 0 {
-  const from = grabberSourceTile(grabber, reachTiles);
+  const sx = grabber.tileX - directionStepX(grabber.dir) * reachTiles;
+  const sy = grabber.tileY - directionStepY(grabber.dir) * reachTiles;
 
-  const belt = beltAt(state, from.tileX, from.tileY);
+  const next = grabberSource(state, grabber, sx, sy, false);
+  if (next === 0) return 0;
+  if (!grabberWouldAccept(state, grabber, next)) return 0;
+
+  return grabberSource(state, grabber, sx, sy, true);
+}
+
+/**
+ * What this arm would pick up next, without touching anything.
+ *
+ * The peek half of `grabberTake` above, exported for `view.ts`'s lamp and the door tests. It is
+ * the same call the pickup makes, so "what the lamp is complaining about" and "what the arm
+ * would have grabbed" are the same item by construction rather than by agreement.
+ */
+export function grabberNextPickup(
+  state: WorldState,
+  grabber: Grabber,
+  reachTiles: number,
+): ItemId | 0 {
+  const sx = grabber.tileX - directionStepX(grabber.dir) * reachTiles;
+  const sy = grabber.tileY - directionStepY(grabber.dir) * reachTiles;
+  return grabberSource(state, grabber, sx, sy, false);
+}
+
+/**
+ * **THE SOURCE SIDE OF AN ARM, ASKED OR WALKED THROUGH.** `commit === false` says what this arm
+ * would pick up from the tile at `(sx, sy)` right now and changes nothing; `true` says the same
+ * thing and takes it.
+ *
+ * One function rather than a peek and a take, because the filter rules here are subtle enough
+ * that a copy would drift within a month: which of a dock's two shelves an unfiltered arm reads,
+ * whether a Fryer's burnt chips count as chips, which end of a belt's queue the claw is over.
+ * Every one of those answers is written once, below, and both halves of item 085's look-ahead
+ * read it.
+ */
+function grabberSource(
+  state: WorldState,
+  grabber: Grabber,
+  sx: number,
+  sy: number,
+  commit: boolean,
+): ItemId | 0 {
+  const belt = beltAt(state, sx, sy);
   if (belt !== null) {
-    return beltTakeFromTile(belt, from.tileX, from.tileY, grabber.filter);
+    const at = beltItemIndexAt(belt, sx, sy, grabber.filter);
+    if (at < 0) return 0;
+    const item = belt.items[at]!.item;
+    if (commit) belt.items.splice(at, 1);
+    return item;
   }
 
-  const machine = machineAt(state, from.tileX, from.tileY);
-  if (machine !== null) {
-    // THE HARVESTER DOCK'S SHELF IS CARGO, NOT AN OUTPUT BUFFER (item 083): its spec honestly
-    // makes nothing, so `nextOutputItem` has no name for what the bot delivered — the identity
-    // lives on the cargo pair. Gated by KIND rather than by dock role, because the planter
-    // dock's seeds and the drone bay's parts are incoming supply an arm must never siphon;
-    // `takeDockShelf` is the one door out and enforces the same gate itself.
-    if (machine.kind === MachineKind.HarvesterDock) {
-      const shelf = machine.cargoItem;
-      if (shelf === 0) return 0;
-      // The filter judges what is actually on the shelf, exactly as it judges the next unit
-      // out of a Fryer: an arm filtered to fresh potatoes leaves a Day-Old shelf alone.
-      if (grabber.filter !== 0 && shelf !== grabber.filter) return 0;
-      const took = takeDockShelf(machine, 1);
-      return took === null ? 0 : took.item;
+  const machine = machineAt(state, sx, sy);
+  if (machine === null) return 0;
+
+  // THE HARVESTER DOCK'S SHELF IS CARGO, NOT AN OUTPUT BUFFER (item 083): its spec honestly
+  // makes nothing, so `nextOutputItem` has no name for what the bot delivered — the identity
+  // lives on the cargo pair. Gated by KIND rather than by dock role, because the planter
+  // dock's seeds and the drone bay's parts are incoming supply an arm must never siphon;
+  // `takeDockShelf` is the one door out and enforces the same gate itself.
+  if (machine.kind === MachineKind.HarvesterDock) {
+    const shelf = dockShelfFor(machine, grabber.filter);
+    if (shelf === DockShelf.Produce) {
+      if (!commit) return machine.cargoItem as ItemId;
+      return takeDockShelf(machine, 1)?.item ?? 0;
     }
-
-    const spec = machineSpec(machine.kind);
-    if (spec === null || spec.outputItem === null) return 0;
-
-    // The filter judges what is actually next out of the buffer, not what the machine makes
-    // on a good day: a Fryer hands over its burnt chips first, and an arm filtered to plain
-    // chips must leave those alone rather than quietly relabelling them.
-    const next = nextOutputItem(machine, spec);
-    if (next === null) return 0;
-    if (grabber.filter !== 0 && next !== grabber.filter) return 0;
-
-    return takeOneOutput(machine, spec) ?? 0;
+    if (shelf === DockShelf.Seed) {
+      if (!commit) return machine.seedShelfItem as ItemId;
+      return takeDockSeedShelf(machine, 1)?.item ?? 0;
+    }
+    return 0;
   }
 
-  return 0;
+  const spec = machineSpec(machine.kind);
+  if (spec === null || spec.outputItem === null) return 0;
+
+  // The filter judges what is actually next out of the buffer, not what the machine makes
+  // on a good day: a Fryer hands over its burnt chips first, and an arm filtered to plain
+  // chips must leave those alone rather than quietly relabelling them.
+  const next = nextOutputItem(machine, spec);
+  if (next === null) return 0;
+  if (grabber.filter !== 0 && next !== grabber.filter) return 0;
+
+  return commit ? (takeOneOutput(machine, spec) ?? 0) : next;
+}
+
+/**
+ * WHICH SHELF OF A HARVESTER DOCK THIS ARM IS READING (item 088's rule, item 085's peek).
+ *
+ * TWO SHELVES ON ONE MACHINE, AND THE FILTER IS WHAT PICKS BETWEEN THEM. A dock holds produce on
+ * one shelf and seeds on the other. An arm filtered to a seed takes seeds; an arm filtered to a
+ * crop takes produce; an UNFILTERED arm takes produce first and falls through to seeds only when
+ * the produce shelf is empty. That default is the one that keeps an existing belt doing exactly
+ * what it did before item 088 landed — a Mk1 arm someone ran from a dock to a Root Cellar last
+ * week must not start posting seeds into it — and the closed seed loop (dock seeds → belt →
+ * planter's hopper) is a FILTERED arm by construction, because a player building it names the
+ * seed.
+ *
+ * ITEM 085 IS WHY THIS IS A FUNCTION AND NOT A PAIR OF `if`s INSIDE THE PULL. The look-ahead has
+ * to resolve the shelf before it can ask the destination anything, and the trap it was warned
+ * about is precise: a seed-shelf arm pointed at a sell bin, which refuses seeds. The bin's
+ * predicate now answers "no" while the seed is still on the shelf, so the arm never grabs and
+ * never jams — but only because the peek and the pull agree about *which shelf that arm reads*,
+ * and they agree because they both call this.
+ */
+const DockShelf = { None: 0, Produce: 1, Seed: 2 } as const;
+type DockShelf = (typeof DockShelf)[keyof typeof DockShelf];
+
+function dockShelfFor(dock: Machine, filter: number): DockShelf {
+  // The filter judges what is actually on the shelf, exactly as it judges the next unit out of
+  // a Fryer: an arm filtered to fresh potatoes leaves a Day-Old shelf alone.
+  const produce = dock.cargoItem;
+  if (produce !== 0 && dock.cargoCount > 0 && (filter === 0 || produce === filter)) {
+    return DockShelf.Produce;
+  }
+  const seeds = dock.seedShelfItem;
+  if (seeds !== 0 && dock.seedShelfCount > 0 && (filter === 0 || seeds === filter)) {
+    return DockShelf.Seed;
+  }
+  return DockShelf.None;
+}
+
+/**
+ * Would this arm's destination take that item right now? The look-ahead's second question.
+ *
+ * Exported for `view.ts`, which needs it to tell a red lamp from an amber one, and for the tests
+ * that pin every door's peek against its accept.
+ */
+export function grabberWouldAccept(state: WorldState, grabber: Grabber, item: ItemId): boolean {
+  return grabberDeliver(state, grabber, item, false);
 }
 
 function grabberPlace(state: WorldState, grabber: Grabber): boolean {
+  return grabberDeliver(state, grabber, grabber.held as ItemId, true);
+}
+
+/**
+ * **THE DESTINATION SIDE OF AN ARM, ASKED OR WALKED THROUGH.** `commit === false` asks whether
+ * the tile in front would take `item` and changes nothing; `true` asks and puts it there.
+ *
+ * ONE BRANCH TABLE FOR BOTH, which is the whole safety property: a look-ahead that picked the
+ * depot branch while the delivery a tick later picked the recipe-hopper branch would hand an
+ * arm exactly the doomed grab this item forbids. Each branch is a pair — a pure `canAccept`
+ * predicate and a mutating accept that calls that same predicate first — so the `commit` flag
+ * chooses between two spellings of one rule rather than between two rules.
+ */
+function grabberDeliver(
+  state: WorldState,
+  grabber: Grabber,
+  item: ItemId | 0,
+  commit: boolean,
+): boolean {
   const spec = grabberSpec(grabber.tier);
   if (spec === null) return false;
-  const to = grabberDestTile(grabber, spec.reachTiles);
+  if (item === 0) return false;
 
-  const belt = beltAt(state, to.tileX, to.tileY);
+  const tx = grabber.tileX + directionStepX(grabber.dir) * spec.reachTiles;
+  const ty = grabber.tileY + directionStepY(grabber.dir) * spec.reachTiles;
+
+  const belt = beltAt(state, tx, ty);
   if (belt !== null) {
-    const index = beltIndexOfTile(belt, to.tileX, to.tileY);
+    const index = beltIndexOfTile(belt, tx, ty);
     if (index < 0) return false;
     // The middle of the tile, so an arm feeding a belt mid-run leaves room on both sides.
-    return beltInsert(belt, index * SUBTILE + divFloor(SUBTILE, 2), grabber.held as ItemId);
+    const dist = index * SUBTILE + divFloor(SUBTILE, 2);
+    return commit ? beltInsert(belt, dist, item) : beltCanInsert(belt, dist);
   }
 
-  const machine = machineAt(state, to.tileX, to.tileY);
-  if (machine !== null) {
-    const machineSpecFor = machineSpec(machine.kind);
-    if (machineSpecFor === null) return false;
-    // A DEPOT HAS NO RECIPE, SO IT NEEDS ITS OWN DOOR. Every other destination in this function
-    // is a recipe line, and a depot's contents are decided by the routes the player signed
-    // rather than by a spec — so the one branch here hands off to `commerce.ts` rather than
-    // teaching this file what a contract is. It refuses when no route on that depot names the
-    // item, or when the floor is full, and the arm then stands there holding it: the same
-    // "look downstream" stall as a full hopper, saying the same thing about the same mistake.
-    if (machineSpecFor.role === MachineRole.TruckDepot) {
-      return depotAccept(state, machine, grabber.held as ItemId);
-    }
-    // AN AGRI-BOT DOCK HAS NO RECIPE EITHER, and its door is the one that makes the Hands-Free
-    // board adjudicable. A planter's seed hopper can be filled by hand or by belt; §6's taxonomy
-    // makes the hand path a `hopperRefill` touch and the belt path free, so the two are different
-    // functions rather than one function with a flag — and this is the free one. It refuses a seed
-    // the dock's zone did not ask for and a hopper that is full, and the arm then stands there
-    // holding it: the same "look downstream" stall a full Fryer hopper gives.
-    if (machineSpecFor.role === MachineRole.BotDock) {
-      // One door for every dock's hopper: seeds for a planter, drone parts for a bay. The
-      // routing lives in `bots.ts`, so this file keeps knowing one fact about docks.
-      return dockAcceptDelivery(state, machine, grabber.held);
-    }
-    // An arm puts what it is holding into the line of the recipe that wants it, and stands there
-    // holding it if no line does. That is the same "look downstream" stall a blocked arm has
-    // always had — a Combo Packer with a full chip hopper and an empty soda hopper takes the
-    // soda and refuses the chips, which is the machine telling the player which belt is behind.
-    for (let i = 0; i < machineSpecFor.inputs.length; i++) {
-      if (machineSpecFor.inputs[i]!.item !== grabber.held) continue;
-      if ((machine.inputCounts[i] ?? 0) >= effectiveInputCapacity(machineSpecFor, machine)) {
-        return false;
-      }
-      machine.inputCounts[i] = (machine.inputCounts[i] ?? 0) + 1;
-      return true;
-    }
-    return false;
-  }
+  const machine = machineAt(state, tx, ty);
+  if (machine === null) return false;
 
-  return false;
+  const machineSpecFor = machineSpec(machine.kind);
+  if (machineSpecFor === null) return false;
+
+  // A DEPOT HAS NO RECIPE, SO IT NEEDS ITS OWN DOOR. Every other destination in this function
+  // is a recipe line, and a depot's contents are decided by the routes the player signed
+  // rather than by a spec — so the one branch here hands off to `commerce.ts` rather than
+  // teaching this file what a contract is. It refuses when no route on that depot names the
+  // item, or when the floor is full; after item 085 an arm reads that refusal before it grabs,
+  // so a mis-aimed belt now leaves its goods on the belt instead of in a frozen claw.
+  if (machineSpecFor.role === MachineRole.TruckDepot) {
+    return commit ? depotAccept(state, machine, item) : depotCanAccept(state, machine, item);
+  }
+  // THE SELL BIN SELLS ON ARRIVAL (item 087). Gated by KIND rather than by `MachineRole.Inert`,
+  // on item 083's precedent: "inert" means "has no work cycle", which is a statement about the
+  // tick loop and not a promise about who buys things — the day a second inert machine exists
+  // it must not start paying the player. The bin is the thing that sells, so the bin is what
+  // this asks about.
+  //
+  // `sellBinAccept` in `commerce.ts` is the door, and it books through `sellAtBin`, which is
+  // the same money-and-ledger the hand's `SellItem` walks through. No touch is counted: a belt
+  // sale is the hands-free path by construction. Its predicate refuses an unsellable exactly as
+  // the bin refuses one from hands — and now refuses it a swing earlier, so the arm that used to
+  // stand there holding a seed forever never picks the seed up.
+  if (machine.kind === MachineKind.SellBin) {
+    return commit ? sellBinAccept(state, item) : sellBinCanAccept(item);
+  }
+  // AN AGRI-BOT DOCK HAS NO RECIPE EITHER, and its door is the one that makes the Hands-Free
+  // board adjudicable. A planter's seed hopper can be filled by hand or by belt; §6's taxonomy
+  // makes the hand path a `hopperRefill` touch and the belt path free, so the two are different
+  // functions rather than one function with a flag — and this is the free one. It refuses a seed
+  // the dock's zone did not ask for and a hopper that is full.
+  if (machineSpecFor.role === MachineRole.BotDock) {
+    // One door for every dock's hopper: seeds for a planter, drone parts for a bay. The
+    // routing lives in `bots.ts`, so this file keeps knowing one fact about docks.
+    return commit
+      ? dockAcceptDelivery(state, machine, item)
+      : dockCanAcceptDelivery(state, machine, item);
+  }
+  // An arm puts what it is holding into the line of the recipe that wants it. A Combo Packer
+  // with a full chip hopper and an empty soda hopper takes the soda and refuses the chips —
+  // which, since item 085, means an arm feeding it chips does not pick chips up at all, and the
+  // belt behind backs up where the player can see it.
+  const line = hopperLineFor(machineSpecFor, machine, item);
+  if (line < 0) return false;
+  if (!commit) return true;
+  machine.inputCounts[line] = (machine.inputCounts[line] ?? 0) + 1;
+  return true;
+}
+
+/**
+ * **THE RECIPE HOPPER'S ACCEPT-DOOR PREDICATE** (item 085): the input line that would take one
+ * more of this item right now, or -1 when none would.
+ *
+ * The line index rather than a boolean, so the accept above is this plus one increment and there
+ * is no second search to disagree with the first. Note it is deliberately not shared with the
+ * hand's `LoadMachine` in `tick.ts`: that verb moves a *stack* out of the player's inventory and
+ * has its own arithmetic for how much fits, while this one always asks about exactly one unit
+ * off a claw. Same capacity function, different question.
+ */
+function hopperLineFor(spec: MachineSpec, machine: Machine, item: ItemId): number {
+  const capacity = effectiveInputCapacity(spec, machine);
+  for (let i = 0; i < spec.inputs.length; i++) {
+    if (spec.inputs[i]!.item !== item) continue;
+    if ((machine.inputCounts[i] ?? 0) >= capacity) return -1;
+    return i;
+  }
+  return -1;
 }

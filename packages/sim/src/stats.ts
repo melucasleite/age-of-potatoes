@@ -307,9 +307,14 @@ export function recordEarnings(stats: WorldStats, amountCents: number): void {
 
 /**
  * Credit one sale: money already moved, this is the ledger. THE ONLY WRITER OF `salesByItem`,
- * and it also owns `recordEarnings` and `itemsSold` for its callers — `applySellItem` and
- * `payForDelivery` both route here, so the per-item rows, the gross, and the unit count can
- * never move separately (item 062: incremented at the single point sales credit money).
+ * and it also owns `recordEarnings` and `itemsSold` for its callers — `sellAtBin` and
+ * `payForDelivery`, both in `commerce.ts`, are the only two functions that reach it, so the
+ * per-item rows, the gross, and the unit count can never move separately (item 062:
+ * incremented at the single point sales credit money).
+ *
+ * `sellAtBin` is the BIN's door and serves two verbs: the hand's `SellItem` and, since item
+ * 087, a grabber arm delivering into the bin. They differ only in their preconditions and in
+ * whether a manual touch is counted — never in what gets written here.
  */
 export function recordSale(
   stats: WorldStats,

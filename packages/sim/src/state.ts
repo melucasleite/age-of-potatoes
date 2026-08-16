@@ -687,6 +687,30 @@ export interface Machine {
   runTicksRemaining: number;
 
   /**
+   * THE HARVESTER DOCK'S SEED SHELF (item 088): a second, dedicated cargo pair beside the
+   * produce shelf `cargoItem`/`cargoCount` that item 083 built.
+   *
+   * A SECOND PAIR RATHER THAN A SHARED ONE, and that is the whole design. The produce shelf
+   * holds one product at a time on purpose — a bot arriving with chili while it still holds
+   * potatoes stalls, visibly, which is the diagnostic. Seeds coming home on the same trip as
+   * the potatoes they came from would collide with that rule on EVERY trip, and the shelf
+   * would spend its life refusing its own bot. So the seed rides in its own slot, where a
+   * belt can take it somewhere useful — harvester seeds to a planter's hopper is the closed
+   * loop this game is about, built by the player out of belts rather than routed by magic.
+   *
+   * Zero/0 on every machine that is not a harvester dock, exactly like the cart fields above,
+   * and for the same reason: a dock is placed, moved, boxed, invoiced and reach-checked by the
+   * code that does all of that for a Fryer.
+   *
+   * Its cap is `HARVESTER_SEED_SHELF_CAPACITY` — armful scale, not warehouse scale. Full means
+   * the bot stands there holding its seeds (nothing vanishes, plan §4), which is the same
+   * "look downstream" stall a full produce shelf gives and says the same thing about the same
+   * mistake: you built a harvester and no way for what it brings home to leave.
+   */
+  seedShelfItem: ItemId | 0;
+  seedShelfCount: number;
+
+  /**
    * Consecutive ticks this machine has ADVANCED WORK with nobody's hands on it.
    *
    * The demonstrated half of the Corporate Charter (plan §3: *"one line untouched for 10 in-game
@@ -849,6 +873,22 @@ export interface Bot {
   /** What a harvester is carrying. One product at a time, like a cart. */
   carryItem: ItemId | 0;
   carryCount: number;
+  /**
+   * THE SEED POCKET (item 088), and it is a POCKET rather than a second pair of arms.
+   *
+   * A hand harvest of a one-shot crop returns a seed — plan §4's anti-softlock floor, the rule
+   * that a world can always plant. The bot went through the same `takeHarvest` but dropped the
+   * seed on the ground, which made automation quietly cost a seed a tile: a parity bug, not a
+   * balance choice.
+   *
+   * "ONE PRODUCT, ONE PAIR OF ARMS" IS ABOUT PRODUCE AND STAYS LAW. A seed is not produce — it
+   * is not sellable, not an output, and not what the bot was sent for — so pocketing one
+   * alongside an armful of potatoes is not the mixed-cargo case that rule exists to prevent.
+   * The pocket holds ONE seed type at a time for the same reason the arms hold one product:
+   * a bot working a zone works one crop, and a second type means the round is already over.
+   */
+  seedItem: ItemId | 0;
+  seedCount: number;
   /** 0..CONDITION_MAX. Wears per completed operation and never per tick (plan §4, by name). */
   condition: number;
   /** Completed operations, lifetime. */
@@ -1415,6 +1455,8 @@ export function spawnMachine(
     cargoItem: 0,
     cargoCount: 0,
     runTicksRemaining: 0,
+    seedShelfItem: 0,
+    seedShelfCount: 0,
     untouchedTicks: 0,
     junctionInCursor: 0,
     junctionOutCursor: 0,
@@ -1626,6 +1668,8 @@ export function spawnBot(state: WorldState, kind: BotKind, dock: Machine): Bot {
     workTicks: 0,
     carryItem: 0,
     carryCount: 0,
+    seedItem: 0,
+    seedCount: 0,
     condition: CONDITION_MAX,
     opCount: 0,
   };
@@ -2177,6 +2221,33 @@ export function takeDockShelf(
   return { item, taken };
 }
 
+/**
+ * Take from the harvester dock's SEED shelf. The one door out of it, for every taker.
+ *
+ * The produce shelf's twin (`takeDockShelf` above), gated the same way and for the same reason:
+ * `MachineKind.HarvesterDock` is checked INSIDE the door rather than at each call site, so a
+ * planter dock's seed hopper — which is incoming supply the bot is meant to plant — can never
+ * be siphoned by an arm that meant to empty a harvester. The two docks both hold seeds in a
+ * cargo pair, and the gate is the only thing that tells them apart.
+ *
+ * **FOR ITEM 085'S AGENT:** this is a second grabber door on the same machine, so the foresight
+ * peek must ask which shelf an arm is aimed at, not merely "is this a harvester dock". The
+ * filter is what disambiguates them today — see `grabberTake` in `belts.ts`.
+ */
+export function takeDockSeedShelf(
+  dock: Machine,
+  count: number,
+): { item: ItemId; taken: number } | null {
+  if (dock.kind !== MachineKind.HarvesterDock) return null;
+  if (dock.seedShelfItem === 0 || dock.seedShelfCount <= 0 || count <= 0) return null;
+
+  const item = dock.seedShelfItem;
+  const taken = count < dock.seedShelfCount ? count : dock.seedShelfCount;
+  dock.seedShelfCount -= taken;
+  if (dock.seedShelfCount === 0) dock.seedShelfItem = 0;
+  return { item, taken };
+}
+
 export function machineCoversTile(machine: Machine, tileX: number, tileY: number): boolean {
   const spec = machineSpec(machine.kind);
   if (spec === null) return false;
@@ -2262,26 +2333,49 @@ export function beltAt(state: WorldState, tileX: number, tileY: number): Belt | 
 }
 
 /**
- * Insert an item at `dist`, keeping the list sorted and the spacing legal.
+ * WHERE AN ITEM AT `dist` WOULD GO, or -1 when the belt will not take it there.
  *
- * Returns false and changes nothing when the slot is occupied — which is what a backed-up
- * belt looks like from the outside, and the reason a grabber holding an item is a jam the
- * player can see rather than an item that disappeared.
+ * **THE BELT'S ACCEPT-DOOR PREDICATE** (item 085). A belt has no opinion about *what* is
+ * offered — spacing is geometry, and a bag of chips takes exactly as much room as a potato —
+ * so the whole question is "is that slot free", and this is the one function that answers it.
+ * `beltInsert` below is this plus a splice, and `beltCanInsert` is this plus a comparison, so
+ * a grabber's look-ahead and its delivery can never disagree about whether the belt had room:
+ * there is one loop, not two that started identical.
+ *
+ * Allocation-free on purpose — the look-ahead runs per arm per swing (item 085's constraint).
  */
-export function beltInsert(belt: Belt, dist: number, item: ItemId): boolean {
-  if (dist < 0 || dist > beltEndDist(belt)) return false;
+export function beltInsertIndex(belt: Belt, dist: number): number {
+  if (dist < 0 || dist > beltEndDist(belt)) return -1;
 
   let insertAt = belt.items.length;
   for (let i = 0; i < belt.items.length; i++) {
     const existing = belt.items[i]!;
     const gap = existing.dist - dist;
     const spacing = gap < 0 ? -gap : gap;
-    if (spacing < BELT_ITEM_SPACING_SUBTILES) return false;
+    if (spacing < BELT_ITEM_SPACING_SUBTILES) return -1;
     if (existing.dist > dist) {
       insertAt = i;
       break;
     }
   }
+  return insertAt;
+}
+
+/** True when `beltInsert` at this distance would succeed. Asks, changes nothing. */
+export function beltCanInsert(belt: Belt, dist: number): boolean {
+  return beltInsertIndex(belt, dist) >= 0;
+}
+
+/**
+ * Insert an item at `dist`, keeping the list sorted and the spacing legal.
+ *
+ * Returns false and changes nothing when the slot is occupied — which is what a backed-up
+ * belt looks like from the outside, and the reason a belt that cannot take one more thing
+ * backs up where the player can see it rather than swallowing goods.
+ */
+export function beltInsert(belt: Belt, dist: number, item: ItemId): boolean {
+  const insertAt = beltInsertIndex(belt, dist);
+  if (insertAt < 0) return false;
 
   belt.items.splice(insertAt, 0, { dist, item });
   return true;

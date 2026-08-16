@@ -546,11 +546,15 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
 
     // The inline golden. Regenerate deliberately or not at all — a move here is a real
     // behaviour change in the maintenance loop and must be enumerated like any golden.
+    // ff316263 -> b26e8c41 in wave 12 (item 088): the digest gained the bot's seed pocket and
+    // every machine's seed shelf, all four zero here — this world's only robot is a REPAIR
+    // drone, which harvests nothing and can therefore pocket nothing. Every story assertion
+    // above is untouched, which is the claim: four new zeroes, no new behaviour.
     // fbdf6072 -> ff316263 in wave 11 (items 073 + 075): the can starts at 20 charges
     // instead of 8 (`player.canCharges` is hashed) and the digest gained
     // `stats.cheatsUsed`. Every story assertion above is untouched.
     // cba8a24b -> fbdf6072 with format 13 (item 066): the digest gained the field tiles'
     // coordinates and the soil-memory ledger. Every story assertion above held unchanged.
-    expect(hashState(state)).toBe('ff316263');
+    expect(hashState(state)).toBe('b26e8c41');
   });
 });

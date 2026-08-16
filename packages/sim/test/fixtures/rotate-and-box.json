@@ -3,7 +3,7 @@
   "description": "Rotation and boxing, on top of a full run to the Upgrade Bench. A grabber is placed facing north and turned three times round the compass; a Chip Kitchen is given two Speed levels and a Capacity level, jams, is whacked and repaired, and is then BOXED by errand with forty bags and six potatoes still in it — all of which come back to the player's hands — and put down again somewhere else for nothing, same dials, same invoice, money untouched. A second, plain kitchen is boxed at the machine rather than walked to, and scrapped for exactly 40% of its $100 invoice. Ends holding two boxes of one kind at two different invoices, so the canonical least-invested-first order inside a slot is in the digest, beside a Washer bought fresh and left part-way through an operation.",
   "seed": 24680,
   "ticks": 272082,
-  "expectedHash": "b9b89c7e",
+  "expectedHash": "f38c63c8",
   "commands": [
     {
       "tick": 0,

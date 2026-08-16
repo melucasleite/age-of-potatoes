@@ -53,6 +53,7 @@ import {
   machineSpec,
   wiltStageForAge,
 } from './data';
+import { grabberNextPickup, grabberWouldAccept } from './belts';
 import {
   cartRunTicks,
   depotRunTicks,
@@ -85,6 +86,7 @@ import {
   effectiveInputCapacity,
   effectiveOutputCapacity,
   effectivePortCapacityMl,
+  effectiveTankCapacityMl,
 } from './upgrades';
 import { SUBTILE, beatIndex, clampInt, divFloor, permille } from './units';
 
@@ -235,6 +237,24 @@ export interface MachineView {
   ticksToEmpty: number;
   /** 1 when this machine asked its network for water and got less. THE AMBER DROPLET. */
   throttled: number;
+  /**
+   * A WATERING HEAD'S TANK IN CHARGES, AND IN CHARGES ONLY (item 086).
+   *
+   * The barrel is filled by hand and spends its water one pour at a time, so millilitres are
+   * the wrong unit to read it in — "6 of 10" is a number a player can plan a walk around,
+   * "9,000 ml" is not. A CHARGE IS `SPRINKLER_POUR_ML`, and both of these are DERIVED from
+   * `machine.tankMl` on the tick they are read: item 028's one-ledger law says millilitres
+   * are counted where they leave the source, and a stored charge counter is exactly the
+   * second number that would drift from the ledger by one somewhere and never be believed
+   * again. Nothing in `WorldState` knows the word "charge".
+   *
+   * Zero on everything that is not a watering head — a Tank holding a million millilitres
+   * has a capacity, not a supply of pours, and reporting it as 666 charges would be noise.
+   * `tankChargesMax` follows the Capacity dial, so an upgraded barrel says what it can
+   * actually hold rather than the spec's ten.
+   */
+  tankCharges: number;
+  tankChargesMax: number;
   /** Chebyshev radius this machine waters, for the placement coverage overlay. */
   coverageRadius: number;
   /** 1 when this machine waters only tiles that are actually dry. */
@@ -252,6 +272,18 @@ export interface MachineView {
    */
   cargoItem: number;
   cargoCount: number;
+
+  /**
+   * The harvester dock's SEED shelf (item 088), beside the produce shelf above. Zero/0 on every
+   * other machine — including the planter dock, whose seeds are `cargoItem`/`cargoCount`
+   * incoming supply rather than a shelf anything may take from.
+   *
+   * Published for the reason the produce shelf is: a shelf nobody can read is not a shelf. The
+   * dock's card should say "6 seeds" beside "12 potatoes", because a player who cannot see the
+   * seeds piling up cannot see why their bot eventually stops.
+   */
+  seedShelfItem: number;
+  seedShelfCount: number;
 
   /**
    * DIAGNOSTICS (item 039): cents of input value this machine wasted over the trailing
@@ -638,6 +670,9 @@ export interface BotView {
   /** What it is carrying and how much, or 0. */
   carryItem: number;
   carryCount: number;
+  /** The seed pocket (item 088): what a harvester picked up alongside its armful, and how many. */
+  seedItem: number;
+  seedCount: number;
   /** 0..CONDITION_MAX, and the permille of it the HUD draws a bar from. */
   condition: number;
   conditionPermille: number;
@@ -1053,12 +1088,16 @@ function projectMachines(state: WorldState, out: WorldView): void {
         flowMlPerMinute: 0,
         ticksToEmpty: -1,
         throttled: 0,
+        tankCharges: 0,
+        tankChargesMax: 0,
         coverageRadius: 0,
         moistureSensing: 0,
         wateredCount: 0,
         skippedCount: 0,
         cargoItem: 0,
         cargoCount: 0,
+        seedShelfItem: 0,
+        seedShelfCount: 0,
         bleedCentsLast60s: 0,
         recipe: [],
         ports: [],
@@ -1104,12 +1143,23 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.ticksToEmpty =
       spec !== null && spec.role === MachineRole.Tank ? tankTicksToEmpty(machine) : -1;
     mv.throttled = machine.throttled ? 1 : 0;
+    // Charges, derived here and stored nowhere. Gated on the watering roles rather than on
+    // "has a tank" so that a Tank's million millilitres are never reported as a pour count.
+    const pours =
+      spec !== null &&
+      (spec.role === MachineRole.Sprinkler || spec.role === MachineRole.PipedSprinkler);
+    mv.tankCharges = pours ? divFloor(machine.tankMl, SPRINKLER_POUR_ML) : 0;
+    mv.tankChargesMax = pours
+      ? divFloor(effectiveTankCapacityMl(spec, machine), SPRINKLER_POUR_ML)
+      : 0;
     mv.coverageRadius = spec === null ? 0 : spec.coverageRadiusTiles;
     mv.moistureSensing = spec !== null && spec.moistureSensing ? 1 : 0;
     mv.wateredCount = machine.wateredCount;
     mv.skippedCount = machine.skippedCount;
     mv.cargoItem = machine.cargoItem;
     mv.cargoCount = machine.cargoCount;
+    mv.seedShelfItem = machine.seedShelfItem;
+    mv.seedShelfCount = machine.seedShelfCount;
     mv.bleedCentsLast60s = bleedCentsWithinWindow(machine, state.tick);
     projectRecipe(machine, spec, mv);
     projectPorts(machine, spec, mv);
@@ -1382,23 +1432,41 @@ function beltThroughputSubtilesPer100Ticks(belt: WorldState['belts'][number]): n
 }
 
 /**
- * An arm's lamp, read off the two fields that already say everything (plan §5's grammar).
+ * An arm's lamp (plan §5's grammar), and after item 085 the whole of its diagnostic.
  *
- * A GRABBER'S WHOLE STATE MACHINE IS `held` AND `cooldown`, so this needs no new field and no
- * re-simulation: mid-swing means it moved something and is green; standing empty means it reached
- * back and found nothing, which is amber, look upstream; standing full means it reached forward
- * and was refused, which is red, look downstream. `advanceGrabber` leaves the cooldown at zero on
- * exactly the ticks it failed, which is why the two failures are distinguishable at all.
+ * Mid-swing means it moved something and is green. Standing empty-handed splits two ways, and
+ * THE SPLIT IS THE POINT: an arm that reached back and found nothing is amber, look upstream; an
+ * arm whose next pickup exists but would be REFUSED by what it is pointed at is red, look
+ * downstream. Standing with an item in its hand is red too — the mid-swing stall item 085 left
+ * standing, where the destination filled up after the claw closed.
  *
- * The stuck arm holding an item was always visible in the world — item 024 called that the
- * readable version of "look downstream" — but "visible if you know what you are looking at" is
- * not the same as a lamp, and a starved arm and a blocked one otherwise look identical from ten
- * tiles up. `render/grabbers.ts` draws it as a fourth sprite riding the pedestal's top-right
- * corner, through the same `lamps.ts` vocabulary every machine uses.
+ * **THIS IS WHERE THE HOSTAGE WENT.** Until item 085 an arm announced a bad destination by
+ * holding the goods forever ("the readable version of look downstream", as item 024 put it);
+ * the owner overruled that, so the arm leaves the goods alone — and the lamp has to carry the
+ * whole message now, or a mis-aimed belt would look exactly like an idle one. Red still means
+ * look downstream and amber still means look upstream. Nothing about the grammar changed; only
+ * the hostage did.
+ *
+ * IT COSTS ONE LOOK-AHEAD PER ARM PER PROJECTION, and no new field on `Grabber` — a stored
+ * "blocked" flag would be sim state, which means the hash, the save format, and a migration, for
+ * an answer that can be recomputed exactly. `grabberWouldAccept` allocates nothing.
+ *
+ * `render/grabbers.ts` draws it as a fourth sprite riding the pedestal's top-right corner,
+ * through the same `lamps.ts` vocabulary every machine uses.
  */
-function grabberLamp(grabber: Grabber): LampState {
+function grabberLamp(state: WorldState, grabber: Grabber): LampState {
   if (grabber.cooldown > 0) return LampState.Running;
-  return grabber.held === 0 ? LampState.Starved : LampState.Blocked;
+  if (grabber.held !== 0) return LampState.Blocked;
+
+  const spec = grabberSpec(grabber.tier);
+  if (spec === null) return LampState.Starved;
+
+  // What it would pick up next, and whether it may. `advanceGrabbers` has already run this
+  // tick and left the cooldown at zero, so an idle empty arm is one that was refused at one end
+  // or the other — and asking which is the difference between the two lamps.
+  const next = grabberNextPickup(state, grabber, spec.reachTiles);
+  if (next === 0) return LampState.Starved;
+  return grabberWouldAccept(state, grabber, next) ? LampState.Starved : LampState.Blocked;
 }
 
 function projectGrabbers(state: WorldState, out: WorldView): void {
@@ -1437,7 +1505,7 @@ function projectGrabbers(state: WorldState, out: WorldView): void {
         ? 0
         : permille(spec.swingTicks - grabber.cooldown, spec.swingTicks);
     gv.opCount = grabber.opCount;
-    gv.lamp = grabberLamp(grabber);
+    gv.lamp = grabberLamp(state, grabber);
   }
 
   out.grabbers.length = count;
@@ -1660,6 +1728,8 @@ function projectBots(state: WorldState, out: WorldView): void {
         phase: 0,
         carryItem: 0,
         carryCount: 0,
+        seedItem: 0,
+        seedCount: 0,
         condition: 0,
         conditionPermille: 0,
         opCount: 0,
@@ -1675,6 +1745,8 @@ function projectBots(state: WorldState, out: WorldView): void {
     bv.phase = bot.phase;
     bv.carryItem = bot.carryItem;
     bv.carryCount = bot.carryCount;
+    bv.seedItem = bot.seedItem;
+    bv.seedCount = bot.seedCount;
     bv.condition = bot.condition;
     bv.conditionPermille = permille(bot.condition, CONDITION_MAX);
     bv.opCount = bot.opCount;

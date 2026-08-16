@@ -3,7 +3,7 @@
   "description": "A Chip Kitchen run into the ground and then rescued. Hand-farms the top field row on the 8-pour can, buys the kitchen, and feeds it batch after batch until wear (5 per operation) drops it below the effect threshold — at which point it runs at half speed, jams every tenth operation (4 whacked out), and spoils an input on the deterministic cadence (8 wasted). Every one of those is a consequence of work done, never a roll. Ends with one $8 repair kit bought at the bin and spent standing by the kitchen, restoring the cell to full in a single use, and a short tail of the restored machine back at work. Re-recorded 2026-08-14 after the 8-pour-can amendment zombified the original recording; see scripts/record-maintenance.ts.",
   "seed": 404040,
   "ticks": 100090,
-  "expectedHash": "4db7581f",
+  "expectedHash": "7cb209cf",
   "commands": [
     {
       "tick": 0,
