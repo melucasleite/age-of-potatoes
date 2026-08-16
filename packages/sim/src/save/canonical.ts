@@ -1054,6 +1054,12 @@ const MACHINE_KINDS: readonly number[] = [
   MachineKind.PlanterDock,
   MachineKind.MaintenanceStation,
   MachineKind.DroneBay,
+  // RETIRED ([[090]]) AND STILL ALLOWED, which is exactly the case this list was hand-written
+  // for — see the comment above `ITEM_IDS`: "deriving the guard from today's table would mean a
+  // kind retired in 2029 silently stops being loadable." That day came early. A format-17 world
+  // cannot contain a Parts Bench (the migration boxes every one), and a hand-edited payload that
+  // names one loads into a machine whose spec is still there — inert, unbuildable, and boxable.
+  // Refusing it instead would turn a curiosity into a save that will not open.
   MachineKind.PartsBench,
 ];
 /** `None` is not a legal liquid for a pipe: a pipe that carries nothing is not a pipe. */

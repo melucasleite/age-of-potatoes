@@ -45,7 +45,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 16;
+export const CURRENT_FORMAT_VERSION = 17;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -1105,6 +1105,184 @@ const migrateFormat15To16: SaveMigration = (payload) => {
   return { ...p, machines, bots };
 };
 
+// --- format 16 → 17: the parts economy retires (item 090) ------------------------------
+//
+// Frozen ids, because a migration must describe the world it is reading rather than the table
+// this build happens to ship. Every one of these was true when format 16 was current and is
+// what a format-16 payload means, whatever `data.ts` later calls them.
+const FORMAT_17_PARTS_BENCH_KIND = 35;
+const FORMAT_17_DRONE_BAY_KIND = 34;
+const FORMAT_17_BOXED_PARTS_BENCH = 69;
+const FORMAT_17_DRONE_PART = 66;
+/** The Parts Bench recipe, in line order: line 0 was a Bottle, line 1 a Kola Powder. */
+const FORMAT_17_BENCH_RECIPE: readonly number[] = [23, 22];
+
+interface Format17Box {
+  speedLevel: number;
+  efficiencyLevel: number;
+  capacityLevel: number;
+  condition: number;
+  investedCents: number;
+}
+
+function format17Int(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) ? value : 0;
+}
+
+/**
+ * The slot for an item, created in canonical position when it is not there yet.
+ *
+ * PLAIN FUNCTIONS OVER THE RAW PAYLOAD, NOT A CALL TO `addItem`/`addBoxedMachine`, and the
+ * duplication is the point: those two read `ItemSpec` for freshness and would stamp a spoil
+ * clock from *today's* table onto goods a format-16 world was holding. A migration that imports
+ * live sim code is a migration whose result changes when the game is rebalanced. Everything
+ * this step returns is shelf-stable — bottles, kola powder and drone parts have never had a
+ * freshness window — so `stacks` stays empty and the count alone is the truth.
+ */
+function format17Slot(slots: Record<string, unknown>[], item: number): Record<string, unknown> {
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i]!;
+    if (format17Int(slot['item']) === item) return slot;
+  }
+  // Sorted ascending by item id, which is the invariant the hash and the loader both rest on.
+  const created: Record<string, unknown> = { boxes: [], count: 0, item, stacks: [] };
+  let insertAt = slots.length;
+  for (let i = 0; i < slots.length; i++) {
+    if (format17Int(slots[i]!['item']) > item) {
+      insertAt = i;
+      break;
+    }
+  }
+  slots.splice(insertAt, 0, created);
+  return created;
+}
+
+function format17AddItem(slots: Record<string, unknown>[], item: number, count: number): void {
+  if (count <= 0) return;
+  const slot = format17Slot(slots, item);
+  slot['count'] = format17Int(slot['count']) + count;
+}
+
+/** Which of two boxes sorts first: `compareBoxes` in `state.ts`, restated in payload terms. */
+const FORMAT_17_BOX_ORDER: readonly (keyof Format17Box)[] = [
+  'investedCents',
+  'speedLevel',
+  'efficiencyLevel',
+  'capacityLevel',
+  'condition',
+];
+
+/** Put one box in the bag, least-invested-first — the order `peekBoxedMachine` promises. */
+function format17AddBox(slots: Record<string, unknown>[], item: number, box: Format17Box): void {
+  const slot = format17Slot(slots, item);
+  const boxes = Array.isArray(slot['boxes']) ? (slot['boxes'] as Record<string, unknown>[]) : [];
+  let insertAt = boxes.length;
+  for (let i = 0; i < boxes.length && insertAt === boxes.length; i++) {
+    const other = boxes[i]!;
+    for (let k = 0; k < FORMAT_17_BOX_ORDER.length; k++) {
+      const key = FORMAT_17_BOX_ORDER[k]!;
+      const mine = box[key];
+      const theirs = format17Int(other[key]);
+      if (mine === theirs) continue;
+      if (mine < theirs) insertAt = i;
+      break;
+    }
+  }
+  boxes.splice(insertAt, 0, { ...box });
+  slot['boxes'] = boxes;
+  slot['count'] = format17Int(slot['count']) + 1;
+}
+
+/**
+ * Format 16 → 17: **the parts economy retires, and hands everything back** (item 090).
+ *
+ * The rule changed above this step: repair drones fix machines for free. That leaves two piles
+ * of a returning player's property with no purpose and no owner — a Parts Bench standing on the
+ * lot making a part nothing consumes, and whatever parts are sitting on a Drone Bay's hopper
+ * shelf. **NEITHER IS DELETED.** Plan §4's floor does not have an exception for things the
+ * design changed its mind about, and a player who logs in to find an $800 machine simply gone
+ * has been robbed by a patch note.
+ *
+ * So this step is the DECONSTRUCT PATH, replayed on load, exactly as `applyDeconstructMachine`
+ * would have run it if the player had walked over and boxed the bench themselves:
+ *   * every bench's **output buffer** comes back as drone parts, and its **two recipe lines**
+ *     come back as the bottles and kola powder they were — the recipe is frozen above rather
+ *     than read from `machineSpec`, because a format-16 bench's line 1 is kola powder no matter
+ *     what a future table says line 1 is;
+ *   * every bench itself comes back as a **boxed Parts Bench** carrying its dials, its condition
+ *     and — the number that actually matters — its **invoice**, which is what decides the 40% a
+ *     scrapped box pays. A box credited at list would quietly rob an upgraded bench's owner;
+ *   * every **Drone Bay's parts** come off the shelf and into the bag, and the shelf is cleared
+ *     to the empty pair a bay has had since its door closed.
+ *
+ * The BAY ITSELF STAYS ON THE LOT with its drone, and that asymmetry is deliberate: the bench
+ * lost its reason to exist, while the bay is the machine this item exists to improve. A player
+ * who bought the capstone still owns the capstone; it simply stopped asking for anything.
+ *
+ * NOTHING ELSE IN THE PAYLOAD NAMES A BENCH, which is worth having checked rather than assumed:
+ * a `PlayerIntent` addresses a TILE and not a machine id, so a pending errand aimed at a bench's
+ * pad resolves the way one aimed at any machine that has been moved or boxed already resolves —
+ * the arrival finds nothing there and the errand is refused. A bench is a converter, so it never
+ * had a bot to orphan, it was never towed, and it never held a contract.
+ *
+ * `payload.version` is NOT rewritten, for the reason format 14 → 15 spells out: that field is
+ * hashed world state, and stamping the format number onto it would make a migrated world hash
+ * differently from the identical world built fresh.
+ */
+const migrateFormat16To17: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-16 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const inventory = rows(p, 'inventory').map((slot) => ({ ...slot }));
+
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    const machine = oldMachines[i]!;
+    const kind = format17Int(machine['kind']);
+
+    if (kind === FORMAT_17_DRONE_BAY_KIND) {
+      // A bay's cargo was only ever parts, but the check is on the item rather than on the kind
+      // — a hand-edited payload with something else on that shelf keeps whatever it named.
+      const cargoItem = format17Int(machine['cargoItem']);
+      const cargoCount = format17Int(machine['cargoCount']);
+      if (cargoItem !== 0 && cargoCount > 0) format17AddItem(inventory, cargoItem, cargoCount);
+      machines.push({ ...machine, cargoItem: 0, cargoCount: 0 });
+      continue;
+    }
+
+    if (kind !== FORMAT_17_PARTS_BENCH_KIND) {
+      machines.push({ ...machine });
+      continue;
+    }
+
+    format17AddItem(inventory, FORMAT_17_DRONE_PART, format17Int(machine['outputCount']));
+    const inputCounts = machine['inputCounts'];
+    if (Array.isArray(inputCounts)) {
+      for (let line = 0; line < FORMAT_17_BENCH_RECIPE.length; line++) {
+        format17AddItem(inventory, FORMAT_17_BENCH_RECIPE[line]!, format17Int(inputCounts[line]));
+      }
+    }
+    // A bench never had cargo — it is a converter, not a dock — but a payload that somehow
+    // carries some keeps it, on the same "its own identity wins" principle format 15 → 16 used.
+    const cargoItem = format17Int(machine['cargoItem']);
+    const cargoCount = format17Int(machine['cargoCount']);
+    if (cargoItem !== 0 && cargoCount > 0) format17AddItem(inventory, cargoItem, cargoCount);
+
+    format17AddBox(inventory, FORMAT_17_BOXED_PARTS_BENCH, {
+      speedLevel: format17Int(machine['speedLevel']),
+      efficiencyLevel: format17Int(machine['efficiencyLevel']),
+      capacityLevel: format17Int(machine['capacityLevel']),
+      condition: format17Int(machine['condition']),
+      investedCents: format17Int(machine['investedCents']),
+    });
+  }
+
+  return { ...p, inventory, machines };
+};
+
 /**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
@@ -1126,6 +1304,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   13: migrateFormat13To14,
   14: migrateFormat14To15,
   15: migrateFormat15To16,
+  16: migrateFormat16To17,
 };
 
 export interface MigrationOutcome {

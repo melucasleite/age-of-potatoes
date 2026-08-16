@@ -119,7 +119,9 @@ export const FERTILITY_PER_FERTILIZER = 1;
 /**
  * Plan §5 caps the recipe graph at ~50 items. We are at **35 items plus 5 liquids = 40 nodes**:
  * the original 26 (the soda line spent 6 item slots and 4 liquid slots), the crop roster's 8
- * (gold potato trio, two tree fruits, fertilizer, scythe, crate), and item 039's drone part.
+ * (gold potato trio, two tree fruits, fertilizer, scythe, crate), and item 039's drone part —
+ * which [[090]] left with no producer and no consumer, but which still occupies its node because
+ * a returning player's stock has to have a price to sell at.
  * Boxed machines are not graph nodes — nothing eats one, nothing makes one, no belt carries
  * one. Numeric values are permanent — they are in every save and on every belt.
  */
@@ -280,18 +282,19 @@ export const ItemId = {
   BoxedPlanterDock: 65,
 
   /**
-   * What a repair drone burns: one part per service, manufactured and belted to the bay.
+   * **AN ITEM THAT OUTLIVED ITS PURPOSE, KEPT SO IT CAN BE SOLD** (item 090).
    *
-   * **PLAN §4'S CAPSTONE CONSUMABLE, AND THE INVERSION IS THE POINT**: automation "saves your
-   * hands, not the bill", so this is deliberately dearer per machine serviced than the kit path
-   * it sits above — a kit is $8 for a whole 7×7 cell, a part is one machine's service. It is
-   * NEVER purchasable: the Parts Bench is the only source, which is what makes late-game
-   * maintenance a logistics problem rather than a bigger shopping trip. Sellable at list so an
-   * over-producer has an exit (§4's floor, same as Fertilizer).
+   * It was the capstone consumable: one part burned per drone service, manufactured at the
+   * Parts Bench from a Bottle and Kola Powder and belted to the bay. Repair drones now fix
+   * machines for free, so nothing consumes a drone part and nothing produces one — the bench is
+   * retired (`RETIRED_MACHINE_KINDS`) and the bay's hopper doors are gone in both spellings.
    *
-   * The recipe (see the Parts Bench spec) is a Bottle and Kola Powder — an existing store-bought
-   * consumable and an existing manufactured intermediate, no new crops, no new raw materials
-   * (item 039 instruction 1). Yes, the propellant is cola powder. It is that kind of factory.
+   * **IT STAYS `sellable` AT $4, AND THAT IS THE WHOLE REASON THE ID IS STILL HERE.** A player
+   * who ran the parts line well may be holding a warehouse of these, and plan §4's floor says
+   * nothing a player owns is deleted — so the stock keeps a price and an exit at the bin, and
+   * the 16 → 17 migration hands back every part that was sitting in a bay's hopper to be sold
+   * with the rest. `purchasable: false` now means what it says rather than describing a
+   * logistics puzzle: there is no source at all.
    */
   DronePart: 66,
 
@@ -426,14 +429,20 @@ export const MachineKind = {
   // The Maintenance Station is an arm that does what your hand did: it spends REAL repair kits
   // from a belt-fed hopper on the same 7×7 cell a hand-thrown kit services, at the same cadence
   // a player would (when the wrench lamp is due), and it starves honestly — no kits on the belt,
-  // no service, ever. The Drone Bay is a `BotDock` in everything but cargo: its bot is a repair
-  // drone that flies to whichever machine on the lot wants a wrench and burns one manufactured
-  // part per service. The Parts Bench is the ordinary converter that makes those parts.
+  // no service, ever. That rung is now the ladder's whole argument about cost, because the rung
+  // above it stopped having one: the Drone Bay's drone flies to whichever machine on the lot
+  // wants a wrench and fixes it for FREE (item 090), so the bay is a `BotDock` with no cargo at
+  // all — nothing goes in, nothing comes out, and the only bill is the hangar and the node.
   /** Belt-fed kits in, serviced cell out. §3's first automated maintenance rung. */
   MaintenanceStation: 33,
-  /** One bay, one drone, a hopper of parts. The tech tree's capstone (§3). */
+  /** One bay, one drone, no hopper. The tech tree's capstone (§3). */
   DroneBay: 34,
-  /** Bottle + kola powder → drone part. The factory whose product is the factory. */
+  /**
+   * **RETIRED** (item 090). Bottle + kola powder → drone part, back when a drone burned one per
+   * fix. Its customer stopped buying, so the game stopped selling it; the spec below survives as
+   * a headstone so a box of one in somebody's bag still has a name and an invoice. See
+   * `RETIRED_MACHINE_KINDS` for why the id and the spec both stay spent forever.
+   */
   PartsBench: 35,
 } as const;
 
@@ -566,12 +575,13 @@ export function rusticStylePriceCents(): number {
 export const REPAIR_KIT_PRICE_CENTS = 800;
 
 /**
- * What a drone part is worth at list, and what one drone service is accounted at.
+ * What a drone part is worth at list. **A sale price now, and nothing else** (item 090).
  *
- * $4 per machine serviced, against the kit's $8 per 7×7 CELL — so per machine touched,
- * automated maintenance runs dearer than the hand it replaced, which is §4's thesis
- * ("saves your hands, not the bill") written as a price. It lives up here for the same
- * temporal-dead-zone reason the kit price does: `ITEM_SPECS` reads it while initialising.
+ * It used to be two facts wearing one number: what a part sold for, and what one drone service
+ * was accounted at in `repairKitSpendCents`. Drone service is free, so the second fact is gone
+ * and this is left doing the ordinary job every other list price does — pricing the stock a
+ * returning player still has in the bag. It lives up here for the same temporal-dead-zone
+ * reason the kit price does: `ITEM_SPECS` reads it while initialising.
  */
 export const DRONE_PART_PRICE_CENTS = 400;
 
@@ -926,7 +936,8 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.BoxedPlanterDock, slug: 'boxed-planter-dock', ...BOXED },
 
   {
-    // Manufactured only — `purchasable: false` IS the logistics problem (see `ItemId.DronePart`).
+    // Manufactured by nothing, now that the bench is retired — `purchasable: false` and no
+    // producer at all, so the stock in a returning player's bag is finite (see `ItemId.DronePart`).
     id: ItemId.DronePart,
     slug: 'drone-part',
     listPriceCents: DRONE_PART_PRICE_CENTS,
@@ -987,6 +998,41 @@ export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly
     { kind: MachineKind.DroneBay, item: ItemId.BoxedDroneBay },
     { kind: MachineKind.PartsBench, item: ItemId.BoxedPartsBench },
   ];
+
+/**
+ * **THE TOMBSTONE LIST: machine kinds this game no longer sells** (item 090).
+ *
+ * A retired kind keeps everything except the right to be built. Its `MachineSpec` stays in
+ * `MACHINE_SPECS`, its row stays in `BOXED_MACHINE_ROWS`, its id stays spent forever — and all
+ * three have to, because a player may still be holding a BOX of one. A box with no spec behind
+ * it has no slug to name itself by, no price for `boxedMachineScrapCents` to work from, and no
+ * label on the row a player is about to scrap for 40%; deleting the spec would therefore turn
+ * a machine somebody bought into unsellable junk, which is the one thing plan §4 rules out
+ * flat. So the spec becomes a headstone rather than a hole, and `applyPlaceMachine` is where
+ * the retirement is actually enforced.
+ *
+ * A LIST RATHER THAN A `retired` FIELD ON EVERY SPEC, for the same reason `BOXED_MACHINE_ROWS`
+ * is a table rather than an offset: retiring a machine is a rare, deliberate, argued act, and
+ * it should read as one entry with one citation beside it rather than as thirty-four `false`s.
+ * It is folded into `BALANCE_HASH` below, because "you can no longer buy this" is exactly the
+ * kind of fact a save's replay determinism depends on.
+ *
+ * **The Parts Bench** — the only entry, and it is here because its only customer stopped
+ * buying. The bench existed to manufacture drone parts; item 090's ruling is that repair drones
+ * fix machines for free, so the bench's output has no consumer, its recipe cooks a souvenir,
+ * and a build menu offering it at $800 would be selling the player a machine whose product does
+ * nothing. `ItemId.DronePart` stays `sellable` so a warehouse of them converts to money at the
+ * bin, and a placed bench comes home in a box through the 16 → 17 migration.
+ */
+export const RETIRED_MACHINE_KINDS: readonly MachineKind[] = [MachineKind.PartsBench];
+
+/** True for a kind the game has stopped selling. The one gate `applyPlaceMachine` reads. */
+export function isMachineRetired(kind: MachineKind): boolean {
+  for (let i = 0; i < RETIRED_MACHINE_KINDS.length; i++) {
+    if (RETIRED_MACHINE_KINDS[i] === kind) return true;
+  }
+  return false;
+}
 
 /** The boxed item a machine kind goes into, or `null` for a kind that has no box. */
 export function boxedItemForMachine(kind: MachineKind): ItemId | null {
@@ -3061,9 +3107,15 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     fieldPlaceable: false,
   },
   {
-    // One bay, one drone, a parts hopper in `cargoItem`/`cargoCount` exactly where the planter
-    // keeps its seeds. The bay itself never wears and never works — the DRONE wears, per
-    // service, and is repaired at the bay by hand or kit like any dock's bot.
+    // One bay, one drone, AND AN EMPTY SHELF ([[090]]). Its `cargoItem`/`cargoCount` pair used
+    // to be a parts hopper sitting exactly where the planter keeps its seeds; drone service is
+    // free now, so nothing goes in and the pair stays zero for the life of the world. The
+    // `inputCapacity` below is what the retired hopper held and is no longer reachable — it is
+    // frozen balance data like every other number in this table, not a live capacity.
+    //
+    // The bay itself never wears and never works — the DRONE wears, per service, and is
+    // repaired at the bay by hand or kit like any dock's bot. It is also, since [[090]], repaired
+    // by ANY drone on the lot, its own included: a dock's wrench-due state is its bots'.
     kind: MachineKind.DroneBay,
     slug: 'drone-bay',
     role: MachineRole.BotDock,
@@ -3092,11 +3144,13 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     fieldPlaceable: false,
   },
   {
-    // An ordinary converter, and that ordinariness is the feature: the parts line is built,
-    // belted, upgraded, worn, jammed, and serviced with exactly the rules the chip line taught.
-    // Bottle + kola powder → drone part; input cost ≈ $2.70 crafted against a $4 list, so the
-    // bench adds value like any other machine and §4's "the bill does not fall" survives the
-    // player building it well.
+    // **A HEADSTONE, NOT A CATALOGUE ROW** (item 090). Every number below is exactly what it was
+    // the day the bench shipped, and none of it is reachable: `applyPlaceMachine` refuses a
+    // retired kind before it reads any of this. It is kept, unedited, because a box of a Parts
+    // Bench in somebody's bag reads its slug, its label and its list price through this entry —
+    // scrap the box and `boxedMachineScrapCents` works off the invoice this spec priced. Editing
+    // it would silently re-price a machine nobody can buy; deleting it would strand one somebody
+    // owns. See `RETIRED_MACHINE_KINDS` for the argument in full.
     kind: MachineKind.PartsBench,
     slug: 'parts-bench',
     role: MachineRole.Converter,
@@ -3839,6 +3893,16 @@ function balanceDigest(): string {
   for (let i = 0; i < BOXED_MACHINE_ROWS.length; i++) {
     const row = BOXED_MACHINE_ROWS[i]!;
     h = fnv1aString(h, `${row.kind}>${row.item}`);
+  }
+  // Retirement (item 090). A machine leaving the catalogue changes nothing about the numbers in
+  // its spec and everything about what a player can do with them, so `MACHINE_SPECS` above folds
+  // in a Parts Bench that is identical to yesterday's and this line is the only thing that says
+  // it can no longer be bought. Without it, the biggest balance change of the item — a whole
+  // production chain retired and automated maintenance made free — would leave `SIM_VERSION`
+  // claiming the save was written by the same rules, which is the exact lie the digest exists
+  // to make impossible.
+  for (let i = 0; i < RETIRED_MACHINE_KINDS.length; i++) {
+    h = fnv1aString(h, `retired:${RETIRED_MACHINE_KINDS[i]!}`);
   }
   // Land. THE MAP'S SHAPE IS BALANCE DATA, not layout trivia: a save records which parcels are
   // owned as indices into this grid, so a world balanced on a 4×4 lot of 16-tile parcels cannot

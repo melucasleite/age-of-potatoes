@@ -180,14 +180,14 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   machineEntry('Storage', ToolMode.PlaceHandCart),
   machineEntry('Storage', ToolMode.PlaceRootCellar),
 
-  // The maintenance chain ([[039]]), in supply-chain order: the station that spends kits, the
-  // bay that spends parts, the bench that makes them. A group of its own rather than three
-  // rows scattered by kind, because what the player is shopping for here is not a machine —
-  // it is the idea that repair can be a line like any other, and the menu should say so by
-  // putting the whole argument in one place.
+  // The maintenance ladder ([[039]], [[090]]): the station that spends kits, and above it the
+  // bay whose drone spends nothing. It was three rows in supply-chain order until item 090
+  // retired the Parts Bench — repair drones fix machines for free, so the bench had no
+  // customer and a menu row offering a machine whose product does nothing would be selling
+  // the player $800 of scenery. Two rows still make the group's argument, and better: the
+  // cheap rung is a supply line you keep feeding, and the dear one is the end of the chore.
   machineEntry('Maintenance', ToolMode.PlaceMaintenanceStation),
   machineEntry('Maintenance', ToolMode.PlaceDroneBay),
-  machineEntry('Maintenance', ToolMode.PlacePartsBench),
 
   // The one row whose price is not a constant. See `dynamicCostCents` below. Drawn as the
   // grass it buys — the deed signs already stand on exactly this tile in the world.

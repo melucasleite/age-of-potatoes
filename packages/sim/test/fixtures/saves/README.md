@@ -209,3 +209,46 @@ anonymous units on a potato zone, and `save.test.ts` asserts they come back as n
 Russet Potatoes. The step also deliberately does NOT rewrite `payload.version` — that field
 is hashed world state, and stamping the format number onto it would make a migrated world
 hash differently from the identical world built fresh.
+
+| `format-16.json` | 16 | 2026-08-16, `v0.5.0` | Seed 880088, tick 2,814. The first save in which **the seed came home** (item 088): a harvester dock holding a named harvest on its produce shelf AND named seeds on its seed shelf — the state format 15 wrote as a harvest and a silence, because a bot's returned seed was not stored badly, it did not exist. |
+
+| `format-16-parts.json` | 16 | 2026-08-16, `v0.5.0` | Seed 160090, tick 4,421. **The last save this game can ever produce with a Parts Bench on the lot.** A Speed-1 bench worn to 972 and invoiced at $1,120, holding six bottles and six kola powder in its two recipe lines with six finished drone parts on its shelf — and a Drone Bay with eight more parts hand-loaded into its hopper. |
+
+| `format-17.json` | 17 | 2026-08-16, `v0.5.0` | Seed 170090, tick 18. The first save in which **a drone works out of an empty bay** (item 090), caught mid-flight: the bay's shelf bare, the drone 12 ticks into an errand, and its target a HARVESTER DOCK at full condition with a worn Agri-Bot asleep in it. |
+
+## The second format-16 file, and why the "one per format" rule bends exactly once
+
+`format-16-parts.json` is the only doubled entry in this directory, and it exists because item
+090 retires the Parts Bench: repair drones now fix machines for free, so the bench lost its only
+customer and left the build catalogue. The 16 → 17 migration therefore has to hand a player's
+property back — every placed bench becomes a boxed bench in the bag, its two recipe lines and
+its output shelf become loose goods, and every drone part sitting in a bay's hopper goes back to
+the bag to be sold. **That claim can only be tested against a save that contains those things,
+and `format-16.json` contains none of them.**
+
+It could not have been made later, either. After 090 lands no build can place a Parts Bench, so
+a fixture recorded tomorrow would be a payload someone typed — which this file's whole first
+paragraph says is worthless. So it was recorded by `scripts/record-format-16-parts.ts` on the
+last day it was possible to record it, by the code that shipped the bench, and it is never
+edited again. Everything in it was chosen to be something the migration must carry rather than
+delete: a bought dial (so the box's invoice is more than list, and the 40% scrap is more than a
+bare bench's), real wear, both recipe lines part-full, a part-full output shelf, and a hopper
+somebody filled by hand through a door that no longer exists.
+
+The 16 → 17 step is the DECONSTRUCT PATH replayed on load — exactly what
+`applyDeconstructMachine` would have done if the player had walked over and boxed the bench
+themselves. It freezes the bench's recipe as literals rather than reading `machineSpec`, because
+a format-16 bench's line 1 is kola powder no matter what a future table says line 1 is. The bay
+itself STAYS on the lot with its drone, and the asymmetry is deliberate: the bench lost its
+reason to exist, while the bay is the machine the item exists to improve. Like every step since
+14 → 15 it does not rewrite `payload.version`, for the same hashed-world-state reason.
+
+`format-17.json` was recorded by `scripts/record-format-17.ts` (2026-08-16, item 090). The
+moment is the point, as always, and this one was **impossible in format 16 in both directions**:
+an empty hopper grounded the drone before a target was even picked, so "bare shelf" and "drone
+on an errand" could never be true at the same instant. It is also aimed at a bot dock, which is
+the owner bug item 090 folded in — a dock's `wearPerOperation` is 0, so its own condition never
+falls and it can never jam, and the drone's eligibility test read only those two fields. A shed
+full of worn robots looked like a machine in perfect health, and the drone flew past it forever.
+The fixture preserves the trap exactly: `dock.condition` at maximum, `dock.jammed` false, and a
+harvester asleep inside at 120.

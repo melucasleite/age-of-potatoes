@@ -143,6 +143,7 @@ import {
   cropSpec,
   grabberSpec,
   isBotDockKind,
+  isMachineRetired,
   isPerishable,
   isPurchasable,
   isSellable,
@@ -152,7 +153,7 @@ import {
   soilSpec,
 } from './data';
 import { advanceBelts, advanceGrabbers, advanceJunctions } from './belts';
-import { advanceBots, bayPartCount, dockWantedSeed } from './bots';
+import { advanceBots, dockWantedSeed, machineWantsService, restoreDockedBots } from './bots';
 import { StepOutcome, stepToward } from './movement';
 import {
   advanceCommerce,
@@ -961,6 +962,13 @@ function footprintFree(
 function applyPlaceMachine(state: WorldState, command: PlaceMachineCommand): boolean {
   const spec = machineSpec(command.kind);
   if (spec === null) return false;
+  // **RETIRED KINDS ARE REFUSED HERE AND NOWHERE ELSE** (item 090). This is the one funnel every
+  // build walks through — the shop's row, a box out of the bag, a replayed command from an old
+  // trace — so a machine the game has stopped selling stops being buildable at this line rather
+  // than at three surfaces that could each forget. A retired machine KEEPS its spec, which is
+  // what lets a box of one still carry a name, a slug and an invoice into the bag; what it
+  // loses is the right to stand on the lot again. See `RETIRED_MACHINE_KINDS`.
+  if (isMachineRetired(command.kind)) return false;
   // The gate stands whether the machine is bought or unboxed. It costs nothing either way — a
   // box can only exist for a machine the player already researched, and nothing un-researches —
   // but the rule reading the same for both paths is worth more than the line it saves.
@@ -1431,15 +1439,11 @@ function applyRefillHopper(state: WorldState, command: RefillHopperCommand): boo
   // exists, already counts `hopperRefill`, and already has a walk-to errand wired — item 023 says
   // in as many words: do not invent a second refill path.
   if (spec.role === MachineRole.BotDock) {
-    // A DRONE BAY'S HOPPER TAKES PARTS THE WAY A PLANTER'S TAKES SEEDS: this hand path costs a
-    // `hopperRefill` touch, and the belt path (`dockAcceptDelivery`) costs nothing — §6's
-    // taxonomy again, so a genuinely hands-free maintenance factory has to belt its parts in.
-    const wanted =
-      machine.kind === MachineKind.DroneBay
-        ? ItemId.DronePart
-        : machine.kind === MachineKind.PlanterDock
-          ? dockWantedSeed(state, machine)
-          : 0;
+    // ONE DOCK IN THREE WANTS ANYTHING (item 090). A Drone Bay's branch used to stand beside
+    // the planter's, taking parts by hand the way this takes seeds; repair drones now fix
+    // machines for free, so the bay has no hopper to fill and this path refuses it the same
+    // way it has always refused a harvester dock — by finding that it wants nothing.
+    const wanted = machine.kind === MachineKind.PlanterDock ? dockWantedSeed(state, machine) : 0;
     if (wanted === 0) return false;
     if (machine.cargoItem !== 0 && machine.cargoItem !== wanted) return false;
 
@@ -1547,10 +1551,7 @@ function applyUseRepairKit(state: WorldState, command: UseRepairKitCommand): boo
 
     machine.condition = CONDITION_MAX;
     machine.jammed = false;
-    for (let j = 0; j < state.bots.length; j++) {
-      const bot = state.bots[j]!;
-      if (bot.dockId === machine.id) bot.condition = CONDITION_MAX;
-    }
+    restoreDockedBots(state, machine);
     handsOn(machine);
     serviced += 1;
   }
@@ -2757,8 +2758,7 @@ function advanceMaintenanceStation(state: WorldState, machine: Machine, spec: Ma
   for (let i = 0; i < state.machines.length && !due; i++) {
     const candidate = state.machines[i]!;
     if (!machineWithinRadiusOfTile(candidate, machine.tileX, machine.tileY, radius)) continue;
-    if (candidate.jammed || candidate.condition < CONDITION_EFFECT_THRESHOLD) due = true;
-    else if (dockHasWrenchDueBot(state, candidate)) due = true;
+    if (machineWantsService(state, candidate)) due = true;
   }
   if (!due) return;
 
@@ -2775,10 +2775,7 @@ function advanceMaintenanceStation(state: WorldState, machine: Machine, spec: Ma
 
     candidate.condition = CONDITION_MAX;
     candidate.jammed = false;
-    for (let j = 0; j < state.bots.length; j++) {
-      const bot = state.bots[j]!;
-      if (bot.dockId === candidate.id) bot.condition = CONDITION_MAX;
-    }
+    restoreDockedBots(state, candidate);
   }
 
   state.stats.repairKitsUsed += 1;
@@ -2787,15 +2784,6 @@ function advanceMaintenanceStation(state: WorldState, machine: Machine, spec: Ma
   // the operation it just performed — it is a machine, not an exception.
   wear(machine, spec.wearPerOperation);
   machine.cooldown = STATION_SERVICE_PERIOD_TICKS;
-}
-
-/** Whether any bot sleeping in this machine is below the wrench threshold. */
-function dockHasWrenchDueBot(state: WorldState, dock: Machine): boolean {
-  for (let i = 0; i < state.bots.length; i++) {
-    const bot = state.bots[i]!;
-    if (bot.dockId === dock.id && bot.condition < CONDITION_EFFECT_THRESHOLD) return true;
-  }
-  return false;
 }
 
 /**

@@ -125,7 +125,8 @@ export const TechId = {
    */
   Trucking: 'commerce-trucking',
   /**
-   * Repair drones: the Drone Bay, the Parts Bench, and the drone part recipe — the capstone of
+   * Repair drones: the Drone Bay and its free-forever service ([[090]] retired the Parts Bench
+   * and the drone part recipe that used to hang off this node) — the capstone of
    * plan §3's Commerce & Operations column, and **THE THIRD NAMED JOINT, FINALLY MADE**:
    * *"drones need diagnostics AND trucking."* You cannot buy a machine that dispatches flying
    * service vehicles before you have read a diagnosis or dispatched a vehicle; both

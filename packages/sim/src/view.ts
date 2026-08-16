@@ -54,6 +54,7 @@ import {
   wiltStageForAge,
 } from './data';
 import { grabberNextPickup, grabberWouldAccept } from './belts';
+import { dockBotWrenchDue } from './bots';
 import {
   cartRunTicks,
   depotRunTicks,
@@ -1112,7 +1113,13 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.tilesWide = spec === null ? 1 : spec.tilesWide;
     mv.tilesHigh = spec === null ? 1 : spec.tilesHigh;
     mv.lamp = lampFor(state, i);
-    mv.wrenchDue = machine.condition < CONDITION_EFFECT_THRESHOLD ? 1 : 0;
+    // A DOCK'S WRENCH IS ITS ROBOTS' (item 090's owner bug). A dock never wears — its
+    // `wearPerOperation` is 0 — so this line alone left a shed full of worn Agri-Bots showing no
+    // overlay at all, which is the same blind spot that made the repair drone fly past it. The
+    // player and the drone now read the SAME dock clause; `machineWantsService` is that answer
+    // plus the jam, and the jam has its own lamp, which is why this reads the clause directly.
+    mv.wrenchDue =
+      machine.condition < CONDITION_EFFECT_THRESHOLD || dockBotWrenchDue(state, machine) ? 1 : 0;
     mv.progressPermille =
       spec === null || spec.workPerOperation <= 0
         ? 0
@@ -1673,12 +1680,14 @@ function lampFor(state: WorldState, index: number): LampState {
     return (machine.inputCounts[0] ?? 0) <= 0 ? LampState.Starved : LampState.Running;
   }
 
-  // A Drone Bay with no parts shows BLUE — "a utility is missing" — because that is precisely
-  // the situation: the drone is fine, the machine it would service is fine, and the consumable
-  // that connects them has run out (item 039 instruction 4, by name).
-  if (machine.kind === MachineKind.DroneBay) {
-    return machine.cargoCount <= 0 ? LampState.UtilityMissing : LampState.Running;
-  }
+  // **THE DRONE BAY HAS NO LAMP OF ITS OWN ANY MORE** (item 090). It used to show the blue
+  // "a utility is missing" light on an empty parts hopper — the honest half of "repairs halt,
+  // never free service". Drone service IS free now, so there is no utility to be missing and no
+  // empty a player could be asked to fix; the bay falls through to `LampState.Off` with the
+  // other two docks, which is the right answer for a shed that is simply always working.
+  //
+  // The blue lamp itself is untouched: it is still the sprinkler's dry barrel, still the tank's,
+  // still an unfed pipe port. What retired is the bay's claim on it.
 
   if (spec.workPerOperation <= 0) return LampState.Off;
   // Blocked before starved: a machine that is both is a downstream problem, and plan §5's

@@ -1524,14 +1524,18 @@ function handCommand(view: WorldView, machine: MachineView): Command | null {
     return { type: 'RefillHopper', machineId: machine.id };
   }
 
-  // The seed and parts hoppers ([[038]]/[[039]]): `applyRefillHopper` is the sim's "one door
-  // seeds enter by" for hands, and until now no click ever knocked on it — the planter dock
-  // fell through `machineInputItem`'s chip-line switch to null, so hand-loading seeds was
-  // simply impossible, which is how the owner found it. The sim re-validates everything
-  // (wrong seed, full hopper, nothing in the bag), so this side only knocks. Before the
-  // `outputCount` branch on purpose: these docks produce nothing, but a future one that did
-  // should still prefer taking in what it exists to consume.
-  if (machine.kind === MachineKind.PlanterDock || machine.kind === MachineKind.DroneBay) {
+  // The seed hopper ([[038]]): `applyRefillHopper` is the sim's "one door seeds enter by" for
+  // hands, and until item 038 no click ever knocked on it — the planter dock fell through
+  // `machineInputItem`'s chip-line switch to null, so hand-loading seeds was simply
+  // impossible, which is how the owner found it. The sim re-validates everything (wrong seed,
+  // full hopper, nothing in the bag), so this side only knocks. Before the `outputCount`
+  // branch on purpose: the dock produces nothing, but a future one that did should still
+  // prefer taking in what it exists to consume.
+  //
+  // THE DRONE BAY USED TO BE THE SECOND HALF OF THIS CONDITION, taking parts by hand the way
+  // the planter takes seeds. Item 090 made drone service free and closed the bay's hopper in
+  // the sim, so a click that still offered to fill it would open a door that is not there.
+  if (machine.kind === MachineKind.PlanterDock) {
     return { type: 'RefillHopper', machineId: machine.id };
   }
 

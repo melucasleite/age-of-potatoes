@@ -288,12 +288,12 @@ describe('hoppers answer the door', () => {
     });
   });
 
-  it('a Hand click on the drone bay offers its parts hopper', () => {
+  it('a Hand click on the drone bay offers nothing — it has no hopper ([[090]])', () => {
+    // The inverse of the test above, and it used to be its twin: a bay took parts by hand the
+    // way a planter takes seeds. Repair drones fix machines for free now, so the sim's door is
+    // gone and a click that still offered `RefillHopper` would knock on a wall.
     const view = withMachine(standingOn(4, 4), 4, 5, MachineKind.DroneBay, 11);
-    expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Hand, Direction.East)).toEqual({
-      type: 'RefillHopper',
-      machineId: 11,
-    });
+    expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Hand, Direction.East)).toBe(null);
   });
 });
 

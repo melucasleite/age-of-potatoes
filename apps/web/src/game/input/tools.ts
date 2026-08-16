@@ -140,6 +140,19 @@ export const ToolMode = {
   // hand kit services, and `toolCoverageVerb` below keeps the ghost from claiming it "waters".
   PlaceMaintenanceStation: 31,
   PlaceDroneBay: 32,
+  /**
+   * **RETIRED** (item 090). The Parts Bench left the build catalogue when repair drones started
+   * fixing machines for free, so this tool has no `BUILD_ROWS` entry, no `PLACE_TOOLS`
+   * membership and no `toolMachineKind` mapping — nothing offers it and the sim would refuse
+   * the placement regardless.
+   *
+   * **THE ID STAYS SPENT, AND THE MEMBER STAYS IN THE ENUM, BECAUSE A HOTBAR IS SAVED.**
+   * `hotbar.ts` validates a persisted layout against `Object.values(ToolMode)` and rejects the
+   * WHOLE layout on one unknown number — so deleting this member would silently wipe the
+   * carefully arranged toolbelt of the one kind of player most likely to have pinned it. It
+   * degrades to a slot that does nothing instead, which is the smaller unkindness. Reusing 33
+   * for a future tool would be the larger one: it would open something else entirely.
+   */
   PlacePartsBench: 33,
 
   /**
@@ -424,14 +437,19 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
   },
   [ToolMode.PlaceDroneBay]: {
     label: 'Drone Bay',
-    hint: 'clear 2x2 — its drone serves the whole lot, one part per fix',
+    // The hint used to end "one part per fix", which was the machine's whole supply chain in
+    // four words. Item 090 deleted the supply chain, so the hint says the thing that is now
+    // true and is also the entire pitch: you buy it once and stop thinking about repairs.
+    hint: 'clear 2x2 — its drone serves the whole lot, free forever',
     costCents: machinePrice(MachineKind.DroneBay),
     gesture: 'click',
   },
+
+  /** The retired bench's tombstone row — see `ToolMode.PlacePartsBench`. Nothing offers it. */
   [ToolMode.PlacePartsBench]: {
     label: 'Parts Bench',
-    hint: 'bottle + kola powder in, drone part out',
-    costCents: machinePrice(MachineKind.PartsBench),
+    hint: 'retired — drones fix machines for free now',
+    costCents: 0,
     gesture: 'click',
   },
 
@@ -511,8 +529,6 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       return MachineKind.MaintenanceStation;
     case ToolMode.PlaceDroneBay:
       return MachineKind.DroneBay;
-    case ToolMode.PlacePartsBench:
-      return MachineKind.PartsBench;
     default:
       return null;
   }
@@ -557,7 +573,6 @@ const PLACEMENT_TOOLS: readonly ToolMode[] = [
   ToolMode.PlacePlanterDock,
   ToolMode.PlaceMaintenanceStation,
   ToolMode.PlaceDroneBay,
-  ToolMode.PlacePartsBench,
 ];
 
 export function toolBeltTier(tool: ToolMode): BeltTier | null {

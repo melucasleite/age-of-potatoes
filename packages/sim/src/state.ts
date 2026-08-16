@@ -2202,10 +2202,11 @@ export function takeOneOutput(machine: Machine, spec: MachineSpec): ItemId | nul
  * both decremented `cargoCount` would eventually disagree about what came off the shelf.
  *
  * GATED BY KIND, IN THE DOOR ITSELF, and the gate is the safety property rather than a
- * convenience: the planter dock's seeds and the drone bay's parts are *incoming* supply — cargo
- * something paid to put IN — and a caller that could drain any dock's cargo by forgetting a
- * check would let a grabber quietly eat a seed hopper. A door that only exists on the one dock
- * whose cargo is outgoing cannot be misaimed.
+ * convenience: the planter dock's seeds are *incoming* supply — cargo something paid to put IN
+ * — and a caller that could drain any dock's cargo by forgetting a check would let a grabber
+ * quietly eat a seed hopper. A door that only exists on the one dock whose cargo is outgoing
+ * cannot be misaimed. (The drone bay's parts were the second incoming pile until [[090]] made
+ * drone service free; its cargo pair is empty forever, and this gate is unchanged by that.)
  */
 export function takeDockShelf(
   dock: Machine,

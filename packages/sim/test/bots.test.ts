@@ -29,12 +29,15 @@ import {
   Direction,
   FIELD_TILES_WIDE,
   GrabberTier,
+  ITEM_SPECS,
   ItemId,
   MachineKind,
   addItem,
   cropSpec,
   createWorld,
+  dockAcceptDelivery,
   dockAcceptSeed,
+  dockCanAcceptDelivery,
   findNonIntegerFields,
   hashState,
   itemCount,
@@ -48,6 +51,7 @@ import {
   stepMany,
   takeDockShelf,
   tileAt,
+  tileCentreSubtiles,
   tillTile,
   totalManualTouches,
   waterAtSubtile,
@@ -874,6 +878,56 @@ describe('the seed comes home (item 088)', () => {
 });
 
 // --- the dock's two doors, looked at before they are opened (item 085) ----------------
+
+describe('the drone bay has no door at all (item 090)', () => {
+  it('refuses every item through BOTH spellings, and the pair never disagrees', () => {
+    // **THE DOOR WAS DELETED IN BOTH SPELLINGS, WHICH IS THE POINT OF TESTING IT TWICE.** Item
+    // 085 gave every accept-door a pure predicate its mutating twin is defined in terms of;
+    // item 090 then closed the bay's parts door for good. Removing only the mutating half would
+    // have left `dockCanAcceptDelivery` promising an arm a hopper that no longer exists — an
+    // arm that peeks yes, swings, and is refused on delivery, holding an item forever. That is
+    // exactly the stall item 085 was written to abolish, so it is pinned here rather than
+    // trusted to a comment.
+    const state = createWorld(9090);
+    const bay = spawnMachine(state, MachineKind.DroneBay, 0, 0)!;
+    spawnBot(state, BotKind.Repair, bay);
+
+    for (const spec of ITEM_SPECS) {
+      expect(dockCanAcceptDelivery(state, bay, spec.id), `bay peeked yes at ${spec.slug}`).toBe(
+        false,
+      );
+      expect(dockAcceptDelivery(state, bay, spec.id), `bay took a ${spec.slug}`).toBe(false);
+    }
+    expect(bay.cargoItem).toBe(0);
+    expect(bay.cargoCount).toBe(0);
+
+    // CONTROL, so the sweep above is not a rig that was never going to move: the door the
+    // deletion had to leave standing still opens for the seed its zone asked for.
+    const planter = farmWithDock(MachineKind.PlanterDock, BotKind.Planter);
+    expect(dockCanAcceptDelivery(planter.state, planter.dock, ItemId.PotatoSeed)).toBe(true);
+    expect(dockAcceptDelivery(planter.state, planter.dock, ItemId.PotatoSeed)).toBe(true);
+    expect(planter.dock.cargoItem).toBe(ItemId.PotatoSeed);
+  });
+
+  it('takes nothing by hand either — the RefillHopper branch closed with the belt door', () => {
+    // §6's taxonomy makes hand-refilling a hopper a Hands-Free disqualifier, so the hand path
+    // and the belt path were always two functions. Both of the bay's are gone; a hand that
+    // could still fill a shelf the drone never reads would be a touch charged for nothing.
+    const state = createWorld(9091);
+    const bay = spawnMachine(state, MachineKind.DroneBay, 0, 0)!;
+    spawnBot(state, BotKind.Repair, bay);
+    addItem(state, ItemId.DronePart, 5);
+    state.player.xSub = tileCentreSubtiles(bay.tileX);
+    state.player.ySub = tileCentreSubtiles(bay.tileY);
+
+    step(state, { tick: state.tick, commands: [{ type: 'RefillHopper', machineId: bay.id }] });
+
+    expect(state.trace).toHaveLength(0);
+    expect(bay.cargoCount).toBe(0);
+    expect(itemCount(state, ItemId.DronePart)).toBe(5);
+    expect(totalManualTouches(state.stats.touches)).toBe(0);
+  });
+});
 
 describe('an arm at a dock looks before it grabs (item 085)', () => {
   it('THE TRAP ITEM 088 NAMED: a seed arm pointed at a sell bin never closes its claw', () => {

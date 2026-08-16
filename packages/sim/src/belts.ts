@@ -451,8 +451,9 @@ function grabberSource(
   // THE HARVESTER DOCK'S SHELF IS CARGO, NOT AN OUTPUT BUFFER (item 083): its spec honestly
   // makes nothing, so `nextOutputItem` has no name for what the bot delivered — the identity
   // lives on the cargo pair. Gated by KIND rather than by dock role, because the planter
-  // dock's seeds and the drone bay's parts are incoming supply an arm must never siphon;
-  // `takeDockShelf` is the one door out and enforces the same gate itself.
+  // dock's seeds are incoming supply an arm must never siphon; `takeDockShelf` is the one door
+  // out and enforces the same gate itself. (A Drone Bay's cargo pair is empty forever now —
+  // [[090]] — but the gate is written against what a shelf MEANS, not against today's roster.)
   if (machine.kind === MachineKind.HarvesterDock) {
     const shelf = dockShelfFor(machine, grabber.filter);
     if (shelf === DockShelf.Produce) {
@@ -596,8 +597,9 @@ function grabberDeliver(
   // functions rather than one function with a flag — and this is the free one. It refuses a seed
   // the dock's zone did not ask for and a hopper that is full.
   if (machineSpecFor.role === MachineRole.BotDock) {
-    // One door for every dock's hopper: seeds for a planter, drone parts for a bay. The
-    // routing lives in `bots.ts`, so this file keeps knowing one fact about docks.
+    // One door for every dock's hopper — seeds for a planter, and nothing at all for the other
+    // two ([[090]] closed the bay's). The routing lives in `bots.ts`, so this file keeps knowing
+    // exactly one fact about docks: they have a door, and it may say no.
     return commit
       ? dockAcceptDelivery(state, machine, item)
       : dockCanAcceptDelivery(state, machine, item);

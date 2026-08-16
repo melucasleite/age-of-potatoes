@@ -20,6 +20,7 @@ import {
   MachineKind,
   SUBTILE,
   createWorldView,
+  isMachineRetired,
   machineSpec,
   techSatisfied,
 } from '@snack/sim';
@@ -99,39 +100,52 @@ describe('the build catalogue', () => {
   });
 });
 
-describe('the maintenance chain rows ([[039]])', () => {
+describe('the maintenance rows ([[039]], [[090]])', () => {
   // Presence is the one thing the generic gates above cannot check: a row that was never
-  // added passes every per-row assertion by not being there. The three machines and their
-  // tech gates are pinned against the sim's own specs — the generic tests then prove the
-  // prices, footprints and gates are the sim's numbers and not typed twice.
-  it('sells the station, the bay and the bench, behind their nodes', () => {
+  // added passes every per-row assertion by not being there. The machines and their tech
+  // gates are pinned against the sim's own specs — the generic tests then prove the prices,
+  // footprints and gates are the sim's numbers and not typed twice.
+  it('sells the station and the bay, behind their nodes', () => {
     const rows = new Map(BUILD_CATALOGUE.map((entry) => [entry.tool, entry]));
     const station = rows.get(ToolMode.PlaceMaintenanceStation);
     const bay = rows.get(ToolMode.PlaceDroneBay);
-    const bench = rows.get(ToolMode.PlacePartsBench);
 
     expect(station?.requiresTech).toBe(machineSpec(MachineKind.MaintenanceStation)?.requiresTech);
     expect(bay?.requiresTech).toBe(machineSpec(MachineKind.DroneBay)?.requiresTech);
-    expect(bench?.requiresTech).toBe(machineSpec(MachineKind.PartsBench)?.requiresTech);
-    // One group, supply-chain order: station, bay, bench.
+    // One group, ladder order: the rung that costs, then the rung that does not.
     expect(station?.group).toBe('Maintenance');
     expect(bay?.group).toBe('Maintenance');
-    expect(bench?.group).toBe('Maintenance');
+  });
+
+  it('offers no row for a retired machine, and none at all for the Parts Bench', () => {
+    // ABSENCE IS THE ASSERTION ([[090]]). The bench was the third row here until drones started
+    // fixing machines for free; a catalogue that still listed it would be selling $800 of
+    // scenery, and `applyPlaceMachine` would refuse the click anyway.
+    for (const entry of BUILD_CATALOGUE) {
+      const kind = toolMachineKind(entry.tool);
+      if (kind === null) continue;
+      expect(isMachineRetired(kind), `${TOOL_INFO[entry.tool].label} is retired`).toBe(false);
+    }
+    expect(BUILD_CATALOGUE.some((entry) => entry.tool === ToolMode.PlacePartsBench)).toBe(false);
+    expect(toolMachineKind(ToolMode.PlacePartsBench)).toBe(null);
   });
 });
 
 /**
  * FIXTURE STORY: the two machines the art lane has not painted yet.
  *
- * The Drone Bay and the Parts Bench have no atlas frame AT ALL — the world itself draws them
- * procedurally (`render/textures.ts`, whose comment says "PLACEHOLDER: the art lane has
- * generated no `machine_drone_bay`"), so the menu cell falling back to the lettered chip is
- * the same honest degradation the bag already performs for them. They are PINNED here, both
- * ways: a NEW entry with no frame fails the test below (the "complete overall" criterion in
- * executable form), and the day the art lane ships these two frames, this list fails too —
- * which is the reminder to shorten it, not a bug.
+ * The Drone Bay has no atlas frame AT ALL — the world itself draws it procedurally
+ * (`render/textures.ts`, whose comment says "PLACEHOLDER: the art lane has generated no
+ * `machine_drone_bay`"), so the menu cell falling back to the lettered chip is the same honest
+ * degradation the bag already performs for it. It is PINNED here, both ways: a NEW entry with
+ * no frame fails the test below (the "complete overall" criterion in executable form), and the
+ * day the art lane ships that frame, this list fails too — which is the reminder to shorten it,
+ * not a bug.
+ *
+ * It was a list of two until [[090]] retired the Parts Bench off the menu entirely, which is
+ * the other way an entry leaves this list.
  */
-const KNOWN_FRAMELESS: readonly ToolMode[] = [ToolMode.PlaceDroneBay, ToolMode.PlacePartsBench];
+const KNOWN_FRAMELESS: readonly ToolMode[] = [ToolMode.PlaceDroneBay];
 
 describe('the build menu icons ([[071]])', () => {
   it('gives every entry a frame name, derived or declared', () => {

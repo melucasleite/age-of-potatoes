@@ -149,6 +149,7 @@ export {
   POND_TILES_WIDE,
   PUMP_RATE_ML_PER_MINUTE,
   RECIRCULATOR_ML_PER_MINUTE,
+  RETIRED_MACHINE_KINDS,
   BLEED_WINDOW_TICKS,
   DRONE_PART_PRICE_CENTS,
   REPAIR_KIT_PRICE_CENTS,
@@ -207,6 +208,7 @@ export {
   deedPriceCents,
   grabberSpec,
   isBoxedMachineItem,
+  isMachineRetired,
   isParcelIndex,
   isNetworkConsumer,
   isPurchasable,
@@ -481,12 +483,16 @@ export type { Mover } from './movement';
 // --- Agri-Bots --------------------------------------------------------------------
 export {
   advanceBots,
-  bayPartCount,
   dockAcceptDelivery,
   dockAcceptSeed,
+  dockBotWrenchDue,
+  dockCanAcceptDelivery,
+  dockCanAcceptSeed,
   dockSeedCount,
   dockWantedSeed,
   isBotDock,
+  machineWantsService,
+  restoreDockedBots,
 } from './bots';
 
 // --- commands ---------------------------------------------------------------------
