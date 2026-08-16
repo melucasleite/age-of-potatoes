@@ -50,6 +50,7 @@ import { DebugPanel } from './DebugPanel';
 import { DockCard } from './DockCard';
 import { requestExit } from './exit';
 import { FieldCard } from './FieldCard';
+import { GrabberCard } from './GrabberCard';
 import { BagToggle, InventoryWindow } from './Inventory';
 import {
   SIDEBAR_HANDLE_PX,
@@ -146,15 +147,23 @@ export default function HudRoot() {
 
               {/*
           THE AT-THE-MACHINE CARDS, and nothing else queues for this space any more
-          ([[093]]). Each decides for itself whether the player is standing somewhere it has
-          something to say about, and they can never both speak: the bench takes machines
-          with a work cycle, the dock card takes Agri-Bot docks, disjoint by construction
-          (`derive-dock.ts`). On the vast majority of frames both return null and this is an
-          empty flex box that costs nothing.
+          ([[093]]). The first two decide for themselves whether the player is STANDING
+          somewhere they have something to say about, and they can never both speak: the
+          bench takes machines with a work cycle, the dock card takes Agri-Bot docks,
+          disjoint by construction (`derive-dock.ts`). On the vast majority of frames every
+          one of these returns null and this is an empty flex box that costs nothing.
+
+          THE GRABBER CARD ([[099]]) IS THE ODD ONE AND KNOWINGLY SO: it is a consequence of
+          a CLICK rather than of position, because the owner asked for a click and because
+          `SetGrabberFilter` is the one grabber command the sim does not reach-gate. So it
+          can be up beside the bench — standing at a Fryer, having clicked an arm across the
+          lot — and that is two true statements stacked rather than a collision: this is
+          where you are, and this is what you last pointed at.
         */}
               <div className={s.sideContext}>
                 <UpgradeBench onOpenResearch={panels.toggleResearch} />
                 <DockCard />
+                <GrabberCard />
               </div>
 
               {/*

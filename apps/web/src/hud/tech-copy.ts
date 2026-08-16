@@ -17,7 +17,14 @@
 // it falls back to its id — because a missing sentence should look like missing copy, not
 // like a broken panel.
 
-import { MachineKind, MilestoneKind, TechBranch, TechId, UpgradeDial } from '@snack/sim';
+import {
+  GrabberTier,
+  MachineKind,
+  MilestoneKind,
+  TechBranch,
+  TechId,
+  UpgradeDial,
+} from '@snack/sim';
 
 export interface NodeCopy {
   /** What it is called on the card face. Title case, two or three words. */
@@ -411,6 +418,30 @@ export const MACHINE_LABELS: Readonly<Record<number, string>> = {
 
 export function machineLabel(kind: number): string {
   return MACHINE_LABELS[kind] ?? 'Machine';
+}
+
+/**
+ * The three grabber tiers, for the card that clicking one opens ([[099]]).
+ *
+ * AN ARM IS NOT A MACHINE — it has no `MachineKind`, no `MachineView`, no footprint — so it
+ * cannot live in the table above, and the grabber card would otherwise have nothing to put at
+ * the top of itself.
+ *
+ * THE WORDS ARE COPIED FROM `TOOL_INFO`'s PLACEMENT ROWS ON PURPOSE. That table names the
+ * TOOL you are holding and this one names the ARM standing on the lot; they are the same
+ * relationship `MACHINE_LABELS` and the Fryer's build row already have, and the one thing that
+ * would actually confuse a player is buying "Long Grabber" from the menu and clicking on
+ * something the card calls a "Grabber Long". A tier this build has never heard of gets the
+ * generic word rather than a blank.
+ */
+export const GRABBER_LABELS: Readonly<Record<number, string>> = {
+  [GrabberTier.Mk1]: 'Grabber Mk1',
+  [GrabberTier.Mk2]: 'Grabber Mk2',
+  [GrabberTier.Long]: 'Long Grabber',
+};
+
+export function grabberLabel(tier: number): string {
+  return GRABBER_LABELS[tier] ?? 'Grabber';
 }
 
 export interface DialCopy {

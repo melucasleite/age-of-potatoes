@@ -32,6 +32,7 @@ import { Direction } from '@snack/sim';
 
 import { publishArmedTool } from './armed-tool';
 import type { InputHost } from './context';
+import { grabberPanelClose, grabberPanelSnapshot } from './grabber-panel';
 import { digitToSlotIndex, hotbar, itemPlaceTool } from './hotbar';
 import type { InputSystem } from './system';
 import { TOOL_INFO, ToolMode } from './tools';
@@ -164,14 +165,21 @@ export class KeyboardInput {
         this.system.stepZoom(-1);
         return;
       case 'Escape':
-        // Four meanings, in the order the player most likely wants them: close the menu,
-        // close the debug panel, abandon the drag (a working queue counts, [[074]]), put
-        // the tool down. Each step is one press. Esc INSIDE the cheat input never lands
-        // here — the focus guard returns first, and the HUD's input closes through
-        // `debugPanelClose` itself.
+        // Five meanings now, in the order the player most likely wants them: close the menu,
+        // close the debug panel, abandon the drag (a working queue counts, [[074]]), close
+        // the grabber card ([[099]]), put the tool down. Each step is one press. Esc INSIDE
+        // the cheat input never lands here — the focus guard returns first, and the HUD's
+        // input closes through `debugPanelClose` itself.
+        //
+        // THE CARD SITS BELOW THE DRAG AND ABOVE THE DISARM because it is the least urgent
+        // thing that is nonetheless OPEN: a half-drawn belt run is the one the player wants
+        // back first, and disarming a tool you are still holding is what Esc means once
+        // nothing is open at all. It is a real rung rather than a no-op for the common case —
+        // the card outlives the click that opened it, so unlike a hover it needs dismissing.
         if (this.system.menuOpen) this.system.closeBuildMenu();
         else if (this.system.debugPanelOpen) this.system.closeDebugPanel();
         else if (this.system.dragging) this.system.cancelDrag();
+        else if (grabberPanelSnapshot().open) grabberPanelClose();
         else {
           this.host.setTool(ToolMode.Hand);
           publishArmedTool(ToolMode.Hand);

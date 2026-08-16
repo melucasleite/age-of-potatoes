@@ -52,6 +52,7 @@ import {
   SUBTILE,
   TillMode,
   beltSpec,
+  cropSpec,
   listPriceCents,
   machineSpec,
 } from '@snack/sim';
@@ -72,6 +73,8 @@ import {
   zoneIdAt,
 } from './gesture';
 import type { DragRun, RectRun, TilePoint } from './gesture';
+import { grabberCardTarget } from './grabber-card';
+import { grabberClicked } from './grabber-panel';
 import type { PanelRequest } from './panels';
 import { requestPanel } from './panels';
 import {
@@ -356,6 +359,19 @@ export class PointerInput {
         requestPanel(panel);
         return;
       }
+      // AN ARM UNDER THE HAND OPENS ITS CARD ([[099]]), on the same rung and for the same
+      // reason the bin opens the board: the click had no verb, and now it has the obvious
+      // one. This DOES reinterpret a click that already meant something — an out-of-reach
+      // arm fell through to the walk below, because a grabber is not a machine and item
+      // 070's fallback only refuses machine tiles — and that is deliberate rather than
+      // overlooked. Walking to an arm was a side effect of arms not being machines, never a
+      // designed verb; the ground beside it still walks, and `SetGrabberFilter` is not
+      // reach-gated, so there is nothing the trip would have bought.
+      const arm = grabberCardTarget(view, tile, tool);
+      if (arm !== 0) {
+        grabberClicked(arm);
+        return;
+      }
       // STILL nothing — so the click is a place, not a job, and the farmer just goes there
       // ([[070]]). Strictly a fallback: it runs only after the tool's verb and the counter
       // both declined, so every click that had a meaning keeps exactly that meaning.
@@ -523,12 +539,22 @@ export class PointerInput {
   }
 
   /**
-   * The sentence over the canvas while queued work is running, or `null` for silence:
-   * "planting 6 more…" while the farmer marches, the pause reason while the can is dry,
-   * and a brief "already soaked" when a wet tile was skipped ([[081]]). Read once per
-   * frame by `InputSystem.update()` into the chrome's tell line.
+   * The one sentence over the canvas, or `null` for silence. Read once per frame by
+   * `InputSystem.update()` into the chrome's tell line.
+   *
+   * **THE ORDER IS THE WHOLE DESIGN.** What you are DOING outranks what you are LOOKING AT: a
+   * player mid-gesture wants "planting 6 more…" and would not thank a hover readout for taking
+   * the line away from it. The machine under the cursor only speaks into a silence.
    */
-  queueTell(): string | null {
+  statusTell(): string | null {
+    return this.queueTell() ?? machineTell(this.host.latestView(), this.hover);
+  }
+
+  /**
+   * The queue's own half: "planting 6 more…" while the farmer marches, the pause reason while
+   * the can is dry, and a brief "already soaked" when a wet tile was skipped ([[081]]).
+   */
+  private queueTell(): string | null {
     if (performance.now() < this.soakedTellUntil) return 'already soaked';
     const queue = this.queue;
     if (queue === null) return null;
@@ -1496,6 +1522,74 @@ export function tillConverts(
   if (pipeAtView(view, tileX, tileY) !== null) return false;
   if (mode === TillMode.Till) return !query.isField;
   return query.isField && query.crop === 0 && query.compost === 0;
+}
+
+/**
+ * **WHAT THE MACHINE UNDER THE CURSOR HAS TO SAY FOR ITSELF**, or `null` for silence.
+ *
+ * IT WAS `idleMachineTell` AND IT IS NOT ONLY A COMPLAINT ANY MORE ([[097]]). Item 098 opened
+ * this line to explain why a machine was doing nothing; item 097 needs a barrel sprinkler to
+ * say how much watering it has left, which is a plain readout of a working machine. Two things
+ * with one door, in one deliberate order: **a complaint outranks a readout**, because a
+ * machine that is stuck has something to say that a number cannot, and nothing in the game can
+ * currently raise both.
+ *
+ * NO REACH TEST, unlike the dock card: this is a reading of a thing you are POINTING at,
+ * across the lot, and requiring the player to already be standing at the planter would answer
+ * the question only for someone who had guessed the answer.
+ *
+ * ⚠️ HANDOFF: `machineStatus` in `game/render/index.ts` is the hover ribbon and is arguably
+ * where all of this belongs — one sentence about the thing under the cursor rather than two
+ * lines in two corners. That file is another agent's lane this round ([[095]]), so this stays
+ * where the gesture layer already owns a line. If the two ever merge, this is the function to
+ * move, and the two orderings to preserve are `statusTell`'s (doing beats looking) and this
+ * one's (complaint beats readout).
+ */
+export function machineTell(view: WorldView | null, tile: HoverTile | null): string | null {
+  if (view === null || tile === null) return null;
+  const machine = tileAtView(view, tile.tileX, tile.tileY).machine;
+  if (machine === null) return null;
+
+  /*
+    THE PLANTER DOCK'S COMPLAINT ([[098]]). A planter with no zone — or a zone with no crop
+    picked — wants NO seed at all: `dockWantedSeed` returns 0, every seed bounces off
+    `dockCanAcceptSeed`, and since item 085 an arm reads that refusal a swing early and simply
+    never closes its claw. So the failure is a $50,000 machine, a working arm, a full harvester
+    dock, and *nothing visibly happening*. The arm's lamp is red, which says "look downstream";
+    this is what the player finds when they do.
+
+    ⚠️ THIS MIRRORS `dockWantedSeed` AND CANNOT CALL IT: the sim's predicate takes `WorldState`
+    and this side has only the projection. The mirror is exact — `boundZone === 0` is the sim's
+    own "no orders", and `cropSpec(zone.crop) === null` is how `derive-dock.ts` already spells
+    "no crop assigned" from the same two published fields. If a third reason to want no seed
+    ever lands in `bots.ts`, it belongs on `MachineView` rather than in a third copy of this.
+  */
+  if (machine.kind === MachineKind.PlanterDock) {
+    if (machine.boundZone === 0) return 'this planter has no zone — it wants no seed';
+    const zone = view.zones.find((z) => z.id === machine.boundZone);
+    if (zone === undefined || cropSpec(zone.crop as CropId) === null) {
+      return "this planter's zone has no crop — it wants no seed";
+    }
+    return null;
+  }
+
+  /*
+    THE BARREL'S CHARGES ([[097]], the owner's second sentence: "this sprinkler should show how
+    many charges they have on hover on the bottom status bar"). A charge is one ACTIVATION now —
+    one whole 5×5 watered — so "6 of 10" is a number the player can plan a walk around, which
+    is precisely what a millilitre count never was.
+
+    GATED ON `tankChargesMax`, NEVER ON THE KIND, because that is the contract `view.ts` writes
+    down in as many words: *"a machine that has no charges reports `tankChargesMax === 0`, which
+    is the flag to say nothing at all"*. The piped heads and the Irrigation Hub are ledger-fed
+    and report 0 deliberately; a kind check here would be a second opinion about which machines
+    are hauled to, and it would be wrong the day a second hand-filled machine lands.
+  */
+  if (machine.tankChargesMax > 0) {
+    return `barrel — ${machine.tankCharges} of ${machine.tankChargesMax} charges`;
+  }
+
+  return null;
 }
 
 /** Right click: maintenance, on whatever machine is under the cursor. */

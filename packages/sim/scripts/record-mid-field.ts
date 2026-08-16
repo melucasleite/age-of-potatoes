@@ -12,10 +12,11 @@
 // recorder asserts every beat — and asserts the REFUSALS (crop tile, non-flagged machine)
 // before recording, which never enter the trace because a refused command appends nothing.
 //
-// RE-RECORDED 2026-08-16 for item 086. The barrel holds ten charges now and waters only
-// thirsty ground, so "one cycle waters all 24" became three hauls of ten, ten and four —
-// which is a bigger story than the one it replaced, not a smaller one: the second haul is
-// where you can watch a sensing head walk past its own work. Section 5 carries the details.
+// RE-RECORDED 2026-08-16 for item 097, over item 086's re-recording of the same morning. A
+// charge is an ACTIVATION again — one charge waters the whole 5×5 — so the three hauls of ten,
+// ten and four collapse back into ONE haul and one cycle. What the story keeps from 086 is the
+// half that outlived it: the cycle AFTER, which finds all 24 tiles wet, spends nothing and
+// marks nothing. Section 5 carries the details.
 //
 // Every command in the fixture is one the sim actually accepted, following
 // `record-the-till.ts`.
@@ -35,7 +36,7 @@ import {
   itemCount,
   step,
 } from '../src/index';
-import { FIELD_ORIGIN_X, FIELD_ORIGIN_Y, machineSpec } from '../src/data';
+import { FIELD_ORIGIN_X, FIELD_ORIGIN_Y, SPRINKLER_PERIOD_TICKS, machineSpec } from '../src/data';
 import { isTileReady, machineAt, tileAt } from '../src/state';
 import { type GoldenFixture, fixturePath } from '../test/goldens';
 
@@ -194,17 +195,19 @@ if (kitchen !== undefined) {
   }
 }
 
-// --- 5. Place mid-field, and haul three barrels across the patch ------------------------
+// --- 5. Place mid-field, fill once, and watch ONE charge do the whole patch --------------
 //
-// THREE FILLS, NOT ONE, SINCE ITEM 086. The barrel used to hold 36,000 ml — exactly 24 pours,
-// sized so a single dumb top-left scan could cross a full mid-field patch without starving
-// the back row. The owner's ruling of 2026-08-15 made it a ten-charge barrel that waters only
-// thirsty ground, which changes this beat from a stunt into a chore with a shape: ten tiles,
-// walk to the pond, ten more, walk again, and the last four. The back row is not starved
-// because the head RESUMES ITS SCAN where the last barrel ran dry (`machine.scanCursor`,
-// item 086) instead of starting the same top-left sweep over — which is precisely the
-// starvation the old 24-pour barrel existed to paper over, and which the owner caught in play
-// on 2026-08-16 when the first cut of 086 shrank the barrel without answering it.
+// ONE HAUL, ONE CYCLE, TWENTY-FOUR TILES (item 097, owner ruling 2026-08-16: "when they spend
+// a charge, they should water everything in a 5x5"). A charge is an ACTIVATION, priced at the
+// full-patch pour — `SPRINKLER_PATCH_TILES × SPRINKLER_POUR_ML`, the 36,000 ml this barrel
+// used to hold in total — so ten charges are ten patches and the barrel cannot stop halfway.
+// Item 086 briefly made a charge one tile's pour, which turned this beat into three hauls of
+// ten, ten and four and needed a resuming scan cursor to keep the back row from starving; both
+// are gone, because a cycle a barrel can afford is a cycle it can finish.
+//
+// THE SECOND CYCLE IS THE ONE 086 EARNED AND KEPT: the same 24 tiles, now soaked, looked at
+// and passed over for no water, no pour mark, and no wear. A sensing head walking past its own
+// work is the thing worth having in a golden trace.
 if (
   !apply({ type: 'PlaceMachine', kind: MachineKind.Sprinkler, tileX: CENTRE.x, tileY: CENTRE.y })
 ) {
@@ -213,35 +216,22 @@ if (
 const sprinkler = machineAt(state, CENTRE.x, CENTRE.y);
 if (sprinkler === null) throw new Error('the sprinkler is not standing where it was placed');
 
-/** One haul: fill at the pond, then wait for the cycle that fill pays for. */
-function haul(): number {
-  // Counted BEFORE the refill: the pour can fire on the very tick the barrel fills — the
-  // refill errand arrives, the tank fills in the command phase, and the machine advance of
-  // that same tick spends every charge it just received.
-  const before = sprinkler!.wateredCount;
-  if (!errand(IntentAction.RefillHopper, CENTRE.x, CENTRE.y)) {
-    throw new Error('filling the barrel was refused');
-  }
-  let waited = 0;
-  while (sprinkler!.wateredCount === before) {
-    run([]);
-    waited += 1;
-    if (waited > 1_000) throw new Error('the sprinkler never watered');
-  }
-  return sprinkler!.wateredCount - before;
+// Counted BEFORE the refill: the pour can fire on the very tick the barrel fills — the refill
+// errand arrives, the tank fills in the command phase, and the machine advance of that same
+// tick spends the charge it just received.
+const chargesBefore = sprinkler.opCount;
+if (!errand(IntentAction.RefillHopper, CENTRE.x, CENTRE.y)) {
+  throw new Error('filling the barrel was refused');
 }
-
-const POURS = [10, 10, 4];
-for (let round = 0; round < POURS.length; round++) {
-  const poured = haul();
-  if (poured !== POURS[round]) {
-    throw new Error(
-      `haul ${String(round + 1)} watered ${String(poured)} tiles, not ${String(POURS[round])}`,
-    );
-  }
+let waited = 0;
+while (sprinkler.opCount === chargesBefore) {
+  run([]);
+  waited += 1;
+  if (waited > 1_000) throw new Error('the sprinkler never watered');
 }
+if (sprinkler.opCount - chargesBefore !== 1) throw new Error('one patch cost more than one charge');
 if (sprinkler.wateredCount !== 24) {
-  throw new Error(`the patch took ${String(sprinkler.wateredCount)} pours, not 24`);
+  throw new Error(`one charge watered ${String(sprinkler.wateredCount)} tiles, not 24`);
 }
 
 const own = tileAt(state, CENTRE.x, CENTRE.y)!;
@@ -252,8 +242,18 @@ if (own.moisture <= 0) throw new Error('the hand pour under the machine was lost
 if (tileAt(state, CROPPED.x, CROPPED.y)!.lastPouredTick <= 0) {
   throw new Error('the cropped neighbour went unwatered');
 }
-// And the saving is on the books: hauls two and three walked past ground haul one had wet.
-if (sprinkler.skippedCount <= 0) throw new Error('the sensing head claimed no savings');
+
+// The free cycle: the whole patch is wet, so the next activation is not an activation.
+const heldMl = sprinkler.tankMl;
+const skippedBefore = sprinkler.skippedCount;
+for (let i = 0; i < 2 * SPRINKLER_PERIOD_TICKS && sprinkler.skippedCount === skippedBefore; i++) {
+  run([]);
+}
+if (sprinkler.skippedCount - skippedBefore !== 24) {
+  throw new Error('the sensing head did not walk its whole patch, or counted its own tile');
+}
+if (sprinkler.tankMl !== heldMl) throw new Error('a cycle over wet ground still spent a charge');
+if (sprinkler.opCount - chargesBefore !== 1) throw new Error('a skipped cycle counted as work');
 
 // --- 6. Deconstruct: the ground comes back exactly as it stood --------------------------
 if (!errand(IntentAction.Deconstruct, CENTRE.x, CENTRE.y)) {
@@ -284,12 +284,13 @@ const fixture: GoldenFixture = {
   description:
     'Machines on farm tiles (item 067): the gardener loop earns $150, the farmer walks to ' +
     'the field centre on a no-op walk errand (item 070), a barrel sprinkler stands ON a ' +
-    'hand-watered farm tile, and three hauls from the pond — ten pours, ten, then four — ' +
-    'water all 24 farm neighbours, including a growing crop, and never the machine’s own ' +
-    'tile, with the second and third cycles walking past the ground the first one wet. ' +
-    'Deconstruction hands the tile back with its soil, fertility, and decayed moisture ' +
-    'untouched, and the freed ground takes a seed again. Pins the fieldPlaceable footprint ' +
-    'rule, the occupied-tile watering skip, item 086’s ten-charge sensing barrel, and ' +
+    'hand-watered farm tile, and ONE haul from the pond buys ONE charge that waters all 24 ' +
+    'farm neighbours in a single cycle — including a growing crop, and never the machine’s ' +
+    'own tile — after which the next cycle looks at the same 24 soaked tiles and spends ' +
+    'nothing at all. Deconstruction hands the tile back with its soil, fertility, and ' +
+    'decayed moisture untouched, and the freed ground takes a seed again. Pins the ' +
+    'fieldPlaceable footprint rule, the occupied-tile watering skip, item 097’s ' +
+    'charge-per-activation barrel with item 086’s thirst rule inside it, and ' +
     'IntentAction.Walk in the trace and the save shape.',
   seed: SEED,
   ticks: state.tick,

@@ -15,10 +15,11 @@
 // `reachAdjusted` is pure and takes the projection as an argument, so the player's position
 // is just a field to assign. No DOM, no camera, no Pixi, nothing mocked.
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   CropId,
   Direction,
+  GrabberTier,
   IntentAction,
   ItemId,
   MachineKind,
@@ -36,6 +37,7 @@ import {
   createWorkQueue,
   dragCommands,
   holdCommand,
+  machineTell,
   primaryCommand,
   pumpWorkQueue,
   reachAdjusted,
@@ -49,6 +51,7 @@ import {
 } from './pointer';
 import type { HoldState, WorkQueueState } from './pointer';
 import { CommandQueue } from './commands';
+import { grabberPanelSnapshot, publishGrabberPanel, resetGrabberPanel } from './grabber-panel';
 import type { InputHost } from './context';
 import type { InputSystem } from './system';
 import type { Camera } from '../render/camera';
@@ -1099,69 +1102,74 @@ describe('the work queue ([[074]])', () => {
   });
 });
 
-// The cancellation wiring the pure pump cannot see: Esc, right-click, and a new gesture all
-// pass through `PointerInput` itself. Driven through a stub host — the constructor takes
-// capabilities, not a browser — with synthetic pointer events.
-describe('the work queue’s cancellation wiring ([[074]])', () => {
-  function harness(view: WorldView, tool: ToolMode) {
-    const canvasListeners = new Map<string, (event: unknown) => void>();
-    const canvas = {
-      addEventListener: (name: string, fn: (event: unknown) => void) => {
-        canvasListeners.set(name, fn);
-      },
-      removeEventListener: () => {},
-      setPointerCapture: () => {},
-      releasePointerCapture: () => {},
-      getBoundingClientRect: () => ({ left: 0, top: 0, width: 640, height: 640 }),
-    } as unknown as HTMLCanvasElement;
-    const camera = {
-      transform: { viewWidth: 640, viewHeight: 640, zoom: 1 },
-      screenToWorld: (x: number, y: number) => ({ x, y }),
-      worldToScreen: (x: number, y: number) => ({ x, y }),
-    } as unknown as Camera;
-    const queue = new CommandQueue();
-    let armed = tool;
-    const host = {
-      canvas,
-      camera,
-      queue,
-      overlayRoot: undefined as unknown as HTMLElement,
-      latestView: () => view,
-      getTool: () => armed,
-      setTool: (t: ToolMode) => {
-        armed = t;
-      },
-      setHover: () => {},
-      toggleOverlay: () => {},
-    } as unknown as InputHost;
-    const system = {
-      spaceHeld: false,
-      placeDir: Direction.East,
-      zoneCrop: CropId.RussetPotato,
-      manualWalkHeld: false,
-    } as unknown as InputSystem;
-    const pointer = new PointerInput(host, system);
-    pointer.attach();
-    const fire = (name: string, event: Record<string, unknown>) => {
-      canvasListeners.get(name)!({ preventDefault: () => {}, pointerId: 1, ...event });
-    };
-    const pressAt = (tileX: number, tileY: number, button = 0) => {
-      fire('pointerdown', {
-        button,
-        clientX: tileX * TILE_PX + TILE_PX / 2,
-        clientY: tileY * TILE_PX + TILE_PX / 2,
-      });
-    };
-    const releaseAt = (tileX: number, tileY: number, button = 0) => {
-      fire('pointerup', {
-        button,
-        clientX: tileX * TILE_PX + TILE_PX / 2,
-        clientY: tileY * TILE_PX + TILE_PX / 2,
-      });
-    };
-    return { pointer, queue, pressAt, releaseAt, arm: (t: ToolMode) => host.setTool(t) };
-  }
+/**
+ * A `PointerInput` on a stub host — the constructor takes capabilities, not a browser — with
+ * synthetic pointer events. Hoisted to module scope because the click LADDER has two tenants
+ * now: the work queue's cancellation wiring below, and item 099's arm-card rung, which can
+ * only be checked by driving a real press through `onPointerDown` in its real order.
+ */
+function harness(view: WorldView, tool: ToolMode) {
+  const canvasListeners = new Map<string, (event: unknown) => void>();
+  const canvas = {
+    addEventListener: (name: string, fn: (event: unknown) => void) => {
+      canvasListeners.set(name, fn);
+    },
+    removeEventListener: () => {},
+    setPointerCapture: () => {},
+    releasePointerCapture: () => {},
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 640, height: 640 }),
+  } as unknown as HTMLCanvasElement;
+  const camera = {
+    transform: { viewWidth: 640, viewHeight: 640, zoom: 1 },
+    screenToWorld: (x: number, y: number) => ({ x, y }),
+    worldToScreen: (x: number, y: number) => ({ x, y }),
+  } as unknown as Camera;
+  const queue = new CommandQueue();
+  let armed = tool;
+  const host = {
+    canvas,
+    camera,
+    queue,
+    overlayRoot: undefined as unknown as HTMLElement,
+    latestView: () => view,
+    getTool: () => armed,
+    setTool: (t: ToolMode) => {
+      armed = t;
+    },
+    setHover: () => {},
+    toggleOverlay: () => {},
+  } as unknown as InputHost;
+  const system = {
+    spaceHeld: false,
+    placeDir: Direction.East,
+    zoneCrop: CropId.RussetPotato,
+    manualWalkHeld: false,
+  } as unknown as InputSystem;
+  const pointer = new PointerInput(host, system);
+  pointer.attach();
+  const fire = (name: string, event: Record<string, unknown>) => {
+    canvasListeners.get(name)!({ preventDefault: () => {}, pointerId: 1, ...event });
+  };
+  const pressAt = (tileX: number, tileY: number, button = 0) => {
+    fire('pointerdown', {
+      button,
+      clientX: tileX * TILE_PX + TILE_PX / 2,
+      clientY: tileY * TILE_PX + TILE_PX / 2,
+    });
+  };
+  const releaseAt = (tileX: number, tileY: number, button = 0) => {
+    fire('pointerup', {
+      button,
+      clientX: tileX * TILE_PX + TILE_PX / 2,
+      clientY: tileY * TILE_PX + TILE_PX / 2,
+    });
+  };
+  return { pointer, queue, pressAt, releaseAt, arm: (t: ToolMode) => host.setTool(t) };
+}
 
+// The cancellation wiring the pure pump cannot see: Esc, right-click, and a new gesture all
+// pass through `PointerInput` itself.
+describe('the work queue’s cancellation wiring ([[074]])', () => {
   /** Press a far tile with Plant: the press walks, the queue holds its errand, release. */
   function workingQueue(view: WorldView) {
     const h = harness(view, ToolMode.Plant);
@@ -1212,12 +1220,60 @@ describe('the work queue’s cancellation wiring ([[074]])', () => {
   it('the tell reads the queue while it works and clears when it is done', () => {
     const view = standingOn(2, 2);
     const h = workingQueue(view);
-    expect(h.pointer.queueTell()).toBe('planting 1 more…');
+    expect(h.pointer.statusTell()).toBe('planting 1 more…');
     // The errand resolves and the pump retires the finished queue; the tell clears.
     view.tick += 1;
     h.pointer.update();
     h.pointer.update();
-    expect(h.pointer.queueTell()).toBeNull();
+    expect(h.pointer.statusTell()).toBeNull();
+  });
+});
+
+describe('the tell names a planter that wants no seed ([[098]])', () => {
+  // **THE FAILURE THAT EXPLAINED ITSELF NOWHERE.** A planter dock with no zone wants no seed at
+  // all, so every arm pointed at it declines to pick up (item 085) and every belt backs up —
+  // and the entire visible evidence was one red lamp on the arm. This is what the player finds
+  // when they follow that lamp downstream. The predicate mirrors `dockWantedSeed` off the two
+  // fields the projection publishes; these pin the mirror, and the silence in the good cases,
+  // which is the half a tell most easily gets wrong.
+
+  function planter(boundZone: number, crop?: number): WorldView {
+    const view = withMachine(standingOn(4, 4), 4, 5, MachineKind.PlanterDock, 9);
+    view.machines[0]!.boundZone = boundZone;
+    if (crop !== undefined) {
+      view.zones.push({ id: boundZone, crop } as WorldView['zones'][number]);
+    }
+    return view;
+  }
+
+  const HOVER = { tileX: 4, tileY: 5 };
+
+  it('says so when the dock has no zone at all', () => {
+    expect(machineTell(planter(0), HOVER)).toBe('this planter has no zone — it wants no seed');
+  });
+
+  it('says so when the zone exists but nobody picked a crop', () => {
+    expect(machineTell(planter(3, CropId.None), HOVER)).toBe(
+      "this planter's zone has no crop — it wants no seed",
+    );
+  });
+
+  it('says so when the bound zone is gone — a binding to nothing wants nothing', () => {
+    expect(machineTell(planter(3), HOVER)).toBe(
+      "this planter's zone has no crop — it wants no seed",
+    );
+  });
+
+  it('is SILENT once the zone has a crop — a working planter is not a complaint', () => {
+    expect(machineTell(planter(3, CropId.RussetPotato), HOVER)).toBeNull();
+  });
+
+  it('is silent about every other machine, and about bare ground', () => {
+    const bay = withMachine(standingOn(4, 4), 4, 5, MachineKind.DroneBay, 11);
+    expect(machineTell(bay, HOVER)).toBeNull();
+    expect(machineTell(standingOn(4, 4), HOVER)).toBeNull();
+    expect(machineTell(null, HOVER)).toBeNull();
+    expect(machineTell(planter(0), null)).toBeNull();
   });
 });
 
@@ -1321,5 +1377,130 @@ describe('what R acts on, with belts in the world ([[084]])', () => {
     const h = harness(standingOn(2, 2));
     h.hoverAt(6, 6);
     expect(h.pointer.rotateCommand()).toBeNull();
+  });
+});
+
+describe('the tell reads a barrel’s charges ([[097]])', () => {
+  // The owner's second sentence on item 097: "this sprinkler should show how many charges they
+  // have on hover on the bottom status bar." A charge is one ACTIVATION now — one whole 5×5
+  // watered — so the count is a number a player can plan a walk around, which is exactly what
+  // the millilitre ledger never was. What fails quietly here is the GATE: reading the count off
+  // the kind rather than off `tankChargesMax` would print "0 of 0 charges" on every piped head
+  // and the Irrigation Hub, which are ledger-fed and report 0 on purpose.
+
+  function barrel(charges: number, max: number, kind: number = MachineKind.Sprinkler): WorldView {
+    const view = withMachine(standingOn(4, 4), 4, 5, kind, 3);
+    view.machines[0]!.tankCharges = charges;
+    view.machines[0]!.tankChargesMax = max;
+    return view;
+  }
+
+  const HOVER = { tileX: 4, tileY: 5 };
+
+  it('says how many are left, over the ceiling the Capacity dial set', () => {
+    expect(machineTell(barrel(9, 10), HOVER)).toBe('barrel — 9 of 10 charges');
+    expect(machineTell(barrel(0, 10), HOVER)).toBe('barrel — 0 of 10 charges');
+    expect(machineTell(barrel(14, 20), HOVER)).toBe('barrel — 14 of 20 charges');
+  });
+
+  it('is SILENT for a machine with no charges — the ledger-fed heads and the Hub', () => {
+    expect(machineTell(barrel(0, 0, MachineKind.PipedSprinkler), HOVER)).toBeNull();
+    expect(machineTell(barrel(0, 0, MachineKind.IrrigationHub), HOVER)).toBeNull();
+    expect(machineTell(barrel(0, 0, MachineKind.Tank), HOVER)).toBeNull();
+  });
+
+  // These two are what make the gate provable. The three above happen to differ in KIND as
+  // well as in `tankChargesMax`, so on their own they cannot tell a correct implementation
+  // from one that switched on `MachineKind.Sprinkler` — a control run with the kind check
+  // substituted left every one of them green. These do not: the flag is the flag, and the
+  // whole point of the contract `view.ts` writes down is that it survives a second hand-filled
+  // machine landing without this file being edited.
+  it('is silent about a SPRINKLER that reports no charges — the flag outranks the kind', () => {
+    expect(machineTell(barrel(0, 0, MachineKind.Sprinkler), HOVER)).toBeNull();
+  });
+
+  it('speaks for any machine that DOES report charges, whatever kind it is', () => {
+    expect(machineTell(barrel(2, 4, MachineKind.Washer), HOVER)).toBe('barrel — 2 of 4 charges');
+  });
+
+  it('lets a complaint outrank a readout — nothing raises both today, and the order is fixed', () => {
+    const planter = barrel(9, 10, MachineKind.PlanterDock);
+    planter.machines[0]!.boundZone = 0;
+    expect(machineTell(planter, HOVER)).toBe('this planter has no zone — it wants no seed');
+  });
+});
+
+describe('clicking an arm opens its card ([[099]])', () => {
+  // The rung item 099 added to the click ladder, checked in its real order by driving a real
+  // press. What fails quietly: putting it BELOW `walkFallback` (the click would send the farmer
+  // marching and never open the card), putting it ABOVE `primaryCommand` (every tool would stop
+  // working over an arm's tile), or letting it fire on a tool that already had a verb there.
+
+  function withArm(view: WorldView, tileX: number, tileY: number, id: number): WorldView {
+    view.grabbers.push({
+      id,
+      tileX,
+      tileY,
+      dir: Direction.East,
+      tier: GrabberTier.Mk2,
+      filter: 0,
+      held: 0,
+    } as never);
+    return view;
+  }
+
+  beforeEach(() => {
+    resetGrabberPanel();
+  });
+
+  it('opens the card on the arm, and does not walk the farmer across the lot to it', () => {
+    const view = withArm(owning(standingOn(2, 2)), 12, 12, 6);
+    const h = harness(view, ToolMode.Hand);
+    h.pressAt(12, 12);
+
+    // Nothing queued: `SetGrabberFilter` is not reach-gated, so the trip buys nothing, and
+    // the click that used to fall through to item 070's walk now has a meaning of its own.
+    expect(h.queue.drain()).toEqual([]);
+    publishGrabberPanel(view);
+    expect(grabberPanelSnapshot().open).toBe(true);
+    expect(grabberPanelSnapshot().grabberId).toBe(6);
+  });
+
+  it('leaves the ground beside it walking exactly as before', () => {
+    const view = withArm(owning(standingOn(2, 2)), 12, 12, 6);
+    const h = harness(view, ToolMode.Hand);
+    h.pressAt(12, 11);
+
+    expect(h.queue.drain()).toMatchObject([{ type: 'WalkAndAct', tileX: 12, tileY: 11 }]);
+    publishGrabberPanel(view);
+    expect(grabberPanelSnapshot().open).toBe(false);
+  });
+
+  it('does not fire for a tool that already has a verb over that tile', () => {
+    const view = withArm(owning(standingOn(4, 4)), 4, 5, 6);
+    const h = harness(view, ToolMode.Harvest);
+    h.pressAt(4, 5);
+
+    expect(h.queue.drain()).toMatchObject([{ type: 'HarvestTile', tileX: 4, tileY: 5 }]);
+    publishGrabberPanel(view);
+    expect(grabberPanelSnapshot().open).toBe(false);
+  });
+
+  it('leaves teardown a teardown: the rect gesture never reaches the click ladder', () => {
+    const view = withArm(owning(standingOn(2, 2)), 4, 4, 6);
+    const h = harness(view, ToolMode.Deconstruct);
+    h.pressAt(4, 4);
+    h.releaseAt(4, 4);
+
+    expect(h.queue.drain()).toMatchObject([{ type: 'RemoveGrabber', grabberId: 6 }]);
+    publishGrabberPanel(view);
+    expect(grabberPanelSnapshot().open).toBe(false);
+  });
+
+  it('leaves R a rotate — the two verbs on an arm stay distinct', () => {
+    const view = withArm(owning(standingOn(4, 4)), 4, 5, 6);
+    const h = harness(view, ToolMode.Hand);
+    h.pressAt(4, 5);
+    expect(h.pointer.rotateCommand()).toEqual({ type: 'RotateGrabber', grabberId: 6 });
   });
 });

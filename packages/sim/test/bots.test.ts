@@ -31,14 +31,17 @@ import {
   GrabberTier,
   ITEM_SPECS,
   ItemId,
+  LampState,
   MachineKind,
   addItem,
+  createWorldView,
   cropSpec,
   createWorld,
   dockAcceptDelivery,
   dockAcceptSeed,
   dockCanAcceptDelivery,
   findNonIntegerFields,
+  grabberNextPickup,
   hashState,
   itemCount,
   plantCrop,
@@ -54,6 +57,7 @@ import {
   tileCentreSubtiles,
   tillTile,
   totalManualTouches,
+  view,
   waterAtSubtile,
 } from '../src/index';
 import { POND_ORIGIN_X, POND_ORIGIN_Y, POND_TILES_WIDE } from '../src/data';
@@ -1017,6 +1021,209 @@ describe('an arm at a dock looks before it grabs (item 085)', () => {
     }
     expect(hopperEverHeldSeed, 'the seed the zone asked for never reached the hopper').toBe(true);
     expect(belt.items).toHaveLength(0);
+  });
+});
+
+// --- the destination picks the shelf (item 098) --------------------------------------
+//
+// **THE OWNER'S REPORT, 2026-08-16: "the arm is not able to take seeds from the harvester to
+// the planter."** Item 088 built the two-shelf dock precisely so that loop could exist, and it
+// could not, for two compounding reasons. `dockShelfFor` was produce-first with a fall-through
+// that only fired on an EMPTY produce shelf — and a working harvester keeps produce stocked, so
+// an unfiltered arm never reached the seeds at all. Meanwhile item 085 had removed the hostage,
+// so the arm did not even jam holding a potato: it declined, silently, and the player saw an
+// arm doing nothing.
+//
+// The fix is not a new rule so much as one question the arm forgot to ask. Produce-first is now
+// the TIE-BREAK; an unfiltered arm at two stocked shelves offers each to `grabberWouldAccept`
+// and reads the one the destination will have. These tests pin both halves of that: the loop
+// works with a plain Mk1 and no filter, and every case that worked before still resolves the
+// same shelf it always did.
+
+describe('an unfiltered arm at a two-shelf dock reads the shelf its destination wants', () => {
+  /** A harvester dock with produce AND seeds on its shelves, and the arm that reaches into it. */
+  function stockedDock(seed = 4242) {
+    const rig = farmWithDock(
+      MachineKind.HarvesterDock,
+      BotKind.Harvester,
+      CropId.RussetPotato,
+      seed,
+    );
+    ripenZone(rig.state, rig.zoneId);
+    stepMany(rig.state, 6_000);
+    // The premise of every test below: BOTH shelves have something on them. The bug only ever
+    // showed up on a dock that was working, which is why it survived item 088's own tests.
+    expect(rig.dock.cargoCount).toBeGreaterThan(0);
+    expect(rig.dock.seedShelfCount).toBeGreaterThan(0);
+    return rig;
+  }
+
+  /** The dock covers (0,0)-(1,1), so an arm at (2,1) reaches back into it and drops at (3,1). */
+  function armAtDock(state: WorldState, filter: ItemId | 0 = 0) {
+    return spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, filter)!;
+  }
+
+  function lampOf(state: WorldState, armId: number): number {
+    return view(state, createWorldView()).grabbers.find((g) => g.id === armId)!.lamp;
+  }
+
+  it('THE REPORTED BUG: a plain Mk1 with no filter carries seeds into a planter', () => {
+    // Harvester dock → arm → planter dock, which is the loop item 088 exists for and the one
+    // the owner could not build. No filter, no Mk2, no ceremony. The planter is bound to the
+    // same zone, so the seed it wants is the seed the harvester is shelving.
+    const { state, dock, zoneId } = stockedDock();
+    const planter = spawnMachine(state, MachineKind.PlanterDock, 3, 1)!;
+    planter.boundZone = zoneId;
+    const arm = armAtDock(state);
+    const seedsBefore = dock.seedShelfCount;
+
+    stepMany(state, 1_000);
+
+    expect(planter.cargoItem).toBe(ItemId.PotatoSeed);
+    expect(planter.cargoCount).toBeGreaterThan(0);
+    expect(dock.seedShelfCount).toBeLessThan(seedsBefore);
+    // The produce never went anywhere near it: a hopper holds one item, and this one holds
+    // seeds. The arm read the shelf its destination wanted rather than the first one stocked.
+    expect(arm.opCount).toBeGreaterThan(0);
+    expect(arm.held).toBe(0);
+  });
+
+  it('still takes produce when the destination will take either — produce-first is the tie-break', () => {
+    // THE REGRESSION THE FIX IS SHAPED AROUND. A belt takes anything, so both shelves are
+    // acceptable and the old priority decides — which is exactly what keeps a dock→belt run
+    // somebody built last week doing precisely what it did last week.
+    const { state, dock } = stockedDock(4243);
+    const belt = spawnBelt(state, BeltTier.Basic, 3, 1, Direction.East, 3)!;
+    armAtDock(state);
+    const seedsBefore = dock.seedShelfCount;
+
+    stepMany(state, 400);
+
+    expect(belt.items.length).toBeGreaterThan(0);
+    expect(belt.items.every((entry) => entry.item === ItemId.RussetPotato)).toBe(true);
+    expect(dock.seedShelfCount).toBe(seedsBefore);
+  });
+
+  it('leaves a filtered arm exactly as it was — the filter names the shelf, nothing overrides it', () => {
+    // An arm filtered to POTATOES, pointed at a planter that wants only seeds. The seed shelf is
+    // stocked and the planter would take from it happily — and the arm must not, because the
+    // player named produce. Destination-guessing is the unfiltered arm's rule and only its rule.
+    const { state, dock, zoneId } = stockedDock(4244);
+    const planter = spawnMachine(state, MachineKind.PlanterDock, 3, 1)!;
+    planter.boundZone = zoneId;
+    const arm = armAtDock(state, ItemId.RussetPotato);
+    const seedsBefore = dock.seedShelfCount;
+
+    stepMany(state, 1_000);
+
+    expect(arm.opCount).toBe(0);
+    expect(arm.held).toBe(0);
+    expect(planter.cargoCount).toBe(0);
+    expect(dock.seedShelfCount).toBe(seedsBefore);
+    expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
+  });
+
+  it('lights RED, not amber, when the destination will take neither shelf', () => {
+    // FAILURE SHAPE ONE, and the reason `dockShelfFor` still names a shelf when both are
+    // refused. A Bagger has a line for seasoned chips and none for a potato or a seed. The arm
+    // is stalled on its DESTINATION, so the lamp must send the player downstream — and a peek
+    // that answered "nothing here" would have sent them upstream to a dock that is full.
+    const { state, dock } = stockedDock(4245);
+    spawnMachine(state, MachineKind.Bagger, 3, 1);
+    const arm = armAtDock(state);
+    const seedsBefore = dock.seedShelfCount;
+    const produceBefore = dock.cargoCount;
+
+    stepMany(state, 400);
+
+    expect(arm.held).toBe(0);
+    expect(arm.opCount).toBe(0);
+    expect(dock.seedShelfCount).toBe(seedsBefore);
+    expect(dock.cargoCount).toBeGreaterThanOrEqual(produceBefore);
+    expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
+  });
+
+  it('FAILURE SHAPE TWO: an unbound planter refuses, the arm never grabs, and the lamp is red', () => {
+    // The second cause of the owner's report, and the one no amount of shelf logic can fix: a
+    // planter with no zone has no instructions, so `dockWantedSeed` is 0 and it wants nothing at
+    // all. The arm is right to stand still. What it must NOT do is grab first and find out
+    // after — and what the game must not do is leave the player with no way to see why.
+    const { state, dock } = stockedDock(4246);
+    const planter = spawnMachine(state, MachineKind.PlanterDock, 3, 1)!;
+    expect(planter.boundZone).toBe(0);
+    const arm = armAtDock(state);
+    const seedsBefore = dock.seedShelfCount;
+
+    stepMany(state, 1_000);
+
+    expect(arm.held).toBe(0);
+    expect(arm.opCount).toBe(0);
+    expect(planter.cargoCount).toBe(0);
+    expect(dock.seedShelfCount).toBe(seedsBefore);
+    expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
+
+    // CONTROL, so the assertions above are not a rig that was never going to move: give the
+    // planter its orders and the same arm starts carrying the same seeds within the minute.
+    planter.boundZone = 1;
+    stepMany(state, 400);
+    expect(planter.cargoItem).toBe(ItemId.PotatoSeed);
+    expect(planter.cargoCount).toBeGreaterThan(0);
+  });
+
+  it('PEEK AND TAKE RESOLVE THE SAME SHELF, at every destination — item 085 is still law', () => {
+    // **THE PROPERTY THE WHOLE DESIGN RESTS ON**, and it got harder to hold this round: the
+    // shelf an arm reads now depends on what is standing in front of it, so a peek and a pull
+    // that consulted the destination differently would take a seed the lamp had promised was a
+    // potato. There is one function, so they cannot — and this is the test that says so rather
+    // than the comment that hopes so. Every tick the arm is idle: ask what it would take, step
+    // once, and see what is in the claw.
+    const destinations: readonly {
+      name: string;
+      build: (s: WorldState, zoneId: number) => void;
+    }[] = [
+      {
+        name: 'planter dock (bound)',
+        build: (s, zoneId) => {
+          const planter = spawnMachine(s, MachineKind.PlanterDock, 3, 1)!;
+          planter.boundZone = zoneId;
+        },
+      },
+      {
+        name: 'planter dock (unbound)',
+        build: (s) => void spawnMachine(s, MachineKind.PlanterDock, 3, 1),
+      },
+      { name: 'sell bin', build: (s) => void spawnMachine(s, MachineKind.SellBin, 3, 1) },
+      { name: 'chip kitchen', build: (s) => void spawnMachine(s, MachineKind.ChipKitchen, 3, 1) },
+      { name: 'bagger', build: (s) => void spawnMachine(s, MachineKind.Bagger, 3, 1) },
+      {
+        name: 'belt',
+        build: (s) => void spawnBelt(s, BeltTier.Basic, 3, 1, Direction.East, 3),
+      },
+      { name: 'bare ground', build: () => {} },
+    ];
+
+    const disagreements: string[] = [];
+    for (const destination of destinations) {
+      for (const filter of [0, ItemId.RussetPotato, ItemId.PotatoSeed] as const) {
+        const { state, zoneId } = stockedDock(4247);
+        destination.build(state, zoneId);
+        const arm = armAtDock(state, filter);
+
+        for (let i = 0; i < 600; i++) {
+          const idle = arm.held === 0 && arm.cooldown === 0;
+          const predicted = idle ? grabberNextPickup(state, arm, 1) : 0;
+          step(state, { tick: state.tick, commands: [] });
+          if (!idle || arm.held === 0) continue;
+          if (arm.held !== predicted) {
+            disagreements.push(
+              `${destination.name} + filter ${filter}: peeked ${predicted}, took ${arm.held}`,
+            );
+            break;
+          }
+        }
+      }
+    }
+    expect(disagreements).toEqual([]);
   });
 });
 

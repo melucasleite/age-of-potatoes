@@ -292,6 +292,21 @@ export type StyleName =
   | 'dockZoneCounts'
   | 'dockZoneNote'
   | 'dockStop'
+  // --- the grabber card ([[099]]) ---
+  // Head, divider and the locked note are the bench's again, class for class. What is new is
+  // the close button (it is the one card a click opens, so it needs a click to shut) and the
+  // filter grid, which is the bag's cell idea at card width.
+  | 'armClose'
+  | 'armOrders'
+  | 'armOrdersAny'
+  | 'armFacing'
+  | 'armGridNote'
+  | 'armGrid'
+  | 'armCell'
+  | 'armCellOn'
+  | 'armCellAny'
+  | 'armCellAnyMark'
+  | 'armCellName'
   // --- the field card ---
   | 'fieldCard'
   | 'fieldRow'

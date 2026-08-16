@@ -39,6 +39,7 @@ import {
   PARCEL_COUNT,
   PARCEL_TILES,
   PortFlow,
+  SPRINKLER_CHARGE_ML,
   SPRINKLER_POUR_ML,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
@@ -239,20 +240,25 @@ export interface MachineView {
   /** 1 when this machine asked its network for water and got less. THE AMBER DROPLET. */
   throttled: number;
   /**
-   * A WATERING HEAD'S TANK IN CHARGES, AND IN CHARGES ONLY (item 086).
+   * THE BARREL SPRINKLER'S TANK IN CHARGES, AND THE BARREL'S ALONE (items 086, 097).
    *
-   * The barrel is filled by hand and spends its water one pour at a time, so millilitres are
-   * the wrong unit to read it in — "6 of 10" is a number a player can plan a walk around,
-   * "9,000 ml" is not. A CHARGE IS `SPRINKLER_POUR_ML`, and both of these are DERIVED from
-   * `machine.tankMl` on the tick they are read: item 028's one-ledger law says millilitres
-   * are counted where they leave the source, and a stored charge counter is exactly the
-   * second number that would drift from the ledger by one somewhere and never be believed
-   * again. Nothing in `WorldState` knows the word "charge".
+   * The barrel is filled by hand and spends its water one **activation** at a time, so
+   * millilitres are the wrong unit to read it in — "6 of 10" is a number a player can plan a
+   * walk around, "216,000 ml" is not. A CHARGE IS `SPRINKLER_CHARGE_ML`, one whole-patch
+   * watering, and both of these are DERIVED from `machine.tankMl` on the tick they are read:
+   * item 028's one-ledger law says millilitres are counted where they leave the source, and a
+   * stored charge counter is exactly the second number that would drift from the ledger by one
+   * somewhere and never be believed again. Nothing in `WorldState` knows the word "charge".
    *
-   * Zero on everything that is not a watering head — a Tank holding a million millilitres
-   * has a capacity, not a supply of pours, and reporting it as 666 charges would be noise.
-   * `tankChargesMax` follows the Capacity dial, so an upgraded barrel says what it can
-   * actually hold rather than the spec's ten.
+   * **ZERO ON EVERY OTHER MACHINE, INCLUDING THE PIPED HEADS AND THE HUB** (item 097). They
+   * are ledger-fed: nobody hauls to them, nobody plans a walk around them, and their buffer is
+   * head-room rather than a supply of waterings — `tankPermille` and the lamp are their
+   * readout. Reporting a Tank's million millilitres as 666 charges would be the same noise for
+   * the same reason. `tankChargesMax` follows the Capacity dial, so an upgraded barrel says
+   * what it can actually hold rather than the spec's ten.
+   *
+   * **HUD CONTRACT**: hover copy reads `tankCharges` of `tankChargesMax`; a machine that has
+   * no charges reports `tankChargesMax === 0`, which is the flag to say nothing at all.
    */
   tankCharges: number;
   tankChargesMax: number;
@@ -1150,14 +1156,13 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.ticksToEmpty =
       spec !== null && spec.role === MachineRole.Tank ? tankTicksToEmpty(machine) : -1;
     mv.throttled = machine.throttled ? 1 : 0;
-    // Charges, derived here and stored nowhere. Gated on the watering roles rather than on
-    // "has a tank" so that a Tank's million millilitres are never reported as a pour count.
-    const pours =
-      spec !== null &&
-      (spec.role === MachineRole.Sprinkler || spec.role === MachineRole.PipedSprinkler);
-    mv.tankCharges = pours ? divFloor(machine.tankMl, SPRINKLER_POUR_ML) : 0;
-    mv.tankChargesMax = pours
-      ? divFloor(effectiveTankCapacityMl(spec, machine), SPRINKLER_POUR_ML)
+    // Charges, derived here and stored nowhere. Gated on the ONE role that has them (item
+    // 097): the hand-filled barrel. A Tank's million millilitres are not 666 pours, and a
+    // piped head's buffer is head-room on a ledger rather than a supply of waterings.
+    const charged = spec !== null && spec.role === MachineRole.Sprinkler;
+    mv.tankCharges = charged ? divFloor(machine.tankMl, SPRINKLER_CHARGE_ML) : 0;
+    mv.tankChargesMax = charged
+      ? divFloor(effectiveTankCapacityMl(spec, machine), SPRINKLER_CHARGE_ML)
       : 0;
     mv.coverageRadius = spec === null ? 0 : spec.coverageRadiusTiles;
     mv.moistureSensing = spec !== null && spec.moistureSensing ? 1 : 0;
@@ -1646,7 +1651,13 @@ function lampFor(state: WorldState, index: number): LampState {
   if (machine.condition <= 0) return LampState.Halted;
 
   if (spec.role === MachineRole.Sprinkler) {
-    return machine.tankMl <= 0 ? LampState.UtilityMissing : LampState.Running;
+    // "Empty" is A CHARGE SHORT, not a drop short (item 097). A barrel holding half a charge
+    // cannot water anything and will not try, so the blue "go fill me" lamp has to agree with
+    // `tankCharges === 0` — a running lamp over a head that has quietly stopped is the exact
+    // lie plan §5's grammar exists to prevent. Residue like that is ordinary now: a metered
+    // haul from a low pond gives what is there rather than a whole charge, and it sits in the
+    // barrel until the next haul tops it up.
+    return machine.tankMl < SPRINKLER_CHARGE_ML ? LampState.UtilityMissing : LampState.Running;
   }
 
   // ONE LAMP GRAMMAR, EVERYWHERE (plan §5). A head with a dry buffer shows the BLUE utility

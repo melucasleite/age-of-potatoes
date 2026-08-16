@@ -2737,6 +2737,140 @@
   opacity: 0.55;
 }
 
+/* --- the grabber card ([[099]]) --------------------------------------------------- */
+
+/*
+ * THE ONE CARD IN THIS CORNER WITH A CLOSE BUTTON, and the reason is the gesture that opens
+ * it. The bench and the dock card are consequences of where the player is standing, so
+ * walking away shuts them and a × would be a control for something the player's feet already
+ * do. This one is a consequence of a CLICK — it outlives the click, and a panel that opens on
+ * a click and cannot be closed by one is a trap. Styled as the floating windows' close, class
+ * for class, because it is the same verb.
+ */
+.armClose {
+  flex: 0 0 auto;
+  pointer-events: auto;
+  cursor: pointer;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #cbb99b;
+  padding: 1px 7px 2px;
+  background: #14100e;
+  box-shadow: inset 0 0 0 2px #46392f;
+}
+
+.armClose:hover {
+  color: #efe2c6;
+  background: #5e1c1a;
+}
+
+/* What the arm is doing, in the dock card's own orders voice — same corner, same question
+   shape ("what has this machine been told to do"), so it gets the same type. */
+.armOrders {
+  margin-top: 7px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #f5d382;
+}
+
+/* Unfiltered is not an unfinished job — it is the state an arm ships in and a perfectly good
+   answer — so it is quiet rather than amber. The dock's "no zone" is amber because a dock
+   with no zone genuinely does nothing; an unfiltered arm works. */
+.armOrdersAny {
+  color: #9a8873;
+}
+
+.armFacing {
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: #8a6234;
+}
+
+.armGridNote {
+  margin-top: 9px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #8a6234;
+}
+
+/*
+ * The bag's grid idea at card width. `auto-fill` rather than a fixed column count because the
+ * list is short and variable — one item off a Fryer, two off a harvester dock, eight off a
+ * built-out lot — and a six-column track with one cell in it reads as five things missing.
+ */
+.armGrid {
+  pointer-events: auto;
+  margin-top: 7px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
+  gap: 5px;
+  /* Past four rows the card scrolls rather than growing taller than the sidebar. */
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #46392f #14100e;
+}
+
+.armCell {
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 3px 5px;
+  border: 0;
+  font: inherit;
+  background: #241c14;
+  box-shadow: inset 0 0 0 2px #14100e;
+}
+
+.armCell:hover:not(:disabled) {
+  background: #2b2119;
+}
+
+.armCell:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* Gold, like every other "this is the one" in the HUD. */
+.armCellOn {
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #f5d382;
+}
+
+/* "Anything" is a verb wearing a cell, so it gets a mark in the space the sprite occupies
+   rather than a sprite — an item icon for "no item" would be the one confusing cell here. */
+.armCellAny {
+  background: #1c1610;
+}
+
+.armCellAnyMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 17px;
+  line-height: 1;
+  color: #cbb99b;
+}
+
+.armCellName {
+  max-width: 100%;
+  font-size: 9.5px;
+  line-height: 1.2;
+  text-align: center;
+  color: #9a8873;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* --- the field card ------------------------------------------------------------- */
 
 /*

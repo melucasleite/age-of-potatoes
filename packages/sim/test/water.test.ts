@@ -20,6 +20,7 @@ import {
   CeremonyId,
   HAND_POUR_ML,
   IRRIGATION_HUB_SCAN_PER_TICK,
+  LampState,
   LiquidId,
   MOISTURE_DRY_THRESHOLD,
   CAN_CHARGES_MAX,
@@ -34,6 +35,8 @@ import {
   RESERVOIR_RECHARGE_ML_PER_MINUTE,
   ReservoirThrottle,
   SPRINKLER_CHARGES_MAX,
+  SPRINKLER_CHARGE_ML,
+  SPRINKLER_PATCH_TILES,
   SPRINKLER_PERIOD_TICKS,
   SPRINKLER_POUR_ML,
   SUBTILE,
@@ -333,15 +336,19 @@ describe('the watering can', () => {
   });
 });
 
-// --- the barrel sprinkler (item 086) -------------------------------------------------
+// --- the barrel sprinkler (items 086, 097) -------------------------------------------
 
 /**
- * The assisted rung, after the owner's ten-charge ruling.
+ * The assisted rung, after the owner's ten-charge ruling (086) and its redefinition (097).
+ *
+ * A CHARGE IS AN ACTIVATION, NOT A TILE — owner ruling 2026-08-16: *"when they spend a charge,
+ * they should water everything in a 5x5, not just the single tiles like it's doing right now."*
+ * Ten charges are ten whole patches.
  *
  * Every test here stands the head DEAD-CENTRE at (7,7) on the 8×8 field (x and y both 4..11),
  * where its 5×5 patch is 25 farm tiles — 24 of them waterable, since item 067 a head never
- * waters its own feet. That is deliberately more thirsty ground than ten charges can cover,
- * so "it stopped at ten" is a fact these tests can observe rather than a shape of the field.
+ * waters its own feet. The whole patch fitting inside the field is what lets "one charge did
+ * all 24" be a fact rather than a shape of the field.
  */
 describe('the barrel sprinkler', () => {
   /** A full barrel mid-field, and the whole field as dry as it can be. */
@@ -353,28 +360,76 @@ describe('the barrel sprinkler', () => {
     return { state, barrel };
   }
 
-  it('HOLDS TEN CHARGES, and the capacity is that sentence in millilitres', () => {
-    // Owner ruling 2026-08-15: "the sprinklers should have charges, ten charges". The spec
-    // number is not allowed to be an independent opinion about how big a barrel is.
+  it('HOLDS TEN CHARGES, and a charge is one full patch in millilitres', () => {
+    // Owner ruling 2026-08-15: "the sprinklers should have charges, ten charges", and
+    // 2026-08-16: a charge waters the whole 5×5. Neither number is allowed to be an
+    // independent opinion — the capacity is those two sentences multiplied together.
+    expect(SPRINKLER_PATCH_TILES).toBe(24);
+    expect(SPRINKLER_CHARGE_ML).toBe(SPRINKLER_PATCH_TILES * SPRINKLER_POUR_ML);
     expect(machineSpec(MachineKind.Sprinkler)!.tankCapacityMl).toBe(
-      SPRINKLER_CHARGES_MAX * SPRINKLER_POUR_ML,
+      SPRINKLER_CHARGES_MAX * SPRINKLER_CHARGE_ML,
     );
   });
 
-  it('WATERS EXACTLY TEN THIRSTY TILES on a full barrel, then wants hauling', () => {
+  it('WATERS THE WHOLE PATCH ON ONE CHARGE, and ten charges are ten patches', () => {
+    // THE ITEM, IN ONE TEST. Twenty-four thirsty neighbours, one cycle, one charge.
     const { state, barrel } = thirstyField(861);
+    const full = machineSpec(barrel.kind)!.tankCapacityMl;
 
     stepMany(state, 1);
-    expect(barrel.wateredCount).toBe(SPRINKLER_CHARGES_MAX);
-    expect(barrel.tankMl).toBe(0);
+    expect(barrel.wateredCount, 'one cycle left thirsty ground behind it').toBe(24);
+    expect(barrel.tankMl, 'the whole patch cost more or less than one charge').toBe(
+      full - SPRINKLER_CHARGE_ML,
+    );
+    expect(view(state).machines.find((m) => m.id === barrel.id)!.tankCharges).toBe(
+      SPRINKLER_CHARGES_MAX - 1,
+    );
 
-    // Fourteen thirsty tiles are still under the patch and it cannot touch one of them: an
-    // empty barrel halts, which is the existing starved tell and not a new failure mode.
+    // Nine more patches in the barrel, and the tenth cycle is the one that empties it. The
+    // field is re-parched between cycles because a wet patch is free (the test below).
+    // `+ 1`: a cycle sets its own cooldown on the tick it fires, so the beat is 101 ticks.
+    for (let cycle = 1; cycle < SPRINKLER_CHARGES_MAX; cycle++) {
+      for (const tile of state.field) tile.moisture = 0;
+      stepMany(state, SPRINKLER_PERIOD_TICKS + 1);
+    }
+    expect(barrel.wateredCount).toBe(SPRINKLER_CHARGES_MAX * 24);
+    expect(barrel.tankMl).toBe(0);
+    expect(barrel.opCount, 'ten patches should be ten operations').toBe(SPRINKLER_CHARGES_MAX);
+
+    // Eleventh cycle on an empty barrel: it halts, which is the existing starved tell.
+    for (const tile of state.field) tile.moisture = 0;
     stepMany(state, 4 * SPRINKLER_PERIOD_TICKS);
-    expect(barrel.wateredCount).toBe(SPRINKLER_CHARGES_MAX);
+    expect(barrel.wateredCount).toBe(SPRINKLER_CHARGES_MAX * 24);
   });
 
-  it('SPENDS NOTHING over saturated ground — no water, no pour signal, no wear', () => {
+  it('NEVER STOPS MID-PATCH: it will not start a cycle it cannot finish', () => {
+    // The whole reason item 097 could delete item 086's resuming scan cursor. A barrel a drop
+    // short of a charge does nothing at all rather than watering the near rows and parking —
+    // so there is no "where it ran dry" left for a cursor to remember, and no back row that
+    // could starve. (Owner's 086 bug, 2026-08-16: "it looks like it's only watering in front
+    // of them.")
+    const { state, barrel } = thirstyField(868);
+    barrel.tankMl = SPRINKLER_CHARGE_ML - 1;
+    const cursor = barrel.scanCursor;
+
+    stepMany(state, 4 * SPRINKLER_PERIOD_TICKS);
+    expect(barrel.wateredCount, 'a part-charge bought part of a patch').toBe(0);
+    expect(barrel.tankMl, 'the part-charge was spent on nothing').toBe(SPRINKLER_CHARGE_ML - 1);
+    expect(barrel.scanCursor, 'the barrel still writes a cursor it no longer reads').toBe(cursor);
+
+    // One more millilitre and the entire patch lands in a single cycle — near rows and far
+    // rows together, which is the shape the cursor used to have to fake across three hauls.
+    barrel.tankMl = SPRINKLER_CHARGE_ML;
+    stepMany(state, SPRINKLER_PERIOD_TICKS + 1);
+    const poured = (y: number) =>
+      [5, 6, 7, 8, 9].map((x) => tileAt(state, x, y)!).filter((t) => t.lastPouredTick > 0).length;
+    expect(poured(5), 'the near row went unwatered').toBe(5);
+    expect(poured(9), 'the far row was starved').toBe(5);
+    expect(barrel.wateredCount).toBe(24);
+    expect(barrel.scanCursor).toBe(cursor);
+  });
+
+  it('SPENDS NOTHING over saturated ground — no charge, no pour signal, no wear', () => {
     const state = createWorld(862);
     const barrel = spawnMachine(state, MachineKind.Sprinkler, 7, 7)!;
     barrel.tankMl = machineSpec(barrel.kind)!.tankCapacityMl;
@@ -385,6 +440,8 @@ describe('the barrel sprinkler', () => {
 
     stepMany(state, 4 * SPRINKLER_PERIOD_TICKS);
     expect(barrel.wateredCount).toBe(0);
+    // Item 086's thirst rule, surviving item 097's new unit intact: a sweep that found nothing
+    // to do is not an activation, so it is not billed as one.
     expect(barrel.tankMl).toBe(machineSpec(barrel.kind)!.tankCapacityMl);
     // Item 081's rule, one rung up: a skip marks NO pour signal. The renderer would draw a
     // splash and the audio observer would play one, over water that never left the barrel.
@@ -396,7 +453,7 @@ describe('the barrel sprinkler', () => {
     expect(barrel.skippedCount).toBeGreaterThan(0);
   });
 
-  it('spends on the thirsty tiles of a mixed patch and passes over the wet ones', () => {
+  it('spends ONE WHOLE CHARGE on a mixed patch, however few tiles were thirsty', () => {
     const { state, barrel } = thirstyField(863);
     // Three dry tiles in a patch that is otherwise soaked.
     for (const tile of state.field) tile.moisture = MOISTURE_MAX;
@@ -406,7 +463,10 @@ describe('the barrel sprinkler', () => {
 
     stepMany(state, 1);
     expect(barrel.wateredCount).toBe(3);
-    expect(before - barrel.tankMl).toBe(3 * SPRINKLER_POUR_ML);
+    // A CHARGE IS AN ACTIVATION, NOT A TILE COUNT. Three tiles cost exactly what twenty-four
+    // would have, and the difference runs off — the barrel rung's sloppiness, and precisely
+    // what the ledger-fed rungs above it are sold against.
+    expect(before - barrel.tankMl).toBe(SPRINKLER_CHARGE_ML);
     // Above the threshold and never over the ceiling. Not exactly `MOISTURE_MAX`: the pour
     // clamps to it and the same tick's drain then takes one point back off, which is the
     // ordinary order of the day and not the sprinkler's business.
@@ -432,25 +492,28 @@ describe('the barrel sprinkler', () => {
     expect(parched.moisture).toBeGreaterThan(MOISTURE_DRY_THRESHOLD);
   });
 
-  it('KEEPS THE ONE LEDGER: every millilitre drawn is in the ground or still in the barrel', () => {
-    // Item 028's law. Charges are a projection; this is the thing they are a projection OF,
-    // and if the two ever disagree it is this that is right.
+  it('KEEPS THE ONE LEDGER: every millilitre drawn is spent as charges or still in the barrel', () => {
+    // Item 028's law, and the reason item 097 left the barrel on `tankMl` instead of storing
+    // charges outright. Charges are a projection; this is the thing they are a projection OF,
+    // and if the two ever disagree it is this that is right. `opCount` is the barrel's charge
+    // count — it moves once per activation and only when something was watered.
     const state = createWorld(865);
     state.moneyCents = 100_000;
     const barrel = spawnMachine(state, MachineKind.Sprinkler, 7, 7)!;
     standOn(state, 7, 8);
-    for (const tile of state.field) tile.moisture = 0;
 
     const drawnBefore = state.stats.waterDrawnMl;
     for (let i = 0; i < 6; i++) {
+      for (const tile of state.field) tile.moisture = 0;
       run(state, [{ type: 'RefillHopper', machineId: barrel.id }]);
       stepMany(state, SPRINKLER_PERIOD_TICKS);
     }
 
     const drawn = state.stats.waterDrawnMl - drawnBefore;
-    expect(drawn).toBe(barrel.wateredCount * SPRINKLER_POUR_ML + barrel.tankMl);
+    expect(drawn).toBe(barrel.opCount * SPRINKLER_CHARGE_ML + barrel.tankMl);
     // And the refills were real: a head that never drank would satisfy the equation trivially.
-    expect(barrel.wateredCount).toBeGreaterThan(SPRINKLER_CHARGES_MAX);
+    expect(barrel.opCount).toBeGreaterThan(0);
+    expect(barrel.wateredCount).toBe(barrel.opCount * 24);
   });
 
   it('projects charges from the ledger at every boundary, and stores none of them', () => {
@@ -463,9 +526,10 @@ describe('the barrel sprinkler', () => {
     barrel.tankMl = 0;
     expect(charges().tankCharges).toBe(0);
 
-    // A part-charge is not a charge: you cannot pour two thirds of a pour, so the readout
-    // floors rather than rounding up into a promise the barrel cannot keep.
-    barrel.tankMl = SPRINKLER_POUR_ML * 3 - 1;
+    // A part-charge is not a charge: you cannot water two thirds of a patch, so the readout
+    // floors rather than rounding up into a promise the barrel cannot keep — and the barrel
+    // agrees, since it refuses to start a cycle it cannot pay for in full.
+    barrel.tankMl = SPRINKLER_CHARGE_ML * 3 - 1;
     expect(charges().tankCharges).toBe(2);
 
     // The Capacity dial moves the ceiling, because it moves the millilitres.
@@ -477,58 +541,38 @@ describe('the barrel sprinkler', () => {
     expect(Object.keys(barrel)).not.toContain('charges');
   });
 
-  it('RESUMES WHERE IT RAN DRY, so the far side of the patch is never starved', () => {
-    // THE OWNER'S BUG, 2026-08-16, reported from play against the first cut of item 086:
-    // "they should be watering 5 by 5 around them, but it looks like it's only watering in
-    // front of them." Ten charges cannot cross 24 thirsty neighbours, so a head that restarted
-    // its top-left scan every cycle served the near rows forever and the back row never once.
-    //
-    // SENSING DOES NOT COVER THIS, which is the trap: between hauls the near rows DRY OUT
-    // again, and a dry tile is not a tile sensing will skip. So this test dries the whole
-    // patch before every refill — the worst case, and the one the owner was living in.
-    const state = createWorld(868);
-    const barrel = spawnMachine(state, MachineKind.Sprinkler, 7, 7)!;
-    for (const tile of state.field) tile.moisture = 0;
-    const rowY = (y: number) =>
-      [5, 6, 7, 8, 9].map((x) => tileAt(state, x, y)!).filter((t) => t.lastPouredTick > 0).length;
+  it('shows the blue lamp A CHARGE SHORT, not a drop short', () => {
+    // Plan §5's grammar: the lamp and the readout have to agree. A barrel holding 35,999 ml
+    // reads zero charges and will not fire, so a running lamp over it would be a lie.
+    const { state, barrel } = thirstyField(870);
+    const lamp = () => view(state).machines.find((m) => m.id === barrel.id)!.lamp;
 
-    // Past tick 0 with an empty barrel, so a pour mark is distinguishable from "never". An
-    // empty barrel halts before the cooldown is set, so the cycle fires the tick it is filled.
-    stepMany(state, 3);
-    barrel.tankMl = machineSpec(barrel.kind)!.tankCapacityMl;
-    stepMany(state, 1);
-    expect(barrel.wateredCount).toBe(SPRINKLER_CHARGES_MAX);
-    // Ten charges reached the first two rows and stopped. So far this is the symptom.
-    expect(rowY(5) + rowY(6)).toBe(10);
-    expect(rowY(8) + rowY(9), 'the far rows should not have been reached yet').toBe(0);
-
-    // The whole patch parched again, and a fresh barrel. A restarting scan would spend all
-    // ten charges back on rows 5 and 6 — which is exactly what the owner saw.
-    for (const tile of state.field) {
-      tile.moisture = 0;
-      tile.lastPouredTick = 0;
-    }
-    barrel.tankMl = machineSpec(barrel.kind)!.tankCapacityMl;
-    stepMany(state, SPRINKLER_PERIOD_TICKS + 1);
-
-    expect(rowY(5) + rowY(6), 'the head went back to the near rows').toBe(0);
-    expect(rowY(7) + rowY(8) + rowY(9)).toBe(SPRINKLER_CHARGES_MAX);
-    // Row 9 is the far edge, and the second haul reached it.
-    expect(rowY(9)).toBeGreaterThan(0);
+    expect(lamp()).toBe(LampState.Running);
+    barrel.tankMl = SPRINKLER_CHARGE_ML - 1;
+    expect(lamp()).toBe(LampState.UtilityMissing);
+    barrel.tankMl = SPRINKLER_CHARGE_ML;
+    expect(lamp()).toBe(LampState.Running);
   });
 
-  it('leaves the piped head’s fresh-start scan exactly as it was — cursor never written', () => {
-    // Item 086 is the barrel's ruling. The piped head is required to come through it
-    // byte-identical, and its cursor sitting at zero forever is what that looks like in state.
+  it('leaves the piped head METERED and its scan cursor untouched, exactly as it was', () => {
+    // Item 097 is the barrel's ruling. The piped head is required to come through it
+    // byte-identical: it still pays `SPRINKLER_POUR_ML` per tile out of its ledger-fed buffer,
+    // still stops the moment it cannot cover the next tile, and still never writes a cursor.
     const state = createWorld(869);
     state.unlocked = [TechId.Pumps, TechId.PipedSprinklers];
     const head = spawnMachine(state, MachineKind.PipedSprinkler, 7, 7)!;
-    head.tankMl = 3 * SPRINKLER_POUR_ML; // Deliberately dry mid-patch, where a barrel would park.
+    head.tankMl = 3 * SPRINKLER_POUR_ML; // Deliberately dry mid-patch, where a barrel would refuse.
     for (const tile of state.field) tile.moisture = 0;
 
     stepMany(state, 2 * SPRINKLER_PERIOD_TICKS);
     expect(head.wateredCount).toBe(3);
+    expect(head.tankMl).toBe(0);
     expect(head.scanCursor).toBe(0);
+    // And it has no charges to report: nobody hauls to it, so "3 of 10" would be a walk it
+    // never has to plan (item 097's view contract).
+    const hv = view(state).machines.find((m) => m.id === head.id)!;
+    expect(hv.tankCharges).toBe(0);
+    expect(hv.tankChargesMax).toBe(0);
   });
 
   it('leaves a tank machine out of the charge readout entirely', () => {
@@ -1017,6 +1061,10 @@ describe('piped sprinklers and the Irrigation Hub', () => {
     // only should go watering if the tile needs it". The rung did not rot, it stopped
     // wasting — so the geometry stays pinned here and the thirst test is pinned in
     // `the barrel sprinkler` above.
+    //
+    // AND A CHARGE IS THE ACTIVATION, NOT THE FIVE TILES (item 097). A head with most of its
+    // patch off the field pays the same charge as one dead-centre: siting it badly is the
+    // player's decision to make and to see, not something the barrel quietly discounts.
     const state = createWorld(48);
     state.moneyCents = 1_000_000;
     const sprinkler = spawnMachine(state, MachineKind.Sprinkler, 2, 8)!;
@@ -1026,7 +1074,7 @@ describe('piped sprinklers and the Irrigation Hub', () => {
 
     stepMany(state, 1);
     expect(sprinkler.wateredCount).toBe(5);
-    expect(sprinkler.tankMl).toBe(full - 5 * SPRINKLER_POUR_ML);
+    expect(sprinkler.tankMl).toBe(full - SPRINKLER_CHARGE_ML);
 
     // Same five tiles, now soaked: same reach, same period, nothing spent.
     const held = sprinkler.tankMl;

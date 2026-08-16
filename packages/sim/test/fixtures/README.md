@@ -61,7 +61,7 @@ its name to `FIXTURE_NAMES` in `test/goldens.ts`, and generate its hash once.
 | `worn-to-zero.json` | 515151 | 24,024 | Item 034's third wear fixture: a Chip Kitchen driven from full condition to zero by honest work — jams whacked out on the way down, never repaired — until it halts and sits dead losing nothing further, then is restored to full by free hand repair alone (plan §1: "manual never rots"). `factory.test.ts` replays it watching and asserts the floor, the halt, the kit-free restoration. |
 | `junction-loop.json` | 626262 | 39,230 | Item 024 instruction 11: the economy ground honestly up to the Splitters node, then a closed belt circuit through two junctions — one splitting one feed across two branches, one merging them back — with the bags circulating forever and both round-robin cursors advancing in the hash. `factory.test.ts` replays it watching and asserts the alternation and that goods reach every belt in the loop. |
 | `the-till.json` | 660660 | 2,203 | The till tool (item 066): a strip of grass broken in one drag, farmed through a potato cycle, un-tilled, and re-tilled — coming back with identical soil and fertility, because the roll-once ledger remembers every position ever broken. Recorded by `scripts/record-the-till.ts`. |
-| `mid-field.json` | 670670 | 5,779 | Machines on farm tiles (item 067): the gardener loop earns the $150 honestly, the farmer crosses the field on a no-op walk errand (item 070's `IntentAction.Walk`, absorbed here), a barrel sprinkler stands ON a hand-watered farm tile, and **three hauls from the pond — ten pours, ten, then four** — water all 24 farm neighbours and never its own feet, the second and third cycles walking past the ground the first one wet. Deconstruction hands the tile back untouched and the freed ground takes a seed again. Recorded by `scripts/record-mid-field.ts`, which asserts every beat — and the refusals (crop tile, non-flagged machine) — before writing; re-recorded 2026-08-16 for item 086's ten-charge sensing barrel. |
+| `mid-field.json` | 670670 | 5,678 | Machines on farm tiles (item 067): the gardener loop earns the $150 honestly, the farmer crosses the field on a no-op walk errand (item 070's `IntentAction.Walk`, absorbed here), a barrel sprinkler stands ON a hand-watered farm tile, and **one haul from the pond buys one charge that waters all 24 farm neighbours in a single cycle** and never its own feet — after which the next cycle looks at the same 24 soaked tiles and spends nothing at all. Deconstruction hands the tile back untouched and the freed ground takes a seed again. Recorded by `scripts/record-mid-field.ts`, which asserts every beat — and the refusals (crop tile, non-flagged machine) — before writing; re-recorded 2026-08-16 for item 097's charge-per-activation barrel, over item 086's re-recording of the same morning. |
 
 `depot-run` carries a field no other fixture has: **`handsOffFromTick`**, the tick after which it
 issues nothing. It is not derivable from `commands` — the last command's tick is where the player
@@ -397,3 +397,55 @@ list and every entry on it is a clock rather than an outcome. Measured, not assu
 one: `untouchedTicks` only advances on a tick a machine genuinely moved work forward, and the
 kitchen's last unbroken working streak is sixty ticks longer in a world where its arm is not
 away holding something nobody would take.
+
+## 2026-08-16 (wave 12, item 097): one charge waters the whole patch — one hash, re-recorded
+
+Owner ruling, verbatim: _"when they spend a charge, they should water everything in a 5x5, not
+just the single tiles like it's doing right now."_ **A charge is an activation, not a tile.** Item
+086 — earlier the same day, two sections up — had made a charge one tile's pour, so ten charges
+covered ten tiles and a full mid-field patch took three hauls; ten charges are now ten whole
+patches.
+
+Two constants and one function carry it. `SPRINKLER_CHARGE_ML` is new and is the full-patch pour
+priced out loud — `SPRINKLER_PATCH_TILES` (24: the 5×5 less the head's own occupied tile, item 067) `× SPRINKLER_POUR_ML` = **36,000 ml**, which is the same number the barrel used to hold in
+total and arrived at the same way. Capacity is `10 × 36,000 = 360,000 ml`. `advanceSprinkler` now
+takes a `chargeMl` rather than a `resumeScan`: **charged** heads (the barrel) check they can
+afford the whole sweep before starting and pay one flat charge afterwards if they watered
+anything; **metered** heads (the piped head) pay per tile out of a ledger-fed buffer and stop when
+it runs out, byte-for-byte as before.
+
+**Item 086's thirst rule survives inside it**: a sweep that finds every tile already wet is not an
+activation, so it costs no water, no wear, no `opCount`, and marks no pour signal. The charge is
+deducted after the sweep, not at the affordability gate, for exactly that reason.
+
+**Item 086's resuming `scanCursor` is gone from the barrel, deleted with its comment rather than
+left as a fossil.** It existed because ten single-tile charges could not cross twenty-four thirsty
+neighbours, so a fresh top-left scan starved the back row. A charged head cannot stop mid-patch —
+a cycle it can afford is a cycle it finishes — so there is no "where it ran dry" left to remember.
+The Irrigation Hub keeps its own cursor, which is a genuinely bounded scan spread across ticks and
+a different mechanism; the metered piped head never wrote one and still does not. Saves are
+untouched: `scanCursor` is still in the state, the hash, and the format, so an old barrel simply
+carries an inert number forever. **No format bump — the chain stays at 17.**
+
+**One hash moved out of twenty. Nineteen replayed byte-identical**, command lists frozen, on the
+first try.
+
+| Fixture     | Old hash   | New hash   | Cause                                                                    |
+| ----------- | ---------- | ---------- | ------------------------------------------------------------------------ |
+| `mid-field` | `00db6dee` | `4eeea937` | Re-recorded: three hauls of ten, ten and four became one haul, one cycle |
+
+Same fact as item 086's note, from the same direction: **no recorded session outside `mid-field`
+refills a barrel sprinkler**, so a barrel whose unit changed has nothing to change in them.
+`all-verbs` and `land-deeds` each build one and neither ever hauls water to it.
+
+`mid-field` was re-recorded rather than re-timed because what moved was its _story_. It was
+re-recorded that morning for item 086 to assert the three-haul split (10, 10, 4); one charge now
+does the patch, so the recorder asserts **one** `RefillHopper`, `opCount` moving by exactly one,
+all 24 neighbours wet and the head's own tile dry — and then keeps the half of 086's story that
+outlived it, the cycle AFTER, which walks the same 24 soaked tiles for 24 skips, no water and no
+second operation. The new fixture is **5,678 ticks and 150 commands**, down from 5,779 and 152:
+the two extra refill errands 086 cost the player are handed back.
+
+**The barrel got substantially stronger, and that is the ruling rather than a side effect** — one
+haul now waters a full patch ten times over instead of covering it once. Logged for item 046's
+balance pile, not tuned here.

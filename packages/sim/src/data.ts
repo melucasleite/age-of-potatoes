@@ -1933,9 +1933,9 @@ export const SPRINKLER_RADIUS_TILES = 2;
  * have charges, ten charges, and they only should go watering if the tile needs it").
  *
  * A CHARGE IS A PROJECTION, NOT A SECOND COUNTER. The barrel's real state stays `tankMl`
- * under item 028's one-ledger law — millilitres counted where they leave the source — and a
- * charge IS `SPRINKLER_POUR_ML`. Capacity is derived (`10 × 1,500 = 15,000 ml`), the view
- * derives charges by division, and nothing stores a number that could drift from the ledger.
+ * under item 028's one-ledger law — millilitres counted where they leave the source — and the
+ * view derives charges by division. Nothing stores a number that could drift from the ledger,
+ * and `WorldState` still does not know the word "charge".
  *
  * SAVE COMPAT, same shape as the can's widening (item 073) in reverse: no format bump. A
  * barrel saved fuller than the new capacity simply loads over-full and refuses refills
@@ -1943,6 +1943,44 @@ export const SPRINKLER_RADIUS_TILES = 2;
  * charge readout reports the over-full truth rather than clamping to ten.
  */
 export const SPRINKLER_CHARGES_MAX = 10;
+
+/**
+ * Waterable tiles under a barrel's patch: the whole 5×5 **minus its own occupied tile**, which
+ * item 067 put permanently outside the watering surface. 24, and derived rather than typed, so
+ * a change to the radius cannot leave this behind.
+ */
+export const SPRINKLER_PATCH_TILES =
+  (SPRINKLER_RADIUS_TILES * 2 + 1) * (SPRINKLER_RADIUS_TILES * 2 + 1) - 1;
+
+/**
+ * WHAT ONE CHARGE COSTS THE BARREL, IN MILLILITRES — AND THE UNIT ITEM 097 REDEFINED.
+ *
+ * **Owner ruling, 2026-08-16 (item 097), verbatim:** *"when they spend a charge, they should
+ * water everything in a 5x5, not just the single tiles like it's doing right now."* A charge is
+ * an ACTIVATION, not a tile. Ten charges are ten full patches, and the barrel's fill is a
+ * number a player can plan a walk around: "six more waterings", never "six more tiles".
+ *
+ * THE ARITHMETIC, OUT LOUD, BECAUSE THE HONESTY OF THE LEDGER RESTS ON IT. One activation
+ * wets up to `SPRINKLER_PATCH_TILES` tiles at `SPRINKLER_POUR_ML` each, so the most a single
+ * cycle can put into the ground is `24 × 1,500 = 36,000 ml`. That full-patch pour IS the
+ * charge — the barrel is sized for the job it does, not for the best case of that job — and a
+ * cycle pays it FLAT: an activation that found three thirsty tiles spends the same charge as
+ * one that found twenty-four, and the runoff is the barrel-sprinkler's sloppiness, which is
+ * exactly what the piped rungs above it are sold against. Capacity is then `10 × 36,000 =
+ * 360,000 ml`, a 360-litre barrel against a 20,000-litre pond.
+ *
+ * ITEM 086'S 1,500 (one tile's pour) IS NOT A CHARGE ANY MORE. It survives as
+ * `SPRINKLER_POUR_ML`, which is still what a *tile* takes — from the hand, from the piped
+ * head, from the Hub. Only the barrel's unit moved.
+ *
+ * **AND THE LEDGER IS UNTOUCHED**: the barrel is still `machine.tankMl`, still filled by
+ * `takeWater` at the shore, still the only place `stats.waterDrawnMl` moves. A charge remains
+ * a projection *of* millilitres — `divFloor(tankMl, SPRINKLER_CHARGE_ML)` — rather than a
+ * second stored integer, so there is nothing here that can drift out of step with item 028's
+ * one ledger, and no save-format bump. See `advanceSprinkler` for the spend and the log on
+ * work item 097 for why this beat storing charges outright.
+ */
+export const SPRINKLER_CHARGE_ML = SPRINKLER_PATCH_TILES * SPRINKLER_POUR_ML;
 
 /**
  * Work rates are all 100/tick and durations are expressed in `workPerOperation`, so an
@@ -2066,22 +2104,22 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputCapacity: 0,
     /**
      * Ten charges' worth, and not one drop of head-room (item 086's owner ruling; see
-     * `SPRINKLER_CHARGES_MAX`).
+     * `SPRINKLER_CHARGES_MAX`), where a charge is one whole-patch ACTIVATION (item 097; see
+     * `SPRINKLER_CHARGE_ML`). 360,000 ml.
      *
-     * THE OLD 36,000 ML EXISTED TO SOLVE A REAL PROBLEM AND THE PROBLEM DID NOT GO AWAY WITH
-     * IT. It was one full mid-field cycle — 24 croppable neighbours at `SPRINKLER_POUR_ML`
-     * each — precisely so a barrel could not run dry partway through a top-left scan and
-     * water the same near rows every cycle while the back row starved. Ten charges cannot
-     * cross that patch, so a fresh scan each cycle brings the starvation straight back, and
-     * it did: the owner saw it in play as *"only watering in front of them."*
+     * THE 36,000 ML THIS USED TO BE IS NOW THE SIZE OF ONE CHARGE, and that is not a
+     * coincidence — it is the same number arrived at the same way. It was one full mid-field
+     * cycle, 24 croppable neighbours at `SPRINKLER_POUR_ML` each, sized so a barrel could
+     * never run dry partway across a top-left scan and starve its back row. Item 086 shrank
+     * the barrel to ten single-tile pours and the starvation arrived within the hour — the
+     * owner saw it in play as *"only watering in front of them"* — and was answered with a
+     * resuming scan cursor. Item 097 answers it at the root instead: a cycle it can afford is
+     * a cycle it can FINISH, so a barrel can no longer stop mid-patch and there is no back
+     * row to starve. The cursor is gone from this head with the problem it solved.
      *
-     * The answer is `advanceSprinkler`'s resuming `scanCursor`, NOT a bigger barrel and NOT
-     * moisture sensing (sensing skips wet ground; a dry patch has none to skip). Read that
-     * function before changing this number — the two are one design, and raising the
-     * capacity here would silently make the fairness machinery untestable rather than
-     * unnecessary.
+     * Read `advanceSprinkler` before changing this number.
      */
-    tankCapacityMl: SPRINKLER_CHARGES_MAX * SPRINKLER_POUR_ML,
+    tankCapacityMl: SPRINKLER_CHARGES_MAX * SPRINKLER_CHARGE_ML,
     wearPerOperation: 1,
     inputs: [],
     outputItem: null,

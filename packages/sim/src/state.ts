@@ -650,6 +650,14 @@ export interface Machine {
    * IT LIVES HERE AND NOT IN A MODULE VARIABLE. Module state is invisible to the hash and to
    * saves, so a cursor kept there would make two identically-saved worlds water different
    * tiles after a reload — the exact class of bug the golden fixtures exist to catch.
+   *
+   * **THE HUB'S, AND ONLY THE HUB'S.** The barrel sprinkler borrowed it for a day (item 086,
+   * to keep ten single-tile charges from starving its back row) and gave it back when item 097
+   * made a charge one whole-patch activation — a head that can afford a cycle now finishes it,
+   * so there is nothing to resume. A barrel loaded from a save recorded in between carries a
+   * non-zero value here forever and nothing reads it: inert, hashed, and not worth a format
+   * bump to scrub. Do not "tidy" it away, and do not assume a non-zero cursor means a machine
+   * is mid-scan.
    */
   scanCursor: number;
   /** Tiles this machine has actually watered, lifetime. A Hub's saving is the gap between… */

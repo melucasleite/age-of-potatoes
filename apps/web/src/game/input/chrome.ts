@@ -77,11 +77,20 @@ const CSS = `
 /* Top-CENTRE, not top-left: the HUD's money panel owns the top-left corner and the
    Clipboard owns the bottom-right, so the strip would sit underneath one of them. The
    HUD belongs to another agent — the polite fix is to stay out of its way. */
-/* The work-queue tell ([[074]]): "planting 6 more…" while the farmer works a queued row, so
-   him marching off is legible as the gesture still running. Bottom-CENTRE — the top centre
-   is the hint strip's and the corners are the HUD's — and amber-bordered because it reports
-   work in progress, not a verdict. */
-.sm-ix-tell { position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
+/* The status tell ([[074]], widened by [[098]]): one line of running commentary over the
+   canvas. "planting 6 more…" while the farmer works a queued row, so him marching off is
+   legible as the gesture still running — and, since 098, the reason a machine under the
+   cursor is refusing to do the thing it was bought for. Bottom-CENTRE — the top centre is
+   the hint strip's and the corners are the HUD's — and amber-bordered because everything it
+   says is a state of affairs rather than a verdict on something the player just did. */
+/* **IT WAS BEHIND THE HOTBAR THE WHOLE TIME.** At 14px off the bottom this line landed inside
+   the HUD's bottom-centre corner — ribbon, pouch chip and toolbelt, about 134px of stack — and
+   was drawn UNDER all three, so a sentence written every frame reached nobody. Found in the
+   browser while verifying [[098]]'s planter tell; the work-queue tell had been invisible since
+   [[074]]. 152px clears the whole corner and parks this immediately above the status ribbon,
+   which is where a player's eye already is. A measured constant rather than a computed offset,
+   because the HUD is another lane's file and this layer must not start reading its geometry. */
+.sm-ix-tell { position:absolute; left:50%; bottom:152px; transform:translateX(-50%);
   display:none; white-space:nowrap; padding:4px 10px; border-radius:4px; letter-spacing:0.04em;
   background:rgba(20,16,25,0.85); border:1px solid rgba(226,190,101,0.45); color:#f2e6cf;
   text-shadow:0 1px 2px rgba(0,0,0,0.9); }
@@ -539,14 +548,19 @@ export class InputChrome {
     return sign;
   }
 
-  // --- the work-queue tell ([[074]]) ----------------------------------------------------
+  // --- the status tell ([[074]], [[098]]) -------------------------------------------------
 
   /**
-   * One line of running commentary while the out-of-reach queue pumps, or `null` for
-   * nothing to say. Called once per frame from `InputSystem.update()`; the steady state —
-   * no queue, or the same sentence as last frame — is one string comparison and no DOM.
+   * The one line of commentary over the canvas, or `null` for nothing to say.
+   *
+   * IT USED TO BE THE WORK QUEUE'S ALONE and it is the bottom status line now: item 098 needed
+   * somewhere for a machine to explain a refusal the player can otherwise only infer from an
+   * arm standing still, and a second strip would have been a second thing to read. What goes in
+   * it is decided in `pointer.ts` (`statusTell`), which owns hover and owns the queue; this only
+   * writes it. Called once per frame from `InputSystem.update()`; the steady state — nothing to
+   * say, or the same sentence as last frame — is one string comparison and no DOM.
    */
-  setQueueTell(text: string | null): void {
+  setStatusTell(text: string | null): void {
     const tell = this.tell;
     if (tell === null || text === this.lastTellText) return;
     this.lastTellText = text;

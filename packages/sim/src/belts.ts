@@ -389,6 +389,11 @@ export function grabberDestTile(
  * mutates between the peek and the pull, so the second call cannot resolve a different item
  * than the first — and because both are the same function, it cannot resolve it by different
  * rules either.
+ *
+ * THE MIDDLE LINE IS NOT REDUNDANT NOW THAT A DOCK'S SHELF ASKS THE DESTINATION TOO (item 098).
+ * `dockShelfFor` consults `grabberWouldAccept` to choose *between* two stocked shelves, but when
+ * neither would land it still names one — so this is the check that turns "the destination wants
+ * neither" into a refusal to grab, and into the red lamp that says so.
  */
 function grabberTake(state: WorldState, grabber: Grabber, reachTiles: number): ItemId | 0 {
   const sx = grabber.tileX - directionStepX(grabber.dir) * reachTiles;
@@ -455,7 +460,7 @@ function grabberSource(
   // out and enforces the same gate itself. (A Drone Bay's cargo pair is empty forever now —
   // [[090]] — but the gate is written against what a shelf MEANS, not against today's roster.)
   if (machine.kind === MachineKind.HarvesterDock) {
-    const shelf = dockShelfFor(machine, grabber.filter);
+    const shelf = dockShelfFor(state, grabber, machine);
     if (shelf === DockShelf.Produce) {
       if (!commit) return machine.cargoItem as ItemId;
       return takeDockShelf(machine, 1)?.item ?? 0;
@@ -481,39 +486,65 @@ function grabberSource(
 }
 
 /**
- * WHICH SHELF OF A HARVESTER DOCK THIS ARM IS READING (item 088's rule, item 085's peek).
+ * WHICH SHELF OF A HARVESTER DOCK THIS ARM IS READING (item 088's rule, item 085's machinery,
+ * item 098's correction).
  *
- * TWO SHELVES ON ONE MACHINE, AND THE FILTER IS WHAT PICKS BETWEEN THEM. A dock holds produce on
- * one shelf and seeds on the other. An arm filtered to a seed takes seeds; an arm filtered to a
- * crop takes produce; an UNFILTERED arm takes produce first and falls through to seeds only when
- * the produce shelf is empty. That default is the one that keeps an existing belt doing exactly
- * what it did before item 088 landed — a Mk1 arm someone ran from a dock to a Root Cellar last
- * week must not start posting seeds into it — and the closed seed loop (dock seeds → belt →
- * planter's hopper) is a FILTERED arm by construction, because a player building it names the
- * seed.
+ * TWO SHELVES ON ONE MACHINE, AND AN UNFILTERED ARM ASKS ITS DESTINATION WHICH ONE TO READ. A
+ * dock holds produce on one shelf and seeds on the other, and the rule used to be a fixed
+ * priority: produce first, seeds only when the produce shelf was EMPTY. That rule made the loop
+ * item 088 exists for — harvester seeds into a planter's hopper — unbuildable in practice, and
+ * the owner found it exactly that way ("the arm is not able to take seeds from the harvester to
+ * the planter"): a working harvester keeps produce stocked, so the fall-through never fired and
+ * an arm pointed at a planter stood there declining a potato nothing would ever take.
  *
- * ITEM 085 IS WHY THIS IS A FUNCTION AND NOT A PAIR OF `if`s INSIDE THE PULL. The look-ahead has
- * to resolve the shelf before it can ask the destination anything, and the trap it was warned
- * about is precise: a seed-shelf arm pointed at a sell bin, which refuses seeds. The bin's
- * predicate now answers "no" while the seed is still on the shelf, so the arm never grabs and
- * never jams — but only because the peek and the pull agree about *which shelf that arm reads*,
- * and they agree because they both call this.
+ * So the priority is now a TIE-BREAK rather than a search order. Both shelves stocked and no
+ * filter means offering each item to `grabberWouldAccept` and taking the first the destination
+ * will have; produce wins only when the destination would take either, which is what keeps a
+ * dock→belt or dock→Root Cellar run doing precisely what it did before this item. The seed loop
+ * needs no filter and no Mk2 any more — a plain Mk1 pointed at a planter reads the seed shelf
+ * because the planter is the thing that says so.
+ *
+ * WHEN NEITHER SHELF WILL LAND IT STILL NAMES ONE, and that is deliberate rather than sloppy.
+ * `grabberLamp` reads `grabberNextPickup` and calls a 0 "nothing to pick up" — amber, look
+ * upstream — so a dock with two full shelves and a destination that refuses both must return an
+ * item here, be refused by the caller's own accept check, and light RED. Returning `None` would
+ * turn a downstream problem into an upstream lamp.
+ *
+ * A FILTERED ARM IS UNTOUCHED. The filter names the shelf and no destination-guessing overrides
+ * it: an arm filtered to seeds that is pointed at a sell bin still resolves the seed shelf, and
+ * still never closes its claw, because the bin refuses seeds a swing early (the trap item 088
+ * named and item 085 closed).
+ *
+ * ITEM 085 IS WHY THIS IS A FUNCTION AND NOT A PAIR OF `if`s INSIDE THE PULL, and the reason
+ * bites harder now that the answer depends on the destination: the peek and the pull must agree
+ * about *which shelf that arm reads*, and they agree because they both call this. Nothing
+ * mutates between them, so the two calls see the same shelves and ask the same door.
  */
 const DockShelf = { None: 0, Produce: 1, Seed: 2 } as const;
 type DockShelf = (typeof DockShelf)[keyof typeof DockShelf];
 
-function dockShelfFor(dock: Machine, filter: number): DockShelf {
+function dockShelfFor(state: WorldState, grabber: Grabber, dock: Machine): DockShelf {
+  const filter = grabber.filter;
+  const produce = dock.cargoCount > 0 ? (dock.cargoItem as ItemId) : 0;
+  const seeds = dock.seedShelfCount > 0 ? (dock.seedShelfItem as ItemId) : 0;
+
   // The filter judges what is actually on the shelf, exactly as it judges the next unit out of
   // a Fryer: an arm filtered to fresh potatoes leaves a Day-Old shelf alone.
-  const produce = dock.cargoItem;
-  if (produce !== 0 && dock.cargoCount > 0 && (filter === 0 || produce === filter)) {
-    return DockShelf.Produce;
+  if (filter !== 0) {
+    if (produce === filter) return DockShelf.Produce;
+    if (seeds === filter) return DockShelf.Seed;
+    return DockShelf.None;
   }
-  const seeds = dock.seedShelfItem;
-  if (seeds !== 0 && dock.seedShelfCount > 0 && (filter === 0 || seeds === filter)) {
-    return DockShelf.Seed;
-  }
-  return DockShelf.None;
+
+  // One shelf stocked is not a choice, and asking the destination about it would only change
+  // which lamp lights — the caller's accept check refuses it either way.
+  if (produce === 0) return seeds === 0 ? DockShelf.None : DockShelf.Seed;
+  if (seeds === 0) return DockShelf.Produce;
+
+  if (grabberWouldAccept(state, grabber, produce)) return DockShelf.Produce;
+  if (grabberWouldAccept(state, grabber, seeds)) return DockShelf.Seed;
+  // Neither will land. Name the produce so the refusal is the caller's to report — see above.
+  return DockShelf.Produce;
 }
 
 /**

@@ -23,6 +23,7 @@ import { InputChrome } from './chrome';
 import type { InputHost } from './context';
 import { publishDebugPanel, registerDebugPanelHooks } from './debug-panel';
 import { firstRunSigns } from './first-run';
+import { publishGrabberPanel, resetGrabberPanel } from './grabber-panel';
 import { KeyboardInput } from './keyboard';
 import { publishLod, viewLod, zoomInIndex, zoomOutIndex } from './lod';
 import { PointerInput } from './pointer';
@@ -115,6 +116,9 @@ export class InputSystem {
   detach(): void {
     this.closeBuildMenu();
     this.closeDebugPanel();
+    // The grabber card names an arm by id, and ids are per-world ([[099]]). A card left open
+    // across a host swap would point at whatever arm the NEXT lot happened to number the same.
+    resetGrabberPanel();
     this.unregisterMenuHooks?.();
     this.unregisterMenuHooks = null;
     this.unregisterDebugHooks?.();
@@ -151,9 +155,16 @@ export class InputSystem {
     // The first-run pointers stand on the world exactly as the deed signs do, and retire
     // themselves by reading the same projection — see `first-run.ts` for the gates.
     this.chrome.setGuideSigns(firstRunSigns(view));
-    // The work-queue tell ([[074]]): "planting 6 more…" while the farmer marches the row,
-    // the pause reason while the can is dry, one brief "already soaked" ([[081]]).
-    this.chrome.setQueueTell(this.pointer.queueTell());
+    // The status tell ([[074]], [[098]], [[097]]): "planting 6 more…" while the farmer marches
+    // the row, the pause reason while the can is dry, one brief "already soaked" ([[081]]) —
+    // and, when the player is doing nothing, whatever the machine under the cursor has to say
+    // for itself, which is a refusal for a blind planter and a charge count for a barrel.
+    this.chrome.setStatusTell(this.pointer.statusTell());
+    // The grabber card ([[099]]), whose subject is a CLICK rather than a hover — so it is
+    // driven from the frame loop like the band and unlike the machine cards, which the world
+    // publish feeds. Nothing selected is one comparison and no allocation; a card open on an
+    // arm whose filter has not moved publishes nothing either.
+    publishGrabberPanel(view);
     // A submitted cheat's verdict, read off the projection once the sim has spoken.
     this.judgePendingCheat(view);
 

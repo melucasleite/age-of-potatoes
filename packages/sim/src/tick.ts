@@ -125,6 +125,7 @@ import {
   RECIRCULATOR_ML_PER_MINUTE,
   REPAIR_KIT_RADIUS_TILES,
   REPAIR_PER_TOUCH,
+  SPRINKLER_CHARGE_ML,
   SPRINKLER_POUR_ML,
   SPRINKLER_PERIOD_TICKS,
   STATION_SERVICE_PERIOD_TICKS,
@@ -2700,9 +2701,9 @@ function advanceMachines(state: WorldState): void {
     // here at all — the pipe ledger already moved their water, and a machine whose whole job
     // is a number in `advancePipes` has nothing left to do on its own.
     if (spec.role === MachineRole.Sprinkler) {
-      // `resumeScan` true: the barrel is the head whose tank predictably runs dry mid-patch,
-      // so it is the one that has to remember where it stopped. See `advanceSprinkler`.
-      advanceSprinkler(state, machine, spec, effectiveWear(spec, machine), true);
+      // `SPRINKLER_CHARGE_ML`: the barrel pays a flat charge for the whole patch, up front, and
+      // therefore always finishes what it starts (item 097). See `advanceSprinkler`.
+      advanceSprinkler(state, machine, spec, SPRINKLER_CHARGE_ML, effectiveWear(spec, machine));
       // Marked here rather than inside `advanceSprinkler`, which the piped head shares and
       // which owes a different id. `wateredCount` is lifetime and hashed, so the mark is
       // idempotent and survives a reload — the renderer no longer has to infer "has it ever
@@ -2840,66 +2841,65 @@ function advanceOrchard(machine: Machine, spec: MachineSpec): void {
  * A SKIPPED TILE IS NOT A POUR: `lastPouredTick` is left alone, item 081's rule — feedback
  * for water that never left the barrel is a lie the renderer would then have to draw, and
  * the audio observer would play a splash over a dry cycle. A cycle that skips its whole
- * patch spends no water, no wear, and no `opCount`: it did nothing, and nothing is what it
- * should cost.
+ * patch spends no water, no charge, no wear, and no `opCount`: it did nothing, and nothing is
+ * what it should cost.
  *
- * **AND THE SCAN RESUMES WHERE IT RAN DRY, WHICH IS THE OTHER HALF OF THE TEN-CHARGE
- * RULING AND NOT A DETAIL.** Ten charges do not cover twenty-four thirsty neighbours. A
- * fresh top-left scan every cycle would therefore water the near rows, run out, and do it
- * again forever — the back row starving in plain sight. That is not a hypothetical: the
- * comment this replaced predicted it in writing when the barrel was sized at 24 pours ("a
- * barrel that held 20 pours would water the same first twenty tiles every cycle and starve
- * the back row forever, because the dumb scan always starts at the top-left"), item 086's
- * first cut deleted the warning on the theory that a sensing head has no back row, and the
- * owner found it in play within the hour: *"they should be watering 5 by 5 around them, but
- * it looks like it's only watering in front of them."*
+ * --- THE TWO WAYS A HEAD PAYS (item 097) ------------------------------------------------
  *
- * SENSING DOES NOT FIX IT, and that is the trap the deleted comment was guarding. Sensing
- * skips WET tiles; on a patch that is uniformly dry every tile is thirsty and the barrel
- * still cannot reach past the tenth. The fairness has to come from WHERE the scan starts,
- * so `machine.scanCursor` — the field the Hub already owns, already hashed, already saved,
- * already migrated, so this costs no state and no format bump — carries the barrel's place
- * in its patch between cycles. Three fills walk the whole 5×5 once, in order, with nothing
- * favoured.
+ * `chargeMl` is the whole difference and it is the barrel's unit made literal.
  *
- * THE PIPED HEAD KEEPS THE OLD FRESH-START SCAN (`resumeScan` false, its cursor never
- * written), and that is a scope line rather than a claim that it is better: a head fed by a
- * pipe normally refills faster than it pours and completes its lap every cycle, so the
- * cursor would sit at zero anyway — but a THROTTLED network can dry one mid-lap, and such a
- * head has the same near-row bias. Item 086 is the barrel's ruling and the Hub and the piped
- * heads are required to stay byte-identical through it; the piped head's version of this is
- * written up for item 046's pile rather than smuggled in here.
+ * **CHARGED (`chargeMl > 0`) — the barrel.** *"When they spend a charge, they should water
+ * everything in a 5x5"* (owner ruling, 2026-08-16). One activation costs one flat
+ * `SPRINKLER_CHARGE_ML` however many tiles turned out to be thirsty, and the head checks it
+ * can afford that BEFORE it starts. So a cycle it begins is a cycle it finishes: a charged
+ * head cannot run dry mid-patch, cannot serve the near rows and abandon the far ones, and
+ * cannot spend a fraction of a charge on a fraction of a job.
+ *
+ * **METERED (`chargeMl === 0`) — the piped head.** Pays `SPRINKLER_POUR_ML` per tile out of a
+ * ledger-fed buffer and stops the moment the buffer cannot cover the next one. This is
+ * byte-for-byte what it always did, and it has to be: item 097 is the barrel's ruling and the
+ * Hub and the piped heads are required to come through it unchanged.
+ *
+ * **`machine.scanCursor` IS GONE FROM THIS FUNCTION, AND ITS ABSENCE IS THE POINT.** Item
+ * 086 made a charge one tile's pour, so ten charges could not cross twenty-four thirsty
+ * neighbours; a fresh top-left scan then watered the near rows forever while the back row
+ * starved, which the owner found in play — *"they should be watering 5 by 5 around them, but
+ * it looks like it's only watering in front of them"* — and which was answered by resuming
+ * the scan where the barrel ran dry. Item 097 answers the same complaint at the root: an
+ * affordable cycle is a completable cycle, so there is no "where it ran dry" left to
+ * remember. Keeping a cursor here would be a fossil that never moves. The Hub keeps its own
+ * (`advanceIrrigationHub`), which is a genuinely bounded scan across ticks and a different
+ * mechanism; the metered piped head never wrote one and still does not.
  */
 function advanceSprinkler(
   state: WorldState,
   machine: Machine,
   spec: MachineSpec,
+  chargeMl: number,
   wearPerCycle: number,
-  resumeScan: boolean,
 ): void {
   if (machine.jammed || machine.condition <= 0) return;
   if (machine.cooldown > 0) {
     machine.cooldown -= 1;
     return;
   }
-  if (machine.tankMl < SPRINKLER_POUR_ML) return;
+
+  const charged = chargeMl > 0;
+  // The affordability gate, and the two models' one shared line: a charged head must hold a
+  // whole charge before it starts, a metered head only enough for the next tile.
+  if (machine.tankMl < (charged ? chargeMl : SPRINKLER_POUR_ML)) return;
 
   const radius = spec.coverageRadiusTiles;
   const span = radius * 2 + 1;
   const patch = span * span;
   if (patch <= 0) return;
 
-  // `% patch` rather than a bare index, the Hub's own guard: a save whose coverage changed
-  // under it lands somewhere legal instead of scanning off the end of the patch.
-  let offset = resumeScan ? machine.scanCursor % patch : 0;
   let watered = 0;
 
-  for (let visited = 0; visited < patch; visited++) {
-    // Out of water: STOP HERE AND PARK. Not `continue`, and not a reset — the cursor is left
-    // pointing at the tile this cycle could not afford, which is what makes the next cycle
-    // resume rather than restart. Exactly `advanceIrrigationHub`'s rule, for exactly its
-    // reason: a head that skated past a dry tile it could not pay for would forget it.
-    if (machine.tankMl < SPRINKLER_POUR_ML) break;
+  for (let offset = 0; offset < patch; offset++) {
+    // Out of water mid-patch, which only a METERED head can be: stop. A charged head paid for
+    // the whole sweep up front and runs the loop to its end.
+    if (!charged && machine.tankMl < SPRINKLER_POUR_ML) break;
 
     const dx = (offset % span) - radius;
     const dy = divFloor(offset, span) - radius;
@@ -2921,17 +2921,19 @@ function advanceSprinkler(
         // Non-hashed pour signal; see `CropTile.lastPouredTick`. A dumb head re-wetting a
         // soaked tile is still a pour — that is its sloppiness tax, and it should look like one.
         tile.lastPouredTick = state.tick;
-        machine.tankMl -= SPRINKLER_POUR_ML;
+        if (!charged) machine.tankMl -= SPRINKLER_POUR_ML;
         watered += 1;
       }
     }
-
-    offset = (offset + 1) % patch;
   }
 
-  if (resumeScan) machine.scanCursor = offset;
   machine.cooldown = SPRINKLER_PERIOD_TICKS;
   if (watered > 0) {
+    // THE CHARGE IS SPENT HERE AND NOWHERE ELSE, which is item 086's thirst rule surviving
+    // item 097's new unit intact: a sweep that found every tile already wet is not an
+    // activation, so it is not billed as one. Deducted after the sweep rather than at the
+    // gate above for exactly that reason.
+    if (charged) machine.tankMl -= chargeMl;
     machine.opCount += 1;
     machine.wateredCount += watered;
     if (wearPerCycle > 0) wear(machine, wearPerCycle);
@@ -2952,7 +2954,9 @@ function advancePipedSprinkler(state: WorldState, machine: Machine, spec: Machin
     advanceIrrigationHub(state, machine, spec);
     return;
   }
-  advanceSprinkler(state, machine, spec, 0, false);
+  // `chargeMl` 0: METERED. The piped head pays per tile out of the buffer the ledger keeps
+  // topped up, exactly as it always has — item 097 moved the barrel's unit, not this one's.
+  advanceSprinkler(state, machine, spec, 0, 0);
   if (machine.wateredCount > 0) markCeremony(state, CeremonyId.PipedSprinkler);
 }
 
