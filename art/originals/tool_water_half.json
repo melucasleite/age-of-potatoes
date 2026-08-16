@@ -1,0 +1,24 @@
+{
+  "id": "tool_water_half",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 984947470,
+  "prompt": "a grey metal watering can seen from the side, one fat round body, one wide straight spout sticking out to the left, one thick curved handle arching over the top, the body split by one straight horizontal line, everything below the line bright blue water, everything above the line dull grey empty metal, the grey upper part clearly bigger than a thin lid, game inventory item icon, chunky readable silhouette, bold dark outline all the way round, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no drops, no flowers, no holes, centred, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-16T01:30:52.862Z"
+}

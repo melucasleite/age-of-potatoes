@@ -1,0 +1,24 @@
+{
+  "id": "terrain_shore_edge",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 842124938,
+  "prompt": "top-down view of a pond shoreline, the top two thirds still dark blue water in two very close shades with no waves and no reflections, the bottom third dry packed dirt shore, one clean straight horizontal waterline between them with a thin strip of pale wet sand and a few small rounded grey stones scattered along the water edge, seamless tiling left to right, flat even lighting, no plants, no shadows, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": false,
+  "tileX": true,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "terrain",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-16T01:32:37.525Z"
+}

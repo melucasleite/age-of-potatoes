@@ -1,0 +1,24 @@
+{
+  "id": "terrain_shore_outer",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 667993268,
+  "prompt": "top-down view of a pond corner shoreline, still dark blue water in two very close shades filling the top left, dry packed dirt shore filling the bottom edge and the right edge, the waterline curving in one smooth rounded arc from the left edge down to meet the bottom of the tile near the right, a thin strip of pale wet sand and a few small rounded grey stones along the water edge, flat even lighting, no waves, no reflections, no plants, no shadows, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": false,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "terrain",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-16T01:32:54.030Z"
+}

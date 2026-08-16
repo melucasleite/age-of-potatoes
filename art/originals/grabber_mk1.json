@@ -1,0 +1,24 @@
+{
+  "id": "grabber_mk1",
+  "provider": "local",
+  "model": "local:local/grabber_mk1.png",
+  "seed": null,
+  "prompt": "One 16x16 Mk1 grabber, the work-item-082 redesign: BASE FACING EAST (the claw opens toward the tile it picks from), centred and mirror-symmetric about the horizontal midline — asserted by art/tools/make-factory-parts.mjs — so the renderer's quarter-turns about the sprite centre are wobble-free. A chamfered mounting plate, a yellow pivot cap, 1 yellow tick(s) on the arm (tier count cue, so colour is never the only signal), and an open two-finger claw reaching the east edge.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "belts",
+  "costUsd": 0,
+  "generatedAt": "2026-08-16T01:28:59.929Z"
+}

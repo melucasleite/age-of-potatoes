@@ -1,0 +1,24 @@
+{
+  "id": "terrain_shore_inner",
+  "provider": "local",
+  "model": "local:local/terrain_shore_inner.png",
+  "seed": null,
+  "prompt": "One 16x16 inner shore corner — a quarter-circle dirt wedge anchored into the tile's SOUTH-EAST corner, wet-sand rim at radius 6..8, pond water beyond — authored from the master palette by art/tools/make-shore-inner.mjs. Hand-authored after two paid Retro Diffusion takes (2026-08-15) both returned a floating dirt island instead of a corner-anchored wedge: the requirement is geometric (dirt must touch both land edges into the corner at the edge tile's band depth, and the waterline arc sits at a KNOWN radius for the future mud ring), and geometry gets authored, not diffused. Quarter-turns reach the other three concave corners.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": false,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "terrain",
+  "costUsd": 0,
+  "generatedAt": "2026-08-16T01:35:03.571Z"
+}

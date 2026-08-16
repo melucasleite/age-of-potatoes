@@ -1,0 +1,37 @@
+{
+  "id": "avatar1_walk_side",
+  "provider": "retro-diffusion",
+  "model": "rd_plus",
+  "seed": 775753817,
+  "prompt": "the same farmer character in every frame, a farmhand with deep brown skin and short black hair, wearing a mustard yellow work shirt and dark blue overalls with two straps, sturdy dark boots, chunky simple body, short stubby arms and legs, identical character and colours in every frame, feet on the bottom edge, transparent background, no text",
+  "promptStyle": "rd_animation__four_angle_walking",
+  "native": {
+    "width": 32,
+    "height": 16
+  },
+  "requested": {
+    "width": 48,
+    "height": 48
+  },
+  "animation": {
+    "frames": 2,
+    "framesRequested": 4,
+    "frameSize": 48,
+    "keptFrames": [
+      4,
+      6
+    ],
+    "discardRule": "sheetCells at time of purchase \u2014 the live selection is art/manifest.json",
+    "takes": 1,
+    "geometry": "sheet accepted: 4x4 cells of 48px, cell choice deferred to cook"
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "top-left",
+  "atlasGroup": "player",
+  "costUsd": 0,
+  "generatedAt": "2026-08-16T01:35:57.164Z",
+  "note": "byte copy of avatar1_walk_up.png \u2014 one four-angle sheet (seed 775753817, $0.07, recorded on avatar1_walk_up) is harvested into all three walk strips so every facing shows the same farmer"
+}

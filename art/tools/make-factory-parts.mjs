@@ -41,6 +41,18 @@ const ROLES = {
   M: 'metal_mid',
   L: 'metal_light',
   P: 'metal_pale',
+  // Tier liveries (work item 082). Three hues, each as rail / rail-shade / chevron:
+  // yellow for Basic, red for Fast, blue for Express — and because colour is never the
+  // only signal (042's colourblind rule), the CHEVRON COUNT is baked in too: 1 / 2 / 3.
+  Y: 'tater_light',
+  T: 'tater_mid',
+  G: 'chip_gold',
+  R: 'red_bright',
+  E: 'red_mid',
+  O: 'red_pale',
+  B: 'water_bright',
+  W: 'water_mid',
+  Q: 'water_pale',
 };
 
 const { swatches } = loadMaster();
@@ -162,6 +174,98 @@ function beltJunction() {
   return grid;
 }
 
+// --- the tier liveries (work item 082) ------------------------------------------------
+//
+// Owner ruling 2026-08-15: "yellow for the slow, red for the fast, blue for the fastest of
+// all", and every tier tellable without colour — so the chevron count is the second cue,
+// 1 / 2 / 3 per tile, which is also why these are per-tier FRAMES rather than one
+// tint-neutral frame: a runtime tint can change hue but can never change how many arrows
+// are on the belt. Same band arithmetic as the neutral tile, same seam proof.
+
+const LIVERIES = {
+  basic: { rail: 'Y', railDark: 'T', chev: 'G', chevronXs: [6] },
+  fast: { rail: 'R', railDark: 'E', chev: 'O', chevronXs: [2, 10] },
+  express: { rail: 'B', railDark: 'W', chev: 'Q', chevronXs: [1, 6, 11] },
+};
+
+// No chevron column may touch column 0 or 15 — that is the seam proof, checked not assumed.
+for (const [tier, livery] of Object.entries(LIVERIES)) {
+  for (const x0 of livery.chevronXs) {
+    if (x0 < 1 || x0 + CHEVRON_WIDTH - 1 > SIZE - 2) {
+      throw new Error(`belt_${tier}: chevron at x=${x0} touches a tile edge — the belt seams.`);
+    }
+  }
+}
+
+/**
+ * A tier straight: the neutral tile's geometry with the rails in the tier's hue (bright
+ * outer rows, one shade row against the band) and the tier's chevron count on the band.
+ */
+function beltTierStraight(livery) {
+  const grid = blankGrid();
+  for (let y = 0; y < SIZE; y++) {
+    const rail = y < BAND_TOP || y > BAND_BOTTOM;
+    const shade = y === BAND_TOP - 1 || y === BAND_BOTTOM + 1;
+    for (let x = 0; x < SIZE; x++) {
+      grid[y][x] = rail ? (shade ? livery.railDark : livery.rail) : 'D';
+    }
+  }
+  for (const x0 of livery.chevronXs) {
+    for (const [x, y] of chevronCells(x0)) {
+      if (x < SIZE) grid[y][x] = livery.chev;
+    }
+  }
+  return grid;
+}
+
+/**
+ * A tier corner: the neutral corner's arms, the plate in the tier's hue with a one-pixel
+ * shade ring where plate meets band — which is exactly what makes this tile's entry edges
+ * match the tier straight's edges, column for column (asserted below, per tier).
+ *
+ * The chevron count survives the bend: Basic keeps the one departing arrow, Fast adds the
+ * entering arrow, Express carries two entering plus the departing one.
+ */
+function beltTierCorner(livery) {
+  const grid = blankGrid();
+  const inArms = (x, y) => {
+    const horizontal = y >= ARM_LOW && y <= ARM_HIGH && x <= ARM_HIGH;
+    const vertical = x >= ARM_LOW && x <= ARM_HIGH && y >= ARM_LOW;
+    return horizontal || vertical;
+  };
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      if (inArms(x, y)) {
+        grid[y][x] = 'D';
+        continue;
+      }
+      const borders =
+        (x > 0 && inArms(x - 1, y)) ||
+        (x < SIZE - 1 && inArms(x + 1, y)) ||
+        (y > 0 && inArms(x, y - 1)) ||
+        (y < SIZE - 1 && inArms(x, y + 1));
+      grid[y][x] = borders ? livery.railDark : livery.rail;
+    }
+  }
+  // Entering arrows (pointing right) on the horizontal leg: none for Basic, one for Fast,
+  // two for Express — the departing arrow below completes the 1 / 2 / 3 count.
+  // Never at x=0: an arrow touching the entry edge would break the edge-match assertion
+  // below (the neutral corner predates that check and keeps its edge-hugging arrow).
+  const entering = { 1: [], 2: [1], 3: [1, 6] }[livery.chevronXs.length];
+  for (const x0 of entering) {
+    for (const [x, y] of chevronCells(x0)) {
+      if (x < SIZE) grid[y][x] = livery.chev;
+    }
+  }
+  // The departing arrow, pointing down the vertical leg — every tier has this one.
+  for (let dy = 0; dy < CHEVRON_WIDTH; dy++) {
+    for (let x = BAND_MID - 3 + dy; x <= BAND_MID + 3 - dy; x++) {
+      grid[SIZE - CHEVRON_WIDTH - 1 + dy][x] = livery.chev;
+    }
+  }
+  return grid;
+}
+
 // --- the grabber ---------------------------------------------------------------------
 //
 // Drawn pointing EAST and centred on the sprite, so the renderer gets the other three
@@ -189,6 +293,61 @@ const GRABBER = [
   '................',
   '................',
 ];
+
+// --- the grabber redesign (work item 082) ---------------------------------------------
+//
+// Owner ruling 2026-08-15: "also reskin the grabbers. I don't like how they look." The new
+// body keeps the two guarantees the old one carried — authored pointing EAST, centred, and
+// mirror-symmetric about the horizontal midline (asserted below), so the renderer's
+// quarter-turns stay wobble-free — and adds what the old one lacked: an open two-finger
+// claw that visibly grips eastward, a mounting plate with an inner housing, a pivot cap in
+// the tier's hue, and the tier's TICK COUNT on the arm (1 / 2 / 3, the belts' chevron rule
+// in grabber vocabulary, so colour is never the only signal). The Long arm additionally
+// hooks its finger tips inward, marking the two-tile reach; Mk1 and Mk2 share the
+// short-claw silhouette and differ by hue and tick count.
+
+function grabberGrid(accent, accentDark, ticks, hooks) {
+  const grid = blankGrid();
+  const rect = (x, y, w, h, glyph) => {
+    for (let yy = y; yy < y + h; yy++) {
+      for (let xx = x; xx < x + w; xx++) grid[yy][xx] = glyph;
+    }
+  };
+  // The mounting plate, chamfered so the silhouette reads round-ish rather than boxy.
+  rect(0, 4, 7, 8, 'D');
+  rect(1, 5, 5, 6, 'M');
+  grid[4][0] = '.';
+  grid[11][0] = '.';
+  grid[4][6] = '.';
+  grid[11][6] = '.';
+  // The pivot cap: tier-hue ring with a bright core, dead centre on the plate.
+  rect(2, 6, 3, 4, accentDark);
+  rect(3, 7, 1, 2, accent);
+  // Shoulder, then the arm: dark outline rows, pale shaft, tier ticks riding the shaft.
+  rect(6, 6, 2, 4, 'D');
+  rect(7, 6, 5, 1, 'D');
+  rect(7, 9, 5, 1, 'D');
+  rect(7, 7, 5, 2, 'P');
+  for (const x of ticks) rect(x, 7, 1, 2, accentDark);
+  // Wrist, claw back, and the two fingers reaching the east edge — the open jaw between
+  // them is the point: a grabber's sprite must say "reaches into the next tile".
+  rect(11, 5, 2, 6, 'D');
+  rect(12, 5, 2, 6, 'K');
+  rect(13, 4, 3, 2, 'K');
+  rect(13, 10, 3, 2, 'K');
+  rect(13, 6, 1, 4, 'P');
+  if (hooks) {
+    grid[6][15] = 'K';
+    grid[9][15] = 'K';
+  }
+  return grid;
+}
+
+const GRABBER_TIERS = {
+  grabber_mk1: grabberGrid('G', 'T', [9], false),
+  grabber_mk2: grabberGrid('R', 'E', [8, 10], false),
+  grabber_long: grabberGrid('B', 'W', [7, 9, 11], true),
+};
 
 // --- emit ----------------------------------------------------------------------------
 
@@ -240,7 +399,51 @@ for (let y = 0; y < SIZE; y++) {
   }
 }
 
+// The tier tiles carry the same two guarantees, per tier: a straight's left edge equals
+// its right edge, and a corner's entry edges equal the straight's edges — so a bend never
+// shows a seam against the run feeding it.
+for (const [tier, livery] of Object.entries(LIVERIES)) {
+  const tierStraight = beltTierStraight(livery);
+  for (let y = 0; y < SIZE; y++) {
+    if (tierStraight[y][0] !== tierStraight[y][SIZE - 1]) {
+      throw new Error(`belt_${tier} seams at row ${y}.`);
+    }
+  }
+  const tierCorner = beltTierCorner(livery);
+  for (let y = 0; y < SIZE; y++) {
+    if (tierCorner[y][0] !== tierStraight[y][0]) {
+      throw new Error(`belt_${tier}_corner does not meet a straight belt at row ${y}.`);
+    }
+  }
+  // The corner's exit edge (bottom) must match a vertical run's edge — which is the same
+  // profile as the straight's left edge, x-for-y, because rotation carries the edge with it.
+  for (let x = 0; x < SIZE; x++) {
+    if (tierCorner[SIZE - 1][x] !== tierStraight[x][0]) {
+      throw new Error(`belt_${tier}_corner does not meet a vertical belt at column ${x}.`);
+    }
+  }
+}
+
+// A grabber is rotated in quarter-turns about its centre, so it must be mirror-symmetric
+// about the horizontal midline or it visibly wobbles as it turns. Asserted, not eyeballed.
+for (const [name, grid] of Object.entries(GRABBER_TIERS)) {
+  for (let y = 0; y < SIZE / 2; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      if (grid[y][x] !== grid[SIZE - 1 - y][x]) {
+        throw new Error(`${name} is not mirror-symmetric at ${x},${y} — it will wobble.`);
+      }
+    }
+  }
+}
+
 await write('belt_straight', straight);
 await write('belt_corner', beltCorner());
 await write('belt_junction', junction);
 await write('grabber_arm', GRABBER);
+for (const [tier, livery] of Object.entries(LIVERIES)) {
+  await write(`belt_${tier}`, beltTierStraight(livery));
+  await write(`belt_${tier}_corner`, beltTierCorner(livery));
+}
+for (const [name, grid] of Object.entries(GRABBER_TIERS)) {
+  await write(name, grid);
+}

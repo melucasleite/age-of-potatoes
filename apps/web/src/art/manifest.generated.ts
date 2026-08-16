@@ -16,13 +16,133 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.ce3bcef8.png';
-export const ATLAS_JSON_URL = '/art/atlas.ce3bcef8.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.fa52bbb9.png';
+export const ATLAS_JSON_URL = '/art/atlas.fa52bbb9.json';
 
 export const ATLAS_SIZE = { width: 1024, height: 512 } as const;
 
 export const ATLAS_FRAMES = {
-  belt_corner: {
+  avatar1_walk_down: {
+    x: 0,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar1_walk_side: {
+    x: 33,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar1_walk_up: {
+    x: 66,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar2_walk_down: {
+    x: 99,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar2_walk_side: {
+    x: 132,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar2_walk_up: {
+    x: 165,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar3_walk_down: {
+    x: 198,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar3_walk_side: {
+    x: 231,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar3_walk_up: {
+    x: 264,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar4_walk_down: {
+    x: 297,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar4_walk_side: {
+    x: 330,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar4_walk_up: {
+    x: 363,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar5_walk_down: {
+    x: 396,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar5_walk_side: {
+    x: 429,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  avatar5_walk_up: {
+    x: 462,
+    y: 209,
+    width: 32,
+    height: 16,
+    anchor: 'top-left',
+    group: 'player',
+  },
+  belt_basic: {
     x: 0,
     y: 0,
     width: 16,
@@ -30,7 +150,7 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'belts',
   },
-  belt_junction: {
+  belt_basic_corner: {
     x: 17,
     y: 0,
     width: 16,
@@ -38,8 +158,56 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'belts',
   },
-  belt_straight: {
+  belt_corner: {
     x: 34,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_express: {
+    x: 51,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_express_corner: {
+    x: 68,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_fast: {
+    x: 85,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_fast_corner: {
+    x: 102,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_junction: {
+    x: 119,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'belts',
+  },
+  belt_straight: {
+    x: 136,
     y: 0,
     width: 16,
     height: 16,
@@ -199,7 +367,31 @@ export const ATLAS_FRAMES = {
     group: 'decals',
   },
   grabber_arm: {
-    x: 51,
+    x: 153,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'belts',
+  },
+  grabber_long: {
+    x: 170,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'belts',
+  },
+  grabber_mk1: {
+    x: 187,
+    y: 0,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'belts',
+  },
+  grabber_mk2: {
+    x: 204,
     y: 0,
     width: 16,
     height: 16,
@@ -703,7 +895,7 @@ export const ATLAS_FRAMES = {
     group: 'pipes',
   },
   player_walk_down: {
-    x: 0,
+    x: 495,
     y: 209,
     width: 32,
     height: 16,
@@ -711,7 +903,7 @@ export const ATLAS_FRAMES = {
     group: 'player',
   },
   player_walk_side: {
-    x: 33,
+    x: 528,
     y: 209,
     width: 32,
     height: 16,
@@ -719,7 +911,7 @@ export const ATLAS_FRAMES = {
     group: 'player',
   },
   player_walk_up: {
-    x: 66,
+    x: 561,
     y: 209,
     width: 32,
     height: 16,
@@ -870,7 +1062,7 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'terrain',
   },
-  terrain_soil: {
+  terrain_shore_edge: {
     x: 17,
     y: 267,
     width: 16,
@@ -878,7 +1070,7 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'terrain',
   },
-  terrain_soil_tilled: {
+  terrain_shore_inner: {
     x: 34,
     y: 267,
     width: 16,
@@ -886,8 +1078,32 @@ export const ATLAS_FRAMES = {
     anchor: 'top-left',
     group: 'terrain',
   },
-  terrain_water: {
+  terrain_shore_outer: {
     x: 51,
+    y: 267,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'terrain',
+  },
+  terrain_soil: {
+    x: 68,
+    y: 267,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'terrain',
+  },
+  terrain_soil_tilled: {
+    x: 85,
+    y: 267,
+    width: 16,
+    height: 16,
+    anchor: 'top-left',
+    group: 'terrain',
+  },
+  terrain_water: {
+    x: 102,
     y: 267,
     width: 16,
     height: 16,
@@ -936,6 +1152,22 @@ export const ATLAS_FRAMES = {
   },
   tool_water: {
     x: 476,
+    y: 125,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  tool_water_empty: {
+    x: 493,
+    y: 125,
+    width: 16,
+    height: 16,
+    anchor: 'center',
+    group: 'items',
+  },
+  tool_water_half: {
+    x: 510,
     y: 125,
     width: 16,
     height: 16,
