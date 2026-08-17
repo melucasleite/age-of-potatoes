@@ -39,6 +39,8 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { runClockCrossings } from './clock-crossings';
+
 import {
   type Machine,
   type WorldState,
@@ -554,4 +556,16 @@ describe('the whole family of doors', () => {
       // Clocked by `Machine.inputFreshTicks` (item 112).
     ]);
   });
+});
+
+// --- the clock crossings this file owns (item 119) --------------------------------------------
+//
+// The scenarios live in `clock-crossings.ts` and the ones run here are the ones that named this
+// file. That split is deliberate: item 119 measured every clock catch in the suite coming from a
+// single file, so the guard was one `rm` away from silently disappearing. `clock-doors.test.ts`
+// sweeps the test directory and fails if a file named by a crossing does not exist or does not
+// call `runClockCrossings` with its own name.
+
+describe('clock crossings: freshness-depot-and-bot', () => {
+  runClockCrossings('freshness-depot-and-bot');
 });

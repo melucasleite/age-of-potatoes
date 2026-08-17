@@ -341,6 +341,354 @@ export function bagDoors(): string[] {
   return [...found].sort();
 }
 
+// --- the clock doors: every line that HANDS a clock to a container ---------------------------
+
+/**
+ * **THE PRIMITIVES THAT TAKE A CLOCK AND WRITE IT INTO A CONTAINER.**
+ *
+ * Every one of these has a clock as its last parameter, and every one of them is a place where
+ * the caller — not the primitive — decides what that clock is. `mergedFreshness`,
+ * `machineOutputFreshness` and `spoilTickFromRemaining` are deliberately NOT here: they compute a
+ * clock and write nothing, so they cannot be the place a window gets minted.
+ */
+const CLOCK_DOOR_PRIMITIVES = [
+  'addItemFresh',
+  'beltInsert',
+  'depotAccept',
+  'placeOnFace',
+  'putHopper',
+  'putStorage',
+] as const;
+
+/** The doors' own bodies call each other; that plumbing is the door, not a user of it. */
+const CLOCK_DOOR_PLUMBING = new Set<string>([...CLOCK_DOOR_PRIMITIVES, 'addItem']);
+
+/** Index just past the `)` matching the `(` at `open`. */
+function matchingParen(text: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === '(') depth += 1;
+    else if (text[i] === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * The last top-level argument of a call, with Prettier's trailing comma discarded.
+ *
+ * The trailing comma is why this is not a `split(',')`: `addItemFresh(state, item, 1, f(a, b),)`
+ * has an empty final segment, and the argument wanted is the one before it — sliced to the NEXT
+ * cut rather than to the end, or the discarded comma comes back on the answer.
+ */
+function lastArgument(inner: string): string {
+  const cuts: number[] = [];
+  let depth = 0;
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i]!;
+    if (ch === '(' || ch === '[' || ch === '{') depth += 1;
+    else if (ch === ')' || ch === ']' || ch === '}') depth -= 1;
+    else if (ch === ',' && depth === 0) cuts.push(i);
+  }
+  const bounds = [...cuts, inner.length];
+  for (let i = bounds.length - 1; i >= 0; i--) {
+    const from = i === 0 ? 0 : cuts[i - 1]! + 1;
+    const candidate = inner.slice(from, bounds[i]).trim();
+    if (candidate !== '') return candidate.replace(/\s+/g, ' ');
+  }
+  return inner.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * **EVERY PLACE IN THE SIM WHERE A CLOCK CROSSES A TRANSFER**, as
+ * `file:function:door(the clock it hands over)`, sorted. **THE FOURTH COLUMN, EXECUTED.**
+ *
+ * `bagDoors()` above exists because the BAG's clock is chosen by which function you call rather
+ * than by an argument you pass, so the doors had to be enumerated BY CALLER. Item 119 is the
+ * discovery that this was never the bag's peculiarity at all — it is every container's. A hopper,
+ * a belt, a basket and a depot floor all take their clock as an ARGUMENT, and an argument is
+ * chosen at a CALL SITE that the quantity census cannot see:
+ *
+ *   - `MOVE_VERDICTS` is keyed by the function that writes the COUNT. `grabberDeliver` writes no
+ *     count at all — it calls `putHopper`, and the row for that is `state:putHopper:inputCounts[]`,
+ *     which the hand's `applyLoadMachine` also drives. Drive it once from the hand and the row is
+ *     "covered" while the claw's clock argument has never been looked at.
+ *   - The four doors item 119 was filed for all sat under a comment reading
+ *     `// --- belts and arms (item 112 clocked all four) ---`, marked `Conserving`, annotated
+ *     `CLOCK: heldFreshTicks`. Every word of that was true and none of it ran.
+ *
+ * **KEYED BY THE CLOCK EXPRESSION, NOT BY THE LINE.** A line number rots on the next edit, and a
+ * `file:function:door` key collapses four different transfers: `applyDeconstructMachine` hands
+ * `addItemFresh` the basket's clock, then each hopper's, then the cargo bay's, then the bot's
+ * armful — four windows, four chances to mint one, one key. So the key carries the expression,
+ * which is stable under formatting, unique per container, and says in the key itself WHICH clock
+ * is crossing. It is deliberately brittle in one direction: rename the local and this list goes
+ * red, which for this family is the feature rather than the cost.
+ */
+export function clockDoors(): string[] {
+  const found: string[] = [];
+  // **A SECOND CALL SITE SPELLED IDENTICALLY IS A SECOND DOOR**, and this is the line that says
+  // so. `applyRemoveBeltTile` hands `entry.freshTicks` to `addItemFresh` twice — once for a
+  // 1-tile belt taken up whole, once for the goods freed by a cut — and the mutation sweep of
+  // item 119 caught the second and not the first. Collapsed to one key, adding a third would
+  // change nothing at all; numbered, it goes red and somebody has to say what it is. The first
+  // occurrence keeps the bare key so an addition does not rename its neighbour.
+  const seen = new Map<string, number>();
+  const add = (key: string): void => {
+    const n = (seen.get(key) ?? 0) + 1;
+    seen.set(key, n);
+    found.push(n === 1 ? key : `${key}#${n}`);
+  };
+  for (const [label, path] of sourceFiles(SRC)) {
+    const text = readFileSync(path, 'utf8');
+    const lines = text.split('\n');
+    const owners = enclosingFunctions(lines);
+    // Where each line starts inside `text`, so a call can be read across line breaks.
+    const offsets: number[] = [];
+    let run = 0;
+    for (const line of lines) {
+      offsets.push(run);
+      run += line.length + 1;
+    }
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue;
+      if (/^\s*(?:export )?function /.test(line)) continue;
+      const owner = owners[i]!;
+      if (CLOCK_DOOR_PLUMBING.has(owner)) continue;
+      for (const door of CLOCK_DOOR_PRIMITIVES) {
+        const call = new RegExp(`(?<![A-Za-z0-9_.])${door}\\(`).exec(line);
+        if (call === null) continue;
+        const open = offsets[i]! + call.index + door.length;
+        const close = matchingParen(text, open);
+        if (close < 0) continue;
+        add(`${label}:${owner}:${door}(${lastArgument(text.slice(open + 1, close))})`);
+      }
+    }
+  }
+  return [...found].sort();
+}
+
+/**
+ * **EVERY PLACE A CLOCK IS WRITTEN STRAIGHT ONTO A CONTAINER**, as
+ * `file:function:field = the clock it is given`, sorted — the other half of `clockDoors()`.
+ *
+ * A clock arrives in a container one of exactly two ways: it is handed to a door primitive, or it
+ * is assigned to the field directly. The first half missed four of the nine crossings item 119's
+ * sweep found unguarded, and all four were assignments — `grabberSource` setting the claw's clock
+ * from a dock shelf and from a machine basket, `takeDockShelf` repairing a clock that was never
+ * written down, and `applyLoadCart` loading a delivery cart. A census of one half is a list.
+ *
+ * The door primitives' own bodies are excluded for the reason `bagDoors()` excludes its own: the
+ * line inside `putStorage` that writes `cargoFreshTicks` IS the `putStorage(freshTicks)` door
+ * already on the other list, and counting it twice would mean two rows for one decision.
+ *
+ * Compound assignment is not a crossing and is not matched: `freshTicks -= 1` is a clock being
+ * SPENT, which is the sim doing its job, and `\s*=` will not match the `-` in front of it.
+ */
+export function clockWrites(): string[] {
+  const found: string[] = [];
+  const seen = new Map<string, number>();
+  for (const [label, path] of sourceFiles(SRC)) {
+    const lines = readFileSync(path, 'utf8').split('\n');
+    const owners = enclosingFunctions(lines);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue;
+      const owner = owners[i]!;
+      if (CLOCK_DOOR_PLUMBING.has(owner)) continue;
+      const write = /\.([A-Za-z0-9_]*(?:[Ff]reshTicks|[Ss]poilAtTick))\s*=([^=].*)$/.exec(line);
+      if (write === null) continue;
+      // A multi-line right-hand side is reported by its opening call, spelled `f(…)`: the census
+      // wants one row per decision, and a decision spread over four lines is still one.
+      const given = write[2]!
+        .trim()
+        .replace(/;\s*$/, '')
+        .replace(/\s+/g, ' ')
+        .replace(/\($/, '(…)');
+      const key = `${label}:${owner}:${write[1]} = ${given}`;
+      const n = (seen.get(key) ?? 0) + 1;
+      seen.set(key, n);
+      found.push(n === 1 ? key : `${key}#${n}`);
+    }
+  }
+  return [...found].sort();
+}
+
+/** Both halves of the clock census, which is the whole of it: every clock crossing in the sim. */
+export function clockCrossings(): string[] {
+  return [...clockDoors(), ...clockWrites()].sort();
+}
+
+/**
+ * **WHAT A CALL SITE DOES TO THE CLOCK IT HANDS OVER.**
+ *
+ * `MOVE_VERDICTS` is about the COUNT and `BAG_DOOR_VERDICTS` is about the bag's WINDOW. This is
+ * the same question as the second, asked of every other container — and it is the column item 112
+ * wrote as a comment (`CLOCK: heldFreshTicks`) and nobody executed.
+ */
+export const ClockDoorVerdict = {
+  /** Hands over the clock the goods came out of. What every transfer between containers owes. */
+  Carries: 'carries',
+  /** A full window, because the goods genuinely did not exist a moment ago. A judgement. */
+  MintsNew: 'mints-new',
+  /** The goods keep no clock, so what is handed over cannot matter. Falsifiable: check them. */
+  MintsShelfStable: 'mints-shelf-stable',
+  /**
+   * Repairs a clock that was never written down — a save old enough to predate the field. The
+   * value handed over is a full window BY DESIGN, and pessimistically: the goods are treated as
+   * having just arrived because nothing recorded when they really did.
+   */
+  Grandfathers: 'grandfathers',
+  /**
+   * **PUTS A CLOCK BACK TO ZERO BECAUSE THERE IS NOTHING LEFT TO COUNT** — a container emptied, a
+   * claw opened, a route paid out. Not a mint and not a carry: zero means "no opinion" everywhere
+   * in this game, and an empty shelf is entitled to have none.
+   *
+   * Listed rather than filtered out, on item 115's rule: a census that exempts a shape is a list
+   * again, and "it only ever writes zero" is exactly the sentence a mint would like to hide behind.
+   */
+  Clears: 'clears',
+  /** Copies a clock outward into a render buffer. The world is not touched. */
+  Projection: 'projection',
+} as const;
+export type ClockDoorVerdict = (typeof ClockDoorVerdict)[keyof typeof ClockDoorVerdict];
+
+/**
+ * **EVERY CLOCK CROSSING IN THE SIM, WITH THE SENTENCE IT IS HELD TO.** Keys are
+ * `clockCrossings()` exactly, so this is the ONE list rather than a second one beside it.
+ *
+ * **THIS TABLE IS ITEM 119, AND THE REASON IT EXISTS IS THAT ITS PREDECESSOR WAS PROSE.** Item
+ * 112 clocked four transfers and wrote `CLOCK: heldFreshTicks` beside each of them in a `//`
+ * comment on `MOVE_VERDICTS`. Item 118 added a `clock` column to `GOODS_COUNTS` and it was read in
+ * exactly two places, both set-membership over field NAMES. Between them, nine crossings could be
+ * reverted to a literal `0` with all 1,544 tests green — measured, at HEAD `5ce5175`, by the sweep
+ * in `scripts/clock-mutation-sweep.py`.
+ *
+ * A literal `0` is the faithful revert and a `+1` is not, which is worth keeping because the first
+ * mutant tried was the wrong one: `FRESHNESS_BUCKET_TICKS` is 300, so a one-tick nudge is
+ * legitimately absorbed, while `mergedFreshness` and `addItemFresh` both read 0 as "no opinion"
+ * and answer with a FULL window. **These lines do not lose time when they break. They mint it.**
+ */
+export const CLOCK_CROSSING_VERDICTS: Readonly<Record<string, ClockDoorVerdict>> = {
+  // --- belts and arms: the four item 112 clocked, and the two beside them nobody had counted ---
+  'belts:advanceGrabber:heldFreshTicks = 0': ClockDoorVerdict.Clears, // the claw let go.
+  'belts:advanceJunction:placeOnFace(head.freshTicks)': ClockDoorVerdict.Carries, // belt → face.
+  'belts:grabberDeliver:beltInsert(grabber.heldFreshTicks)': ClockDoorVerdict.Carries,
+  'belts:grabberDeliver:depotAccept(grabber.heldFreshTicks)': ClockDoorVerdict.Carries,
+  'belts:grabberDeliver:putHopper(grabber.heldFreshTicks)': ClockDoorVerdict.Carries, // claw →
+  //                                                        hopper. **ONE OF THE NINE.** Its own
+  //                                                        comment reads "This line used to pass a
+  //                                                        literal 0"; put the 0 back and, until
+  //                                                        item 119, nothing objected.
+  'belts:grabberDeliver:putStorage(grabber.heldFreshTicks)': ClockDoorVerdict.Carries,
+  'belts:grabberSource:heldFreshTicks = 0': ClockDoorVerdict.Clears, // a seed shelf: no clock.
+  'belts:grabberSource:heldFreshTicks = entry.freshTicks': ClockDoorVerdict.Carries, // ← a belt.
+  'belts:grabberSource:heldFreshTicks = freshTicks': ClockDoorVerdict.Carries, // ← a machine's
+  //                                                        output basket. **ONE OF THE NINE**, and
+  //                                                        one the item was not filed for: this
+  //                                                        function has four take-paths, and the
+  //                                                        belt and the cellar were guarded while
+  //                                                        the basket and the dock shelf were not.
+  'belts:grabberSource:heldFreshTicks = took.freshTicks': ClockDoorVerdict.Carries, // ← a dock's
+  //                                                        produce shelf. **ONE OF THE NINE.**
+  'belts:grabberSource:heldFreshTicks = took.freshTicks#2': ClockDoorVerdict.Carries, // ← storage.
+  'belts:handOffFromHead:beltInsert(head.freshTicks)': ClockDoorVerdict.Carries, // belt → belt.
+  //                                                        **ONE OF THE NINE**, and its comment
+  //                                                        predicted the exploit in so many words:
+  //                                                        "the fix would be defeated by laying
+  //                                                        belt in short pieces".
+  // --- bots ---
+  'bots:harvestUnderBot:carryFreshTicks = 0': ClockDoorVerdict.Clears, // the seed pocket.
+  'bots:harvestUnderBot:carryFreshTicks = mergedFreshness(bot.carryCount, bot.carryFreshTicks, result.item, 0)':
+    ClockDoorVerdict.MintsNew, //                           GROUND → arms: the crop did not exist a
+  //                                                        moment ago, and 0 asks for a full
+  //                                                        window merged against the armful.
+  'bots:unloadIntoDock:cargoFreshTicks = mergedFreshness(…)': ClockDoorVerdict.Carries, // arms →
+  //                                                        shelf, at the sooner of the two.
+  'bots:unloadIntoDock:carryFreshTicks = 0': ClockDoorVerdict.Clears, // the arms are empty now.
+  // --- commerce ---
+  'commerce:advanceCart:cargoFreshTicks = 0': ClockDoorVerdict.Clears, // the cart sold its load.
+  'commerce:advanceContract:inTransitFreshTicks = 0': ClockDoorVerdict.Clears, // the lorry paid out.
+  'commerce:advanceContract:inTransitFreshTicks = contract.stockedFreshTicks':
+    ClockDoorVerdict.Carries, //                            floor → lorry.
+  'commerce:advanceContract:stockedFreshTicks = 0': ClockDoorVerdict.Clears, // the floor is bare.
+  'commerce:refundContract:addItemFresh(spoilTickFromRemaining(state, contract.inTransitFreshTicks))':
+    ClockDoorVerdict.Carries, //                            a torn-up route hands the lorry back.
+  'commerce:refundContract:addItemFresh(spoilTickFromRemaining(state, contract.stockedFreshTicks))':
+    ClockDoorVerdict.Carries, //                            and the floor.
+  'commerce:refundContract:inTransitFreshTicks = 0': ClockDoorVerdict.Clears,
+  'commerce:refundContract:stockedFreshTicks = 0': ClockDoorVerdict.Clears,
+  // --- the primitives' own take-doors ---
+  'state:takeDockShelf:cargoFreshTicks = 0': ClockDoorVerdict.Clears, // shelf emptied.
+  'state:takeDockShelf:cargoFreshTicks = freshnessTicks(item)': ClockDoorVerdict.Grandfathers,
+  'state:takeOneOutput:outputFreshTicks = 0': ClockDoorVerdict.Clears, // basket emptied.
+  'state:takeStorage:cargoFreshTicks = 0': ClockDoorVerdict.Clears, // container emptied.
+  'state:takeStorage:cargoFreshTicks = freshnessTicks(item)': ClockDoorVerdict.Grandfathers,
+  // --- the tick's own ---
+  'tick:advanceBeltSpoilage:freshTicks = 0': ClockDoorVerdict.Clears, // it turned to compost.
+  'tick:advanceBotSpoilage:carryFreshTicks = 0': ClockDoorVerdict.Clears, // ditto, in the arms.
+  'tick:advanceOrchard:outputFreshTicks = mergedFreshness(…)': ClockDoorVerdict.MintsNew, // a tree
+  //                                                        makes fruit out of time.
+  'tick:advanceStorageSpoilage:cargoFreshTicks = 0': ClockDoorVerdict.Clears,
+  'tick:applyDeconstructMachine:addItemFresh(spoilTickFromRemaining(state, bot.carryFreshTicks))':
+    ClockDoorVerdict.Carries, //                            boxing a dock with a bot mid-errand.
+  'tick:applyDeconstructMachine:addItemFresh(spoilTickFromRemaining(state, freshTicks))':
+    ClockDoorVerdict.Carries, //                            **ONE OF THE NINE**: the output BASKET
+  //                                                        on boxing. Its twin at `applyUnload`
+  //                                                        has two tests; this one had none, and
+  //                                                        the scenario that "covered" the verb
+  //                                                        boxed a starved Seasoner whose basket
+  //                                                        was empty.
+  'tick:applyDeconstructMachine:addItemFresh(spoilTickFromRemaining(state, machine.cargoFreshTicks))':
+    ClockDoorVerdict.Carries, //                            the cargo bay.
+  'tick:applyDeconstructMachine:addItemFresh(spoilTickFromRemaining(state, took.freshTicks))':
+    ClockDoorVerdict.Carries, //                            every hopper line.
+  'tick:applyDeconstructMachine:cargoFreshTicks = 0': ClockDoorVerdict.Clears,
+  'tick:applyLoadCart:cargoFreshTicks = mergedCargoFreshnessForCart(cart, count, command.item, freshTicks)':
+    ClockDoorVerdict.Carries, //                            **ONE OF THE NINE**: bag → delivery
+  //                                                        cart. A cart never SPENDS its clock, so
+  //                                                        nothing about the cart itself could
+  //                                                        show the loss — the door this closes is
+  //                                                        the way back out, when the cart is boxed.
+  'tick:applyLoadMachine:putHopper(freshTicks)': ClockDoorVerdict.Carries, // hand → hopper.
+  'tick:applyLoadMachine:putStorage(freshTicks)': ClockDoorVerdict.Carries, // hand → container.
+  'tick:applyPackCrate:addItemFresh(deadline)': ClockDoorVerdict.MintsNew, // **A CRATE IS THE ONE
+  //                                                        DOOR ALLOWED TO LENGTHEN A WINDOW**, and
+  //                                                        it is a bought good doing it. Guarded in
+  //                                                        the sim rather than here: the verb
+  //                                                        refuses when the deadline it would grant
+  //                                                        is no later than the one already held.
+  'tick:applyRemoveBelt:addItemFresh(spoilTickFromRemaining(state, entry.freshTicks))':
+    ClockDoorVerdict.Carries, //                            a whole belt run hands its riders back.
+  'tick:applyRemoveBeltTile:addItemFresh(spoilTickFromRemaining(state, entry.freshTicks))':
+    ClockDoorVerdict.Carries, //                            **ONE OF THE NINE**: the branch that
+  //                                                        takes up a ONE-TILE belt whole. Its
+  //                                                        neighbour below — the goods freed by
+  //                                                        cutting a longer run — is the same line
+  //                                                        of code twice and was already covered,
+  //                                                        which is why these two keys are
+  //                                                        numbered rather than collapsed.
+  'tick:applyRemoveBeltTile:addItemFresh(spoilTickFromRemaining(state, entry.freshTicks))#2':
+    ClockDoorVerdict.Carries,
+  'tick:applyRemoveGrabber:addItemFresh(spoilTickFromRemaining(state, grabber.heldFreshTicks))':
+    ClockDoorVerdict.Carries, //                            whatever the arm was holding.
+  'tick:applyUnloadMachine:addItemFresh(spoilTickFromRemaining(state, freshTicks))':
+    ClockDoorVerdict.Carries, //                            the basket, by hand.
+  'tick:applyUnloadMachine:addItemFresh(spoilTickFromRemaining(state, took.freshTicks))':
+    ClockDoorVerdict.Carries, //                            a hopper line, by hand.
+  'tick:applyUnloadMachine:addItemFresh(spoilTickFromRemaining(state, took.freshTicks))#2':
+    ClockDoorVerdict.Carries, //                            the cargo bay, by hand.
+  'tick:produceRecipe:outputFreshTicks = mergedFreshness(…)': ClockDoorVerdict.MintsNew, // §4's
+  //                                                        "processing IS preservation": the output
+  //                                                        is a NEW good with a new window.
+  // --- the projection, which moves nothing ---
+  'view:projectCommerce:stockedFreshTicks = contract.stockedFreshTicks':
+    ClockDoorVerdict.Projection,
+};
+
 // --- the verdicts: what each transfer CLAIMS, as data rather than as a comment ---------------
 
 /**
@@ -1024,9 +1372,63 @@ export function clockFieldCoverage(root: unknown): Map<string, { filled: number;
   return coverage;
 }
 
-/** The naming convention this codebase actually uses for "how long these goods have left". */
+/**
+ * The naming convention this codebase actually uses for "how long these goods have left".
+ *
+ * **AND A NAMING CONVENTION IS EXACTLY AS GOOD AS ITS ENFORCEMENT**, which until item 119 was
+ * none. A clock called `pocketStaleness` is invisible to this regex, so it would be invisible to
+ * `clockBearingPaths`, to `clockFieldCoverage`, and to the save sweep that zeroes each clock in
+ * turn — and it could be dropped from `toPayload` entirely with the whole suite green.
+ *
+ * `worldDiff` is genuinely name-blind and would catch it, but only when the fixture puts a NUMBER
+ * in it: a field left at 0 round-trips as 0 whether it is carried or dropped. So the enforcement
+ * is not a better regex — a regex can always be dodged by choosing another name — it is
+ * `unfilledNumbers` below, which does not read names at all.
+ */
 function isClockKey(key: string): boolean {
   return /freshticks$/i.test(key) || /spoilattick$/i.test(key);
+}
+
+/**
+ * **EVERY NUMBER IN A WORLD THAT THIS FIXTURE NEVER PUTS A VALUE IN**, by collapsed path.
+ *
+ * **THE ANSWER TO "ENFORCE THE CONVENTION OR REPLACE IT"**, and it replaces it. Nothing here
+ * reads a field name: it walks the world, collects every numeric leaf, and reports the paths whose
+ * every occurrence is zero. A clock called `pocketStaleness` lands on this list on the day it is
+ * added, and the only ways off it are to fill it in the fixture — which hands `worldDiff` and the
+ * zeroing sweep something real to be about — or to write down why a permanent zero is right.
+ *
+ * That is the same bargain `UNREACHED` strikes for the census rows, and it is strictly stronger
+ * than a regex for the reason a regex cannot be: **it cannot be dodged by choosing a name**,
+ * because it never looks at the name.
+ */
+export function unfilledNumbers(root: unknown): string[] {
+  const filled = new Map<string, boolean>();
+  const seen = new Set<object>();
+
+  const walk = (node: unknown, collapsed: string): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const entry of node) walk(entry, `${collapsed}[]`);
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      const here = collapsed === '' ? key : `${collapsed}.${key}`;
+      if (typeof value === 'number') {
+        filled.set(here, (filled.get(here) ?? false) || value !== 0);
+      } else {
+        walk(value, here);
+      }
+    }
+  };
+
+  walk(root, '');
+  return [...filled.entries()]
+    .filter(([, any]) => !any)
+    .map(([path]) => path)
+    .sort();
 }
 
 /**

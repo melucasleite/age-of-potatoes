@@ -19,6 +19,8 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { runClockCrossings } from './clock-crossings';
+
 import {
   type MachineView,
   type WorldState,
@@ -236,4 +238,16 @@ describe('every machine in the game, checked against what its goods actually did
     expect(containers, 'the sweep found no containers at all').toBeGreaterThanOrEqual(3);
     expect(frozen, 'there is one freeze in this game and it costs $250').toBe(1);
   });
+});
+
+// --- the clock crossings this file owns (item 119) --------------------------------------------
+//
+// The scenarios live in `clock-crossings.ts` and the ones run here are the ones that named this
+// file. That split is deliberate: item 119 measured every clock catch in the suite coming from a
+// single file, so the guard was one `rm` away from silently disappearing. `clock-doors.test.ts`
+// sweeps the test directory and fails if a file named by a crossing does not exist or does not
+// call `runClockCrossings` with its own name.
+
+describe('clock crossings: container-clock-view', () => {
+  runClockCrossings('container-clock-view');
 });

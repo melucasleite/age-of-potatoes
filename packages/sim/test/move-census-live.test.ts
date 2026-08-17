@@ -79,6 +79,7 @@ import {
   boxLedger,
   clockBearingPaths,
   clockFieldCoverage,
+  unfilledNumbers,
   goodsLedger,
   itemBearingPaths,
   ledgerClock,
@@ -1143,6 +1144,96 @@ describe('the save/load round trip', () => {
     const restored = deserialize(serialize(state), state.trace);
     const diff = worldDiff(state, restored);
     expect(diff.slice(0, 12), `a save/load changed ${String(diff.length)} fields`).toEqual([]);
+  });
+
+  it('**LEAVES NO NUMBER UNFILLED THAT NOBODY HAS EXCUSED — THE NAME-BLIND HALF**', () => {
+    // **THIS IS WHAT REPLACES `isClockKey`, AND WHY A BETTER REGEX WOULD NOT HAVE DONE.**
+    //
+    // Every net above this one reads FIELD NAMES. `clockBearingPaths` matches `/freshticks$/i`,
+    // `GOODS_COUNTS[].clock` is a list of names, and both are dodged for free by a clock called
+    // `pocketStaleness` — unfilled and dropped from `toPayload`, it passes the entire suite,
+    // because `worldDiff` is name-blind but a field left at 0 round-trips as 0 whether it is
+    // carried or dropped.
+    //
+    // `unfilledNumbers` never looks at a name. It walks the world, finds every number whose every
+    // occurrence is zero, and hands back the list — so a new field of ANY name shows up here the
+    // day it is added, and the only ways off the list are to fill it in the fixture (which gives
+    // `worldDiff` and the zeroing sweep something real to be about) or to say why a permanent
+    // zero is right. **Not one clock is on this list**, which is the assertion this makes: the
+    // fixture fills all nine, and it is provable without knowing what any of them are called.
+    const state = loadedWorld(12_210);
+    expect(
+      unfilledNumbers(state),
+      'a number this fixture never fills — fill it, or add it here with a reason',
+    ).toEqual([
+      // Counters, cursors, dials and ledgers that are legitimately zero in a fixture nobody has
+      // played: no machine has completed an operation, no route has run, no money has moved, and
+      // every upgrade is at its opening level. A clock arriving here would be a clock the round
+      // trip cannot see, which is the whole point of the check.
+      'bots[].workTicks',
+      'contracts[].grossCents',
+      'contracts[].phase',
+      'contracts[].runsCompleted',
+      'contracts[].ticksRemaining',
+      'field[].compost',
+      'field[].lastPouredTick',
+      'field[].moisture',
+      'field[].moistureAccum',
+      'grabbers[].cooldown',
+      'grabbers[].filter',
+      'grabbers[].opCount',
+      'machines[].blockedTicks',
+      'machines[].capacityLevel',
+      'machines[].cooldown',
+      'machines[].efficiencyLevel',
+      'machines[].flowMlPerMinute',
+      'machines[].junctionInCursor',
+      'machines[].junctionOutCursor',
+      'machines[].network',
+      'machines[].opCount',
+      'machines[].progress',
+      'machines[].runTicksRemaining',
+      'machines[].scanCursor',
+      'machines[].skippedCount',
+      'machines[].speedLevel',
+      'machines[].tankMl',
+      'machines[].untouchedTicks',
+      'machines[].wateredCount',
+      'player.moveAccum',
+      'player.moveDir',
+      'player.towedCartId',
+      'reservoirs[].rechargeAccum',
+      'soilMemory[].fertilityWear',
+      'stats.automatedGrossCents',
+      'stats.cheatsUsed',
+      'stats.dawnsSeen',
+      'stats.hourMark.earnedCents',
+      'stats.hourMark.hour',
+      'stats.hourMark.inputsWasted',
+      'stats.hourMark.itemsProduced',
+      'stats.hourMark.itemsSold',
+      'stats.hourMark.spentCents',
+      'stats.hourMark.tick',
+      'stats.hourMark.waterMl',
+      'stats.inputsWastedByMachine',
+      'stats.itemsHarvestedByHand',
+      'stats.itemsProducedByMachine',
+      'stats.itemsSold',
+      'stats.lifetimeEarnedCents',
+      'stats.lifetimeSpentCents',
+      'stats.longestUntouchedMachineTicks',
+      'stats.repairKitSpendCents',
+      'stats.repairKitsUsed',
+      'stats.touches.handCarry',
+      'stats.touches.handHarvest',
+      'stats.touches.handPlant',
+      'stats.touches.handRepair',
+      'stats.touches.handWater',
+      'stats.touches.hopperRefill',
+      'stats.touches.jamWhack',
+      'stats.waterDrawnMl',
+      'zones[].replantCooldown',
+    ]);
   });
 
   it('fills every clock a live world has, so a dropped one has something to differ from', () => {

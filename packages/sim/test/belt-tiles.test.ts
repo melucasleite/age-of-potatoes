@@ -15,6 +15,8 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { runClockCrossings } from './clock-crossings';
+
 import {
   type Belt,
   type Command,
@@ -392,4 +394,16 @@ describe('throughput parity', () => {
     expect(Math.abs(chainRate - longRate)).toBeLessThanOrEqual(1);
     expect(Math.abs(cutRate - longRate)).toBeLessThanOrEqual(1);
   });
+});
+
+// --- the clock crossings this file owns (item 119) --------------------------------------------
+//
+// The scenarios live in `clock-crossings.ts` and the ones run here are the ones that named this
+// file. That split is deliberate: item 119 measured every clock catch in the suite coming from a
+// single file, so the guard was one `rm` away from silently disappearing. `clock-doors.test.ts`
+// sweeps the test directory and fails if a file named by a crossing does not exist or does not
+// call `runClockCrossings` with its own name.
+
+describe('clock crossings: belt-tiles', () => {
+  runClockCrossings('belt-tiles');
 });
