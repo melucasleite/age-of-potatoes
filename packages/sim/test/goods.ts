@@ -28,10 +28,12 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import * as balance from '../src/data';
 import {
   type WorldState,
   ItemId,
   freshnessTicks,
+  heldOutputItem,
   machineHoppers,
   machineSpec,
   soonestSpoilTick,
@@ -74,7 +76,7 @@ export function itemBearingPaths(state: WorldState): string[] {
 // --- the edges: every line that changes how much of a good is somewhere ----------------------
 
 /**
- * **THE NUMBER BESIDE EACH NAME**, one row per container in the node list above.
+ * **A GOOD IS THREE THINGS, AND THIS TABLE NOW SAYS ALL THREE** (item 118).
  *
  * A container is an item id and a quantity. The node sweep enumerates the ids; this is how the
  * quantity is spelled for each of them, and `pattern` is what a WRITE to that quantity looks
@@ -88,58 +90,153 @@ export function itemBearingPaths(state: WorldState): string[] {
  *   - a GRABBER's claw holds exactly one thing, so the id field IS the quantity.
  *   - a HOPPER's quantity is `inputCounts[line]`, an array slot with no name of its own.
  *   - the BAG's is `slot.count`, plus `stacks` for the clock the count is split across.
+ *
+ * **AND THE TWO COLUMNS ITEM 118 ADDED, WHICH ARE THE WHOLE OF ITS ARGUMENT.** Wave 18's
+ * adversary read the table above and said the level this family had climbed to was still one
+ * short:
+ *
+ *   > Item 115 watched NODES; the answer was "watch EDGES"; this census watches QUANTITIES.
+ *   > Every row is a number saying *how much*. **None says what a good IS, none says how long
+ *   > it has left.**
+ *
+ * So `identity` says where the id of the goods in that container comes from, and `clock` says
+ * which field is counting down beside them. Both are paths rather than prose, because both are
+ * checked: `move-census.test.ts` holds `identity` to a live world's data tables and `clock` to
+ * the save round trip, and neither can be satisfied by a comment.
  */
-export const GOODS_COUNTS: readonly { node: string; quantity: string; pattern: RegExp }[] = [
+export interface GoodsCount {
+  /** The `itemBearingPaths` node whose id names these goods. */
+  readonly node: string;
+  /** How the quantity beside that name is spelled, and the census row's own suffix. */
+  readonly quantity: string;
+  /**
+   * **WHERE THE ID COMES FROM**, and `'state'` is the boring answer for eleven of thirteen rows:
+   * the `node` field above is itself the id, so a node sweep can see it and a save carries it.
+   *
+   * Anything else is a path into the BALANCE DATA, and that is door 10: `overcookedCount` units
+   * of a Fryer's basket are not `machines[].outputItem` at all, they are whatever
+   * `MACHINE_SPECS[].overcookOutputItem` says — a fact that lives in a table rather than in the
+   * world, so there is no field for a node sweep to find and no count for a quantity census to
+   * watch. `goodsLedger` reads this column's meaning; `dataItemFields()` below enumerates every
+   * data path that could join it.
+   */
+  readonly identity: string;
+  /** The clock counting down beside this quantity, as a path, or null with a `clockless` reason. */
+  readonly clock: string | null;
+  /** Why this container keeps no clock. A REASON, never a bare `null` — see `MoveCheck`. */
+  readonly clockless?: string;
+  readonly pattern: RegExp;
+}
+
+export const GOODS_COUNTS: readonly GoodsCount[] = [
   {
     node: 'belts[].items[].item',
     quantity: 'items[]',
+    identity: 'state',
+    clock: 'belts[].items[].freshTicks',
     pattern: /\.items\.(?:push|splice|shift|pop|unshift)\(/,
   },
   {
     node: 'bots[].carryItem',
     quantity: 'carryCount',
+    identity: 'state',
+    clock: 'bots[].carryFreshTicks',
     pattern: /\.carryCount\s*(?:[-+*/]?=[^=]|\+\+|--)/,
   },
   {
     node: 'bots[].seedItem',
     quantity: 'seedCount',
+    identity: 'state',
+    clock: null,
+    clockless: 'a seed does not spoil; the pocket holds seeds and nothing else.',
     pattern: /\.seedCount\s*(?:[-+*/]?=[^=]|\+\+|--)/,
   },
   {
     node: 'contracts[].item',
     quantity: 'stocked',
+    identity: 'state',
+    clock: 'contracts[].stockedFreshTicks',
     pattern: /\.stocked\s*(?:[-+*/]?=[^=]|\+\+|--)/,
   },
   {
     node: 'contracts[].item',
     quantity: 'inTransit',
+    identity: 'state',
+    clock: 'contracts[].inTransitFreshTicks',
     pattern: /\.inTransit\s*(?:[-+*/]?=[^=]|\+\+|--)/,
   },
-  { node: 'grabbers[].held', quantity: 'held', pattern: /\.held\s*=[^=]/ },
-  { node: 'inventory[].item', quantity: 'count', pattern: /\.count\s*(?:[-+*/]?=[^=]|\+\+|--)/ },
+  {
+    node: 'grabbers[].held',
+    quantity: 'held',
+    identity: 'state',
+    clock: 'grabbers[].heldFreshTicks',
+    pattern: /\.held\s*=[^=]/,
+  },
+  {
+    node: 'inventory[].item',
+    quantity: 'count',
+    identity: 'state',
+    clock: 'inventory[].stacks[].spoilAtTick',
+    pattern: /\.count\s*(?:[-+*/]?=[^=]|\+\+|--)/,
+  },
   {
     node: 'inventory[].item',
     quantity: 'stacks[]',
+    identity: 'state',
+    clock: 'inventory[].stacks[].spoilAtTick',
     pattern: /\.stacks\.(?:push|splice|shift|pop|unshift)\(/,
   },
   {
     node: 'machines[].cargoItem',
     quantity: 'cargoCount',
+    identity: 'state',
+    clock: 'machines[].cargoFreshTicks',
     pattern: /\.cargoCount\s*(?:[-+*/]?=[^=]|\+\+|--)/,
   },
   {
     node: 'machines[].outputItem',
     quantity: 'outputCount',
+    identity: 'state',
+    clock: 'machines[].outputFreshTicks',
     pattern: /\.outputCount\s*(?:[-+*/]?=[^=]|\+\+|--)/,
+  },
+  {
+    // **DOOR 10, AND THE ONLY ROW ON THIS CENSUS WHOSE GOODS HAVE NO NAME IN THE WORLD.**
+    //
+    // A Fryer stopped by demand-pull browns one chip per `OVERCOOK_BLOCKED_TICKS`. Nothing moves:
+    // `outputCount` does not change, `outputItem` does not change, and one PlainChips has become
+    // one RusticStyleChips inside the basket. Measured by wave 18's adversary at 602 ticks — the
+    // ledger delta read "(nothing changed)" and `goodsMoves()` matching /overcook/ returned `[]`.
+    //
+    // It is a transfer between two item ids with no quantity field on the receiving side, which
+    // is why a census of quantities was structurally unable to see it. The receiving side's
+    // quantity is `overcookedCount` and its NAME is in the spec table, so both columns had to
+    // exist before this row could be written down at all.
+    node: 'machines[].outputItem',
+    quantity: 'overcookedCount',
+    identity: 'MACHINE_SPECS[].overcookOutputItem',
+    clock: null,
+    clockless:
+      'every overcooked grade is shelf-stable, which is what `machineOutputFreshness` means ' +
+      'when it hands a burnt unit a zero rather than the basket’s clock.',
+    pattern: /\.overcookedCount\s*(?:[-+*/]?=[^=]|\+\+|--)/,
   },
   {
     node: 'machines[].seedShelfItem',
     quantity: 'seedShelfCount',
+    identity: 'state',
+    clock: null,
+    clockless: 'a dock’s seed shelf holds seeds, and a seed does not spoil.',
     pattern: /\.seedShelfCount\s*(?:[-+*/]?=[^=]|\+\+|--)/,
   },
   {
+    // A hopper line has no id field of its own — which line holds which good is `machineHoppers`,
+    // and that is data. Harmless, and worth writing down anyway: it is the same shape as door 10
+    // with the sting taken out, because a hopper line can only ever hold the one good.
     node: 'machines[].inputCounts',
     quantity: 'inputCounts[]',
+    identity: 'MACHINE_SPECS[].inputs[].item',
+    clock: 'machines[].inputFreshTicks[]',
     pattern: /\.inputCounts\[[^\]]*\]\s*(?:[-+*/]?=[^=]|\+\+|--)/,
   },
 ];
@@ -334,10 +431,27 @@ export const MOVE_VERDICTS: Readonly<Record<string, MoveVerdict>> = {
   'state:takeFromStacks:stacks[]': MoveVerdict.Conserving, // ditto.
   'state:takeHopper:inputCounts[]': MoveVerdict.Conserving, //hopper → out. CLOCK: returned
   'state:takeOneOutput:outputCount': MoveVerdict.Conserving, //THE one door out of a basket.
+  'state:takeOneOutput:overcookedCount': MoveVerdict.Conserving, // **the SAME door, counted on the
+  //                                                         burnt side.** One pull decrements
+  //                                                         both numbers, and it is one transfer:
+  //                                                         `nextOutputItem` hands the burnt grade
+  //                                                         over first, so the unit that leaves is
+  //                                                         a RusticStyleChips and the basket is
+  //                                                         one lighter in both books.
   'state:takeStorage:cargoCount': MoveVerdict.Conserving, //  container → out. CLOCK: returned
   // --- the tick's own transfers ---
   'tick:advanceBotSpoilage:carryCount': MoveVerdict.Transform, // armful → Compost.
   'tick:advanceOrchard:outputCount': MoveVerdict.Source, //    a tree makes fruit out of time.
+  'tick:advanceOvercooking:overcookedCount': MoveVerdict.Transform, // **DOOR 10.** A stopped Fryer
+  //                                                         turns one PlainChips into one
+  //                                                         RusticStyleChips WHERE IT STANDS. The
+  //                                                         total holds and the ids move, which is
+  //                                                         a Transform exactly as spoilage is —
+  //                                                         and until item 118 there was no row
+  //                                                         here at all, because the census
+  //                                                         watched quantities and this line
+  //                                                         changes no quantity of anything the
+  //                                                         old census could name.
   'tick:advanceSpoilage:count': MoveVerdict.Transform, //     bag → Compost.
   'tick:advanceSpoilage:stacks[]': MoveVerdict.Transform, //  ditto, the deadline side.
   'tick:advanceStorageSpoilage:cargoCount': MoveVerdict.Transform, // container → Compost.
@@ -368,6 +482,9 @@ export const MOVE_VERDICTS: Readonly<Record<string, MoveVerdict>> = {
   'view:projectInventory:count': MoveVerdict.Projection,
   'view:projectMachines:cargoCount': MoveVerdict.Projection,
   'view:projectMachines:outputCount': MoveVerdict.Projection,
+  'view:projectMachines:overcookedCount': MoveVerdict.Projection, // the burnt count reaches the
+  //                                                         HUD, which is how a player sees a
+  //                                                         basket going rustic without opening it.
   'view:projectMachines:seedShelfCount': MoveVerdict.Projection,
   'view:projectRecipe:count': MoveVerdict.Projection, //      a hopper level.
   'view:projectStats:count': MoveVerdict.NotGoods, //         the sales ledger's units. The second
@@ -449,16 +566,30 @@ export interface GoodsHolding {
    * bag stores one and every container stores the other and a census has to compare them.
    */
   soonest: number;
+  /**
+   * **ONE ENTRY PER UNIT, AND THIS IS THE FIELD ITEM 118 EXISTS FOR.**
+   *
+   * `soonest` above is a MINIMUM, and a minimum is a hiding place. Wave 18's adversary measured
+   * it: a world holding the same item at 4,321 ticks and at 1,111, delete the 4,321 entirely, and
+   * `ledgerDelta` reports "(nothing changed)" — the count check is per item and the clock check
+   * takes the min, so a whole holder can be deleted behind a sooner one and both instruments
+   * agree that nothing happened.
+   *
+   * A multiset cannot hide anything. Ascending, one entry per UNIT rather than per holder, so
+   * "five potatoes at 4,321" and "one potato at 4,321" are different worlds — which they are.
+   */
+  clocks: number[];
 }
 
 function hold(into: Map<ItemId, GoodsHolding>, item: ItemId | 0, count: number, ticks: number) {
   if (item === 0 || count <= 0) return;
   const had = into.get(item);
   if (had === undefined) {
-    into.set(item, { count, soonest: ticks });
+    into.set(item, { count, soonest: ticks, clocks: new Array<number>(count).fill(ticks) });
     return;
   }
   had.count += count;
+  for (let i = 0; i < count; i++) had.clocks.push(ticks);
   if (ticks > 0 && (had.soonest <= 0 || ticks < had.soonest)) had.soonest = ticks;
 }
 
@@ -473,6 +604,92 @@ function hold(into: Map<ItemId, GoodsHolding>, item: ItemId | 0, count: number, 
  * (`CropTile.compost`), which is a number with no item id beside it, and standing crops, which are
  * not goods until something pulls them. Both are outside every door this family has ever found.
  */
+/**
+ * **WHAT IS ACTUALLY IN A MACHINE'S BASKET, BY GRADE — DOOR 10 IN ONE FUNCTION.**
+ *
+ * Every other container in the game answers "what are you holding?" with a field. A basket
+ * answers with a field, a spec, and a subtraction, and neither of the last two is in `WorldState`:
+ *
+ *   - `heldOutputItem` falls back to `MACHINE_SPECS[].outputItem` when the basket is unlabelled,
+ *     so a machine can hold goods whose id is nowhere in the world at all.
+ *   - `overcookedCount` of those units are not that id: they are the spec's
+ *     `overcookOutputItem`, a different good with a different price, and the only trace of the
+ *     change is a counter going up. `outputCount` does not move. `outputItem` does not move.
+ *
+ * The ledger read `machine.outputItem` and multiplied by `outputCount` for five items of this
+ * family's history, which is why "a Fryer turned a PlainChips into a RusticStyleChips" produced
+ * a delta reading "(nothing changed)". `nextOutputItem` and `takeOneOutput` in the sim have
+ * always known this — burnt goes out first — so the sim was right and the instrument was blind,
+ * which is the exact shape item 115's node sweep had and the exact shape item 117's census had.
+ *
+ * A BURNT UNIT CARRIES NO CLOCK, and that is `machineOutputFreshness`' rule rather than a choice
+ * made here: every overcooked grade is shelf-stable, so the basket's clock is not about it.
+ */
+export function basketGrades(
+  machine: WorldState['machines'][number],
+  spec: NonNullable<ReturnType<typeof machineSpec>>,
+): { item: ItemId | 0; count: number; freshTicks: number }[] {
+  const held = heldOutputItem(machine, spec);
+  const burntItem = spec.overcookOutputItem;
+  const burnt = burntItem === null ? 0 : Math.min(machine.overcookedCount, machine.outputCount);
+  const grades: { item: ItemId | 0; count: number; freshTicks: number }[] = [
+    { item: held, count: machine.outputCount - burnt, freshTicks: machine.outputFreshTicks },
+  ];
+  if (burntItem !== null && burnt > 0) {
+    const window = freshnessTicks(burntItem);
+    grades.push({
+      item: burntItem,
+      count: burnt,
+      freshTicks: window > 0 ? machine.outputFreshTicks : 0,
+    });
+  }
+  return grades;
+}
+
+/**
+ * **UNITS THIS WORLD IS HOLDING THAT HAVE NO NAME**, as `path: count`, and it should always be
+ * empty.
+ *
+ * `hold` drops anything whose id is 0, which is correct — a container at rest is an empty field
+ * beside a zero — and would be a silent deletion the day a container held goods without saying
+ * which. That is not hypothetical: `heldOutputItem` exists precisely because a basket CAN carry
+ * `outputItem: 0` with `outputCount: 3`, and before item 118 the ledger read the raw field and
+ * counted those three as nothing at all.
+ *
+ * So the guard is stated rather than assumed: every quantity on the census must have an id
+ * beside it, and a container that breaks that is a hole in the books rather than a zero in them.
+ *
+ * **AND THE TYPES ALREADY DECIDE WHICH CONTAINERS CAN EVEN DO THIS**, which is worth writing down
+ * because a non-incremental `tsc` is what said so. Four id fields are `ItemId | 0` — a basket, a
+ * cargo bay, a seed shelf, a bot's two hands — and those four are checked below. The bag slot, the
+ * belt rider and a contract's product are plain `ItemId`: they cannot be unnamed, the comparison
+ * does not compile, and the first draft of this function had all three in it. A container that
+ * changes its mind about that will fail to compile here rather than pass quietly.
+ */
+export function unnamedGoods(state: WorldState): string[] {
+  const orphans: string[] = [];
+  const note = (path: string, count: number) => {
+    if (count > 0) orphans.push(`${path}: ${count} units with no item id`);
+  };
+  for (const machine of state.machines) {
+    if (machine.cargoItem === 0) note('machines[].cargoItem', machine.cargoCount);
+    if (machine.seedShelfItem === 0) note('machines[].seedShelfItem', machine.seedShelfCount);
+    const spec = machineSpec(machine.kind);
+    if (spec === null) {
+      note('machines[].kind', machine.outputCount);
+      continue;
+    }
+    for (const grade of basketGrades(machine, spec)) {
+      if (grade.item === 0) note('machines[].outputItem', grade.count);
+    }
+  }
+  for (const bot of state.bots) {
+    if (bot.carryItem === 0) note('bots[].carryItem', bot.carryCount);
+    if (bot.seedItem === 0) note('bots[].seedItem', bot.seedCount);
+  }
+  return orphans;
+}
+
 export function goodsLedger(state: WorldState): Map<ItemId, GoodsHolding> {
   const ledger = new Map<ItemId, GoodsHolding>();
 
@@ -496,10 +713,15 @@ export function goodsLedger(state: WorldState): Map<ItemId, GoodsHolding> {
 
   for (const machine of state.machines) {
     hold(ledger, machine.cargoItem, machine.cargoCount, machine.cargoFreshTicks);
-    hold(ledger, machine.outputItem, machine.outputCount, machine.outputFreshTicks);
     hold(ledger, machine.seedShelfItem, machine.seedShelfCount, 0);
     const spec = machineSpec(machine.kind);
-    if (spec === null) continue;
+    if (spec === null) {
+      hold(ledger, machine.outputItem, machine.outputCount, machine.outputFreshTicks);
+      continue;
+    }
+    for (const grade of basketGrades(machine, spec)) {
+      hold(ledger, grade.item, grade.count, grade.freshTicks);
+    }
     const hoppers = machineHoppers(spec);
     for (let i = 0; i < hoppers.length; i++) {
       hold(ledger, hoppers[i]!.item, machine.inputCounts[i] ?? 0, machine.inputFreshTicks[i] ?? 0);
@@ -560,6 +782,17 @@ export function ledgerClock(ledger: Map<ItemId, GoodsHolding>, item: ItemId): nu
   return ledger.get(item)?.soonest ?? 0;
 }
 
+/**
+ * **EVERY CLOCK ON ONE ITEM, ONE PER UNIT, ASCENDING** — `ledgerClock` without the hiding place.
+ *
+ * Use this wherever the question is "did anything happen to the goods", and `ledgerClock` only
+ * where the question is genuinely about the next thing to turn. A minimum answers the second
+ * question and quietly declines the first.
+ */
+export function ledgerClocks(ledger: Map<ItemId, GoodsHolding>, item: ItemId): number[] {
+  return [...(ledger.get(item)?.clocks ?? [])].sort((a, b) => a - b);
+}
+
 /** Whether this item runs a clock at all. Seeds, boxes and bagged chips do not. */
 export function perishable(item: ItemId): boolean {
   return freshnessTicks(item) > 0;
@@ -602,10 +835,281 @@ export function ledgerDelta(
   for (const item of ledgerItems(before, after)) {
     const was = ledgerCount(before, item);
     const now = ledgerCount(after, item);
-    const wasClock = ledgerClock(before, item);
-    const nowClock = ledgerClock(after, item);
-    if (was === now && wasClock === nowClock) continue;
-    parts.push(`item ${item}: ${was}→${now} units, clock ${wasClock}→${nowClock}`);
+    // **EVERY CLOCK, NOT THE SOONEST ONE** (item 118). The old line compared `ledgerClock`, which
+    // is a minimum over holders, so deleting a holder at 4,321 while another sat at 1,111 printed
+    // "(nothing changed)" — measured, in those numbers, by wave 18's adversary. A delta that can
+    // say "nothing" about a deleted holder is the failure this whole family keeps having.
+    const wasClocks = ledgerClocks(before, item);
+    const nowClocks = ledgerClocks(after, item);
+    if (was === now && wasClocks.join(',') === nowClocks.join(',')) continue;
+    parts.push(
+      `item ${item}: ${was}→${now} units, clocks [${wasClocks.join(',')}]→[${nowClocks.join(',')}]`,
+    );
   }
   return parts.length === 0 ? '(nothing changed)' : parts.join('; ');
+}
+
+// --- the third and fourth columns: where identity lives, and where the clocks are -------------
+
+/**
+ * **EVERY FIELD IN THE BALANCE DATA THAT NAMES A GOOD** — item 115's sweep, pointed at the other
+ * half of the game.
+ *
+ * Item 115 walked a live `WorldState` and collected every field naming a good, on the principle
+ * that *"a type is what somebody wrote down and a world is what is actually there"*. It was the
+ * right principle and it had a blind side, which door 10 walked through: a good's id does not
+ * have to be in the world. `MACHINE_SPECS[].overcookOutputItem` decides what `overcookedCount`
+ * units of a Fryer's basket ARE, and it is in a table. No sweep of any world would ever find it.
+ *
+ * So this walks the balance module the same way, collecting every exported path whose key names
+ * an item and whose value is an id. `move-census.test.ts` then makes somebody say a sentence
+ * about each — specifically, whether it can RE-LABEL goods that already exist somewhere, which
+ * is the only kind the ledger has to know about.
+ *
+ * Array indices collapse to `[]`, so one spec stands for all of them.
+ */
+export function dataItemFields(): string[] {
+  const found = new Set<string>();
+  const seen = new Set<object>();
+
+  const walk = (node: unknown, path: string): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const entry of node) walk(entry, `${path}[]`);
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      const here = path === '' ? key : `${path}.${key}`;
+      // An id is a number or an explicit "this machine has no such grade". A field holding a
+      // table is a table, whatever it is called — `FRESHNESS_TICKS_BY_ITEM` is not an id.
+      if (/item$/i.test(key) && (typeof value === 'number' || value === null)) found.add(here);
+      walk(value, here);
+    }
+  };
+
+  for (const [name, value] of Object.entries(balance)) {
+    if (typeof value === 'function') continue;
+    walk(value, name);
+  }
+  return [...found].sort();
+}
+
+/**
+ * **WHAT A DATA-BORNE ITEM ID DOES TO GOODS THAT ALREADY EXIST.**
+ *
+ * The census's two live instruments — the node sweep and the ledger — read the world. A data
+ * field is invisible to both, so the question that decides whether that matters is narrow and
+ * answerable: does this field change the identity of goods ALREADY SITTING IN A CONTAINER?
+ */
+export const DataIdentity = {
+  /**
+   * **RE-LABELS IN PLACE.** Units that exist, in a container, are silently a different good
+   * because of this field. The ledger MUST read it or its books are wrong — door 10.
+   */
+  Relabels: 'relabels',
+  /**
+   * Names goods at the moment they are CREATED, and the container then records the id in a state
+   * field the node sweep can see. The overwhelming majority, and harmless for that reason.
+   */
+  Mints: 'mints',
+  /** Names goods a machine or a recipe CONSUMES. Nothing is re-labelled; something is eaten. */
+  Consumes: 'consumes',
+  /** A lookup key rather than a container's contents — a price row, a freshness row, a mapping. */
+  Lookup: 'lookup',
+} as const;
+export type DataIdentity = (typeof DataIdentity)[keyof typeof DataIdentity];
+
+/**
+ * **EVERY DATA PATH THAT NAMES A GOOD, WITH THE SENTENCE IT IS HELD TO.** Keys are
+ * `dataItemFields()` exactly, so the day somebody adds a second `overcookOutputItem` to a spec
+ * this list goes red and the only way to green it is to say which of four sentences it is —
+ * and `Relabels` drags `goodsLedger` in behind it.
+ */
+export const DATA_IDENTITY_VERDICTS: Readonly<Record<string, DataIdentity>> = {
+  'BOXED_MACHINE_ROWS[].item': DataIdentity.Lookup, //   kind ↔ box. `boxLedger` weighs these.
+  'CROP_SPECS[].dayOldItem': DataIdentity.Mints, //      a turned tile yields a different good —
+  //                                                     but the pull writes `carryItem`, so the
+  //                                                     id is in the world before anything holds
+  //                                                     it. That is door 9's fix, seen from here.
+  'CROP_SPECS[].seedItem': DataIdentity.Mints, //        a harvest hands a seed back.
+  'CROP_SPECS[].yieldItem': DataIdentity.Mints, //       the crop itself.
+  'FRESHNESS_TICKS_BY_ITEM[].item': DataIdentity.Lookup, // a row key, not a container.
+  'MACHINE_RECIPES[].recipes[].consumes[].item': DataIdentity.Consumes,
+  'MACHINE_SPECS[].inputs[].item': DataIdentity.Consumes, //  which hopper line eats which good.
+  //                                                     `MACHINE_HOPPERS` is not on this list and
+  //                                                     does not need to be: it is `MACHINE_SPECS
+  //                                                     .map(…)`, module-private, and every id in
+  //                                                     it came from this row.
+  'MACHINE_SPECS[].outputItem': DataIdentity.Mints, //   what a machine makes — AND the fallback
+  //                                                     `heldOutputItem` reads when the basket is
+  //                                                     unlabelled, which is why `basketGrades`
+  //                                                     goes through that function rather than
+  //                                                     reading `machine.outputItem` raw.
+  'MACHINE_SPECS[].overcookOutputItem': DataIdentity.Relabels, // **DOOR 10. THE ONLY ONE.**
+};
+
+/**
+ * **EVERY CLOCK IN A WORLD, BY PATH** — the fourth column, swept rather than listed.
+ *
+ * The second of two independent nets over the same question, and they are independent on
+ * purpose. `GOODS_COUNTS[].clock` hangs the clock list off the CONTAINER list, so a new container
+ * cannot arrive without somebody naming its clock; this hangs it off the NAMING CONVENTION, so a
+ * new clock cannot be added to an EXISTING container without showing up either. Item 115 shipped
+ * one net and item 117 found three holes in it.
+ *
+ * Values, not just paths: the save sweep needs to know which of these the fixture actually
+ * exercises, because zeroing a field that was already zero proves nothing at all.
+ */
+export interface ClockSite {
+  /** The field with array indices collapsed to `[]` — one entry per FIELD, not per machine. */
+  readonly collapsed: string;
+  /** The concrete route to this one occurrence, for a sweep that wants to mutate it. */
+  readonly path: (string | number)[];
+  readonly value: number;
+}
+
+/**
+ * Takes `unknown` rather than `WorldState` on purpose: it is run over a live world AND over the
+ * save payload, and comparing the two answers is a third net. A clock that exists in the world
+ * and has no field in the payload was never serialized at all, and the sets differ by its name.
+ */
+export function clockBearingPaths(root: unknown): ClockSite[] {
+  const found: ClockSite[] = [];
+  const seen = new Set<object>();
+
+  const walk = (node: unknown, collapsed: string, path: (string | number)[]): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (let i = 0; i < node.length; i++) walk(node[i], `${collapsed}[]`, [...path, i]);
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      const here = collapsed === '' ? key : `${collapsed}.${key}`;
+      const route = [...path, key];
+      if (typeof value === 'number') {
+        if (isClockKey(key)) found.push({ collapsed: here, path: route, value });
+      } else if (Array.isArray(value) && isClockKey(key)) {
+        // A clock can be an ARRAY of clocks — `inputFreshTicks` is one per hopper line — and a
+        // walker that only looked at scalars would miss the field door 11 measured as guarded by
+        // exactly one test.
+        for (let i = 0; i < value.length; i++) {
+          const entry: unknown = value[i];
+          if (typeof entry === 'number') {
+            found.push({ collapsed: `${here}[]`, path: [...route, i], value: entry });
+          }
+        }
+      } else {
+        walk(value, here, route);
+      }
+    }
+  };
+
+  walk(root, '', []);
+  return found;
+}
+
+/** The clock sweep's fields, one entry each, with how many occurrences the fixture actually filled. */
+export function clockFieldCoverage(root: unknown): Map<string, { filled: number; total: number }> {
+  const coverage = new Map<string, { filled: number; total: number }>();
+  for (const site of clockBearingPaths(root)) {
+    const had = coverage.get(site.collapsed) ?? { filled: 0, total: 0 };
+    had.total += 1;
+    if (site.value !== 0) had.filled += 1;
+    coverage.set(site.collapsed, had);
+  }
+  return coverage;
+}
+
+/** The naming convention this codebase actually uses for "how long these goods have left". */
+function isClockKey(key: string): boolean {
+  return /freshticks$/i.test(key) || /spoilattick$/i.test(key);
+}
+
+/**
+ * **EVERY WAY TWO WORLDS DIFFER, BY PATH** — the save guard that needs no list at all.
+ *
+ * The item asked for a guard general enough that "a ninth clock field added tomorrow is covered
+ * without anyone remembering to write a test". Every list-shaped answer to that fails the same
+ * way: somebody has to add the field to the list. So the guard is not a list.
+ *
+ * `deserialize(serialize(state), state.trace)` is structurally IDENTICAL to `state` — measured,
+ * every leaf, on a world with something in every container. So the guard is that sentence, and
+ * it covers every field of every kind forever: clocks, counts, ids, dials, condition, the lot.
+ * A ninth clock dropped from `toPayload` reads back as 0 against a fixture holding 1,234, and
+ * this returns a line saying so with the path on it.
+ *
+ * **WHAT IT CANNOT DO ON ITS OWN, STATED HERE BECAUSE IT IS THE WHOLE OF THE REMAINING RISK:**
+ * a field the fixture leaves at 0 round-trips as 0 whether it is carried or dropped. That is not
+ * a hole in this function, it is the entire content of door 11 — five of eight clocks were
+ * "unguarded" while an assertion about them existed, because nothing ever put a number in them.
+ * `clockBearingPaths` above is the half that fixes THAT, by naming the fields the fixture has
+ * left empty; the two together are the guard.
+ */
+export function worldDiff(before: unknown, after: unknown): string[] {
+  const out: string[] = [];
+  const walk = (a: unknown, b: unknown, path: string): void => {
+    if (a === b) return;
+    if (typeof a !== typeof b || a === null || b === null || typeof a !== 'object') {
+      out.push(`${path}: ${JSON.stringify(a)} → ${JSON.stringify(b)}`);
+      return;
+    }
+    if (Array.isArray(a) !== Array.isArray(b)) {
+      out.push(`${path}: one is an array and the other is not`);
+      return;
+    }
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) out.push(`${path}: length ${a.length} → ${b.length}`);
+      for (let i = 0; i < Math.max(a.length, b.length); i++) walk(a[i], b[i], `${path}[${i}]`);
+      return;
+    }
+    const keys = new Set([...Object.keys(a), ...Object.keys(b as object)]);
+    for (const key of keys) {
+      walk(
+        (a as Record<string, unknown>)[key],
+        (b as Record<string, unknown>)[key],
+        path === '' ? key : `${path}.${key}`,
+      );
+    }
+  };
+  walk(before, after, '');
+  return out;
+}
+
+/**
+ * **ZERO ONE FIELD OF A SAVE AND SAY WHETHER ANYONE WOULD NOTICE**, the mutation sweep of door
+ * 11 run as code rather than by hand.
+ *
+ * Wave 18's adversary ran 648 sim tests per mutant to answer this. It does not need 648: zeroing
+ * a field in `toPayload` and zeroing it in the payload `toPayload` produced are the same act, so
+ * the question "does the suite catch it" reduces to "does the restored world differ" — because
+ * the round trip above asserts, in one line, that it does not.
+ *
+ * A payload that no longer PARSES counts as caught, and loudly: `fromPayload` validates, and a
+ * throw is the most emphatic form of noticing there is.
+ */
+export function zeroingIsCaught(
+  payload: unknown,
+  path: readonly (string | number)[],
+  restore: (payload: unknown) => unknown,
+  compareTo: unknown,
+): boolean {
+  const mutant: unknown = JSON.parse(JSON.stringify(payload));
+  let cursor: unknown = mutant;
+  for (let i = 0; i < path.length - 1; i++) {
+    cursor = (cursor as Record<string | number, unknown>)[path[i]!];
+    if (cursor === null || cursor === undefined) return false;
+  }
+  const last = path[path.length - 1]!;
+  const holder = cursor as Record<string | number, unknown>;
+  if (holder[last] === 0) return false;
+  holder[last] = 0;
+  try {
+    return worldDiff(compareTo, restore(mutant)).length > 0;
+  } catch {
+    return true;
+  }
 }

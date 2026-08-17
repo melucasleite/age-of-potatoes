@@ -47,6 +47,7 @@ import {
   ItemId,
   MACHINE_SPECS,
   MachineKind,
+  OVERCOOK_BLOCKED_TICKS,
   SUBTILE,
   WILT_GRACE_TICKS,
   WILT_WINDOW_TICKS,
@@ -70,9 +71,12 @@ import {
 } from '../src/index';
 import {
   BAG_DOOR_VERDICTS,
+  DATA_IDENTITY_VERDICTS,
+  DataIdentity,
   GOODS_COUNTS,
   MOVE_VERDICTS,
   bagDoors,
+  dataItemFields,
   goodsLedger,
   goodsMoves,
   itemBearingPaths,
@@ -438,6 +442,89 @@ describe('the move census', () => {
       ).toBe(true);
     }
   });
+
+  // --- THE TWO COLUMNS ITEM 118 ADDED --------------------------------------------------------
+  //
+  // A good is three things: how many, what it is, and how long it has left. Every row above was
+  // a number saying how many. These are the other two, and each is checked against something
+  // outside the table rather than against the table's own opinion of itself.
+
+  it('says WHAT the goods in every container are, and the answer is real', () => {
+    // The identity column is either `'state'` — the node field is the id, which is the boring and
+    // safe case — or a path into the balance data, which is door 10's shape. A data path that
+    // does not exist is a row claiming to have thought about identity while naming nothing, so
+    // every one of them is held to `dataItemFields()`, which walks the data the way item 115
+    // walked a world.
+    const dataFields = new Set(dataItemFields());
+    for (const entry of GOODS_COUNTS) {
+      if (entry.identity === 'state') continue;
+      expect(
+        dataFields.has(entry.identity),
+        `${entry.node}/${entry.quantity} says its id comes from ${entry.identity}, ` +
+          'and no such field exists in the balance data',
+      ).toBe(true);
+    }
+    // And the one row whose goods have no name in the world at all is on the census by name, so
+    // deleting it is a visible act rather than a quiet narrowing.
+    const burnt = GOODS_COUNTS.find((entry) => entry.quantity === 'overcookedCount');
+    expect(burnt?.identity, 'door 10 is not on the census').toBe(
+      'MACHINE_SPECS[].overcookOutputItem',
+    );
+  });
+
+  it('has every item id in the BALANCE DATA on a list too, and says what it does', () => {
+    // **ITEM 115'S SWEEP, POINTED AT THE OTHER HALF OF THE GAME.** Item 115 walked a live world
+    // for every field naming a good, because "a type is what somebody wrote down and a world is
+    // what is actually there". True, and it has a blind side: door 10's good is named in a spec
+    // table and appears in no world anywhere. So the data gets the same treatment, and the day
+    // somebody adds a second grade to a machine this goes red until they say which of four
+    // sentences it is.
+    expect(dataItemFields()).toEqual(Object.keys(DATA_IDENTITY_VERDICTS).sort());
+  });
+
+  it('names exactly one data field that RE-LABELS goods where they stand', () => {
+    // The whole point of the verdicts above, in one assertion. Three of the four sentences are
+    // harmless — a good that is minted, consumed or looked up leaves its id in a state field the
+    // node sweep can see. `Relabels` means units that already exist, in a container, are quietly
+    // a different good; that is the only kind the ledger has to read data to get right, and
+    // `basketGrades` is where it does.
+    const relabels = Object.keys(DATA_IDENTITY_VERDICTS).filter(
+      (path) => DATA_IDENTITY_VERDICTS[path] === DataIdentity.Relabels,
+    );
+    expect(relabels).toEqual(['MACHINE_SPECS[].overcookOutputItem']);
+  });
+
+  it('gives every container a clock or a reason it has none', () => {
+    // The fourth column's own half of the argument. Whether the named clock is a REAL field, and
+    // whether every real field is named, is asked in `move-census-live.test.ts` against the
+    // save fixture — that file owns the world rich enough to have one of everything in it.
+    //
+    // A `null` clock with no reason beside it is the sentence three items in this family shipped
+    // a bug inside of, so the reason is the assertion here rather than a convention.
+    for (const entry of GOODS_COUNTS) {
+      if (entry.clock !== null) continue;
+      expect(
+        entry.clockless,
+        `${entry.node}/${entry.quantity} has no clock and no reason why not`,
+      ).toBeTruthy();
+    }
+    // Nine clocks, and door 11's own table listed eight — the bag's `spoilAtTick` is the ninth,
+    // and it is on the census here for the same reason the other eight are.
+    const clocks = new Set(
+      GOODS_COUNTS.map((entry) => entry.clock).filter((clock): clock is string => clock !== null),
+    );
+    expect([...clocks].sort()).toEqual([
+      'belts[].items[].freshTicks',
+      'bots[].carryFreshTicks',
+      'contracts[].inTransitFreshTicks',
+      'contracts[].stockedFreshTicks',
+      'grabbers[].heldFreshTicks',
+      'inventory[].stacks[].spoilAtTick',
+      'machines[].cargoFreshTicks',
+      'machines[].inputFreshTicks[]',
+      'machines[].outputFreshTicks',
+    ]);
+  });
 });
 
 // --- the ledger: the census, run against a live world ----------------------------------------
@@ -586,6 +673,42 @@ describe('the goods ledger', () => {
       'maintenance-station',
       'parts-bench',
     ]);
+  });
+
+  it('BOXING A PART-BURNT BASKET HANDS BACK BOTH GRADES, NOT TWO OF THE BETTER ONE', () => {
+    // **DOOR 10 ASKED OF THE FUNCTION DOORS 8, 8b AND 8c ALL LIVED IN.** `applyDeconstructMachine`
+    // empties a basket through `takeOneOutput` in a loop, and that is the one take path in the
+    // game that knows a Fryer's basket is two goods at once. So the sim was already right — and
+    // this test could not have been written before item 118, because the instrument it needs is
+    // a ledger that can tell a RusticStyleChips from a PlainChips, and until now there was not
+    // one. The old books recorded four PlainChips going into the box and four coming out, which
+    // is exactly what laundering three burnt chips into good ones also looks like.
+    const state = createWorld(11_715);
+    const spec = machineSpec(MachineKind.Fryer)!;
+    const fryer = spawnMachine(state, MachineKind.Fryer, 6, 6)!;
+    fryer.outputItem = ItemId.PlainChips;
+    fryer.outputCount = spec.outputCapacity;
+    stepMany(state, OVERCOOK_BLOCKED_TICKS * 3);
+
+    const before = goodsLedger(state);
+    const burnt = ledgerCount(before, ItemId.RusticStyleChips);
+    const good = ledgerCount(before, ItemId.PlainChips);
+    expect(burnt, 'three intervals of nobody coming for it').toBe(3);
+    expect(good).toBe(spec.outputCapacity - 3);
+
+    standOn(state, 6, 6);
+    run(state, { type: 'DeconstructMachine', machineId: fryer.id });
+    expect(
+      state.machines.some((entry) => entry.id === fryer.id),
+      'it went in the box',
+    ).toBe(false);
+
+    // In the bag now, and still the same two goods in the same two amounts. A burnt chip sells
+    // for 70% of a seasoned one, so a grade that changed in the box would be money out of thin air.
+    expect(itemCount(state, ItemId.RusticStyleChips), 'the burnt chips came back burnt').toBe(
+      burnt,
+    );
+    expect(itemCount(state, ItemId.PlainChips)).toBe(good);
   });
 
   it('a transport loop running by itself neither mints nor deletes, over an hour', () => {
