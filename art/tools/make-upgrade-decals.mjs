@@ -1,4 +1,4 @@
-// Authors art/local/decal_<dial>_<level>.png — nine 32x32 overlays, three per upgrade dial.
+// Authors art/local/decal_<dial>_<level>.png — nine 64x64 overlays, three per upgrade dial.
 //
 // WHAT THESE ARE FOR
 //
@@ -34,7 +34,19 @@ import sharp from 'sharp';
 import { loadMaster } from './palette-png.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SIZE = 32;
+/**
+ * A decal is exactly the size of the machine sprite it sits on — that is the whole reason it
+ * is an overlay rather than a badge (see the header). So it does NOT have its own resolution:
+ * it inherits the machine's, which is two tiles across. When TILE_PX moved 16 -> 32, machine
+ * sprites moved 32 -> 64, and these must move with them or every dial slides off its roofline.
+ */
+const SIZE = 64;
+/**
+ * Pixels per 32px-era pixel. Every shape below is still authored in the original 32px
+ * coordinate space and multiplied up inside `fill`, so the three levels of each dial escalate
+ * by exactly the arithmetic that was tuned against the machine art.
+ */
+const SCALE = SIZE / 32;
 const LEVELS = [1, 2, 3];
 
 const { swatches } = loadMaster();
@@ -48,9 +60,21 @@ function blank() {
   return Array.from({ length: SIZE }, () => new Array(SIZE).fill(null));
 }
 
+/**
+ * Inclusive 32px-era coordinates in, pixels out.
+ *
+ * Every rim, cap and highlight in this file is one call to this, so scaling here is what
+ * makes them SCALE pixels thick rather than hairlines. A one-pixel rim on a 64px decal is not
+ * a rim, it is an artefact — the shapes would lose their outlines exactly where the extra
+ * resolution was meant to sharpen them.
+ */
 function fill(grid, x0, y0, x1, y1, role) {
-  for (let y = Math.max(0, y0); y <= Math.min(SIZE - 1, y1); y++) {
-    for (let x = Math.max(0, x0); x <= Math.min(SIZE - 1, x1); x++) grid[y][x] = role;
+  const top = Math.max(0, y0 * SCALE);
+  const bottom = Math.min(SIZE - 1, (y1 + 1) * SCALE - 1);
+  const left = Math.max(0, x0 * SCALE);
+  const right = Math.min(SIZE - 1, (x1 + 1) * SCALE - 1);
+  for (let y = top; y <= bottom; y++) {
+    for (let x = left; x <= right; x++) grid[y][x] = role;
   }
 }
 
@@ -108,9 +132,11 @@ function capacity(level) {
     const x0 = 16 - half;
     const x1 = 15 + half;
     fill(grid, x0, y, x1, y, HOPPER.body);
-    grid[y][x0] = HOPPER.rim;
-    grid[y][x1] = HOPPER.rim;
-    if (x1 - x0 >= 3) grid[y][x0 + 1] = HOPPER.lit;
+    // Through `fill` rather than a direct grid write, so the funnel walls are SCALE px thick
+    // like every other rim in the file instead of a hairline down a 64px sprite.
+    fill(grid, x0, y, x0, y, HOPPER.rim);
+    fill(grid, x1, y, x1, y, HOPPER.rim);
+    if (x1 - x0 >= 3) fill(grid, x0 + 1, y, x0 + 1, y, HOPPER.lit);
   }
   fill(grid, 16 - Math.round(mouth / 2), top, 15 + Math.round(mouth / 2), top, HOPPER.rim);
   return grid;

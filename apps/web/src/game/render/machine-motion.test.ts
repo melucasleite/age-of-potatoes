@@ -113,7 +113,7 @@ describe('the motion table', () => {
     expect(names.size).toBe(kinds.length);
   });
 
-  it('keeps every wave to whole pixels within the 2px amplitude ceiling', () => {
+  it('keeps every wave to whole pixels within the 4px amplitude ceiling', () => {
     const out = blankSample();
     for (const kind of kinds) {
       const spec = MACHINE_MOTION[kind as MachineKind];
@@ -121,7 +121,7 @@ describe('the motion table', () => {
         sampleWave(spec.wave, step / 64, out);
         for (const value of [out.dx, out.dy, out.dw, out.dh]) {
           expect(Number.isInteger(value), `${spec.name} emits a sub-pixel offset`).toBe(true);
-          expect(Math.abs(value)).toBeLessThanOrEqual(2);
+          expect(Math.abs(value)).toBeLessThanOrEqual(4);
         }
         // A squeeze keeps its base planted: any height loss is paired with the dy that
         // pins the bottom edge, so no wave can lift a machine off its own footprint.

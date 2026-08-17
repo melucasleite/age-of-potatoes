@@ -6,12 +6,12 @@
   "prompt": "One 16x16 sealed bag of chili chips ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. Sits one rung DOWN the red ramp from the plain bag — red_mid-bodied where plain is red_bright-bodied — because two red bags in one grid must differ in VALUE, not in hue, or they are the same bag to a colourblind player. Carries the pepper mark in chip_gold.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "center",
   "atlasGroup": "items",
   "costUsd": 0,
-  "generatedAt": "2026-08-17T05:47:51.961Z"
+  "generatedAt": "2026-08-17T19:54:52.733Z"
 }

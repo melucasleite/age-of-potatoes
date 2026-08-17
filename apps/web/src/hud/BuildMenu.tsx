@@ -43,8 +43,11 @@ import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
 
 /**
- * The cell's icon box. Machine frames are 32×32 and draw at 1×; tiles and items are 16×16
- * and draw at 2× — both integer, both filling most of the box, per `paintIcon`'s rules.
+ * The cell's icon box. Machine frames are 64×64 and draw at ½; tiles and items are 32×32 and
+ * draw at 1× — both exact samples, both landing on the same 32 painted pixels, per `paintIcon`.
+ *
+ * 40 IS A CSS PIXEL COUNT AND DID NOT MOVE when the tile went 16→32. The art doubled underneath
+ * it and the painted result is identical; a build menu twice the size was never the ask.
  */
 const CELL_ICON = 40;
 

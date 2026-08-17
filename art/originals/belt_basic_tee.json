@@ -6,12 +6,12 @@
   "prompt": "One 16x16 yellow basic-tier conveyor belt tee — the side feed: the run passes west to east and a second line joins it from the south — authored by art/tools/make-factory-parts.mjs (work item 095). The tier's 1 chevron(s), spent as the corner's through-run arrows plus exactly one arrow on the south arm pointing north, into the run, because a side feed joins and does not leave. Both its west and east edges are asserted equal to the tier straight's edge, its bottom edge to a vertical run's, and its north face to closed plate — so a tee dropped into the middle of a run seams on neither side.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "belts",
   "costUsd": 0,
-  "generatedAt": "2026-08-16T19:33:47.891Z"
+  "generatedAt": "2026-08-17T19:54:52.740Z"
 }

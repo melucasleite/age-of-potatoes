@@ -6,7 +6,7 @@
 //
 // Two rules from §13, and the reason each is not a preference:
 //
-//   INTEGER ZOOM ONLY. A 2.4× zoom on 16px tiles shimmers, and the problem is
+//   INTEGER ZOOM ONLY. A 2.4× zoom on 32px tiles shimmers, and the problem is
 //   arithmetic rather than filtering: fractional scaling maps source pixels onto
 //   non-integer device pixels, so some source pixels get two device pixels and their
 //   neighbours get three. No filter mode saves that. `ZOOM_LEVELS` is the whole
@@ -30,12 +30,35 @@
 
 import type { Container } from 'pixi.js';
 
-/** Every zoom this game will ever have. Plan §13; v0.1 ships fixed at 3× (§16.3). */
-export const ZOOM_LEVELS = [2, 3, 4, 6] as const;
+/**
+ * Every zoom this game will ever have. Plan §13; v0.1 ships fixed at the default rung (§16.3).
+ *
+ * HALVED WHEN `TILE_PX` WENT 16 → 32, because a rung is only meaningful as the product
+ * `TILE_PX * zoom` — the CSS pixels one tile actually occupies. The old ladder at 32px source
+ * would have topped out at 6 × 32 = 192 CSS px per tile, which is four tiles across a laptop.
+ *
+ * The new rungs reproduce the old ladder's 2×, 4× and 6× views EXACTLY (32, 64 and 96 CSS px
+ * per tile), and add a closer one on top. What is lost is the old 3× — 48 CSS px per tile —
+ * and it cannot be recovered: 48 / 32 is 1.5, and a fractional zoom is the one thing this
+ * ladder exists to forbid. See `DEFAULT_ZOOM_INDEX` for where that leaves the default view.
+ */
+export const ZOOM_LEVELS = [1, 2, 3, 4] as const;
 
 export type ZoomLevel = (typeof ZOOM_LEVELS)[number];
 
-/** §16.3 pins v0.1 here. The ladder exists; the level does not move in v0.1. */
+/**
+ * §16.3 pins v0.1 here. The ladder exists; the level does not move in v0.1.
+ *
+ * STILL INDEX 1, and the index rather than the factor is the load-bearing part — `input/lod.ts`
+ * seeds `viewLod` from `ZOOM_LEVELS[1]` independently, so a default that moved off 1 would have
+ * to move in two files or the renderer's first frame would disagree with the camera's.
+ *
+ * Index 1 is now 2×, i.e. 64 CSS px per tile against the old default's 48. The old 3× rung is
+ * gone (see above) and 2× is the nearer survivor: on a 1920×1080 viewport the view goes from
+ * 40 × 22.5 tiles to 30 × 16.9 — a third closer in, where index 0 would have been half again
+ * further out. Closer is also the safer miss of the two, since it is the direction that keeps
+ * the newly doubled art legible.
+ */
 export const DEFAULT_ZOOM_INDEX = 1;
 
 /** The transform that reached the display this frame. The only thing picking may invert. */
@@ -110,11 +133,12 @@ export class Camera {
   /**
    * Keep the world on screen: centre it on whichever axes it fits, clamp on the rest.
    *
-   * The centring branch is a leftover kindness from the 16×16 lot, which at 3× fitted inside
-   * most viewports whole. Land deeds took the world to 64×64 tiles — 1,024 world px, 3,072 CSS
-   * px at the default zoom — so on any ordinary screen this now clamps on both axes and the
-   * camera genuinely follows the player. The branch stays because it is still reachable: at 2×
-   * zoom on a very large display, or if a future scenario ships a small lot.
+   * The centring branch is a leftover kindness from the 16×16 lot, which fitted inside most
+   * viewports whole. Land deeds took the world to 64×64 tiles — 2,048 world px at `TILE_PX` 32,
+   * so 4,096 CSS px at the default zoom — so on any ordinary screen this now clamps on both axes
+   * and the camera genuinely follows the player. The branch stays because it is still reachable,
+   * though the doubled tile made it rarer: it needs the bottom rung (1×, where the lot is 2,048
+   * CSS px) on a display wider than that, or a future scenario shipping a small lot.
    */
   clampToWorld(worldWidthPx: number, worldHeightPx: number): void {
     const zoom = this.zoom;

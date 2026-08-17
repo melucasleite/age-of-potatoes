@@ -6,12 +6,12 @@
   "prompt": "One 16x16 heap of sweetcorn crisps ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. An amber heap under dark specks, wearing the COB mark that item_bagged_sweetcorn_chips also wears — a leaning ear with two husk leaves at its foot.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "center",
   "atlasGroup": "items",
   "costUsd": 0,
-  "generatedAt": "2026-08-17T05:47:51.962Z"
+  "generatedAt": "2026-08-17T19:54:52.734Z"
 }

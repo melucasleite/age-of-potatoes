@@ -6,12 +6,12 @@
   "prompt": "One 7x7 status lamp — a bar laid across the outlet — for the blocked state (red: output full. Look downstream). Authored from the master palette by art/tools/make-status-lamp.mjs. Seven shapes, one per LampState, because §16 lists colourblind-safe machine status as lamp SHAPE variation rather than colour alone — and the palette makes that urgent rather than optional, since starved amber and blocked red are deliberate neighbours on a warm limited palette and are near-identical under deuteranopia. Still ONE tint per state applied in code (§13), so the batch and the page are unchanged; the shape now carries the state and the colour reinforces it. The generator asserts every pair of shapes differs by at least six of twenty-five pixels, which is the greyscale criterion made mechanical. Core is `paper` so a multiply tint lands on the intended hue; the `ink` halo is what keeps a pale lamp legible on a pale machine. `trim` is false: all seven must sit on the same 7x7 grid or the lamp would jump around the machine as its state changed.",
   "promptStyle": null,
   "native": {
-    "width": 7,
-    "height": 7
+    "width": 14,
+    "height": 14
   },
   "requested": {
-    "width": 7,
-    "height": 7
+    "width": 14,
+    "height": 14
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "center",
   "atlasGroup": "status",
   "costUsd": 0,
-  "generatedAt": "2026-08-13T15:15:58.733Z"
+  "generatedAt": "2026-08-17T19:54:52.736Z"
 }

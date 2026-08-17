@@ -39,7 +39,13 @@ import sharp from 'sharp';
 import { loadMaster } from './palette-png.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SIZE = 16;
+const SIZE = 32;
+/**
+ * Pixels per 16px-era pixel. Every shape below keeps its authored 16px coordinates and is
+ * multiplied up at the point of use — the proportions were traced by hand off the family's
+ * own icons, and re-deriving them at a new resolution would be re-tracing them by guess.
+ */
+const SCALE = SIZE / 16;
 
 const { swatches } = loadMaster();
 const hexOf = (name) => {
@@ -119,9 +125,10 @@ function blankGrid() {
   return Array.from({ length: SIZE }, () => new Array(SIZE).fill('.'));
 }
 
+/** Coordinates in, authored 16px units; pixels out. */
 function rect(grid, x0, y0, width, height, glyph) {
-  for (let y = y0; y < y0 + height; y++) {
-    for (let x = x0; x < x0 + width; x++) {
+  for (let y = y0 * SCALE; y < (y0 + height) * SCALE; y++) {
+    for (let x = x0 * SCALE; x < (x0 + width) * SCALE; x++) {
       if (x < 0 || y < 0 || x >= SIZE || y >= SIZE) continue;
       grid[y][x] = glyph;
     }
@@ -135,7 +142,14 @@ function rect(grid, x0, y0, width, height, glyph) {
  * an ellipse is the only shape that can be moved a pixel without being redrawn — the three
  * crisps in a pile were positioned by moving centres, not by editing pixels.
  */
-function ellipse(grid, cx, cy, rx, ry, fill, rim) {
+function ellipse(grid, cx16, cy16, rx16, ry16, fill, rim) {
+  // A 16px coordinate names a PIXEL, and that pixel becomes a SCALE-wide block whose centre
+  // sits half a block further along — hence the (SCALE - 1) / 2. Getting this wrong by the
+  // half pixel is what would slide a crisp pile off the axis the four ellipses share.
+  const cx = cx16 * SCALE + (SCALE - 1) / 2;
+  const cy = cy16 * SCALE + (SCALE - 1) / 2;
+  const rx = rx16 * SCALE;
+  const ry = ry16 * SCALE;
   for (let y = 0; y < SIZE; y++) {
     for (let x = 0; x < SIZE; x++) {
       const dx = (x - cx) / rx;
@@ -154,8 +168,28 @@ function ellipse(grid, cx, cy, rx, ry, fill, rim) {
  * colour, `k` its second value, and `s` the one always-green stem pixel that stops the pepper
  * reading as a flame.
  */
+/**
+ * The marks, blown up SCALE:1 rather than redrawn.
+ *
+ * This is the one place in the file where nearest-neighbour is not a compromise but the
+ * requirement. The cob took five attempts to stop reading as a letterform, and the argument
+ * that finally settled it is about SILHOUETTE — the lean, and the husk leaves at its foot.
+ * A redraw at 10x10 would be a sixth attempt with the four failed theories still available
+ * to walk back into. Doubling the pixels cannot introduce a counter or straighten an axis,
+ * so the property that was so expensive to establish survives for free.
+ */
+const MARKS_PX = Object.fromEntries(
+  Object.entries(MARKS).map(([name, rows]) => [
+    name,
+    rows.flatMap((row) => {
+      const wide = [...row].flatMap((cell) => new Array(SCALE).fill(cell)).join('');
+      return new Array(SCALE).fill(wide);
+    }),
+  ]),
+);
+
 function stampMark(grid, mark, x0, y0, glyph) {
-  MARKS[mark].forEach((row, dy) => {
+  MARKS_PX[mark].forEach((row, dy) => {
     [...row].forEach((cell, dx) => {
       if (cell === '.') return;
       const x = x0 + dx;
@@ -176,15 +210,23 @@ function stampMark(grid, mark, x0, y0, glyph) {
 // The mark sits at x=6..10, y=5..9, which is dead centre of the body with a one-pixel
 // margin on every side. That margin is why the marks can be as loud as they are.
 
-const BAG_MARK_X = 6;
-const BAG_MARK_Y = 5;
+const BAG_MARK_X = 6 * SCALE;
+const BAG_MARK_Y = 5 * SCALE;
 
 function bagGrid(mark) {
   const grid = blankGrid();
 
   // Crimped seal: alternating teeth over a solid bar. Narrower than the body — a chip bag
   // is pinched where it is heat-sealed, and that pinch is most of what says "bag" at 16px.
-  for (let x = 4; x <= 11; x++) grid[1][x] = x % 2 === 0 ? 'r' : 'l';
+  //
+  // The teeth keep their 16px PITCH, so there are still eight of them and each is now SCALE
+  // wide. One-pixel teeth at 32px would be a finer crimp but a fainter one: at this size
+  // alternating single pixels average out to a flat band, which is the crimp not existing.
+  for (let x = 4 * SCALE; x < 12 * SCALE; x++) {
+    for (let y = 1 * SCALE; y < 2 * SCALE; y++) {
+      grid[y][x] = Math.floor(x / SCALE) % 2 === 0 ? 'r' : 'l';
+    }
+  }
   rect(grid, 4, 2, 8, 1, 'r');
 
   // Body. Both side columns take the rim value so the pouch reads as round, and column 4
@@ -211,8 +253,8 @@ function bagGrid(mark) {
 
 // Inset by one from the top-right corner, not flush to it: flush put the crown's first row on
 // row 0 and its last column on column 15, and the edge assertion below caught both.
-const PIP_X = 10;
-const PIP_Y = 1;
+const PIP_X = 10 * SCALE;
+const PIP_Y = 1 * SCALE;
 
 /**
  * Seasoning, as a fixed list. Never random: a sprite that changes between runs is not a sprite.
@@ -249,8 +291,18 @@ function pileGrid({ mark = null, seasoned = false } = {}) {
   ellipse(grid, 10.5, 8, 3, 2.3, 'l', 'r');
 
   if (seasoned) {
+    // Each speck stays one 16px-era pixel — a SCALE x SCALE block — rather than becoming a
+    // single fine grain. Twelve fine grains would be a quarter of the seasoning by area, and
+    // the comment above is a design ruling: a seasoned rung that only whispered is a rung the
+    // player cannot see happen. Loudness is the invariant, grain size is not.
     for (const [x, y] of SEASONING) {
-      if (grid[y][x] !== '.') grid[y][x] = 'd';
+      for (let dy = 0; dy < SCALE; dy++) {
+        for (let dx = 0; dx < SCALE; dx++) {
+          const sx = x * SCALE + dx;
+          const sy = y * SCALE + dy;
+          if (grid[sy][sx] !== '.') grid[sy][sx] = 'd';
+        }
+      }
     }
   }
   if (mark !== null) stampMark(grid, mark, PIP_X, PIP_Y, 'm');
@@ -407,8 +459,10 @@ const luma = (hex) =>
  * set as authored passes with room, and so a later recolour that quietly collapses two
  * flavours into one silhouette fails the build instead of shipping.
  */
+// TOLERANCE is a luma delta and so is resolution-free. FLOOR is a pixel COUNT, so it scales
+// with the area or the gate silently loosens by a factor of four at every resolution bump.
 const TOLERANCE = 24;
-const FLOOR = 24;
+const FLOOR = 24 * SCALE * SCALE;
 
 const names = Object.keys(RENDERED);
 const scores = [];
@@ -433,7 +487,7 @@ for (const { pair, differing } of scores.slice(0, 5)) {
 const worst = scores[0];
 if (worst.differing < FLOOR) {
   throw new Error(
-    `${worst.pair} differ on only ${worst.differing} of 256 pixels in greyscale ` +
+    `${worst.pair} differ on only ${worst.differing} of ${SIZE * SIZE} pixels in greyscale ` +
       `(floor ${FLOOR}) — they would be one picture to a colourblind player.`,
   );
 }
@@ -451,7 +505,7 @@ const WEARS_A_MARK = [
 for (const name of WEARS_A_MARK) {
   const wanted = hexOf(SPRITES[name].glyphs.m);
   const painted = RENDERED[name].filter((hex) => hex === wanted).length;
-  if (painted < 8) {
+  if (painted < 8 * SCALE * SCALE) {
     throw new Error(`${name} shows only ${painted}px of its flavour mark — it is not readable.`);
   }
 }

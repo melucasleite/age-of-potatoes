@@ -22,12 +22,19 @@
 // more than drawing the items did, it is not a LOD and must not ship.
 //
 // WHERE THE THRESHOLD COMES FROM, arithmetically rather than by taste. Belt items sit
-// `BELT_ITEM_SPACING_SUBTILES` (64) apart, which is a quarter of a 16 px tile — FOUR
-// SOURCE PIXELS between one item and the next. At 2× that is eight CSS px of centre
-// spacing for a sprite wider than eight px, so the items overlap into a smear that reads
-// as a texture rather than as goods. At 3× the spacing is twelve px and a bag is a bag.
-// So the boundary sits between 2 and 3, and the ladder has no rung in between — which is
-// the whole point of the ladder.
+// `BELT_ITEM_SPACING_SUBTILES` (64) apart, which is a quarter of a 32 px tile — EIGHT
+// SOURCE PIXELS between one item and the next. The rule the boundary encodes is that a
+// bag needs about twelve CSS px of centre spacing to read as a bag rather than smearing
+// into its neighbours: below that the items overlap into a texture, and drawing them
+// costs draw calls to communicate nothing. At 1× the spacing is eight px (a smear); at 2×
+// it is sixteen (a bag). So the boundary sits between 1 and 2, and the ladder has no rung
+// in between — which is the whole point of the ladder.
+//
+// THIS MOVED WITH `TILE_PX` 16 → 32. Source spacing doubled 4 → 8 px, so the same twelve
+// CSS px is bought one rung lower, and `ZOOM_LEVELS` halved to `[1, 2, 3, 4]` in the same
+// change. Both edits push the same way: the threshold is 2, not 3. Left at 3 it would
+// have hidden every item at the DEFAULT zoom, which is index 1 — goods invisible on a
+// fresh load, the single most visible way this could have gone wrong.
 
 import { ZOOM_LEVELS } from '../render/camera';
 import type { ZoomLevel } from '../render/camera';
@@ -35,11 +42,11 @@ import type { ZoomLevel } from '../render/camera';
 /**
  * The lowest zoom at which individual belt items are still drawn.
  *
- * With `ZOOM_LEVELS = [2, 3, 4, 6]` this means flow-only at 2×, items at 3× and up — and
- * 3× is where v0.1 shipped and where the game is normally played, so the common case is
- * unchanged and zooming out is the thing that switches instruments.
+ * With `ZOOM_LEVELS = [1, 2, 3, 4]` this means flow-only at 1×, items at 2× and up — and
+ * 2× is the default rung and where the game is normally played, so the common case draws
+ * items and zooming out is the thing that switches instruments.
  */
-export const BELT_ITEM_LOD_MIN_ZOOM = 3;
+export const BELT_ITEM_LOD_MIN_ZOOM = 2;
 
 /** True when the item `ParticleContainer` should be populated at all. */
 export function beltItemsVisibleAt(zoom: number): boolean {

@@ -6,12 +6,12 @@
   "prompt": "One 16x16 conveyor belt corner tile — in from the left edge, out through the bottom edge — authored from the master palette by art/tools/make-factory-parts.mjs. Hand-authored after two paid takes; the second came back as a brown scribble on a background that quantised to violet. Drawn as a solid plate rather than a cutout, matching the straight tile: a belt corner is machinery sitting on the ground, not a decal floating over it.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "belts",
   "costUsd": 0,
-  "generatedAt": "2026-08-12T21:52:42.866Z"
+  "generatedAt": "2026-08-17T19:54:52.731Z"
 }

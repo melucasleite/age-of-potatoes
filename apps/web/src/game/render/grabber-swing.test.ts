@@ -256,7 +256,7 @@ describe('reach', () => {
 });
 
 describe('ARM_SLICE', () => {
-  it('tiles the authored 16px frame with no gap and no overlap', () => {
+  it('tiles the authored 32px frame with no gap and no overlap', () => {
     expect(ARM_SLICE.mountX).toBe(0);
     expect(ARM_SLICE.mountX + ARM_SLICE.mountW).toBe(ARM_SLICE.linkX);
     expect(ARM_SLICE.linkX + ARM_SLICE.linkW).toBe(ARM_SLICE.clawX);
@@ -266,6 +266,6 @@ describe('ARM_SLICE', () => {
   it('leaves the claw an even split about the midline, so its jaws can meet', () => {
     expect(TILE_PX % 2).toBe(0);
     // Both jaws are cut at half the tile, and the art's own centreline is that same row.
-    expect(TILE_PX / 2).toBe(8);
+    expect(TILE_PX / 2).toBe(16);
   });
 });

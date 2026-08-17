@@ -45,7 +45,13 @@ const POP_POOL = 32;
 /** How long one drink-bounce runs, before per-pour jitter. */
 const BOUNCE_MS = 420;
 
-/** Squash-stretch depth. Deep enough to read at 3x zoom, shallow enough not to wobble. */
+/**
+ * Squash-stretch depth. Deep enough to read at the default zoom, shallow enough not to wobble.
+ *
+ * A RATIO, so it did not move with `TILE_PX` — it is a fraction of the sprite's own size and
+ * scales itself. (It used to say "at 3x zoom"; the ladder halved when tiles doubled, and the
+ * tile is the same size on screen either way, so the sentence is about the default rung now.)
+ */
 const BOUNCE_DEPTH = 0.19;
 
 /** Oscillations inside one bounce. Just over one: a gulp and a settle, not a jelly. */
@@ -55,7 +61,7 @@ const BOUNCE_CYCLES = 1.35;
 const POP_MS = 620;
 
 /** How high the pop throws the potato, in world px, before the magnet takes over. */
-const POP_RISE = 13;
+const POP_RISE = 26;
 
 interface Pop {
   sprite: Sprite;
@@ -255,7 +261,7 @@ export class FarmFx {
       // Phase two: the magnet. Ease-IN, so the pull starts as a drift and finishes as a
       // snatch. A linear lerp here reads as a potato on a string.
       const pull = easeInCubic(clamp01((t - 0.22) / 0.78));
-      const wobble = Math.sin(t * 9 + pop.wobble) * 3 * (1 - pull);
+      const wobble = Math.sin(t * 9 + pop.wobble) * 6 * (1 - pull);
 
       pop.sprite.x = launchX + (playerX - launchX) * pull + wobble;
       pop.sprite.y = launchY + (playerY - launchY) * pull;
@@ -405,7 +411,7 @@ export class FarmFx {
       pop.life = pop.total;
       pop.fromX = tileX * TILE_PX + TILE_PX / 2;
       pop.fromY = tileY * TILE_PX + TILE_PX / 2;
-      pop.driftX = (Math.random() - 0.5) * 7;
+      pop.driftX = (Math.random() - 0.5) * 14;
       pop.wobble = Math.random() * Math.PI * 2;
       pop.spin = (Math.random() - 0.5) * 1.6;
       pop.sprite.alpha = 1;

@@ -31,11 +31,24 @@ import { loadMaster } from './palette-png.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(HERE, '../local/zone_overlay.png');
 
-const SIZE = 16;
+/**
+ * Tile edge, in pixels. Everything below is expressed as a multiple of SCALE so a future
+ * resolution bump is one number rather than a hunt through literals.
+ */
+const SIZE = 32;
+/** Pixels per 16px-era pixel. The hatch is authored in the original 16px vocabulary. */
+const SCALE = SIZE / 16;
 /** Stripe pitch. Must divide SIZE or the tile seams. */
-const PERIOD = 8;
-/** Stripe thickness, in pixels along the diagonal. Three of eight: present, not a blanket. */
-const THICKNESS = 3;
+const PERIOD = 8 * SCALE;
+/**
+ * Stripe thickness, in pixels along the diagonal. Three of eight: present, not a blanket.
+ *
+ * Pitch and thickness scale TOGETHER on purpose. The ratio is the design — 3/8 of the area
+ * inked — and holding it means a zone reads with exactly the weight it read with before, on
+ * a smoother diagonal. Halving the apparent pitch instead would have made the hatch finer
+ * and heavier at once, which is a redesign of an annotation nobody asked to redesign.
+ */
+const THICKNESS = 3 * SCALE;
 
 if (SIZE % PERIOD !== 0) {
   throw new Error(`Zone hatch period ${PERIOD} does not divide ${SIZE} — the tile would seam.`);

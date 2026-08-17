@@ -6,12 +6,12 @@
   "prompt": "One 16x16 yellow basic-tier conveyor belt tee — the head-on merge: goods arrive from both the west and the east and leave together through the south — authored by art/tools/make-factory-parts.mjs (work item 095). The tier's 1 chevron(s) stacked down the south stem pointing out, and the two feeding arms deliberately bare, because they are interchangeable and an arrow on one would read as the preferred one. Asserted mirror-symmetric left to right on every build, plus the tee's edge and closed-north guarantees.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "belts",
   "costUsd": 0,
-  "generatedAt": "2026-08-16T19:33:47.892Z"
+  "generatedAt": "2026-08-17T19:54:52.741Z"
 }

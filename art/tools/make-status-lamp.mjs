@@ -55,9 +55,17 @@ import { loadMaster } from './palette-png.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** The lit shape is authored in a 5x5 box; the ink halo needs one pixel all round. */
-const CORE = 5;
-const SIZE = CORE + 2;
+/**
+ * Pixels per 7px-era pixel. A lamp is a badge pinned to a machine in WORLD space, so it grows
+ * with the tile: left at 7px on a doubled world it would halve in apparent size, and a shape
+ * this small has no size to give away.
+ */
+const SCALE = 2;
+
+/** The lit shape is authored in a 5x5 box; the ink halo needs SCALE pixels all round. */
+const CORE = 5 * SCALE;
+const HALO = SCALE;
+const SIZE = CORE + HALO * 2;
 
 /**
  * The shapes, in `LampState` order. `#` is lit core, `.` is nothing.
@@ -84,7 +92,7 @@ const SHAPES = {
  * who is not sure whether two lamps differ has to go and check, and checking is the cost this
  * whole feature exists to remove.
  */
-const MIN_DIFFERENCE = 6;
+const MIN_DIFFERENCE = 6 * SCALE * SCALE;
 
 const NAMES = Object.keys(SHAPES);
 
@@ -101,9 +109,28 @@ if (NAMES.length !== 7) {
   throw new Error(`Expected seven lamp shapes, one per LampState; found ${NAMES.length}.`);
 }
 
-/** A shape as a flat boolean array over the 5x5 core box. */
+/**
+ * The shapes at pixel resolution, blown up SCALE:1.
+ *
+ * Deliberately not redrawn. The seven glyphs were chosen against a measured 6-of-25 pairwise
+ * floor, and doubling every cell scales every pairwise difference by exactly SCALE^2 — the
+ * distinguishability law below is therefore the SAME law, checked at the same margin. A
+ * redraw with ten pixels to play with would be a nicer X and a whole new set of pairs to
+ * re-argue, and nobody has asked for a nicer X.
+ */
+const SHAPES_PX = Object.fromEntries(
+  Object.entries(SHAPES).map(([name, rows]) => [
+    name,
+    rows.flatMap((row) => {
+      const wide = [...row].flatMap((glyph) => new Array(SCALE).fill(glyph)).join('');
+      return new Array(SCALE).fill(wide);
+    }),
+  ]),
+);
+
+/** A shape as a flat boolean array over the CORE x CORE box. */
 function maskOf(name) {
-  const rows = SHAPES[name];
+  const rows = SHAPES_PX[name];
   if (rows.length !== CORE) {
     throw new Error(`Lamp "${name}" has ${rows.length} rows; the core box is ${CORE}.`);
   }
@@ -170,15 +197,18 @@ function frameOf(name) {
   for (let y = 0; y < SIZE; y++) {
     const row = [];
     for (let x = 0; x < SIZE; x++) {
-      const cx = x - 1;
-      const cy = y - 1;
+      const cx = x - HALO;
+      const cy = y - HALO;
       if (lit(cx, cy)) {
         row.push('paper');
         continue;
       }
+      // Dilation radius is HALO, not 1: growing the figure by one PIXEL on a doubled sprite
+      // would leave a hairline outline where the design calls for a ring the eye can find.
+      // At radius HALO this is exactly the 7px halo, twice as large.
       let touching = false;
-      for (let dy = -1; dy <= 1 && !touching; dy++) {
-        for (let dx = -1; dx <= 1 && !touching; dx++) {
+      for (let dy = -HALO; dy <= HALO && !touching; dy++) {
+        for (let dx = -HALO; dx <= HALO && !touching; dx++) {
           if (lit(cx + dx, cy + dy)) touching = true;
         }
       }

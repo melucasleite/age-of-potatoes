@@ -247,8 +247,15 @@ export const MACHINE_MOTION: Record<MachineKind, MotionSpec> = {
  * One wave, sampled at phase `t` in [0, 1). PURE, and every offset a whole pixel: these
  * are the functions the test pins, and the only place motion arithmetic lives.
  *
- * Amplitude ceiling is 2 source px on every axis — presence, not carnival ([[091]]),
+ * Amplitude ceiling is 4 source px on every axis — presence, not carnival ([[091]]),
  * and small enough that no wave can walk a machine off its own footprint.
+ *
+ * EVERY AMPLITUDE HERE DOUBLED WITH `TILE_PX` 16 → 32, because these are source pixels and
+ * the thing they have to stay proportional to is the machine body. Left at the old numbers
+ * the whole vocabulary would have read at half strength on a body twice the size — which for
+ * a set of motions whose entire job is "presence" is the same as deleting half of them.
+ * The ceiling moved with them, so the "cannot walk off its own footprint" guarantee is
+ * unchanged: 4 px of 32 is what 2 px of 16 was.
  */
 export function sampleWave(wave: WaveId, t: number, out: MotionSample): void {
   out.dx = 0;
@@ -259,121 +266,123 @@ export function sampleWave(wave: WaveId, t: number, out: MotionSample): void {
     case 'still':
       return;
     case 'chop':
-      // The blade: a long rest, a fast two-pixel bite, a one-pixel recover.
-      out.dy = t < 0.55 ? 0 : t < 0.7 ? 1 : t < 0.85 ? 2 : 1;
+      // The blade: a long rest, a fast four-pixel bite, a two-pixel recover.
+      out.dy = t < 0.55 ? 0 : t < 0.7 ? 2 : t < 0.85 ? 4 : 2;
       return;
     case 'press':
       // The inverse of the chop: a slow lean into the fruit, a slow release.
-      out.dy = t < 0.2 ? 0 : t < 0.4 ? 1 : t < 0.7 ? 2 : t < 0.85 ? 1 : 0;
+      out.dy = t < 0.2 ? 0 : t < 0.4 ? 2 : t < 0.7 ? 4 : t < 0.85 ? 2 : 0;
       return;
     case 'piston':
       // Slam down, DWELL on the bottle, come back up. The dwell is what reads as a piston.
-      out.dy = t < 0.35 ? 0 : t < 0.45 ? 1 : t < 0.8 ? 2 : t < 0.9 ? 1 : 0;
+      out.dy = t < 0.35 ? 0 : t < 0.45 ? 2 : t < 0.8 ? 4 : t < 0.9 ? 2 : 0;
       return;
     case 'sineX':
-      // ±1px side-to-side. `Math.round(sin)` spends most of the cycle AT the extremes
-      // with a beat of rest at each crossing — a slosh, not a slide.
-      out.dx = Math.round(Math.sin(t * Math.PI * 2));
+      // ±2px side-to-side. `Math.round(sin)` spends most of the cycle AT the extremes
+      // with a beat of rest at each crossing — a slosh, not a slide. The doubling is applied
+      // OUTSIDE the round, deliberately: rounding `sin * 2` would introduce intermediate
+      // ±1 steps and turn the slosh back into the slide this wave exists not to be.
+      out.dx = Math.round(Math.sin(t * Math.PI * 2)) * 2;
       return;
     case 'sineY':
-      out.dy = Math.round(Math.sin(t * Math.PI * 2));
+      out.dy = Math.round(Math.sin(t * Math.PI * 2)) * 2;
       return;
     case 'shake':
-      // A burst of ±1 rattles, then a rest — a seasoning pass, not a permanent tremor.
-      out.dx = t < 0.45 ? (Math.floor(t / 0.075) % 2 === 0 ? 1 : -1) : 0;
+      // A burst of ±2 rattles, then a rest — a seasoning pass, not a permanent tremor.
+      out.dx = t < 0.45 ? (Math.floor(t / 0.075) % 2 === 0 ? 2 : -2) : 0;
       return;
     case 'grind':
-      // Continuous 1px rattle at the table's fast period. The period IS the character.
-      out.dx = t < 0.5 ? 1 : -1;
+      // Continuous 2px rattle at the table's fast period. The period IS the character.
+      out.dx = t < 0.5 ? 2 : -2;
       return;
     case 'squeeze':
-      // Two-pixel vertical squash with the base pinned: dh always pairs with dy = -dh.
+      // Four-pixel vertical squash with the base pinned: dh always pairs with dy = -dh.
       if (t < 0.12 || (t >= 0.34 && t < 0.46)) {
-        out.dh = -1;
-        out.dy = 1;
-      } else if (t < 0.34) {
         out.dh = -2;
         out.dy = 2;
+      } else if (t < 0.34) {
+        out.dh = -4;
+        out.dy = 4;
       }
       return;
     case 'clamp':
-      // The horizontal squeeze, centred: dw -2 with dx +1 pinches both sides equally.
+      // The horizontal squeeze, centred: dw -4 with dx +2 pinches both sides equally.
       if (t < 0.28) {
-        out.dw = -2;
-        out.dx = 1;
+        out.dw = -4;
+        out.dx = 2;
       }
       return;
     case 'crimp':
       // Clamp, then squeeze: the combo packer folds sideways and presses down, in turn.
       if (t < 0.2) {
-        out.dw = -2;
-        out.dx = 1;
+        out.dw = -4;
+        out.dx = 2;
       } else if (t >= 0.5 && t < 0.7) {
+        out.dh = -4;
+        out.dy = 4;
+      }
+      return;
+    case 'throb':
+      // A quick 2px base-planted compression — a pump beat.
+      if (t >= 0.5) {
         out.dh = -2;
         out.dy = 2;
       }
       return;
-    case 'throb':
-      // A quick 1px base-planted compression — a pump beat.
-      if (t >= 0.5) {
-        out.dh = -1;
-        out.dy = 1;
-      }
-      return;
     case 'swirl':
-      // A 1px circle in four quarter-steps. The one wave that moves both axes at once.
+      // A 2px circle in four quarter-steps. The one wave that moves both axes at once.
       switch (Math.floor(t * 4) % 4) {
         case 0:
-          out.dx = 1;
+          out.dx = 2;
           break;
         case 1:
-          out.dy = 1;
+          out.dy = 2;
           break;
         case 2:
-          out.dx = -1;
+          out.dx = -2;
           break;
         default:
-          out.dy = -1;
+          out.dy = -2;
       }
       return;
     case 'lift':
-      // The 1px bob — a COMPONENT, never a whole answer: each kind that borrows it does
+      // The 2px bob — a COMPONENT, never a whole answer: each kind that borrows it does
       // so at its own named period (simmer, heave, hum, shunt, trundle).
-      out.dy = t < 0.5 ? 0 : 1;
+      out.dy = t < 0.5 ? 0 : 2;
       return;
     case 'doubleTap':
-      out.dy = t < 0.15 ? 1 : t < 0.3 ? 0 : t < 0.45 ? 1 : 0;
+      out.dy = t < 0.15 ? 2 : t < 0.3 ? 0 : t < 0.45 ? 2 : 0;
       return;
     case 'flutter':
-      // 1px horizontal flicker at rotor speed.
-      out.dx = t < 0.5 ? 0 : 1;
+      // 2px horizontal flicker at rotor speed.
+      out.dx = t < 0.5 ? 0 : 2;
       return;
     case 'hop':
-      // The sale: a 2px jump that settles. Negative dy — the one wave that goes UP.
-      out.dy = t < 0.25 ? -2 : t < 0.5 ? -1 : 0;
+      // The sale: a 4px jump that settles. Negative dy — the one wave that goes UP.
+      out.dy = t < 0.25 ? -4 : t < 0.5 ? -2 : 0;
       return;
     case 'shudder':
       // The departure: three quick sideways knocks as something heavy gets moving.
-      out.dx = t < 0.15 ? 1 : t < 0.3 ? -1 : t < 0.45 ? 1 : 0;
+      out.dx = t < 0.15 ? 2 : t < 0.3 ? -2 : t < 0.45 ? 2 : 0;
       return;
     case 'jitter':
-      // The cold shiver: fast ±1 rattle that dies off inside the pulse.
-      out.dx = t < 0.6 ? (Math.floor(t * 8) % 2 === 0 ? 1 : -1) : 0;
+      // The cold shiver: fast ±2 rattle that dies off inside the pulse.
+      out.dx = t < 0.6 ? (Math.floor(t * 8) % 2 === 0 ? 2 : -2) : 0;
       return;
     case 'crank':
-      // Two quick 1px turns of the swirl circle — a wrench going round.
+      // Two quick 2px turns of the swirl circle — a wrench going round.
       switch (Math.floor(t * 8) % 4) {
         case 0:
-          out.dx = 1;
+          out.dx = 2;
           break;
         case 1:
-          out.dy = 1;
+          out.dy = 2;
           break;
         case 2:
-          out.dx = -1;
+          out.dx = -2;
           break;
         default:
-          out.dy = -1;
+          out.dy = -2;
       }
       return;
   }
@@ -614,20 +623,23 @@ export class MachineMotion {
             ? 600 + Math.random() * 250
             : 260 + Math.random() * 120;
       speck.life = speck.total;
-      speck.vx = (Math.random() - 0.5) * 0.006;
+      // Source px per millisecond, so these doubled with `TILE_PX` while the lifetimes above
+      // (milliseconds) did not: a bubble must still cross the same FRACTION of the vat it
+      // always did, in the same time.
+      speck.vx = (Math.random() - 0.5) * 0.012;
       speck.vy =
         flavour === 'oil'
-          ? -0.008 - Math.random() * 0.006
+          ? -0.016 - Math.random() * 0.012
           : flavour === 'steam'
-            ? -0.016 - Math.random() * 0.008
-            : -0.02 - Math.random() * 0.01;
+            ? -0.032 - Math.random() * 0.016
+            : -0.04 - Math.random() * 0.02;
       speck.sprite.tint = SPECK_TINT[flavour];
       speck.sprite.alpha = flavour === 'steam' ? 0.55 : 0.85;
       speck.sprite.visible = true;
       // Over the vat's interior — inset from the edges, starting below the middle so a
       // bubble has somewhere to rise to before it fades.
       speck.sprite.position.set(
-        left + 3 + Math.random() * Math.max(1, width - 6),
+        left + 6 + Math.random() * Math.max(2, width - 12),
         top + height * 0.45 + Math.random() * height * 0.3,
       );
       return;

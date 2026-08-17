@@ -245,7 +245,10 @@ function resolveUncached(item: number): IconSource | null {
 
 /** The CSS that paints one atlas rectangle into a square box. Every number an integer. */
 export interface IconPaint {
-  /** Whole-number magnification. Never 0, so a sprite is never scaled away to nothing. */
+  /**
+   * The magnification. A whole number when the frame fits, and otherwise an exact reciprocal
+   * power of two — never 0, so a sprite is never scaled away to nothing.
+   */
   readonly scale: number;
   /** Letterbox padding, in painted pixels. Negative when the frame is wider than its box. */
   readonly offsetX: number;
@@ -258,26 +261,35 @@ export interface IconPaint {
 /**
  * Fit an atlas rectangle into a `boxPx` square: integer scale, centred, never stretched.
  *
- * THE WHOLE JOB IS NOT STRETCHING. Item frames are 16×16 and machine frames are 32×32 — except
- * the Bottler, which is 48×32. A box that set `background-size: 100% 100%` would squash that
+ * THE WHOLE JOB IS NOT STRETCHING. Item frames are 32×32 and machine frames are 64×64 — except
+ * the Bottler, which is 96×64. A box that set `background-size: 100% 100%` would squash that
  * Bottler by a third on one axis, and squashed pixel art is the single loudest way to say the UI
  * was not built for the game it is sitting on. So the scale is `floor` of what fits on the
  * TIGHTER axis and the slack becomes padding on the other one.
  *
- * The consequence, stated plainly because it is visible: a 16px item in a 48px box is drawn 3×
- * and a 32px machine in the same box is drawn 1×, so machines are physically smaller in the grid
+ * The consequence, stated plainly because it is visible: a 32px item in a 48px box is drawn 1×
+ * and a 64px machine in the same box is drawn ½, so machines are physically smaller in the grid
  * and their pixels are finer. The alternative is fractional scaling, and a pixel game does not
  * get to have blurry inventory icons.
  *
- * A frame too big even at 1× keeps its scale and is centre-CROPPED, because a background is
- * clipped to its element. That cannot happen at the sizes this HUD uses (the Bottler needs 48px
- * and the smallest box is the pouch's 32 — which never holds a boxed machine), and cropping
- * beats both stretching and disappearing if it ever does.
+ * A FRAME TOO BIG FOR ITS BOX HALVES UNTIL IT FITS. It used to keep 1× and centre-CROP, on the
+ * stated grounds that an oversized frame "cannot happen at the sizes this HUD uses" — the
+ * Bottler needed 48px and the smallest box was the pouch's 32. Doubling the art to 32px tiles is
+ * exactly the event that falsified that: every machine frame is 64×64 now, the Bottler is 96×64,
+ * and the boxes below it are CSS pixels that did not move and should not. Under the old rule
+ * every machine crate in the bag, the shop and the build menu would have shown the middle
+ * quarter of itself, which is a worse picture than a small one.
+ *
+ * HALVING IS THE ONE DOWNSCALE THAT IS NOT A BLUR. At ½ with `image-rendering: pixelated` the
+ * browser takes every other source pixel — which is, near enough, the 16px frame this art was
+ * baked from. Any other ratio re-samples and the grid goes soft, so the ladder is 1, ½, ¼ and
+ * stops: a quarter fits the widest frame in the game into the smallest box in the HUD.
+ *
+ * The box sizes themselves are deliberately untouched. They are CSS pixels, the HUD is CSS
+ * pixels, and the tile bump has no opinion about how big a bag slot should be.
  */
 export function paintIcon(source: IconSource, boxPx: number): IconPaint {
-  const fitsWide = Math.floor(boxPx / source.width);
-  const fitsTall = Math.floor(boxPx / source.height);
-  const scale = Math.max(1, Math.min(fitsWide, fitsTall));
+  const scale = fitScale(source, boxPx);
 
   // `floor`, not a halved remainder rounded: a half-pixel offset re-samples the whole sprite and
   // undoes `image-rendering: pixelated` in one line.
@@ -292,7 +304,25 @@ export function paintIcon(source: IconSource, boxPx: number): IconPaint {
     // The page is scaled up whole and then slid so the wanted rectangle lands in the box. Both
     // halves must use the SAME scale or the sprite drifts by a few pixels per hundred — which
     // looks like slightly wrong art rather than like a bug, and is the reason this is tested.
-    backgroundPosition: `${offsetX - source.x * scale}px ${offsetY - source.y * scale}px`,
+    // `round` is a no-op at every whole scale and is only ever reached below 1×, where a frame
+    // parked at an odd x on the page would otherwise slide the whole atlas by half a CSS pixel —
+    // which re-samples the icon, which is the one thing this module exists to prevent.
+    backgroundPosition: `${Math.round(offsetX - source.x * scale)}px ${Math.round(offsetY - source.y * scale)}px`,
     backgroundSize: `${ATLAS_SIZE.width * scale}px ${ATLAS_SIZE.height * scale}px`,
   };
+}
+
+/** Whole magnification while the frame fits, then halves — 1, ½, ¼ — and never 0. */
+function fitScale(source: IconSource, boxPx: number): number {
+  if (source.width <= 0 || source.height <= 0) return 1;
+
+  const whole = Math.min(Math.floor(boxPx / source.width), Math.floor(boxPx / source.height));
+  if (whole >= 1) return whole;
+
+  let scale = 1;
+  for (let step = 0; step < 2; step++) {
+    scale /= 2;
+    if (source.width * scale <= boxPx && source.height * scale <= boxPx) break;
+  }
+  return scale;
 }

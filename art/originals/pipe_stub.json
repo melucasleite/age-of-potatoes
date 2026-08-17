@@ -6,12 +6,12 @@
   "prompt": "One 16x16 pipe hub with no run leaving it — the frame for an isolated pipe tile — authored from the master palette by art/tools/make-pipes.mjs. Six frames, not three: apps/web/src/game/render/pipe-shape.ts covers all sixteen neighbour masks by turning stub, cap, straight, corner, tee and cross in quarter turns, and asks for them by exactly these names. Near-neutral on purpose, because the pipe layer MULTIPLIES the sprite by its liquid's colour. Shaded concentrically rather than top-lit, so a frame turned three quarters is not lit from underneath — that rotation law is asserted over all sixteen masks on every build.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "pipes",
   "costUsd": 0,
-  "generatedAt": "2026-08-13T03:34:12.048Z"
+  "generatedAt": "2026-08-17T19:54:52.737Z"
 }

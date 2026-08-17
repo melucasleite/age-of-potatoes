@@ -6,12 +6,12 @@
   "prompt": "One 16x16 tileable diagonal hatch, authored from the master palette by art/tools/make-zone-overlay.mjs and tinted per zone in code. A zone is a plan, not a machine (plan §5), so it reads as an annotation drawn over the world. Hand-authored because it must tile EXACTLY in both axes and must have binary alpha — the cook stage binarises alpha, so a soft wash would come back opaque and bury the field it annotates.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": true,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "overlay",
   "costUsd": 0,
-  "generatedAt": "2026-08-12T21:29:32.355Z"
+  "generatedAt": "2026-08-17T19:54:52.734Z"
 }

@@ -29,7 +29,8 @@ const DIALS = ['speed', 'capacity', 'efficiency'];
 const LEVELS = [1, 2, 3];
 const ZOOM = 6;
 const PAD = 8;
-const SIZE = 32;
+// Decals are 64px now (one machine sprite = 2x2 tiles at TILE_PX 32).
+const SIZE = 64;
 const cell = SIZE * ZOOM + PAD;
 
 const composites = [];

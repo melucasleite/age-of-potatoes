@@ -55,7 +55,12 @@ import sharp from 'sharp';
 import { loadMaster } from './palette-png.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SIZE = 16;
+const SIZE = 32;
+/**
+ * Pixels per 16px-era pixel. The whole file is authored in the original vocabulary and
+ * multiplied up, so the next resolution bump is this line and nothing else.
+ */
+const SCALE = SIZE / 16;
 
 /**
  * Working canvas margin. Arms are drawn out past the tile edge and the result is cropped
@@ -63,7 +68,7 @@ const SIZE = 16;
  * it the shading would put a dark rim across every tile seam — a bead every 16px down a
  * straight run, which is the artefact this whole file exists to prevent.
  */
-const PAD = 4;
+const PAD = 4 * SCALE;
 const CANVAS = SIZE + PAD * 2;
 
 const { swatches } = loadMaster();
@@ -79,11 +84,18 @@ const hexOf = (name) => {
  *
  * Concentric, never top-lit: see the header. Depth is capped at the last entry, so the
  * inside of a bend and the middle of a cross both read as the same lit core.
+ *
+ * Each ring is SCALE pixels thick, which is why the entries repeat. The erosion below
+ * peels one pixel per level, so at 16px a rim was one pixel of a six-pixel run — a sixth of
+ * the tube. Left un-repeated at 32px it would be a twelfth, and the pipe would lose its
+ * outline rather than gain resolution: the sprite would read as a flat bar with a hairline
+ * around it. Repeating each shade SCALE times keeps rim, shoulder and core in the exact
+ * proportions the placeholder set, on twice the pixels.
  */
-const SHADE = ['metal_dark', 'metal_pale', 'paper'];
+const SHADE = ['metal_dark', 'metal_pale', 'paper'].flatMap((role) => new Array(SCALE).fill(role));
 
-/** Half-width of the run: rows 5..10 of 16, symmetric about the tile centre. */
-const THICKNESS = 6;
+/** Half-width of the run: rows 10..21 of 32, symmetric about the tile centre. */
+const THICKNESS = 6 * SCALE;
 const LOW = (SIZE - THICKNESS) >> 1;
 const HIGH = LOW + THICKNESS - 1;
 

@@ -46,8 +46,25 @@ import { LampState } from '@snack/sim';
 
 import { overPaper } from './tint';
 
-/** Source pixels per side. All seven frames are this, so a lamp never moves as its state does. */
-export const LAMP_PX = 7;
+/**
+ * Source pixels per side. All seven frames are this, so a lamp never moves as its state does.
+ *
+ * DOUBLED WITH `TILE_PX` 16 → 32. The lamp is a decal on a machine body, so it is sized
+ * relative to the tile, not to the screen: left at 7 it would have gone on being seven real
+ * pixels while the machine under it doubled, i.e. half the apparent size it has always had —
+ * on the one sprite §16 calls an accessibility floor.
+ *
+ * TWO CONSUMERS OUTSIDE THIS FILE READ IT AS A CANVAS SIZE. Both are handled, and neither
+ * needed its FIGURE redrawn — worth stating, because the obvious reading of "the frame
+ * doubled" is that the shape inside it must be redrawn twice as large, and here it must not:
+ *   · `textures.ts` `registerLampPlaceholders` derives `LAMP_PAINT_PX = LAMP_PX / BAKE_SCALE`
+ *     (= 7) and paints its 5×5 mask unchanged in the painters' 16-space, which the shared
+ *     bake scaler then blows up to the full 14. Doubling the mask by hand would have doubled
+ *     it twice. Grey-box builds only, but that is the build with no atlas at all.
+ *   · `art/tools/make-status-lamp.mjs` bakes the shipped seven at its own `SCALE`, so the
+ *     atlas frames arrive already 14 and this constant simply agrees with them.
+ */
+export const LAMP_PX = 14;
 
 /**
  * Frame name per state — the shape half of the grammar.

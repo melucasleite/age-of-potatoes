@@ -6,12 +6,12 @@
   "prompt": "One 16x16 pipe elbow joining EAST to SOUTH — the canonical corner pipe-shape.ts rotates to reach the other three bends — authored from the master palette by art/tools/make-pipes.mjs. The lit core wraps the inside of the bend, which is what makes it read as one tube turning rather than two tubes crossing. Both arms are asserted equal to the straight's cross-section, so a bend dropped into a run shows no jog at either end.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "pipes",
   "costUsd": 0,
-  "generatedAt": "2026-08-13T03:34:12.049Z"
+  "generatedAt": "2026-08-17T19:54:52.738Z"
 }

@@ -5,7 +5,7 @@
 // one that causes textures to exist. See the comment block there.
 import { TILE_PX } from './pixel';
 
-import { Assets, Graphics, Rectangle, Texture } from 'pixi.js';
+import { Assets, Container, Graphics, Rectangle, Texture } from 'pixi.js';
 import type { Renderer, Spritesheet } from 'pixi.js';
 
 import { BeltTier, CROP_SPECS, ITEM_SPECS, LampState, MACHINE_SPECS } from '@snack/sim';
@@ -15,6 +15,30 @@ import { ATLAS_FRAMES, ATLAS_JSON_URL } from '@/art/manifest.generated';
 import { AVATAR_COUNT } from './avatar';
 import { LAMP_FRAME, LAMP_PX, lampFrame } from './lamps';
 import { stripCells, stripHasWiltCell } from './strips';
+
+/**
+ * The grid every painter in this file draws on, which is NOT the grid the game ships on.
+ *
+ * Every `PLACEHOLDERS` entry is written in 16px tiles — 337 rects, 38 circles and 6 polys of
+ * bare literals, addressed as "3px in from the left edge". Re-typing those by hand each time
+ * `TILE_PX` moves is a thousand-literal edit and a thousand chances to fluff one, so instead
+ * the painters stay in this space forever and `bake` scales what they drew.
+ *
+ * The rule that makes it safe: a painter's coordinates are PAINT_PX units, a baked texture's
+ * dimensions are `TILE_PX` units, and `bake` is the only place the two meet.
+ */
+const PAINT_PX = 16;
+
+/**
+ * How far up `bake` blows the painters' 16-space output. 1 while `TILE_PX` is 16, 2 at 32.
+ *
+ * The scale is applied as a TRANSFORM on the Graphics rather than by rewriting coordinates,
+ * which matters for a reason worth stating: it means circles and polys are still tessellated
+ * at 16-space radii and then enlarged, so they keep the chunky silhouette the rest of the art
+ * has. Tessellating them at 32 would make the curves genuinely smoother than every rect
+ * beside them — which in 8-bit art reads as a rendering bug, not as extra fidelity.
+ */
+const BAKE_SCALE = TILE_PX / PAINT_PX;
 
 /** Frame ids are the sim's own slugs with dashes swapped for underscores. One vocabulary. */
 function frameSlug(slug: string): string {
@@ -361,19 +385,36 @@ export async function loadArt(renderer: Renderer): Promise<ArtSet> {
   const owned: Texture[] = [];
   let placeholderCount = 0;
 
+  /**
+   * Paint in 16-space, bake at tile-space. `width`/`height` are PAINT_PX units.
+   *
+   * The scale is a transform on a CHILD of the render root, not on the root itself:
+   * `generateTexture` renders its target with an explicit translate-only matrix, so a scale
+   * set on the target is not reliably part of the picture, while a scale on a child always
+   * is. The extra `Container` costs one allocation per frame baked, once, at load.
+   *
+   * `resolution` is deliberately NOT the lever here even though it looks like the obvious
+   * one. It scales the render target's pixel buffer while leaving `region.width` as the
+   * texture's LOGICAL width, so `resolution: 2` yields a crisp texture that still reports
+   * itself as 16 wide — and every `new Sprite(art.get(...))` in the renderer, which sizes
+   * itself from exactly that number, would draw a correct-looking sprite at half a tile.
+   */
   function bake(paint: Paint, width: number, height: number): Texture {
+    const root = new Container();
     const g = new Graphics();
     // A full-bounds transparent base so the generated frame is exactly the size asked
     // for, whatever the paint routine happens to cover.
     g.rect(0, 0, width, height).fill({ color: 0x000000, alpha: 0 });
     paint(g);
+    g.scale.set(BAKE_SCALE);
+    root.addChild(g);
     const texture = renderer.generateTexture({
-      target: g,
+      target: root,
       resolution: 1,
       antialias: false,
-      frame: new Rectangle(0, 0, width, height),
+      frame: new Rectangle(0, 0, width * BAKE_SCALE, height * BAKE_SCALE),
     });
-    g.destroy();
+    root.destroy({ children: true });
     owned.push(texture);
     return texture;
   }
@@ -381,9 +422,13 @@ export async function loadArt(renderer: Renderer): Promise<ArtSet> {
   function placeholder(name: string): Texture {
     const spec = PLACEHOLDERS[name];
     if (spec === undefined) {
-      return bake((g) => g.rect(0, 0, TILE_PX, TILE_PX).fill(0xff00ff), TILE_PX, TILE_PX);
+      return bake((g) => g.rect(0, 0, PAINT_PX, PAINT_PX).fill(0xff00ff), PAINT_PX, PAINT_PX);
     }
-    return bake(spec.paint, spec.width ?? TILE_PX, spec.height ?? TILE_PX);
+    // PAINT_PX, not TILE_PX. A spec's `width` is written in the painters' 16-space like
+    // everything else here, so the default has to be too — defaulting to TILE_PX would hand
+    // `bake` a 32 that then gets scaled again, and a one-tile machine would bake a 64px
+    // canvas with its picture huddled in the top-left quarter. Silently, on nine machines.
+    return bake(spec.paint, spec.width ?? PAINT_PX, spec.height ?? PAINT_PX);
   }
 
   // Strip cells are views onto the atlas source, so they are destroyed WITHOUT it. Putting
@@ -545,13 +590,13 @@ interface PlaceholderSpec {
 
 /** Deterministic per-position speckle, so a re-bake is pixel-identical to the last one. */
 function speckle(g: Graphics, base: number, accent: number, seed: number): void {
-  g.rect(0, 0, TILE_PX, TILE_PX).fill(base);
+  g.rect(0, 0, PAINT_PX, PAINT_PX).fill(base);
   let h = (seed * 2654435761) >>> 0;
   for (let i = 0; i < 5; i++) {
     h = (h ^ (h >>> 15)) >>> 0;
     h = (h * 2246822519) >>> 0;
-    const x = h % TILE_PX;
-    const y = (h >>> 8) % TILE_PX;
+    const x = h % PAINT_PX;
+    const y = (h >>> 8) % PAINT_PX;
     g.rect(x, y, 1, 1).fill(accent);
   }
 }
@@ -562,7 +607,7 @@ function grassTile(seed: number): Paint {
     let h = (seed * 40503) >>> 0;
     for (let i = 0; i < 3; i++) {
       h = (h * 2246822519 + 12345) >>> 0;
-      g.rect(h % TILE_PX, (h >>> 9) % TILE_PX, 1, 2).fill(PALETTE.grassLight);
+      g.rect(h % PAINT_PX, (h >>> 9) % PAINT_PX, 1, 2).fill(PALETTE.grassLight);
     }
   };
 }
@@ -584,7 +629,7 @@ const BELT_INK = {
 // reads outside its own closure has to already exist — a `const` declared further down is a
 // blank page at boot, which is exactly how this one was found.
 const BELT_ARM_LOW = 3;
-const BELT_ARM_HIGH = TILE_PX - BELT_ARM_LOW - 1;
+const BELT_ARM_HIGH = PAINT_PX - BELT_ARM_LOW - 1;
 /** Where the through-run's entering arrows sit — the authored frames' own x table. */
 const BELT_ENTERING_XS: readonly number[] = [1, 6];
 
@@ -608,8 +653,8 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   terrain_shore_edge: {
     paint: (g) => {
       speckle(g, PALETTE.water, 0x4fa3d1, 13);
-      g.rect(0, 12, TILE_PX, 1).fill(0xd9c9a0);
-      g.rect(0, 13, TILE_PX, 3).fill(PALETTE.soil);
+      g.rect(0, 12, PAINT_PX, 1).fill(0xd9c9a0);
+      g.rect(0, 13, PAINT_PX, 3).fill(PALETTE.soil);
       g.rect(2, 14, 2, 1).fill(PALETTE.metalDark);
       g.rect(9, 14, 2, 1).fill(PALETTE.metalDark);
     },
@@ -617,8 +662,8 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   terrain_shore_outer: {
     paint: (g) => {
       speckle(g, PALETTE.water, 0x4fa3d1, 17);
-      g.rect(0, 13, TILE_PX, 3).fill(PALETTE.soil);
-      g.rect(13, 0, 3, TILE_PX).fill(PALETTE.soil);
+      g.rect(0, 13, PAINT_PX, 3).fill(PALETTE.soil);
+      g.rect(13, 0, 3, PAINT_PX).fill(PALETTE.soil);
       g.rect(0, 12, 13, 1).fill(0xd9c9a0);
       g.rect(12, 0, 1, 13).fill(0xd9c9a0);
       g.rect(12, 12, 1, 1).fill(0xd9c9a0);
@@ -638,17 +683,17 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
 
   [ART.groundField]: {
     paint: (g) => {
-      g.rect(0, 0, TILE_PX, TILE_PX).fill(PALETTE.soil);
+      g.rect(0, 0, PAINT_PX, PAINT_PX).fill(PALETTE.soil);
       // Furrows, so tilled soil reads as tilled and not just as brown.
-      for (let y = 2; y < TILE_PX; y += 4) {
-        g.rect(1, y, TILE_PX - 2, 1).fill(PALETTE.soilDark);
+      for (let y = 2; y < PAINT_PX; y += 4) {
+        g.rect(1, y, PAINT_PX - 2, 1).fill(PALETTE.soilDark);
       }
     },
   },
 
   // Drawn at full opacity and faded by sprite alpha, so "wet" is a cheap alpha ramp
   // rather than a per-tile tint that would break the batch.
-  [ART.soilWet]: { paint: (g) => g.rect(0, 0, TILE_PX, TILE_PX).fill(PALETTE.soilWet) },
+  [ART.soilWet]: { paint: (g) => g.rect(0, 0, PAINT_PX, PAINT_PX).fill(PALETTE.soilWet) },
 
   // Crop stages are registered per crop id at the bottom of this file — four crops ship,
   // and hand-writing sixteen near-identical plants is how three of them end up wrong.
@@ -844,11 +889,11 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
     },
   },
 
-  [ART.uiZoneFill]: { paint: (g) => g.rect(0, 0, TILE_PX, TILE_PX).fill(PALETTE.white) },
-  [ART.uiZoneEdgeN]: { paint: (g) => g.rect(0, 0, TILE_PX, 1).fill(PALETTE.white) },
-  [ART.uiZoneEdgeS]: { paint: (g) => g.rect(0, TILE_PX - 1, TILE_PX, 1).fill(PALETTE.white) },
-  [ART.uiZoneEdgeW]: { paint: (g) => g.rect(0, 0, 1, TILE_PX).fill(PALETTE.white) },
-  [ART.uiZoneEdgeE]: { paint: (g) => g.rect(TILE_PX - 1, 0, 1, TILE_PX).fill(PALETTE.white) },
+  [ART.uiZoneFill]: { paint: (g) => g.rect(0, 0, PAINT_PX, PAINT_PX).fill(PALETTE.white) },
+  [ART.uiZoneEdgeN]: { paint: (g) => g.rect(0, 0, PAINT_PX, 1).fill(PALETTE.white) },
+  [ART.uiZoneEdgeS]: { paint: (g) => g.rect(0, PAINT_PX - 1, PAINT_PX, 1).fill(PALETTE.white) },
+  [ART.uiZoneEdgeW]: { paint: (g) => g.rect(0, 0, 1, PAINT_PX).fill(PALETTE.white) },
+  [ART.uiZoneEdgeE]: { paint: (g) => g.rect(PAINT_PX - 1, 0, 1, PAINT_PX).fill(PALETTE.white) },
 
   [ART.grabberBase]: {
     paint: (g) => {
@@ -881,10 +926,10 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
 
   [ART.uiHover]: {
     paint: (g) => {
-      g.rect(0, 0, TILE_PX, 1).fill(PALETTE.white);
-      g.rect(0, TILE_PX - 1, TILE_PX, 1).fill(PALETTE.white);
-      g.rect(0, 0, 1, TILE_PX).fill(PALETTE.white);
-      g.rect(TILE_PX - 1, 0, 1, TILE_PX).fill(PALETTE.white);
+      g.rect(0, 0, PAINT_PX, 1).fill(PALETTE.white);
+      g.rect(0, PAINT_PX - 1, PAINT_PX, 1).fill(PALETTE.white);
+      g.rect(0, 0, 1, PAINT_PX).fill(PALETTE.white);
+      g.rect(PAINT_PX - 1, 0, 1, PAINT_PX).fill(PALETTE.white);
     },
   },
 
@@ -900,15 +945,15 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   [ART.uiTarget]: {
     paint: (g) => {
       const arm = 4;
-      const far = TILE_PX - arm;
+      const far = PAINT_PX - arm;
       g.rect(0, 0, arm, 1).fill(PALETTE.white);
       g.rect(0, 0, 1, arm).fill(PALETTE.white);
       g.rect(far, 0, arm, 1).fill(PALETTE.white);
-      g.rect(TILE_PX - 1, 0, 1, arm).fill(PALETTE.white);
-      g.rect(0, TILE_PX - 1, arm, 1).fill(PALETTE.white);
+      g.rect(PAINT_PX - 1, 0, 1, arm).fill(PALETTE.white);
+      g.rect(0, PAINT_PX - 1, arm, 1).fill(PALETTE.white);
       g.rect(0, far, 1, arm).fill(PALETTE.white);
-      g.rect(far, TILE_PX - 1, arm, 1).fill(PALETTE.white);
-      g.rect(TILE_PX - 1, far, 1, arm).fill(PALETTE.white);
+      g.rect(far, PAINT_PX - 1, arm, 1).fill(PALETTE.white);
+      g.rect(PAINT_PX - 1, far, 1, arm).fill(PALETTE.white);
     },
   },
 
@@ -947,11 +992,11 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
  */
 function beltTile(bed: number, rail: number, shadow: number): Paint {
   return (g) => {
-    g.rect(0, 0, TILE_PX, TILE_PX).fill(bed);
-    g.rect(0, 0, TILE_PX, 2).fill(rail);
-    g.rect(0, TILE_PX - 2, TILE_PX, 2).fill(rail);
-    g.rect(0, 2, TILE_PX, 1).fill(shadow);
-    g.rect(0, TILE_PX - 3, TILE_PX, 1).fill(shadow);
+    g.rect(0, 0, PAINT_PX, PAINT_PX).fill(bed);
+    g.rect(0, 0, PAINT_PX, 2).fill(rail);
+    g.rect(0, PAINT_PX - 2, PAINT_PX, 2).fill(rail);
+    g.rect(0, 2, PAINT_PX, 1).fill(shadow);
+    g.rect(0, PAINT_PX - 3, PAINT_PX, 1).fill(shadow);
     // Two chevrons, each wrapping cleanly at the tile edge so the scroll has no seam.
     for (const ox of [1, 9]) {
       for (let i = 0; i < 4; i++) {
@@ -1039,15 +1084,15 @@ function beltShapeTile(
   const low = BELT_ARM_LOW;
   const span = BELT_ARM_HIGH - low + 1;
   // A corner's through-arm stops at the bend; a tee's runs clean out the far side.
-  const runWidth = kind === 'corner' ? BELT_ARM_HIGH + 1 : TILE_PX;
+  const runWidth = kind === 'corner' ? BELT_ARM_HIGH + 1 : PAINT_PX;
 
   return (g) => {
-    g.rect(0, 0, TILE_PX, TILE_PX).fill(rail);
+    g.rect(0, 0, PAINT_PX, PAINT_PX).fill(rail);
     // Shadow first, band on top: the ring is what is left showing around each arm.
     g.rect(0, low - 1, runWidth + 1, span + 2).fill(shadow);
-    g.rect(low - 1, low - 1, span + 2, TILE_PX - low + 1).fill(shadow);
+    g.rect(low - 1, low - 1, span + 2, PAINT_PX - low + 1).fill(shadow);
     g.rect(0, low, runWidth, span).fill(bed);
-    g.rect(low, low, span, TILE_PX - low).fill(bed);
+    g.rect(low, low, span, PAINT_PX - low).fill(bed);
 
     if (kind === 'teeMerge') {
       // The tier count stacked down the stem, taken nearest-the-exit first, so basic's single
@@ -1058,7 +1103,7 @@ function beltShapeTile(
     // Entering arrows on the run — one fewer than the tier, because the arm arrow completes
     // the count — then the arm's own: leaving, for a bend; joining, for a side feed.
     for (const x0 of BELT_ENTERING_XS.slice(0, tier - 1)) chevronEast(g, x0, rail);
-    chevronVertical(g, TILE_PX - 5, kind === 'tee', rail);
+    chevronVertical(g, PAINT_PX - 5, kind === 'tee', rail);
   };
 }
 
@@ -1074,17 +1119,17 @@ function beltShapeTile(
  */
 function beltJunctionTile(bed: number, rail: number, shadow: number): Paint {
   return (g) => {
-    g.rect(0, 0, TILE_PX, TILE_PX).fill(bed);
-    g.rect(0, 0, TILE_PX, 2).fill(rail);
-    g.rect(0, 2, TILE_PX, 1).fill(shadow);
+    g.rect(0, 0, PAINT_PX, PAINT_PX).fill(bed);
+    g.rect(0, 0, PAINT_PX, 2).fill(rail);
+    g.rect(0, 2, PAINT_PX, 1).fill(shadow);
     // The south rail, broken either side of the branch mouth.
-    g.rect(0, TILE_PX - 2, 5, 2).fill(rail);
-    g.rect(TILE_PX - 5, TILE_PX - 2, 5, 2).fill(rail);
-    g.rect(0, TILE_PX - 3, 5, 1).fill(shadow);
-    g.rect(TILE_PX - 5, TILE_PX - 3, 5, 1).fill(shadow);
+    g.rect(0, PAINT_PX - 2, 5, 2).fill(rail);
+    g.rect(PAINT_PX - 5, PAINT_PX - 2, 5, 2).fill(rail);
+    g.rect(0, PAINT_PX - 3, 5, 1).fill(shadow);
+    g.rect(PAINT_PX - 5, PAINT_PX - 3, 5, 1).fill(shadow);
     // The branch's own cheeks, running down either side of the mouth at x = 5..10.
-    g.rect(4, TILE_PX - 5, 1, 5).fill(shadow);
-    g.rect(TILE_PX - 5, TILE_PX - 5, 1, 5).fill(shadow);
+    g.rect(4, PAINT_PX - 5, 1, 5).fill(shadow);
+    g.rect(PAINT_PX - 5, PAINT_PX - 5, 1, 5).fill(shadow);
     // Chevrons: two along the run pointing east, one down the branch pointing south, so the
     // fork is legible at 16px and the two directions are told apart by shape rather than tone.
     for (let i = 0; i < 4; i++) {
@@ -1648,8 +1693,8 @@ function genericMachine(slug: string): MachinePaint {
  */
 function registerMachinePlaceholders(): void {
   const register = (slug: string, tilesWide: number, tilesHigh: number): void => {
-    const width = Math.max(1, tilesWide) * TILE_PX;
-    const height = Math.max(1, tilesHigh) * TILE_PX;
+    const width = Math.max(1, tilesWide) * PAINT_PX;
+    const height = Math.max(1, tilesHigh) * PAINT_PX;
     const paint = MACHINE_LOOKS[slug] ?? genericMachine(slug);
     PLACEHOLDERS[`machine_${frameSlug(slug)}`] = {
       width,
@@ -1700,7 +1745,7 @@ function registerCropPlaceholders(): void {
       const spread = Math.round(3 + t * 9);
       PLACEHOLDERS[ART.cropStage(spec.id as number, stage)] = {
         paint: (g) => {
-          const top = TILE_PX - 1 - height;
+          const top = PAINT_PX - 1 - height;
           g.rect(7, top, 2, height).fill(accent.leafDark);
           g.rect(8 - Math.floor(spread / 2), top + 2, spread, 2).fill(accent.leaf);
           g.rect(8 - Math.floor(spread / 3), top, Math.max(2, spread - 3), 2).fill(accent.leaf);
@@ -1888,19 +1933,30 @@ const LAMP_MASKS: Record<string, readonly string[]> = {
   [LAMP_FRAME[LampState.Halted]]: ['#####', '#...#', '#...#', '#...#', '#####'],
 };
 
+/**
+ * The lamp in the painters' 16-space. `LAMP_PX` is the SHIPPED size — it doubled with the tile
+ * — and every other dimension in this file is written pre-scale, so the lamp has to be too.
+ *
+ * `lamps.ts` flags this exact coupling and asks for the 5×5 mask below to be redrawn at 10×10
+ * with a two-pixel inset. It does not need to be. That note assumes `bake` paints at the final
+ * size; it scales instead, so dividing back out here yields the same 14px lamp with the figure
+ * filling it, and the mask — which is a piece of typography, not a resolution — stays as drawn.
+ */
+const LAMP_PAINT_PX = LAMP_PX / BAKE_SCALE;
+
 function registerLampPlaceholders(): void {
   for (const [name, rows] of Object.entries(LAMP_MASKS)) {
     PLACEHOLDERS[name] = {
-      width: LAMP_PX,
-      height: LAMP_PX,
+      width: LAMP_PAINT_PX,
+      height: LAMP_PAINT_PX,
       paint: (g) => {
         // The ink halo first, as one dilated pass, then the core over it. Same construction as
         // the generator's, so the negative space inside the saltire and the hollow box fills
         // with ink and the bright figure reads on any machine.
         const lit = (x: number, y: number): boolean =>
           y >= 0 && y < rows.length && x >= 0 && x < 5 && rows[y]![x] === '#';
-        for (let y = 0; y < LAMP_PX; y++) {
-          for (let x = 0; x < LAMP_PX; x++) {
+        for (let y = 0; y < LAMP_PAINT_PX; y++) {
+          for (let x = 0; x < LAMP_PAINT_PX; x++) {
             let touching = false;
             for (let dy = -1; dy <= 1; dy++) {
               for (let dx = -1; dx <= 1; dx++) {
@@ -1910,8 +1966,8 @@ function registerLampPlaceholders(): void {
             if (touching) g.rect(x, y, 1, 1).fill(PALETTE.black);
           }
         }
-        for (let y = 0; y < LAMP_PX; y++) {
-          for (let x = 0; x < LAMP_PX; x++) {
+        for (let y = 0; y < LAMP_PAINT_PX; y++) {
+          for (let x = 0; x < LAMP_PAINT_PX; x++) {
             if (lit(x - 1, y - 1)) g.rect(x, y, 1, 1).fill(PALETTE.white);
           }
         }

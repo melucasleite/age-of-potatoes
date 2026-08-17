@@ -6,12 +6,12 @@
   "prompt": "One 16x16 red fast-tier conveyor belt corner — in from the left edge, out through the bottom edge — with the tier's 2 chevron(s), authored by art/tools/make-factory-parts.mjs (work item 082). Its entry and exit edges are asserted equal to the tier straight's edges, so a bend never shows a seam against the run feeding it.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "belts",
   "costUsd": 0,
-  "generatedAt": "2026-08-16T01:28:59.929Z"
+  "generatedAt": "2026-08-17T19:54:52.741Z"
 }

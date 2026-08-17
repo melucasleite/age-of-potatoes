@@ -31,6 +31,12 @@ import type { IconSource } from './item-art';
 const FRAMES: Readonly<Record<string, { x: number; y: number; width: number; height: number }>> =
   ATLAS_FRAMES;
 
+/** 3, 2, 1, ½, ¼ — yes. 1.5, ⅓, 0 — no. */
+function isWholeOrHalving(scale: number): boolean {
+  if (scale >= 1) return Number.isInteger(scale);
+  return scale > 0 && Number.isInteger(1 / scale) && Number.isInteger(Math.log2(1 / scale));
+}
+
 /** "-33px 12px" → [-33, 12]. */
 function offsets(position: string): [number, number] {
   const parts = position.split(' ').map((part) => Number(part.replace('px', '')));
@@ -40,11 +46,16 @@ function offsets(position: string): [number, number] {
 describe('fitting an atlas frame into a box', () => {
   const potato = resolveItemIcon(ItemId.RussetPotato);
 
-  it('scales a 16px item by a whole number and fills the box', () => {
+  it('scales a square item by a whole number and fills a box that is a multiple of it', () => {
     expect(potato).not.toBeNull();
-    const paint = paintIcon(potato as IconSource, 48);
-    expect(paint.scale).toBe(3);
-    // Square frame, square box, no slack: nothing to letterbox.
+    const source = potato as IconSource;
+
+    // THE NUMBER HERE USED TO BE 3, for 16px art in a 48px box — a resolution assertion wearing
+    // an arithmetic hat, and the tile bump is what exposed it: the same box now yields 1×.
+    // Asserting the MULTIPLE rather than the magnification is the version that survives the next
+    // one. Square frame, square box, no slack: nothing to letterbox.
+    const paint = paintIcon(source, source.width * 2);
+    expect(paint.scale).toBe(2);
     expect(paint.offsetX).toBe(0);
     expect(paint.offsetY).toBe(0);
   });
@@ -71,12 +82,19 @@ describe('fitting an atlas frame into a box', () => {
     expect(paintIcon(potato as IconSource, 32).backgroundImage).toBe(`url(${ATLAS_IMAGE_URL})`);
   });
 
-  it('never scales a sprite away to nothing, even in a box smaller than the frame', () => {
-    const bottler = resolveMachineIcon(MachineKind.Bottler);
+  it('halves an oversized frame into its box instead of cropping it, and never to nothing', () => {
+    const bottler = resolveMachineIcon(MachineKind.Bottler) as IconSource;
     expect(bottler).not.toBeNull();
-    // 48×32 into a 32px box does not fit at any whole scale. It stays at 1× and centre-crops,
-    // because a background is clipped to its element — the one thing it must not do is vanish.
-    expect(paintIcon(bottler as IconSource, 32).scale).toBe(1);
+
+    // THIS TEST USED TO PIN THE OPPOSITE and the tile bump is why it flipped: it asserted that a
+    // frame too big for its box keeps 1× and centre-crops, on the grounds that the case could not
+    // arise. It arises on every machine now — the art is 32px-tile art and the boxes are CSS
+    // pixels that did not move — so the widest frame in the game must survive the narrowest box
+    // the HUD has, by shrinking on both axes and staying whole.
+    const paint = paintIcon(bottler, 32);
+    expect(paint.scale).toBeGreaterThan(0);
+    expect(bottler.width * paint.scale).toBeLessThanOrEqual(32);
+    expect(bottler.height * paint.scale).toBeLessThanOrEqual(32);
   });
 
   it('letterboxes a non-square frame instead of stretching it', () => {
@@ -100,7 +118,12 @@ describe('fitting an atlas frame into a box', () => {
         const [x, y] = offsets(paint.backgroundPosition);
         expect(Number.isInteger(x)).toBe(true);
         expect(Number.isInteger(y)).toBe(true);
-        expect(Number.isInteger(paint.scale)).toBe(true);
+        // A whole magnification, or an exact halving. Those are the two ratios a nearest-neighbour
+        // sampler maps one-to-one — every other one lands between source pixels, and a blurry
+        // inventory icon in a pixel game is the failure this whole module is arranged to avoid.
+        // The box list reaches below the smallest box the HUD actually uses (the pouch's 32) on
+        // purpose: 16 and 24 are where the halving ladder gets exercised at all.
+        expect(isWholeOrHalving(paint.scale)).toBe(true);
       }
     }
   });

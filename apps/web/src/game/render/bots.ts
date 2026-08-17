@@ -47,7 +47,7 @@
 //
 // Same `BotView`, same `stepToward` in the sim, same interpolation here — one movement
 // implementation on both sides of the seam, which is item 039's own rule. What differs is
-// entirely presentational: the art is ONE 16×16 frame rather than walk strips (no feet, no
+// entirely presentational: the art is ONE 32×32 frame rather than walk strips (no feet, no
 // footfall), it rides a few pixels above the ground with a slow wall-clock bob so it reads
 // as hovering rather than standing, and while its phase is `Working` a wrench swings beside
 // it — repair-in-progress legible at a glance, from across the lot, without opening a card.
@@ -92,10 +92,16 @@ const KIND_SLUG: Readonly<Record<number, string>> = {
 };
 
 /** How far above its tile the drone hovers, in source px, before the bob. */
-const DRONE_HOVER_PX = 5;
+const DRONE_HOVER_PX = 10;
 
-/** The bob's reach and pace. Slow and shallow: a machine holding station, not a bee. */
-const DRONE_BOB_PX = 1.5;
+/**
+ * The bob's reach and pace. Slow and shallow: a machine holding station, not a bee.
+ *
+ * The reach is source px and doubled with `TILE_PX`; the PACE is milliseconds and did not.
+ * Doubling a duration alongside the distances is the easy mistake here, and it would have
+ * halved the drone's hover speed for no reason anyone could name.
+ */
+const DRONE_BOB_PX = 3;
 const DRONE_BOB_MS = 280;
 
 /** The service wrench's swing, in radians, and how fast it works. */
@@ -203,7 +209,7 @@ export class BotLayer {
         // Repair in progress, at a glance: the wrench swings beside the hovering drone for
         // as long as the sim says the service is running, and not a frame longer.
         if (working) {
-          visual.tool.position.set(drawX + 6, drawY - DRONE_HOVER_PX - 2);
+          visual.tool.position.set(drawX + 12, drawY - DRONE_HOVER_PX - 4);
           visual.tool.rotation = Math.sin(nowMs / TOOL_SWING_MS) * TOOL_SWING;
         }
       } else {
@@ -220,15 +226,15 @@ export class BotLayer {
 
       if (bot.carryCount > 0) {
         visual.cargo.texture = this.items.texture(bot.carryItem);
-        // Over the head, not in front of the chest: the chip is 8px and the chassis is 16, so
+        // Over the head, not in front of the chest: the chip is 16px and the chassis is 32, so
         // anything lower is a sticker on the robot rather than an armful being carried.
-        visual.cargo.position.set(drawX, drawY - TILE_PX - 1);
+        visual.cargo.position.set(drawX, drawY - TILE_PX - 2);
       }
 
       // Top-right of the tile it is standing in — the same corner every status light and
       // wrench in the factory sits in, so the eye finds it in the same place on a thing that
       // moves as on a thing that does not.
-      visual.wrench.position.set(drawX + 2, drawY - TILE_PX - 2);
+      visual.wrench.position.set(drawX + 4, drawY - TILE_PX - 4);
     }
 
     for (const [id, visual] of this.visuals) {

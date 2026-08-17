@@ -18,11 +18,11 @@ import { TextureStyle } from 'pixi.js';
 
 TextureStyle.defaultOptions.scaleMode = 'nearest';
 
-/** Source pixels per tile. The whole art pipeline is built on 16px tiles. */
-export const TILE_PX = 16;
+/** Source pixels per tile. The whole art pipeline is built on 32px tiles. */
+export const TILE_PX = 32;
 
 /**
- * Tiles per chunk edge. 32×32 tiles = 512×512 source px per baked chunk texture.
+ * Tiles per chunk edge. 32×32 tiles = 1024×1024 source px per baked chunk texture.
  *
  * v0.1's world was 16×16 tiles — the whole lot in one chunk, which was fine and deliberate
  * because the seam was what mattered rather than the count. Land deeds took the map to 64×64,

@@ -31,7 +31,9 @@ import sharp from 'sharp';
 import { loadMaster } from './palette-png.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SIZE = 16;
+const SIZE = 32;
+/** Pixels per 16px-era pixel. Every radius and stone below is authored in that vocabulary. */
+const SCALE = SIZE / 16;
 
 const { swatches } = loadMaster();
 const hexOf = (name) => {
@@ -40,8 +42,8 @@ const hexOf = (name) => {
   return found.hex;
 };
 
-const DIRT_RADIUS = 6;
-const SAND_RADIUS = 8;
+const DIRT_RADIUS = 6 * SCALE;
+const SAND_RADIUS = 8 * SCALE;
 
 /** Deterministic positional hash — cosmetic grain that re-bakes identically every run. */
 function grain(x, y) {
@@ -72,19 +74,30 @@ for (let y = 0; y < SIZE; y++) {
   rows.push(row);
 }
 
-// Two stones on the dirt, placed by hand where the wedge is widest.
-rows[13][13] = 'stone_mid';
-rows[13][14] = 'stone_light';
-rows[14][11] = 'stone_mid';
+// Two stones on the dirt, placed by hand where the wedge is widest. Authored at the original
+// 16px positions and stamped SCALE x SCALE, so a stone stays the same size ON THE GROUND
+// rather than shrinking to a speck as the tile grows. The extra pixels buy each one a lit top
+// row, which is the one thing a single-pixel stone could never have.
+const stone = (x, y, role) => {
+  for (let dy = 0; dy < SCALE; dy++) {
+    for (let dx = 0; dx < SCALE; dx++) {
+      rows[y * SCALE + dy][x * SCALE + dx] =
+        dy === 0 && role === 'stone_mid' ? 'stone_light' : role;
+    }
+  }
+};
+stone(13, 13, 'stone_mid');
+stone(14, 13, 'stone_light');
+stone(11, 14, 'stone_mid');
 
 // The anchoring guarantee, checked rather than trusted: the corner pixel is dirt, and both
 // land edges carry dirt for at least the wedge radius.
-if (rows[15][15] === 'water_deep' || rows[15][15] === 'water_mid') {
+if (rows[SIZE - 1][SIZE - 1] === 'water_deep' || rows[SIZE - 1][SIZE - 1] === 'water_mid') {
   throw new Error('terrain_shore_inner: the corner pixel is water — the wedge is not anchored.');
 }
 for (let i = SIZE - DIRT_RADIUS; i < SIZE; i++) {
-  const bottom = rows[15][i];
-  const right = rows[i][15];
+  const bottom = rows[SIZE - 1][i];
+  const right = rows[i][SIZE - 1];
   for (const got of [bottom, right]) {
     if (got.startsWith('water')) {
       throw new Error(`terrain_shore_inner: land edge shows water at index ${i}.`);

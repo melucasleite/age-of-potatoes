@@ -101,8 +101,9 @@ export function buildItemPage(renderer: Renderer, art: ArtSet): ItemPage {
   for (let i = 0; i < ids.length; i++) {
     const source = art.get(ART.item(ids[i]!));
     const sprite = new Sprite(source);
-    // Art may arrive at 16px (an atlas frame) or already at 8px (a placeholder). Fit it
-    // to the cell either way; a 16→8 halving is exact, which is why the cell is 8.
+    // Art may arrive at 32px (an atlas frame) or already at `ITEM_CHIP_PX` (a placeholder).
+    // Fit it to the cell either way; the halving is exact, which is why the cell is half a
+    // tile. `ITEM_CHIP_PX` lives in `textures.ts` and must double with `TILE_PX` to keep it so.
     const w = source.width > 0 ? source.width : ITEM_CHIP_PX;
     const h = source.height > 0 ? source.height : ITEM_CHIP_PX;
     sprite.scale.set(ITEM_CHIP_PX / w, ITEM_CHIP_PX / h);

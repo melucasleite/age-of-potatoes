@@ -36,12 +36,34 @@ import type { GuideSign } from './first-run';
 import { TOOL_INFO, ToolMode } from './tools';
 
 const STYLE_ID = 'snack-input-chrome';
+/* WHICH NUMBERS IN HERE MOVED WHEN THE TILE WENT 16→32, AND WHICH DID NOT.
+   Everything positioned through `TILE_PX` doubles on its own and appears nowhere below — the
+   band's box, the cells, the chevron's size, both signs' anchors. What is left in this sheet is
+   flat CSS pixels, and each one belongs to exactly one of two piles:
+     MEASURED AGAINST A TILE  → grown, but NOT doubled. Band border and inset lip, cell border,
+                                chevron shadow, the guide sign's arrow. All of them dress a tile,
+                                and the tile only grew by a third IN CSS PIXELS because the zoom
+                                ladder was halved alongside TILE_PX. Doubling these would have
+                                been correcting for a shrink that never happened.
+     MEASURED AGAINST THE SCREEN → untouched. The 12px base below, the status tell's whole block
+                                (its 152px bottom offset is the HUD's stack, in CSS pixels, and
+                                the HUD did not change), and every padding/radius, which is sized
+                                against its own font.
+   World-anchored TEXT is the third case and gets neither treatment: see the tag rule. */
 const CSS = `
+/* 12px is the SCREEN-chrome base and stays. Only the three world-anchored classes override it. */
 .sm-ix-root { position:absolute; inset:0; pointer-events:none; z-index:5;
   font:12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color:#e6dccb; }
+/* THE OUTLINE IS MEASURED AGAINST A TILE, NOT AGAINST THE SCREEN — AND THE TILE DID NOT DOUBLE
+   ON SCREEN ([[TILE_PX 16→32]]). The band's box is tile-sized and follows TILE_PX on its own
+   (state.w * TILE_PX * zoom). What this rule has to keep up with is the tile's size IN CSS
+   PIXELS, and that grew by a third, not by half again as much: the zoom ladder was halved in the
+   same change ([2,3,4,6] → [1,2,3,4]), so the default tile went 16×3=48 to 32×2=64 and the
+   smallest rung is 32px either way. 3px is that third, rounded — a 4px rule was sized for a
+   doubling that the zoom ladder cancelled, and it swaggers at the bottom rung. */
 .sm-ix-band { position:absolute; box-sizing:border-box; display:none;
-  border:2px solid rgba(126,214,142,0.95); background:rgba(126,214,142,0.18);
-  box-shadow:0 0 0 1px rgba(0,0,0,0.55) inset; }
+  border:3px solid rgba(126,214,142,0.95); background:rgba(126,214,142,0.18);
+  box-shadow:0 0 0 2px rgba(0,0,0,0.55) inset; }
 .sm-ix-band[data-tone="erase"] { border-color:rgba(233,124,110,0.95); background:rgba(233,124,110,0.18); }
 .sm-ix-band[data-tone="belt"] { border-color:rgba(226,190,101,0.95); background:rgba(226,190,101,0.16); }
 /* The pipe run ([[101]]). A TEAL OF ITS OWN rather than a reuse: the band already speaks in
@@ -55,8 +77,12 @@ const CSS = `
    teardown drag whose tiles disagree about what is going to happen to them. One div per
    tile, pooled and reused — a drag is at most a few hundred of these and they are written
    once a frame from the same loop the rect band is. */
+/* Tile-measured, same as the band's rule above, but this one went to 2 rather than 3: a cell is
+   a FILL and its border only has to separate it from the cell next to it, where the band's rule
+   is the whole statement. One CSS pixel around a tile that now reaches 128px at the top rung is
+   not a grid, it is a rumour. */
 .sm-ix-cell { position:absolute; box-sizing:border-box; display:none;
-  border:1px solid rgba(126,214,142,0.85); background:rgba(126,214,142,0.20); }
+  border:2px solid rgba(126,214,142,0.85); background:rgba(126,214,142,0.20); }
 .sm-ix-cell[data-tone="erase"] { border-color:rgba(233,124,110,0.9); background:rgba(233,124,110,0.22); }
 .sm-ix-cell[data-tone="belt"] { border-color:rgba(226,190,101,0.95); background:rgba(226,190,101,0.22); }
 .sm-ix-cell[data-tone="pipe"] { border-color:rgba(104,206,205,0.95); background:rgba(104,206,205,0.22); }
@@ -74,12 +100,22 @@ const CSS = `
    physically swings a quarter turn under the cursor is the one version of this that cannot
    be mistaken for nothing happening. Clipped from a square so a single size sets it, and
    drop-shadowed so it survives being drawn over a bright tile. */
+/* The chevron's SIZE is two fifths of the band and doubles by itself (see setChevron); only its
+   drop shadow was a flat pixel count, and a 1px shadow under a shape twice as big stops
+   separating it from the tile. Doubled. */
 .sm-ix-chev { position:absolute; display:none; background:rgba(126,214,142,0.98);
   clip-path:polygon(50% 0%, 100% 100%, 0% 100%);
-  filter:drop-shadow(0 1px 1px rgba(0,0,0,0.75)); }
+  filter:drop-shadow(0 2px 2px rgba(0,0,0,0.75)); }
 .sm-ix-chev[data-tone="blocked"], .sm-ix-chev[data-tone="erase"] { background:rgba(233,124,110,0.98); }
 .sm-ix-chev[data-tone="belt"] { background:rgba(226,190,101,0.98); }
+/* WORLD-ANCHORED TEXT IS NUDGED, NOT DOUBLED — and the same goes for the two signs below.
+   The art doubled; the player's eyes and monitor did not, and the tile only got a third bigger
+   in CSS pixels anyway. 24px lettering hanging off a band would be a heads-up display that
+   wandered onto the field. One rung up (12→14, 13→16 for the bold line) is enough that the words
+   no longer read as a footnote beside a 64px tile, and is deliberately less than the third the
+   tile gained. Padding and radius are measured against the FONT, not the tile, so they stay. */
 .sm-ix-tag { position:absolute; display:none; transform:translate(0,-140%); white-space:nowrap;
+  font-size:14px;
   padding:2px 6px; border-radius:3px; background:rgba(20,16,25,0.88); border:1px solid rgba(255,255,255,0.14); }
 /* Top-CENTRE, not top-left: the HUD's money panel owns the top-left corner and the
    Clipboard owns the bottom-right, so the strip would sit underneath one of them. The
@@ -96,7 +132,10 @@ const CSS = `
    browser while verifying [[098]]'s planter tell; the work-queue tell had been invisible since
    [[074]]. 152px clears the whole corner and parks this immediately above the status ribbon,
    which is where a player's eye already is. A measured constant rather than a computed offset,
-   because the HUD is another lane's file and this layer must not start reading its geometry. */
+   because the HUD is another lane's file and this layer must not start reading its geometry.
+   IT DID NOT MOVE FOR THE TILE BUMP, and that is the whole distinction this file turns on: 152
+   is measured against the HUD's stack in CSS pixels, and the HUD is still the size it was. A
+   doubled 304px would have parked this line in the middle of the screen. */
 .sm-ix-tell { position:absolute; left:50%; bottom:152px; transform:translateX(-50%);
   display:none; white-space:nowrap; padding:4px 10px; border-radius:4px; letter-spacing:0.04em;
   background:rgba(20,16,25,0.85); border:1px solid rgba(226,190,101,0.45); color:#f2e6cf;
@@ -107,10 +146,11 @@ const CSS = `
    renderer is somebody else's file. It is positioned from the transform that actually reached
    the display this frame, so it rides the camera exactly as the ground under it does. */
 .sm-ix-deed { position:absolute; display:none; transform:translate(-50%,-50%); white-space:nowrap;
+  font-size:14px;
   padding:3px 8px; border-radius:3px; text-align:center; letter-spacing:0.04em;
   background:rgba(20,16,12,0.78); border:1px solid rgba(216,201,164,0.45); color:#e8dcc0;
   text-shadow:0 1px 2px rgba(0,0,0,0.9); }
-.sm-ix-deed b { display:block; font-size:13px; color:#f2e6cf; }
+.sm-ix-deed b { display:block; font-size:16px; color:#f2e6cf; }
 .sm-ix-deed[data-state="far"] { opacity:0.55; border-color:rgba(216,201,164,0.20); }
 .sm-ix-deed[data-state="broke"] b { color:#e97c6e; }
 /* First-run guide signs (item 040, instruction 2): a gentle pointer standing over the thing
@@ -119,13 +159,16 @@ const CSS = `
    nothing to dismiss and nothing to click through. The bob is margin, not transform: the
    frame loop owns left/top and the static translate must survive the animation. */
 .sm-ix-guide { position:absolute; display:none; transform:translate(-50%,-100%); white-space:nowrap;
+  font-size:14px;
   text-align:center; padding:4px 10px; border-radius:4px; letter-spacing:0.04em;
   background:rgba(22,30,20,0.84); border:1px solid rgba(126,214,142,0.55); color:#dff0d6;
   text-shadow:0 1px 2px rgba(0,0,0,0.9);
   animation:sm-ix-guide-bob 2.2s ease-in-out infinite; }
-.sm-ix-guide b { display:block; font-size:13px; color:#7ed68e; }
+.sm-ix-guide b { display:block; font-size:16px; color:#7ed68e; }
+/* The arrow points AT A TILE, so it grew with the tile — and with the slightly larger sign it
+   hangs off, which would otherwise have outgrown its own pointer. */
 .sm-ix-guide::after { content:''; position:absolute; left:50%; top:100%; transform:translateX(-50%);
-  border:6px solid transparent; border-top-color:rgba(126,214,142,0.55); }
+  border:8px solid transparent; border-top-color:rgba(126,214,142,0.55); }
 /* The below-the-anchor variant: the sign hangs under its target with the arrow on top,
    for targets whose airspace the HUD already occupies (the field at the spawn camera). */
 .sm-ix-guide[data-place="below"] { transform:translate(-50%,0); }
@@ -348,7 +391,14 @@ export class InputChrome {
     }
 
     // Two fifths of the tile: big enough to read at 2× zoom, small enough that the band's
-    // own outline still shows around it at 6×.
+    // own outline still shows around it at 6×. Doubles with the tile for free, because `width`
+    // and `height` came in as `TILE_PX * zoom`.
+    //
+    // THE 9px FLOOR IS UNCHANGED. It is a screen-side legibility minimum and it has never once
+    // fired: the smallest a one-tile band gets on screen is the lowest zoom rung, which is 32px
+    // both before this change (16×2) and after it (32×1) — 0.4 of that is 13, comfortably over
+    // the floor. Raising a floor that never fires would only invent a way for the chevron to
+    // outgrow a small band.
     const size = Math.max(9, Math.round(Math.min(width, height) * 0.4));
     chev.style.display = 'block';
     chev.dataset.tone = state.tone;

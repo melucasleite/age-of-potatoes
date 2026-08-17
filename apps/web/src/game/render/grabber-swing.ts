@@ -82,26 +82,31 @@ export const GRIP_FRACTION = 1 / 4;
  * Where the authored grabber tile divides into housing | shaft | claw.
  *
  * Read off the atlas rather than guessed: every one of `grabber_mk1`, `grabber_mk2` and
- * `grabber_long` puts opaque pixels in columns 0–6 (the housing, 8 rows tall), 7–10 (the
- * shaft, 4 rows tall) and 11–15 (the claw, 8 rows tall). The three tiers agree exactly,
+ * `grabber_long` puts opaque pixels in columns 0–13 (the housing, 16 rows tall), 14–21 (the
+ * shaft, 8 rows tall) and 22–31 (the claw, 16 rows tall). The three tiers agree exactly,
  * which is what makes one slice table serve all of them, and `textures.ts` paints the
  * grey-box bodies to the same grid so a build with no atlas assembles the same arm.
+ *
+ * THESE ARE SOURCE PIXELS, NOT FRACTIONS, so they doubled with `TILE_PX` 16 → 32 and the
+ * widths must still sum to exactly `TILE_PX` — they are a partition of the authored tile, and
+ * a table that sums to 16 against a 32px frame cuts the arm out of its left half and leaves
+ * the claw as empty air. `grabber-swing.test.ts` pins the sum.
  *
  * Lives in this module rather than beside the sprites it cuts, for the reason everything
  * else here does: it is geometry, and geometry can be pinned by a test that never opens a
  * canvas.
  *
- * The pieces are cut at full tile HEIGHT deliberately: row 8 is then the vertical centre of
+ * The pieces are cut at full tile HEIGHT deliberately: row 16 is then the vertical centre of
  * each slice, which is also the arm's own midline in the authored art, so an anchor at 0.5
  * puts the hinge exactly on the bar rather than a pixel above it.
  */
 export const ARM_SLICE = {
   mountX: 0,
-  mountW: 7,
-  linkX: 7,
-  linkW: 4,
-  clawX: 11,
-  clawW: 5,
+  mountW: 14,
+  linkX: 14,
+  linkW: 8,
+  clawX: 22,
+  clawW: 10,
 } as const;
 
 /** Reach in tiles, defaulting to the shortest arm when a tier is unknown to this build. */

@@ -120,17 +120,19 @@ const QUARTER = Math.PI / 2;
 // ────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * How far the shadow falls, in ART pixels — one, in each axis.
+ * How far the shadow falls, in ART pixels — two, in each axis.
  *
- * An integer, and it must stay one: the whole world is drawn at an integer zoom (2/3/4/6) onto
- * a pixel-snapped camera, so an integer art offset lands on an exact 2, 3, 4 or 6 device pixels
+ * AN INTEGER, AND IT MUST STAY ONE: the whole world is drawn at an integer zoom (1/2/3/4) onto
+ * a pixel-snapped camera, so an integer art offset lands on an exact 1, 2, 3 or 4 device pixels
  * and never shimmers. A half-pixel offset would sample between texels at every rung and undo
  * the reason `scaleMode` is `nearest` in the first place.
  *
- * One rather than two because the pipe's arm is only 6px thick: a 2px shadow on a 6px bar reads
- * as a second, darker pipe rather than as height.
+ * TWO RATHER THAN ONE SINCE `TILE_PX` WENT 16 → 32, which is the same ratio this always had
+ * rather than a new opinion: the rule was "a shadow no more than a sixth of the arm's
+ * thickness", the arm was 6px thick and is now 12, and a 2px shadow on a 12px bar reads as
+ * height where a 4px one would read as a second, darker pipe running alongside.
  */
-const SHADE_OFFSET_PX = 1;
+const SHADE_OFFSET_PX = 2;
 
 /** Shadow strength. Dark enough to separate on pale dirt, light enough not to fake an outline. */
 const SHADE_ALPHA = 0.38;

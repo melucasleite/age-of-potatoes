@@ -107,12 +107,13 @@ describe('the item threshold', () => {
   });
 
   it('splits the ladder with no rung in between', () => {
-    // The threshold was derived from item spacing at 2× versus 3× — four source px between
-    // items, so eight CSS px at 2× for a sprite wider than that. A ladder that grew a 2.5×
-    // rung would put a zoom level on the boundary the arithmetic says nothing about.
+    // The threshold is derived from item spacing at 1× versus 2× — eight source px between
+    // items on a 32 px tile, so eight CSS px at 1× for a sprite wider than that, sixteen at
+    // 2×. A ladder that grew a 1.5× rung would put a zoom level on the boundary the
+    // arithmetic says nothing about.
     const below = ZOOM_LEVELS.filter((zoom) => !beltItemsVisibleAt(zoom));
     const above = ZOOM_LEVELS.filter((zoom) => beltItemsVisibleAt(zoom));
-    expect(below).toEqual([2]);
-    expect(above).toEqual([3, 4, 6]);
+    expect(below).toEqual([1]);
+    expect(above).toEqual([2, 3, 4]);
   });
 });

@@ -239,12 +239,13 @@ describe('ceremony playback', () => {
     ceremony.observe(view([CeremonyId.Sprinkler], POURED));
     advance(ceremony, 1_000);
 
-    // The machine sits at tile (4,4), i.e. world pixel 72 — well right of the player at 10.
+    // The machine sits at tile (4,4) — its centre is world pixel 144 at `TILE_PX` 32, which
+    // is well right of the player at 10.
     ceremony.cameraTarget(10, 20, out);
     expect(out.x).toBeGreaterThan(10);
 
     // ...and never all the way. The player is still the subject; the camera only leans.
-    expect(out.x).toBeLessThan(72);
+    expect(out.x).toBeLessThan(144);
 
     advance(ceremony, 10_000);
     ceremony.cameraTarget(10, 20, out);

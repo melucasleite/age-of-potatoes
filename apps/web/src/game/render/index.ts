@@ -71,15 +71,45 @@ const motionScratch: MotionSample = { dx: 0, dy: 0, dw: 0, dh: 0, specks: null, 
 /** Subtiles per footfall — the same stride the bots plant (`bots.ts`). A tile is 256. */
 const PLAYER_STRIDE_SUB = 64;
 
-/** How far above the feet the held tool rides, in source px. Hand height on a 16px pawn. */
-const HELD_TOOL_RAISE_PX = 6;
-
-/** How far to the leading side the held tool sits, in source px. */
-const HELD_TOOL_SIDE_PX = 5;
+/**
+ * How far above the feet the held tool rides, in source px — hand height on the pawn.
+ *
+ * MEASURED AGAINST THE PLAYER CELL, NOT THE TILE, and that distinction is the whole reason
+ * this constant is 18 rather than 12. When `TILE_PX` went 16 → 32 the walk art did NOT
+ * double with it: the purchased strip re-baked at its native 48px cell, so the pawn went
+ * 16 → 48 — THREE times, against the tile's two. Doubling this to 12 put the tool at
+ * (12 − 5) / 35 ≈ 20% of body height: the farmer walked around holding a watering can level
+ * with his shins. The original 6 was 0.375 of a 16px cell, so the honest port is
+ * 0.375 × 48 = 18, which restores hand height exactly.
+ *
+ * If the walk cell ever changes size again, scale BOTH `_PX` offsets below by the CELL's
+ * ratio. They are the only two numbers in this file measured against the player rather than
+ * against the world grid, which is precisely why a tile-wide sweep misses them.
+ */
+const HELD_TOOL_RAISE_PX = 18;
 
 /**
- * The held icon's scale against its 16px frame. Half size: the icon is drawn full-size in
+ * How far to the leading side the held tool sits, in source px.
+ *
+ * Same player-cell rule as the raise above: 5 was 0.3125 of a 16px cell, so 0.3125 × 48 = 15.
+ * The pawn's own art is 20px wide inside the 48px cell, so 15 sets the tool just clear of the
+ * body edge — the same visible gap it had at 16px, where 5 cleared a 6px-wide pawn.
+ */
+const HELD_TOOL_SIDE_PX = 15;
+
+/**
+ * The held icon's scale against its 32px frame. Half size: the icon is drawn full-size in
  * the hotbar slot and SMALL in the hand — same manifest entry, two consumers, per [[065]].
+ *
+ * A RATIO, so it did not move when `TILE_PX` did — it is half of whatever the frame is, and
+ * the two `_PX` offsets above are what carry the resolution change.
+ *
+ * DELIBERATELY STILL TILE-RELATIVE, unlike those two offsets. The tool is a world ITEM whose
+ * frame doubled 16 → 32 with everything else, so it now draws at 16 source px against a 35px
+ * farmer where it used to draw at 8 against an 11px one. That is a real proportion change —
+ * the can went from about three quarters of his height to about half — and it reads as a
+ * correction rather than a regression, so it stays. Making the held icon player-relative too
+ * would be a taste call, not a resolution fix.
  */
 const HELD_TOOL_SCALE = 0.5;
 
@@ -375,7 +405,7 @@ function updateField(
     crop.y =
       tileTop +
       TILE_PX +
-      (wiltFrame !== null ? 0 : wilt === WiltStage.Wilted ? 2 : wilt === WiltStage.Wilting ? 1 : 0);
+      (wiltFrame !== null ? 0 : wilt === WiltStage.Wilted ? 4 : wilt === WiltStage.Wilting ? 2 : 0);
 
     // The drink-bounce. A flat transform when the tile is not bouncing, so this is an
     // unconditional two-number write rather than a branch — and the crop's scale is owned
@@ -412,13 +442,16 @@ function spawnDroplets(scene: WorldScene, tileX: number, tileY: number): void {
   for (const droplet of scene.droplets) {
     if (droplet.life > 0) continue;
     droplet.life = 260 + Math.random() * 200;
-    droplet.vx = (Math.random() - 0.5) * 0.02;
-    droplet.vy = -0.03 - Math.random() * 0.02;
+    // Velocities are source px per MILLISECOND, so they doubled with `TILE_PX` while `life`
+    // (which is milliseconds) did not. Halving the arc's size against the tile would have
+    // turned the splash into a twitch at the farmer's feet.
+    droplet.vx = (Math.random() - 0.5) * 0.04;
+    droplet.vy = -0.06 - Math.random() * 0.04;
     droplet.sprite.visible = true;
     droplet.sprite.alpha = 1;
     droplet.sprite.position.set(
-      tileX * TILE_PX + 2 + Math.random() * (TILE_PX - 4),
-      tileY * TILE_PX + 4 + Math.random() * 8,
+      tileX * TILE_PX + 4 + Math.random() * (TILE_PX - 8),
+      tileY * TILE_PX + 8 + Math.random() * 16,
     );
     spawned += 1;
     if (spawned >= 3) return;
@@ -434,7 +467,9 @@ function updateDroplets(scene: WorldScene, deltaMs: number): void {
       droplet.sprite.visible = false;
       continue;
     }
-    droplet.vy += 0.00035 * dt;
+    // Gravity, in source px per ms². Doubled with the velocities above so the arc keeps its
+    // shape against the tile rather than flattening out.
+    droplet.vy += 0.0007 * dt;
     droplet.sprite.x += droplet.vx * dt;
     droplet.sprite.y += droplet.vy * dt;
     droplet.sprite.alpha = Math.min(1, droplet.life / 200);
@@ -491,15 +526,15 @@ function updateMachines(scene: WorldScene, view: WorldView, now: number, deltaMs
     // unchanged state is a no-op inside Pixi, so selecting by state every frame is free —
     // and it is what makes the state legible to a player who cannot use the colour (§16,
     // and `lamps.ts` for the whole argument).
-    const lampX = left + width - LAMP_PX - 1;
-    const lampY = top + 1;
+    const lampX = left + width - LAMP_PX - 2;
+    const lampY = top + 2;
     visual.lamp.texture = scene.art.get(ART.lamp(m.lamp));
     visual.lamp.position.set(lampX, lampY);
     visual.lamp.visible = m.lamp !== LampState.Off;
     visual.lamp.tint = lampTint(m.lamp);
     visual.lamp.alpha = lampAlpha(m.lamp, now);
 
-    visual.wrench.position.set(lampX - 7, lampY);
+    visual.wrench.position.set(lampX - 14, lampY);
     visual.wrench.visible = m.wrenchDue === 1;
 
     // Progress along the base. A bar rather than an animated body: §15 rates machine
@@ -509,8 +544,12 @@ function updateMachines(scene: WorldScene, view: WorldView, now: number, deltaMs
     const running = m.lamp === LampState.Running && m.progressPermille > 0;
     visual.progress.visible = running;
     if (running) {
-      visual.progress.position.set(left + 1, top + height - 2);
-      visual.progress.scale.set(((width - 2) * m.progressPermille) / 1000, 1);
+      // `ui_pixel` is a 1×1 white texture, so the second scale argument is the bar's
+      // THICKNESS in source px — a `1` here is a pixel count wearing a unit-scale disguise,
+      // and it doubled with everything else. (If `ui_pixel` ever stops being 1×1 this and
+      // every other `scale.set` on it silently multiplies twice over.)
+      visual.progress.position.set(left + 2, top + height - 4);
+      visual.progress.scale.set(((width - 4) * m.progressPermille) / 1000, 2);
     }
 
     // THE HARVESTER DOCK'S SHELF IS CARGO, NOT AN OUTPUT BUFFER (item 083): its spec makes
@@ -530,9 +569,9 @@ function updateMachines(scene: WorldScene, view: WorldView, now: number, deltaMs
           : 0;
     visual.hopper.visible = hopper > 0;
     if (hopper > 0) {
-      const bar = Math.max(1, Math.round((height - 4) * hopper));
-      visual.hopper.position.set(left, top + height - 2 - bar);
-      visual.hopper.scale.set(1, bar);
+      const bar = Math.max(2, Math.round((height - 8) * hopper));
+      visual.hopper.position.set(left, top + height - 4 - bar);
+      visual.hopper.scale.set(2, bar);
     }
 
     // What is waiting in the output buffer, so a red lamp names its own cargo. Bobs, so a
@@ -544,7 +583,7 @@ function updateMachines(scene: WorldScene, view: WorldView, now: number, deltaMs
       visual.outputPip.texture = scene.itemPage.texture(shelf ? m.cargoItem : m.outputItem);
       visual.outputPip.position.set(
         left + width / 2,
-        top - 3 + Math.round(Math.sin(now / 300 + m.id) * 1.5),
+        top - 6 + Math.round(Math.sin(now / 300 + m.id) * 3),
       );
     }
 
@@ -655,8 +694,8 @@ function updateCommerce(scene: WorldScene, view: WorldView): void {
     visual.progress.visible = rolling;
     if (rolling) {
       const done = Math.max(0, Math.min(1, (cart.runTicks - cart.ticksRemaining) / cart.runTicks));
-      visual.progress.position.set(cart.tileX * TILE_PX + 1, (cart.tileY + 1) * TILE_PX - 2);
-      visual.progress.scale.set((TILE_PX - 2) * done, 1);
+      visual.progress.position.set(cart.tileX * TILE_PX + 2, (cart.tileY + 1) * TILE_PX - 4);
+      visual.progress.scale.set((TILE_PX - 4) * done, 2);
     }
 
     // What is aboard, and how full. Hidden while it is away: a pip bobbing over an empty
@@ -665,7 +704,7 @@ function updateCommerce(scene: WorldScene, view: WorldView): void {
     visual.outputPip.visible = loaded;
     if (loaded) {
       visual.outputPip.texture = scene.itemPage.texture(cart.item);
-      visual.outputPip.position.set(cart.tileX * TILE_PX + TILE_PX / 2, cart.tileY * TILE_PX - 3);
+      visual.outputPip.position.set(cart.tileX * TILE_PX + TILE_PX / 2, cart.tileY * TILE_PX - 6);
     }
     fillColumn(visual, cart.tileX, cart.tileY, 1, !away ? cart.loaded : 0, cart.capacity);
   }
@@ -696,9 +735,9 @@ function fillColumn(
   visual.hopper.visible = fill > 0;
   if (fill <= 0) return;
   const height = tilesHigh * TILE_PX;
-  const bar = Math.max(1, Math.round((height - 4) * fill));
-  visual.hopper.position.set(tileX * TILE_PX, tileY * TILE_PX + height - 2 - bar);
-  visual.hopper.scale.set(1, bar);
+  const bar = Math.max(2, Math.round((height - 8) * fill));
+  visual.hopper.position.set(tileX * TILE_PX, tileY * TILE_PX + height - 4 - bar);
+  visual.hopper.scale.set(2, bar);
 }
 
 /** Never more collars than a machine could plausibly have plumbed. */
@@ -770,7 +809,7 @@ function placeDecal(
   const sprite = decalSprite(scene, visual, used);
   sprite.texture = scene.art.get(name);
   sprite.position.set(left, top);
-  // Pinned to the FOOTPRINT, exactly as the body is. The decals are drawn at 32×32 over a 2×2
+  // Pinned to the FOOTPRINT, exactly as the body is. The decals are drawn at 64×64 over a 2×2
   // machine, so this is 1:1 for the whole chip line and correct rather than merely lucky for
   // the 1×1 sprinkler and the 3×2 Bottler.
   sprite.setSize(width, height);
@@ -837,14 +876,14 @@ function updateTankFill(
     return;
   }
   const fill = Math.max(0, Math.min(1000, m.tankPermille));
-  const columnWidth = Math.max(2, Math.round(width / 8));
-  const columnHeight = Math.max(0, Math.round(((height - 8) * fill) / 1000));
+  const columnWidth = Math.max(4, Math.round(width / 8));
+  const columnHeight = Math.max(0, Math.round(((height - 16) * fill) / 1000));
   visual.tankFill.visible = columnHeight > 0;
   if (columnHeight === 0) return;
   visual.tankFill.tint = liquidTint(portLiquid(m.kind));
   visual.tankFill.position.set(
     left + Math.round((width - columnWidth) / 2),
-    top + height - 4 - columnHeight,
+    top + height - 8 - columnHeight,
   );
   visual.tankFill.scale.set(columnWidth, columnHeight);
 }
@@ -901,28 +940,28 @@ function updatePorts(
   for (let row = 0; row < m.tilesHigh; row++) {
     const y = top + row * TILE_PX + TILE_PX / 2;
     if (scene.pipes.hasPipe(m.tileX - 1, m.tileY + row)) {
-      place(left - 1, y, liquidTint(scene.pipes.liquidAt(m.tileX - 1, m.tileY + row)), 1);
+      place(left - 2, y, liquidTint(scene.pipes.liquidAt(m.tileX - 1, m.tileY + row)), 1);
     }
     if (scene.pipes.hasPipe(m.tileX + m.tilesWide, m.tileY + row)) {
       const liquid = scene.pipes.liquidAt(m.tileX + m.tilesWide, m.tileY + row);
-      place(left + width + 1, y, liquidTint(liquid), 1);
+      place(left + width + 2, y, liquidTint(liquid), 1);
     }
   }
   for (let column = 0; column < m.tilesWide; column++) {
     const x = left + column * TILE_PX + TILE_PX / 2;
     if (scene.pipes.hasPipe(m.tileX + column, m.tileY - 1)) {
-      place(x, top - 1, liquidTint(scene.pipes.liquidAt(m.tileX + column, m.tileY - 1)), 1);
+      place(x, top - 2, liquidTint(scene.pipes.liquidAt(m.tileX + column, m.tileY - 1)), 1);
     }
     if (scene.pipes.hasPipe(m.tileX + column, m.tileY + m.tilesHigh)) {
       const liquid = scene.pipes.liquidAt(m.tileX + column, m.tileY + m.tilesHigh);
-      place(x, top + height + 1, liquidTint(liquid), 1);
+      place(x, top + height + 2, liquidTint(liquid), 1);
     }
   }
 
   // Nothing plumbed: one dim hint on the west face, which is where a line laid left-to-right
   // arrives. A hint, not a rule — the sim takes fluid on any face, and the scan above proves
   // it by lighting whichever face actually got one.
-  if (used === 0) place(left - 1, top + height / 2, portHintTint(wants), 0.75);
+  if (used === 0) place(left - 2, top + height / 2, portHintTint(wants), 0.75);
 
   for (let i = used; i < visual.ports.length; i++) visual.ports[i]!.visible = false;
 }

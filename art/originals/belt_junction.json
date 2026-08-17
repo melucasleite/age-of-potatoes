@@ -6,12 +6,12 @@
   "prompt": "One 16x16 conveyor belt tee — the run passes west to east and a branch leaves through the south — authored by art/tools/make-factory-parts.mjs. Four rotations reach every tee a grid can contain, and a merger is a splitter read the other way. Its through-run edges are asserted equal to the straight tile's, so a tee dropped into the middle of a run shows no seam at either end of itself.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "belts",
   "costUsd": 0,
-  "generatedAt": "2026-08-13T03:34:12.048Z"
+  "generatedAt": "2026-08-17T19:54:52.737Z"
 }

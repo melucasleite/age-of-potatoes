@@ -6,12 +6,12 @@
   "prompt": "One 16x16 straight conveyor belt tile, authored from the master palette by art/tools/make-factory-parts.mjs. Hand-authored after two paid Retro Diffusion takes came back as a featureless dark rectangle with the run pointing the wrong way. The deciding reason is not quality: a belt tile must repeat along its run with NO SEAM, and a mismatched edge repeats every 16px down a straight line. `tile_x` is a best effort; the modulus in that script is exact, and it asserts left edge equals right edge on every build.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": true,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "belts",
   "costUsd": 0,
-  "generatedAt": "2026-08-12T21:52:42.866Z"
+  "generatedAt": "2026-08-17T19:54:52.730Z"
 }

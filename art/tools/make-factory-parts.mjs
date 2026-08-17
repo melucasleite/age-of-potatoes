@@ -33,7 +33,21 @@ import sharp from 'sharp';
 import { loadMaster } from './palette-png.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SIZE = 16;
+const SIZE = 32;
+
+/**
+ * Pixels per 16px-era pixel.
+ *
+ * Every shape in this file is still authored in the original 16px vocabulary and multiplied
+ * up at the point of use, which is deliberate: the geometry below is a set of PROOFS (seam
+ * matching, mirror symmetry, edge cross-sections) that were reasoned out at 16px and are
+ * known to hold there. Scaling the inputs rather than re-deriving the outputs means the
+ * proofs come along unchanged, and the next resolution bump is this one line.
+ */
+const SCALE = SIZE / 16;
+
+/** Authored-at-16px coordinates, in tile pixels. */
+const scaled = (...xs) => xs.map((x) => x * SCALE);
 
 const ROLES = {
   K: 'ink',
@@ -68,9 +82,22 @@ const hexOf = (name) => {
 // 16, and no chevron pixel touches column 0 or column 15 — that is the whole seamlessness
 // proof, and it is why the arrows are placed by modulus rather than by eye.
 
-const RAIL_THICKNESS = 3;
-const CHEVRON_PERIOD = 8;
-const CHEVRON_WIDTH = 4;
+const RAIL_THICKNESS = 3 * SCALE;
+/**
+ * THE PERIOD SCALES WITH THE TILE, AND THAT IS A DESIGN RULING RATHER THAN AN OVERSIGHT.
+ *
+ * The tempting move at higher resolution is to hold the period and get twice as many arrows
+ * — more detail for free. Here that would be a bug, because on this belt the ARROW COUNT IS
+ * LOAD-BEARING. Work item 082 makes it the colourblind signal: one arrow Basic, two Fast,
+ * three Express, so a player who cannot separate the yellow, red and blue liveries counts
+ * instead. Holding the period would put FOUR arrows on the neutral tile while a Basic belt
+ * still showed one — the plainest belt in the game reading as faster than Express.
+ *
+ * So chevrons stay locked to the tile and are drawn twice as large. Density per TILE is the
+ * invariant; density per pixel is not.
+ */
+const CHEVRON_PERIOD = 8 * SCALE;
+const CHEVRON_WIDTH = 4 * SCALE;
 const BAND_TOP = RAIL_THICKNESS;
 const BAND_BOTTOM = SIZE - RAIL_THICKNESS - 1;
 const BAND_MID = (BAND_TOP + BAND_BOTTOM) >> 1;
@@ -79,16 +106,52 @@ if (SIZE % CHEVRON_PERIOD !== 0) {
   throw new Error(`Chevron period ${CHEVRON_PERIOD} does not divide ${SIZE} — the belt seams.`);
 }
 
-/** A fat right-pointing triangle: 4 columns wide, tapering to a point. */
+/**
+ * How far a triangle has narrowed by column `d`.
+ *
+ * The taper holds one step per SCALE columns, so the silhouette is the 16px triangle's
+ * silhouette exactly rather than a steeper one. Tapering every column instead would run a
+ * 4*SCALE-wide arrow to a point in four columns and leave the rest of it empty.
+ */
+const taperAt = (d) => SCALE * Math.floor(d / SCALE);
+
+/** Half-height of a chevron's base, above and below BAND_MID. */
+const CHEVRON_UP = 3 * SCALE;
+const CHEVRON_DOWN = 3 * SCALE + (SCALE - 1);
+
+/** A fat right-pointing triangle: 4*SCALE columns wide, tapering to a point. */
 function chevronCells(x0) {
   const cells = [];
   for (let dx = 0; dx < CHEVRON_WIDTH; dx++) {
-    for (let y = BAND_MID - 3 + dx; y <= BAND_MID + 3 - dx; y++) {
+    const taper = taperAt(dx);
+    for (let y = BAND_MID - CHEVRON_UP + taper; y <= BAND_MID + CHEVRON_DOWN - taper; y++) {
       cells.push([x0 + dx, y]);
     }
   }
   return cells;
 }
+
+/**
+ * The same triangle turned to point SOUTH, with its top-left at row `y0`. Three frames drew
+ * this by hand from the same four numbers; at two resolutions that is three places to get the
+ * taper wrong, so it is one function now.
+ */
+function chevronCellsDown(y0) {
+  const cells = [];
+  for (let dy = 0; dy < CHEVRON_WIDTH; dy++) {
+    const taper = taperAt(dy);
+    for (let x = BAND_MID - CHEVRON_UP + taper; x <= BAND_MID + CHEVRON_DOWN - taper; x++) {
+      cells.push([x, y0 + dy]);
+    }
+  }
+  return cells;
+}
+
+/**
+ * Where a departing arrow starts, so it clears the tile's south edge by SCALE pixels — the
+ * seam proof restated: an arrow touching the edge repeats down every vertical run.
+ */
+const DEPARTING_Y = SIZE - CHEVRON_WIDTH - SCALE;
 
 function blankGrid() {
   return Array.from({ length: SIZE }, () => new Array(SIZE).fill('.'));
@@ -100,7 +163,7 @@ function beltStraight() {
     const rail = y < BAND_TOP || y > BAND_BOTTOM;
     for (let x = 0; x < SIZE; x++) grid[y][x] = rail ? 'L' : 'D';
   }
-  for (let x0 = 2; x0 < SIZE; x0 += CHEVRON_PERIOD) {
+  for (let x0 = 2 * SCALE; x0 < SIZE; x0 += CHEVRON_PERIOD) {
     for (const [x, y] of chevronCells(x0)) {
       if (x < SIZE) grid[y][x] = 'P';
     }
@@ -115,7 +178,7 @@ function beltStraight() {
 // machinery sitting on the ground, not a decal floating over it. One arrow on each leg, so
 // the direction of travel through the bend is unambiguous.
 
-const ARM_LOW = 3;
+const ARM_LOW = 3 * SCALE;
 const ARM_HIGH = SIZE - ARM_LOW - 1;
 
 function beltCorner() {
@@ -130,11 +193,7 @@ function beltCorner() {
   // Entering arrow, pointing right, on the horizontal leg.
   for (const [x, y] of chevronCells(0)) grid[y][x] = 'P';
   // Leaving arrow, pointing down, on the vertical leg — the same triangle transposed.
-  for (let dy = 0; dy < CHEVRON_WIDTH; dy++) {
-    for (let x = BAND_MID - 3 + dy; x <= BAND_MID + 3 - dy; x++) {
-      grid[SIZE - CHEVRON_WIDTH - 1 + dy][x] = 'P';
-    }
-  }
+  for (const [x, y] of chevronCellsDown(DEPARTING_Y)) grid[y][x] = 'P';
   return grid;
 }
 
@@ -159,18 +218,14 @@ function beltJunction() {
     }
   }
   // The through run keeps the straight tile's chevrons exactly, phase and all.
-  for (let x0 = 2; x0 < SIZE; x0 += CHEVRON_PERIOD) {
+  for (let x0 = 2 * SCALE; x0 < SIZE; x0 += CHEVRON_PERIOD) {
     for (const [x, y] of chevronCells(x0)) {
       if (x < SIZE) grid[y][x] = 'P';
     }
   }
   // One departing arrow on the branch, pointing down, so a tee is never ambiguous about
   // which of its three arms is the odd one out.
-  for (let dy = 0; dy < CHEVRON_WIDTH; dy++) {
-    for (let x = BAND_MID - 3 + dy; x <= BAND_MID + 3 - dy; x++) {
-      grid[SIZE - CHEVRON_WIDTH - 1 + dy][x] = 'P';
-    }
-  }
+  for (const [x, y] of chevronCellsDown(DEPARTING_Y)) grid[y][x] = 'P';
   return grid;
 }
 
@@ -183,15 +238,17 @@ function beltJunction() {
 // are on the belt. Same band arithmetic as the neutral tile, same seam proof.
 
 const LIVERIES = {
-  basic: { rail: 'Y', railDark: 'T', chev: 'G', chevronXs: [6] },
-  fast: { rail: 'R', railDark: 'E', chev: 'O', chevronXs: [2, 10] },
-  express: { rail: 'B', railDark: 'W', chev: 'Q', chevronXs: [1, 6, 11] },
+  basic: { rail: 'Y', railDark: 'T', chev: 'G', chevronXs: scaled(6) },
+  fast: { rail: 'R', railDark: 'E', chev: 'O', chevronXs: scaled(2, 10) },
+  express: { rail: 'B', railDark: 'W', chev: 'Q', chevronXs: scaled(1, 6, 11) },
 };
 
-// No chevron column may touch column 0 or 15 — that is the seam proof, checked not assumed.
+// No chevron column may come within SCALE of a tile edge — the seam proof, checked not
+// assumed. The margin scales because "one pixel clear" at 16px means "one 16px-era pixel
+// clear", not "one of however many pixels the tile now has".
 for (const [tier, livery] of Object.entries(LIVERIES)) {
   for (const x0 of livery.chevronXs) {
-    if (x0 < 1 || x0 + CHEVRON_WIDTH - 1 > SIZE - 2) {
+    if (x0 < SCALE || x0 + CHEVRON_WIDTH - 1 > SIZE - 1 - SCALE) {
       throw new Error(`belt_${tier}: chevron at x=${x0} touches a tile edge — the belt seams.`);
     }
   }
@@ -224,7 +281,7 @@ function beltTierStraight(livery) {
 // predates that check and keeps its edge-hugging arrow). Shared with the tee further down,
 // so the two frames' through runs are literally the same arrows rather than two lists that
 // have to be kept in step by hand.
-const ENTERING_XS = { 1: [], 2: [1], 3: [1, 6] };
+const ENTERING_XS = { 1: [], 2: scaled(1), 3: scaled(1, 6) };
 
 /**
  * A tier corner: the neutral corner's arms, the plate in the tier's hue with a one-pixel
@@ -263,11 +320,7 @@ function beltTierCorner(livery) {
     }
   }
   // The departing arrow, pointing down the vertical leg — every tier has this one.
-  for (let dy = 0; dy < CHEVRON_WIDTH; dy++) {
-    for (let x = BAND_MID - 3 + dy; x <= BAND_MID + 3 - dy; x++) {
-      grid[SIZE - CHEVRON_WIDTH - 1 + dy][x] = livery.chev;
-    }
-  }
+  for (const [x, y] of chevronCellsDown(DEPARTING_Y)) grid[y][x] = livery.chev;
   return grid;
 }
 
@@ -315,7 +368,10 @@ function beltTierCorner(livery) {
 
 // Stem arrow row offsets, top to bottom. A tier takes the LAST n of these, so every tier's
 // bottom-most arrow sits on the corner's departing rows and the extras stack upward.
-const STEM_CHEVRON_YS = [3, 7, 11];
+// Derived from DEPARTING_Y rather than written out, so the bottom-most stem arrow lands on
+// the corner's departing rows BY CONSTRUCTION at any resolution. The old literals happened to
+// agree at 16px; two hand-kept lists that must agree is one list too many.
+const STEM_CHEVRON_YS = [DEPARTING_Y - 2 * CHEVRON_WIDTH, DEPARTING_Y - CHEVRON_WIDTH, DEPARTING_Y];
 
 /**
  * The stem arrow: a fat triangle CHEVRON_WIDTH rows tall on an 8-wide base, centred on the
@@ -325,8 +381,9 @@ const STEM_CHEVRON_YS = [3, 7, 11];
 function stemChevronCells(y0, pointing) {
   const cells = [];
   for (let dy = 0; dy < CHEVRON_WIDTH; dy++) {
-    const taper = pointing === 'south' ? dy : CHEVRON_WIDTH - 1 - dy;
-    for (let x = BAND_MID - 3 + taper; x <= BAND_MID + 4 - taper; x++) {
+    const step = taperAt(dy);
+    const taper = pointing === 'south' ? step : CHEVRON_WIDTH - SCALE - step;
+    for (let x = BAND_MID - CHEVRON_DOWN + taper; x <= BAND_MID + 4 * SCALE - taper; x++) {
       cells.push([x, y0 + dy]);
     }
   }
@@ -393,8 +450,23 @@ function beltTierTeeMerge(livery) {
 // gripper head deliberately reaches the right edge: a Mk1 grabber's whole job is to reach
 // into the next tile, and a sprite that stops politely at its own boundary lies about that.
 
+/**
+ * Blow a character grid up by SCALE, one source cell to a SCALE x SCALE block.
+ *
+ * Used ONLY for the legacy `grabber_arm` below, and worth being honest about: this is nearest-
+ * neighbour, so it gains no detail. The frame is superseded by the three tier grabbers
+ * (082) and is kept only so an older save asking for it by name still finds a picture.
+ * Redrawing a retired sprite at 32px is work spent where nobody is looking.
+ */
+function upscaleRows(rows) {
+  return rows.flatMap((row) => {
+    const wide = [...row].flatMap((glyph) => new Array(SCALE).fill(glyph)).join('');
+    return new Array(SCALE).fill(wide);
+  });
+}
+
 // prettier-ignore
-const GRABBER = [
+const GRABBER_16 = [
   '................',
   '................',
   '................',
@@ -413,6 +485,8 @@ const GRABBER = [
   '................',
 ];
 
+const GRABBER = upscaleRows(GRABBER_16);
+
 // --- the grabber redesign (work item 082) ---------------------------------------------
 //
 // Owner ruling 2026-08-15: "also reskin the grabbers. I don't like how they look." The new
@@ -427,18 +501,22 @@ const GRABBER = [
 
 function grabberGrid(accent, accentDark, ticks, hooks) {
   const grid = blankGrid();
+  // Coordinates below are the authored 16px ones; `rect` multiplies them up. Keeping the
+  // drawing in its original vocabulary is what lets the mirror-symmetry assertion carry over
+  // unchanged: a shape symmetric about the 16px midline is symmetric about the 32px one.
   const rect = (x, y, w, h, glyph) => {
-    for (let yy = y; yy < y + h; yy++) {
-      for (let xx = x; xx < x + w; xx++) grid[yy][xx] = glyph;
+    for (let yy = y * SCALE; yy < (y + h) * SCALE; yy++) {
+      for (let xx = x * SCALE; xx < (x + w) * SCALE; xx++) grid[yy][xx] = glyph;
     }
   };
+  const dot = (x, y, glyph) => rect(x, y, 1, 1, glyph);
   // The mounting plate, chamfered so the silhouette reads round-ish rather than boxy.
   rect(0, 4, 7, 8, 'D');
   rect(1, 5, 5, 6, 'M');
-  grid[4][0] = '.';
-  grid[11][0] = '.';
-  grid[4][6] = '.';
-  grid[11][6] = '.';
+  dot(0, 4, '.');
+  dot(0, 11, '.');
+  dot(6, 4, '.');
+  dot(6, 11, '.');
   // The pivot cap: tier-hue ring with a bright core, dead centre on the plate.
   rect(2, 6, 3, 4, accentDark);
   rect(3, 7, 1, 2, accent);
@@ -456,8 +534,8 @@ function grabberGrid(accent, accentDark, ticks, hooks) {
   rect(13, 10, 3, 2, 'K');
   rect(13, 6, 1, 4, 'P');
   if (hooks) {
-    grid[6][15] = 'K';
-    grid[9][15] = 'K';
+    dot(15, 6, 'K');
+    dot(15, 9, 'K');
   }
   return grid;
 }

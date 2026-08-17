@@ -65,7 +65,7 @@ import { ART } from './textures';
 import type { ArtSet } from './textures';
 
 /** How far each jaw travels toward the midline when the claw shuts, in source pixels. */
-const CLAW_TRAVEL = 2;
+const CLAW_TRAVEL = 4;
 
 interface GrabberVisual {
   /** The housing, on the pivot. Quarter-turns with facing ([[082]]) and never swings. */
@@ -198,7 +198,7 @@ export class GrabberLayer {
       // rides the tile rather than the hand on purpose: a lamp that swung with the arm
       // would be hardest to read at exactly the moment the arm is stalled at full extension.
       visual.lamp.texture = this.art.get(ART.lamp(g.lamp));
-      visual.lamp.position.set(originX + TILE_PX - LAMP_PX - 1, originY + 1);
+      visual.lamp.position.set(originX + TILE_PX - LAMP_PX - 2, originY + 2);
       visual.lamp.tint = lampTint(g.lamp);
       visual.lamp.alpha = lampAlpha(g.lamp, nowMs);
 

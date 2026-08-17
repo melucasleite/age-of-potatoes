@@ -6,12 +6,12 @@
   "prompt": "One 16x16 pipe crossing, all four arms — authored from the master palette by art/tools/make-pipes.mjs. Four-fold symmetric by construction, so its four quarter turns are the same picture and the auto-tiler can reach mask fifteen from any of them.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "pipes",
   "costUsd": 0,
-  "generatedAt": "2026-08-13T03:34:12.049Z"
+  "generatedAt": "2026-08-17T19:54:52.738Z"
 }

@@ -6,12 +6,12 @@
   "prompt": "One 16x16 yellow basic-tier conveyor belt tile with exactly 1 chevron(s) baked in, authored from the master palette by art/tools/make-factory-parts.mjs (work item 082). Per-tier frames rather than a runtime tint, because chevron count is the colourblind-safe second cue and a tint can change hue but never the number of arrows. Left edge equals right edge, asserted on every build, so a straight run never seams.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": true,
@@ -20,5 +20,5 @@
   "anchor": "top-left",
   "atlasGroup": "belts",
   "costUsd": 0,
-  "generatedAt": "2026-08-16T01:28:59.928Z"
+  "generatedAt": "2026-08-17T19:54:52.740Z"
 }

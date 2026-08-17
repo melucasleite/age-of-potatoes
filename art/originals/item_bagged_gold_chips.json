@@ -6,12 +6,12 @@
   "prompt": "One 16x16 sealed bag of gold chips — the premium line's finished good ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. The family's plain bag turns out to be FOUR colours and 104 opaque pixels, the whole red ramp and nothing else, which is why a flavoured bag is a recolour job rather than a drawing job. Amber-bodied with a dark red crown. Hand-authored because four bags now sit in one inventory grid and §42 is not satisfied by four hues — premium amber and chili red are near-identical under deuteranopia — so each bag carries a SHAPE, and the generator asserts the greyscale separation over every pair rather than trusting it.",
   "promptStyle": null,
   "native": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "requested": {
-    "width": 16,
-    "height": 16
+    "width": 32,
+    "height": 32
   },
   "removeBg": true,
   "tileX": false,
@@ -20,5 +20,5 @@
   "anchor": "center",
   "atlasGroup": "items",
   "costUsd": 0,
-  "generatedAt": "2026-08-17T05:47:51.961Z"
+  "generatedAt": "2026-08-17T19:54:52.733Z"
 }
