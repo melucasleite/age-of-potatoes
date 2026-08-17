@@ -1884,7 +1884,14 @@ function lampFor(state: WorldState, index: number): LampState {
   // asked for shows AMBER, the "look upstream" lamp — and upstream of a head is the pump,
   // which is exactly where the player should go.
   if (spec.role === MachineRole.PipedSprinkler) {
-    if (machine.tankMl < SPRINKLER_POUR_ML) return LampState.UtilityMissing;
+    // **AND "EMPTY" IS WHATEVER THE MACHINE CANNOT AFFORD TO START** (item 128). The two
+    // machines on this role pay differently, so they go dark at different numbers: the piped
+    // head is charged and needs a whole patch in the buffer, the Hub is metered across a
+    // bounded scan and needs one tile's pour. `spec.moistureSensing` is the discriminator
+    // because it is the SAME one `advancePipedSprinkler` uses to fork — one predicate, read
+    // twice, rather than a lamp with its own opinion about which machine this is.
+    const floor = spec.moistureSensing ? SPRINKLER_POUR_ML : SPRINKLER_CHARGE_ML;
+    if (machine.tankMl < floor) return LampState.UtilityMissing;
     return machine.throttled ? LampState.Starved : LampState.Running;
   }
 

@@ -116,6 +116,38 @@ function plumbedWorld(seed = 909): {
   return { state, pump, tank, heads, hub };
 }
 
+/**
+ * ONE PIPED HEAD, DEAD CENTRE OF THE FIELD, ON A NETWORK OF ITS OWN — and optionally one tank.
+ *
+ * `plumbedWorld` above cannot answer item 128's questions and should not be stretched to: its
+ * heads sit at (2,8) and (4,13) with most of their patch off the field, which is deliberate (it
+ * is the "siting it badly is the player's decision to see" case) and useless for counting 24
+ * neighbours. And it carries THREE consumers, so nothing on it can ever be a closed book.
+ *
+ * The head at (7,8) has all 24 of its neighbours inside the field. Pipes run under three of
+ * them, which changes nothing: `advanceSprinkler` asks `machineAt`, not `tileOccupied`, so a
+ * pipe overhead (item 120) is not a roof.
+ */
+function pipedHeadWorld(
+  seed: number,
+  withTank = false,
+): { state: WorldState; head: Machine; tank: Machine | null } {
+  const state = createWorld(seed);
+  state.unlocked = [TechId.Pumps, TechId.PipedSprinklers];
+  state.moneyCents = 10_000_000;
+
+  spawnMachine(state, MachineKind.Pump, 12, 12)!;
+  for (let x = 11; x >= 3; x--) spawnPipe(state, x, 12, LiquidId.Water);
+  for (let y = 11; y >= 8; y--) spawnPipe(state, 3, y, LiquidId.Water);
+  for (let x = 4; x <= 6; x++) spawnPipe(state, x, 8, LiquidId.Water);
+
+  const tank = withTank ? spawnMachine(state, MachineKind.Tank, 1, 10)! : null;
+  const head = spawnMachine(state, MachineKind.PipedSprinkler, 7, 8)!;
+
+  rebuildNetworks(state);
+  return { state, head, tank };
+}
+
 // --- the reservoir ------------------------------------------------------------------
 
 describe('the reservoir', () => {
@@ -560,22 +592,27 @@ describe('the barrel sprinkler', () => {
     expect(lamp()).toBe(LampState.Running);
   });
 
-  it('leaves the piped head METERED and its scan cursor untouched, exactly as it was', () => {
-    // Item 097 is the barrel's ruling. The piped head is required to come through it
-    // byte-identical: it still pays `SPRINKLER_POUR_ML` per tile out of its ledger-fed buffer,
-    // still stops the moment it cannot cover the next tile, and still never writes a cursor.
+  it('BRINGS THE PIPED HEAD WITH IT (item 128), and still writes it no scan cursor', () => {
+    // **THE BEHAVIOUR THIS TEST USED TO PIN WAS THE BUG.** Until item 128 it asserted that three
+    // tiles' worth of buffer bought three tiles and then the head parked mid-patch — item 097 was
+    // the barrel's ruling, and the piped head was required to come through it byte-identical. In
+    // play that read as *"the pipette sprinkler should work just like the regular sprinkler and
+    // water around it 5 by 5"*: a head on a network that could not keep its buffer full served
+    // the near rows and abandoned the far ones. It is charged now, so the same buffer buys
+    // NOTHING — it cannot afford to start — and the whole patch lands the moment it can.
     const state = createWorld(869);
     state.unlocked = [TechId.Pumps, TechId.PipedSprinklers];
     const head = spawnMachine(state, MachineKind.PipedSprinkler, 7, 7)!;
-    head.tankMl = 3 * SPRINKLER_POUR_ML; // Deliberately dry mid-patch, where a barrel would refuse.
+    head.tankMl = 3 * SPRINKLER_POUR_ML; // Three tiles' worth: three pours once, nothing now.
     for (const tile of state.field) tile.moisture = 0;
 
     stepMany(state, 2 * SPRINKLER_PERIOD_TICKS);
-    expect(head.wateredCount).toBe(3);
-    expect(head.tankMl).toBe(0);
+    expect(head.wateredCount, 'a part-charge bought part of a patch').toBe(0);
+    expect(head.tankMl, 'the part-charge was spent on nothing').toBe(3 * SPRINKLER_POUR_ML);
     expect(head.scanCursor).toBe(0);
     // And it has no charges to report: nobody hauls to it, so "3 of 10" would be a walk it
-    // never has to plan (item 097's view contract).
+    // never has to plan (item 097's view contract, unchanged by item 128 — the buffer is
+    // head-room on a ledger, not a supply of waterings somebody has to go and top up).
     const hv = view(state).machines.find((m) => m.id === head.id)!;
     expect(hv.tankCharges).toBe(0);
     expect(hv.tankChargesMax).toBe(0);
@@ -1060,6 +1097,175 @@ describe('piped sprinklers and the Irrigation Hub', () => {
     const count = state.ceremonies.filter((id) => id === CeremonyId.IrrigationHub).length;
     stepMany(state, 500);
     expect(state.ceremonies.filter((id) => id === CeremonyId.IrrigationHub).length).toBe(count);
+  });
+
+  it('CHARGED: a healthy head wets all 24 neighbours in one activation, never its own', () => {
+    // **THE ITEM, IN ONE TEST** (128). Owner ask, 2026-08-17: *"the pipette sprinkler should
+    // work just like the regular sprinkler and water around it 5 by 5."* The coverage was never
+    // the bug — this head has carried `SPRINKLER_RADIUS_TILES` since it existed — the METERING
+    // was: it paid per tile and broke out of the sweep the moment the buffer could not cover
+    // the next one, so a network running short bought the near rows and abandoned the far ones.
+    const { state, head } = pipedHeadWorld(1280);
+    head.network = 0; // Detached, so the arithmetic below is the head's and not the pump's.
+    head.tankMl = 0;
+    stepMany(state, 2); // Past tick 0, so a pour mark is distinguishable from "never".
+    head.tankMl = SPRINKLER_CHARGE_ML;
+    for (const tile of state.field) {
+      tile.moisture = 0;
+      tile.lastPouredTick = 0;
+    }
+
+    stepMany(state, 1);
+    expect(head.wateredCount, 'the sweep stopped short of the full patch').toBe(24);
+    expect(head.opCount).toBe(1);
+    expect(head.tankMl, 'a whole-patch charge cost more or less than one charge').toBe(0);
+
+    // Near row and far row together, which is the shape the metered head could not hold.
+    const poured = (y: number) =>
+      [5, 6, 7, 8, 9].map((x) => tileAt(state, x, y)!).filter((t) => t.lastPouredTick > 0).length;
+    expect(poured(6), 'the near row went unwatered').toBe(5);
+    expect(poured(10), 'the far row was starved').toBe(5);
+    // ITS OWN TILE IS NEVER WET: it is machine-occupied, and item 067 put occupied ground
+    // permanently outside the watering surface. 24 and not 25, and this is which one is missing.
+    expect(tileAt(state, 7, 8)!.lastPouredTick, 'the head watered the ground under itself').toBe(0);
+    expect(tileAt(state, 7, 8)!.moisture).toBe(0);
+  });
+
+  it('NO WEAR, EVER — parity of unit is not parity of entropy', () => {
+    // `data.ts` on this machine: "Entropy is its own release." The barrel wears one per pour and
+    // the piped head wears nothing, and item 128 moved only what a cycle COSTS IN WATER.
+    const { state, head } = pipedHeadWorld(1281);
+    head.network = 0;
+    head.tankMl = 4 * SPRINKLER_CHARGE_ML;
+    const condition = head.condition;
+    for (let cycle = 0; cycle < 4; cycle++) {
+      for (const tile of state.field) tile.moisture = 0;
+      stepMany(state, SPRINKLER_PERIOD_TICKS + 1);
+    }
+    expect(head.opCount).toBeGreaterThan(0);
+    expect(head.condition, 'the piped head grew a wear model').toBe(condition);
+  });
+
+  it('**A STARVED HEAD WATERS NOTHING AND SAYS SO IN BLUE** — the trade item 128 makes', () => {
+    // THE HONEST COST OF THE FIX, PINNED RATHER THAN GLOSSED. A metered head short of water still
+    // wet *some* tiles; a charged one wets NONE, because it cannot afford to start. That is
+    // accepted knowingly: a partial patch is a machine looking like it works while the back row
+    // dies. What makes it fair is that the head SAYS so — `LampState.UtilityMissing`, the blue
+    // "a utility is missing" lamp, which had to move with the charge or it would be a green lamp
+    // over a machine that has quietly stopped.
+    const { state, head } = pipedHeadWorld(1282);
+    head.network = 0;
+    const lamp = () => view(state).machines.find((m) => m.id === head.id)!.lamp;
+    for (const tile of state.field) tile.moisture = 0;
+
+    head.tankMl = SPRINKLER_CHARGE_ML - 1;
+    expect(lamp(), 'a head a millilitre short reported itself running').toBe(
+      LampState.UtilityMissing,
+    );
+    stepMany(state, 4 * SPRINKLER_PERIOD_TICKS);
+    expect(head.wateredCount, 'a part-charge bought part of a patch').toBe(0);
+    expect(head.tankMl, 'the part-charge was spent on nothing').toBe(SPRINKLER_CHARGE_ML - 1);
+    expect(head.opCount).toBe(0);
+
+    // One more millilitre and the lamp goes green and the patch lands, in that order.
+    head.tankMl = SPRINKLER_CHARGE_ML;
+    expect(lamp()).toBe(LampState.Running);
+    stepMany(state, 1);
+    expect(head.wateredCount).toBe(24);
+  });
+
+  it('QUEUES rather than idling: it fires the tick the buffer comes good', () => {
+    // Work item 128's open question, ANSWERED BY MEASUREMENT rather than assumed from the
+    // cooldown grammar. "Waters nothing while slightly short" would be a much worse feeling if
+    // it also meant "and then waits out a fresh cooldown before noticing" — it does not: an
+    // unaffordable cycle returns before `machine.cooldown` is set, so the head re-asks every
+    // tick and spends the charge on the very tick it can afford one.
+    const { state, head } = pipedHeadWorld(1283);
+    head.network = 0;
+    head.tankMl = SPRINKLER_CHARGE_ML - 1;
+    for (const tile of state.field) tile.moisture = 0;
+
+    stepMany(state, 3 * SPRINKLER_PERIOD_TICKS);
+    expect(head.opCount, 'it fired on a buffer it could not afford').toBe(0);
+    expect(head.cooldown, 'a cycle it never began still cost it a cooldown').toBe(0);
+
+    head.tankMl = SPRINKLER_CHARGE_ML;
+    stepMany(state, 1);
+    expect(head.opCount, 'it sat on a full charge for a tick').toBe(1);
+    expect(head.wateredCount).toBe(24);
+  });
+
+  it('KEEPS THE ONE LEDGER, ON THE PIPED HEAD AND WITH A TANK IN THE LOOP', () => {
+    // **NOT INHERITED FROM THE BARREL'S COVERAGE — DRIVEN HERE** (item 128's instruction 2), and
+    // deliberately a CLOSED BOOK rather than an inequality. On a network with exactly one
+    // consumer and one tank, every millilitre the pump lifts out of the pond has precisely three
+    // places it can be at the end: still in the head's buffer, still in the tank, or spent as
+    // whole charges. Nothing else on this network can hold a drop.
+    //
+    // The tank is in the loop ON PURPOSE. Item 122 records that the pipe surplus buffer can be
+    // zeroed OR tripled with the whole suite green, and the surplus path is exactly the line
+    // that puts undelivered water into a tank. An equality across the tank catches both
+    // directions — zeroed and the water vanishes, tripled and it is invented — where the
+    // "never delivers more than it drew" inequality above only ever catches one.
+    const { state, head, tank } = pipedHeadWorld(1284, true);
+    const drawnBefore = state.stats.waterDrawnMl;
+    const headBefore = head.tankMl;
+    const tankBefore = tank!.tankMl;
+
+    // Re-parched between cycles, so the head keeps finding work and the ledger keeps moving.
+    for (let i = 0; i < 20; i++) {
+      for (const tile of state.field) tile.moisture = 0;
+      stepMany(state, 150);
+    }
+
+    const drawn = state.stats.waterDrawnMl - drawnBefore;
+    const spent = head.opCount * SPRINKLER_CHARGE_ML;
+    expect(drawn, 'the network leaked, banked, or invented water').toBe(
+      head.tankMl - headBefore + (tank!.tankMl - tankBefore) + spent,
+    );
+    // And it was a real run rather than a trivially satisfied one: a head that never drank and
+    // never poured would balance this equation with three zeroes.
+    expect(head.opCount, 'the head never fired, so the ledger proved nothing').toBeGreaterThan(0);
+    expect(drawn, 'the pump never lifted a drop').toBeGreaterThan(0);
+    // Every charge bought a whole patch — the other half of "a cycle it begins is a cycle it
+    // finishes", stated in tiles rather than in millilitres.
+    expect(head.wateredCount).toBe(head.opCount * 24);
+  });
+
+  it('sizes the buffer in the unit it actually spends, and says so', () => {
+    // `tankCapacityMl` used to be 15,000 under a comment reading "ten pours of head-room" — both
+    // true of a head that paid per tile, and both dead the moment the unit became a whole patch.
+    // Left alone it would have been less than HALF of one charge, and the machine would have sat
+    // at a full buffer it could never afford to spend: retired by a comment nobody re-read.
+    const spec = machineSpec(MachineKind.PipedSprinkler)!;
+    expect(spec.tankCapacityMl).toBe(2 * SPRINKLER_CHARGE_ML);
+    expect(spec.tankCapacityMl, 'a full buffer cannot buy a single cycle').toBeGreaterThanOrEqual(
+      SPRINKLER_CHARGE_ML,
+    );
+    // A cycle's worth of intake covers a cycle's charge, which is why the rate did not move.
+    expect(spec.intakeMlPerTick * (SPRINKLER_PERIOD_TICKS + 1)).toBeGreaterThan(
+      SPRINKLER_CHARGE_ML,
+    );
+  });
+
+  it('LEAVES THE IRRIGATION HUB METERED — a bounded scan has no whole sweep to buy', () => {
+    // Item 128 is the piped HEAD's ruling and the Hub is explicitly out of it. The Hub's sweep is
+    // a slice per tick across many ticks rather than one activation, so there is no cycle for it
+    // to pay for up front — and its lamp therefore still goes blue one POUR short, not one charge
+    // short. Both halves asserted, because the lamp reads a spec flag and a flag can be flipped.
+    const { state, hub } = plumbedWorld(1285);
+    const lamp = () => view(state).machines.find((m) => m.id === hub!.id)!.lamp;
+    hub!.network = 0;
+    for (const tile of state.field) tile.moisture = 0;
+
+    hub!.tankMl = 3 * SPRINKLER_POUR_ML;
+    stepMany(state, 4 * SPRINKLER_PERIOD_TICKS);
+    // Three tiles' worth bought three tiles: the metered model, alive and well on this machine.
+    expect(hub!.wateredCount).toBe(3);
+    expect(hub!.tankMl).toBe(0);
+    expect(lamp()).toBe(LampState.UtilityMissing);
+    hub!.tankMl = SPRINKLER_POUR_ML;
+    expect(lamp(), 'the Hub was held to the charged head’s floor').toBe(LampState.Running);
   });
 
   it('leaves the lower rung’s reach and pour size exactly as they were', () => {

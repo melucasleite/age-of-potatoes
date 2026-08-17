@@ -65,6 +65,7 @@ import {
   spawnZone,
   step,
   stepMany,
+  TillMode,
   toPayload,
 } from '../src/index';
 import {
@@ -677,6 +678,52 @@ const CHECKS: readonly MoveCheck[] = [
         state,
         act: () =>
           run(state, { type: 'PlaceMachine', kind: MachineKind.Sprinkler, tileX: 6, tileY: 6 }),
+      };
+    },
+  },
+  {
+    // **THE SAME TRANSFER, THE OTHER TRIGGER** (item 127). The till's new middle rung hands a
+    // laden tile back through the very same `clearFieldTileForMachine`, so it opens no new door
+    // and adds no row to the census — and THAT CLAIM IS WHAT THIS SCENARIO CHECKS. A reused
+    // primitive that had quietly grown a second path would show up here as a door driven by a
+    // verb the door list has never heard of, or as a ledger that stopped adding up.
+    //
+    // A drag rather than a single tile, because the drag is where the reuse could go wrong: one
+    // `TillTile` over three laden tiles is three trips through the primitive inside one command,
+    // and a hand-back that leaked would leak three times.
+    //
+    // A SOURCE, for the reason the placement scenario is one: a crop standing in the ground is
+    // not on the books at all — `goodsLedger` counts bags, hoppers, baskets, belts and shelves,
+    // and a tile is none of those. So the total may rise and may never fall.
+    name: 'the till sweeps a laden row and hands every tile back',
+    covers: [],
+    doors: [
+      'tick:clearFieldTileForMachine:addItem',
+      'tick:clearFieldTileForMachine:addItem#2',
+      'tick:clearFieldTileForMachine:addItem#3',
+    ],
+    verdict: MoveVerdict.Source,
+    build() {
+      const state = createWorld(12_020);
+      const spec = cropSpec(CropId.RussetPotato)!;
+      const growing = state.field.find((t) => t.tileX === 5 && t.tileY === 6)!;
+      plantCrop(state, growing, spec);
+      growing.growth = 1;
+      const ripe = state.field.find((t) => t.tileX === 6 && t.tileY === 6)!;
+      plantCrop(state, ripe, spec);
+      ripe.growth = ripe.growthTarget;
+      ripe.compost = 2;
+      const composted = state.field.find((t) => t.tileX === 7 && t.tileY === 6)!;
+      composted.compost = 3;
+      standOn(state, 6, 7);
+      return {
+        state,
+        act: () =>
+          run(state, {
+            type: 'TillTile',
+            rect: { x: 5, y: 6, w: 3, h: 1 },
+            mode: TillMode.Unplant,
+          }),
       };
     },
   },

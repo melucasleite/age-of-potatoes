@@ -22,6 +22,7 @@ import {
   GrabberTier,
   IntentAction,
   ItemId,
+  LiquidId,
   MachineKind,
   SUBTILE,
   TillMode,
@@ -37,6 +38,7 @@ import {
   counterPanelFor,
   createHold,
   createWorkQueue,
+  dragBand,
   dragCommands,
   holdCommand,
   machineTell,
@@ -633,10 +635,154 @@ describe('the till tool ([[066]])', () => {
     );
   }
 
-  it('the anchor decides the mode: grass tills, farmland un-tills', () => {
-    const view = owning(withFieldTiles(createWorldView(), [[4, 4]]));
+  /** The till's band, through the real drag path rather than the private `tillBand`. */
+  function tillBandFor(view: WorldView, anchor: [number, number], cursor: [number, number]) {
+    return dragBand(
+      view,
+      {
+        pointerId: 1,
+        anchor: { tileX: anchor[0], tileY: anchor[1] },
+        cursor: { tileX: cursor[0], tileY: cursor[1] },
+        tool: ToolMode.Till,
+        flipped: false,
+      },
+      CropId.RussetPotato,
+      LiquidId.None,
+    );
+  }
+
+  /** Three farm tiles at y=4: (4,4) bare, (5,4) planted, (6,4) composted. */
+  function ladder(): WorldView {
+    const view = owning(
+      withFieldTiles(createWorldView(), [
+        [4, 4],
+        [5, 4],
+        [6, 4],
+      ]),
+    );
+    view.field.crop[1] = CropId.RussetPotato; // (5,4)
+    view.field.compost[2] = 3; // (6,4)
+    return view;
+  }
+
+  it('the anchor decides the mode: grass tills, a laden tile lifts, bare dirt un-tills', () => {
+    const view = ladder();
     expect(tillModeFor(view, { tileX: 10, tileY: 10 })).toBe(TillMode.Till);
     expect(tillModeFor(view, { tileX: 4, tileY: 4 })).toBe(TillMode.Untill);
+    expect(tillModeFor(view, { tileX: 5, tileY: 4 })).toBe(TillMode.Unplant);
+    // A COMPOST HEAP IS LADEN TOO ([[127]] ruling 2). This tile used to be a dead end for the
+    // till — `Till` passed it over as already-farm and `Untill` refused it for the heap.
+    expect(tillModeFor(view, { tileX: 6, tileY: 4 })).toBe(TillMode.Unplant);
+  });
+
+  it('un-plant takes exactly the LADEN farm tiles, which is un-till’s complement', () => {
+    const view = ladder();
+    expect(tillConverts(view, 5, 4, TillMode.Unplant)).toBe(true); // crop
+    expect(tillConverts(view, 6, 4, TillMode.Unplant)).toBe(true); // compost
+    expect(tillConverts(view, 4, 4, TillMode.Unplant)).toBe(false); // bare farmland
+    expect(tillConverts(view, 9, 9, TillMode.Unplant)).toBe(false); // grass
+
+    // The partition, stated as such: no farm tile answers to both, and none to neither.
+    for (const [x, y] of [
+      [4, 4],
+      [5, 4],
+      [6, 4],
+    ] as const) {
+      const unplant = tillConverts(view, x, y, TillMode.Unplant);
+      const untill = tillConverts(view, x, y, TillMode.Untill);
+      expect(unplant).not.toBe(untill);
+    }
+  });
+
+  it('the band SAYS WHICH OF THE THREE it is about to do, before the button comes up', () => {
+    const view = ladder();
+
+    const till = tillBandFor(view, [9, 9], [10, 9]);
+    expect(till.tone).toBe('zone');
+    expect(till.label).toBe('till 2 tiles');
+
+    const untill = tillBandFor(view, [4, 4], [4, 4]);
+    expect(untill.tone).toBe('erase');
+    expect(untill.label).toBe('1 tile → grass');
+
+    // `box` blue, borrowed from teardown: the ground stays, the crop goes in your bag.
+    const unplant = tillBandFor(view, [5, 4], [5, 4]);
+    expect(unplant.tone).toBe('box');
+    expect(unplant.label).toContain('lift 1 tile');
+  });
+
+  it('the un-plant band NAMES WHAT COMES BACK, off the sim’s own slugs ([[121]]’s phrase)', () => {
+    const view = ladder();
+    view.field.ready[1] = 1; // (5,4) is ripe, so the produce is named too
+
+    // Anchored on the crop, dragged across the compost: one drag, both kinds of goods.
+    const band = tillBandFor(view, [5, 4], [6, 4]);
+    expect(band.label).toBe('lift 2 tiles · returns russet potato + 1 potato seed + 3 compost');
+  });
+
+  it('a rect that converts nothing says so IN THE MODE IT IS IN, all three of them', () => {
+    // Unowned land is the one place all three rungs go quiet on the same lot: the anchor still
+    // reads the tile and picks a mode, and every cell is refused for ownership.
+    const view = withFieldTiles(createWorldView(), [
+      [40, 40],
+      [41, 40],
+    ]);
+    view.field.crop[0] = CropId.RussetPotato; // (40,40) laden → `Unplant`
+    // (41,40) bare → `Untill`; (45,45) is unowned grass → `Till`.
+
+    expect(tillBandFor(view, [45, 45], [45, 45]).label).toBe('nothing here to till');
+    expect(tillBandFor(view, [40, 40], [40, 40]).label).toBe('nothing here to lift');
+    expect(tillBandFor(view, [41, 40], [41, 40]).label).toBe('nothing to return to grass');
+    // A blocked band carries no promise and no cells, in any of the three.
+    for (const at of [
+      [45, 45],
+      [40, 40],
+      [41, 40],
+    ] as const) {
+      const band = tillBandFor(view, [at[0], at[1]], [at[0], at[1]]);
+      expect(band.tone).toBe('blocked');
+      expect(band.label).not.toContain('returns');
+      expect(band.cells).toBeUndefined();
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────────────
+  //  THE TRAP ITEM 121 FELL INTO, AND THE ONE THIS BAND MUST NOT.
+  //
+  //  Commit `23fc429` fixed a placement ghost that went on advertising *"returns 1 potato
+  //  seed"* over a click the reducer refused: the tell was built from the BOUNDS and gated on
+  //  a legality flag assembled somewhere else, so a mute refusal (`footprintClear`) let the
+  //  two disagree. A drag makes that failure bigger, not smaller — the rectangle is whatever
+  //  the player waved over, and most of it is usually ground the till will not touch.
+  //
+  //  Here the phrase is computed from the CONVERTING CELLS, so a tile the sim will skip cannot
+  //  put a noun in it. These pin that: a machine standing on a planted tile contributes
+  //  nothing, and neither does a tile outside the owned lot.
+  // ────────────────────────────────────────────────────────────────────────────────────
+  it('never promises goods off a tile the reducer will skip', () => {
+    const view = owning(
+      withFieldTiles(createWorldView(), [
+        [4, 4],
+        [5, 4],
+      ]),
+    );
+    view.field.crop[0] = CropId.RussetPotato; // (4,4) — a clear lift
+    view.field.crop[1] = CropId.RussetPotato; // (5,4) — under a machine, so skipped
+    withMachine(view, 5, 4, MachineKind.Sprinkler);
+
+    const band = tillBandFor(view, [4, 4], [5, 4]);
+    // One tile lifted, ONE seed promised — not two.
+    expect(band.label).toBe('lift 1 tile · returns 1 potato seed');
+    expect(band.cells).toHaveLength(1);
+  });
+
+  it('promises nothing at all off unowned land', () => {
+    // Farmland outside the owned parcel: laden to the view, refused by the sim's ownership
+    // test, so it may neither fill a cell nor name a seed.
+    const view = withFieldTiles(createWorldView(), [[40, 40]]);
+    view.field.crop[0] = CropId.RussetPotato;
+    expect(tillConverts(view, 40, 40, TillMode.Unplant)).toBe(false);
+    expect(tillBandFor(view, [40, 40], [40, 40]).label).toBe('nothing here to lift');
   });
 
   it('one drag is ONE TillTile carrying the whole rect', () => {

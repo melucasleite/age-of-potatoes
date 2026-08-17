@@ -2620,9 +2620,13 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
   },
   {
     // THE TOP RUNG OF PLAN §3'S WATERING LADDER, and deliberately no better at watering than
-    // the barrel it replaces: same pour, same period, same radius. The only thing it buys is
-    // that you never fill it again. An automated tier that also waters *better* would make
-    // the lower rungs rot, and plan §1 says manual never rots.
+    // the barrel it replaces: same pour, same period, same radius, AND SINCE ITEM 128 THE SAME
+    // UNIT — one activation buys the whole patch, up front. The only thing it buys is that you
+    // never fill it again. An automated tier that also waters *better* would make the lower
+    // rungs rot, and plan §1 says manual never rots; item 097 moved the barrel to a whole-patch
+    // charge and left this head paying per tile, which made the AUTOMATED rung the sloppier of
+    // the two — a head on a network that could not keep its buffer full watered a handful of
+    // tiles and abandoned the rest mid-sweep. Charged is parity, not superiority.
     kind: MachineKind.PipedSprinkler,
     slug: 'piped-sprinkler',
     role: MachineRole.PipedSprinkler,
@@ -2633,8 +2637,18 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     workRatePerTick: 0,
     inputCapacity: 0,
     outputCapacity: 0,
-    /** Ten pours of head-room, so a brief throttle does not stop the cycle dead. */
-    tankCapacityMl: 15_000,
+    /**
+     * TWO WHOLE-PATCH CHARGES: one to spend now and one in hand, so a brief throttle does not
+     * stop the cycle dead. 72,000 ml.
+     *
+     * **THE OLD NUMBER WAS 15,000 AND THE OLD COMMENT SAID "ten pours of head-room"** — both
+     * true of a head that paid `SPRINKLER_POUR_ML` per tile, and both dead the moment item 128
+     * made the unit a whole patch. Left alone, 15,000 would have been less than HALF of one
+     * charge, and the head would have sat at a full buffer it could never afford to spend: a
+     * machine silently retired by a comment nobody re-read. Derived from `SPRINKLER_CHARGE_ML`
+     * rather than typed, so the next change to the unit cannot leave it behind again.
+     */
+    tankCapacityMl: 2 * SPRINKLER_CHARGE_ML,
     wearPerOperation: 0,
     inputs: [],
     outputItem: null,
@@ -2643,7 +2657,14 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     liquid: LiquidId.Water,
     ports: [],
     pumpRateMlPerMinute: 0,
-    /** 400 ml/tick — a touch over the 375 it averages, so it stays topped up when it can. */
+    /**
+     * 400 ml/tick — a touch over the ~356 it averages (`SPRINKLER_CHARGE_ML` every 101 ticks,
+     * which is the cycle: a head sets its own cooldown on the tick it fires), so it stays topped
+     * up when it can. UNCHANGED BY ITEM 128, and that is arithmetic rather than luck: the head's
+     * long-run draw over a full patch is the same 24 pours it always was, moved from twenty-four
+     * small payments to one large one. What the rate has to cover now is a charge between two
+     * cycles — 400 × 101 = 40,400 against 36,000 — which it does with room to spare.
+     */
     intakeMlPerTick: 400,
     coverageRadiusTiles: SPRINKLER_RADIUS_TILES,
     moistureSensing: false,

@@ -1546,11 +1546,17 @@ export function dragCommands(
 
   if (run.kind === 'rect') {
     if (drag.tool === ToolMode.Deconstruct) return teardownCommands(view, run);
-    // The till ([[066]]): one drag is ONE `TillTile`, and the ANCHOR picked the mode at the
-    // press — grass anchor tills, farmland anchor un-tills — the same commit-at-the-press
-    // rule zone painting uses, so the band can label itself correctly the whole way. The
-    // command is formed and sent even when every tile in it will be skipped; the sim is the
-    // authority and refuses a no-op drag untraced (§12).
+    // The till ([[066]], three rungs since [[127]]): one drag is ONE `TillTile`, and the
+    // ANCHOR picked the mode at the press — grass tills, a laden farm tile un-plants, bare
+    // farmland un-tills — the same commit-at-the-press rule zone painting uses, so the band
+    // can label itself correctly the whole way. The command is formed and sent even when every
+    // tile in it will be skipped; the sim is the authority and refuses a no-op drag untraced
+    // (§12).
+    //
+    // THIS IS THE ONE LINE IN THIS FILE WHERE A MIRROR IS NOT MERELY A GHOST. `tillModeFor`'s
+    // answer is not a colour — it is the verb the sim will perform, and §12's "the sim
+    // re-checks it" is no backstop against a mode that is merely WRONG rather than illegal.
+    // Swept against the real reducer in `till-mirror.test.ts` for exactly that reason.
     if (drag.tool === ToolMode.Till) {
       return [
         {
@@ -1892,19 +1898,45 @@ function runFor(drag: Drag): DragRun {
 // --- the till ----------------------------------------------------------------------------
 
 /**
- * Which way a till drag converts, decided by its ANCHOR: press on farmland and the drag
- * un-tills, press on anything else and it tills. Exported for the pointer tests.
+ * Which of the THREE ways a till drag converts, decided by its ANCHOR ([[127]]).
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  Press on grass and the drag tills. Press on a farm tile with SOMETHING ON IT — a crop in
+ *  the ground, a compost heap on top, or both — and the drag lifts that something and leaves
+ *  the ground as farmland. Press on BARE farmland and the drag goes back to grass.
+ *
+ *  THE MIDDLE RUNG IS WHY THIS STOPPED BEING A BOOLEAN. It used to be `isField ? Untill :
+ *  Till`, and "is this farmland" is no longer enough of a question: the sim now splits the
+ *  farm tiles in two, and `Unplant`/`Untill` are exact complements over them (`applyTillTile`,
+ *  `packages/sim/src/tick.ts`). So this asks the sim's own laden test — `crop !== None ||
+ *  compost > 0` — off the view columns the sim projects for it.
+ *
+ *  NOT A GATE, AND MORE THAN A GHOST (§12). Every other mirror in this file only colours a
+ *  preview, and the sim re-checks it. This one also picks the `mode` field the command
+ *  actually carries (`dragCommands`), so a drift here does not merely mis-draw — it sends the
+ *  wrong verb. That is precisely why it is swept tile-for-tile against the real reducer in
+ *  `till-mirror.test.ts` rather than eyeballed against `applyTillTile`.
+ * ────────────────────────────────────────────────────────────────────────────────────
  */
 export function tillModeFor(view: WorldView, anchor: TilePoint): TillMode {
-  return tileAtView(view, anchor.tileX, anchor.tileY).isField ? TillMode.Untill : TillMode.Till;
+  const query = tileAtView(view, anchor.tileX, anchor.tileY);
+  if (!query.isField) return TillMode.Till;
+  return query.crop !== 0 || query.compost > 0 ? TillMode.Unplant : TillMode.Untill;
 }
 
 /**
  * Would the sim's `applyTillTile` convert this tile, in this mode? The ghost's per-tile
  * truth, mirroring the reducer's own skip list — owned ground only, `tileOccupied` (which
- * over there is machines, belts, arms, pipes and water in one question), farmland keeps a
- * planted or compost-bearing tile, and a tile already in the asked-for state is a skip.
+ * over there is machines, belts, arms, pipes and water in one question), and a tile that does
+ * not match the mode the anchor picked is a skip.
  * A hint, never a gate (§12): the command goes regardless; this only colours the preview.
+ *
+ * THE THREE TAILS ARE WRITTEN OUT RATHER THAN LEFT TO A FALLTHROUGH ([[127]]). Before the
+ * middle rung this ended `if (Till) …; return <untill test>`, so every mode that was not
+ * `Till` was silently treated as `Untill` — which was true of a two-member union and became a
+ * lie the moment `Unplant` existed. `TillMode` is a const object rather than an enum, so
+ * nothing in the type system would have caught it: an `Unplant` drag would simply have drawn
+ * the un-till ghost, green cells over the wrong tiles, while the reducer did the right thing.
  */
 export function tillConverts(
   view: WorldView,
@@ -1920,7 +1952,13 @@ export function tillConverts(
   if (grabberAtView(view, tileX, tileY) !== null) return false;
   if (pipeAtView(view, tileX, tileY) !== null) return false;
   if (mode === TillMode.Till) return !query.isField;
-  return query.isField && query.crop === 0 && query.compost === 0;
+  // LADEN and BARE, the sim's two halves of the farm tiles: `tile.crop === CropId.None &&
+  // tile.compost <= 0` is the line `applyTillTile` skips an `Unplant` on, and the pair
+  // `untillTile` refuses on. Read here off the same two view columns, so one predicate is
+  // negated rather than two written.
+  const laden = query.crop !== 0 || query.compost > 0;
+  if (mode === TillMode.Unplant) return query.isField && laden;
+  return query.isField && !laden;
 }
 
 /**
@@ -2435,17 +2473,69 @@ function teardownBand(view: WorldView, bounds: Bounds): BandState {
 }
 
 /**
+ * The tone each till mode fills its converting tiles with — and `box` is a BORROWED word, not
+ * a new one ([[127]]).
+ *
+ * `zone` green is "this becomes farmland" and `erase` red is "this goes back to grass, ground
+ * released", exactly as un-zoning releases a zone. The middle rung does NEITHER: the ground it
+ * touches is farmland before and farmland after, and the only thing that moves is the crop —
+ * off the tile and into your bag. That is the sentence teardown's `box` blue was invented to
+ * say (`chrome.ts`: *"`erase` red is 'off the lot, money back' and this is 'into your bag'"*),
+ * so an un-plant says it in the same colour rather than in a fourth one the player would have
+ * to learn separately. A boxed Fryer and a lifted potato are the same promise.
+ */
+const TILL_TONE: Readonly<Record<TillMode, BandTone>> = {
+  [TillMode.Till]: 'zone',
+  [TillMode.Unplant]: 'box',
+  [TillMode.Untill]: 'erase',
+};
+
+/**
+ * What a rectangle that converts NOTHING says, per mode.
+ *
+ * A RECORD RATHER THAN A TERNARY, and that is the whole point of it: a `TillMode` this table
+ * has no row for is a compile error, which is exactly what did not happen when the middle rung
+ * landed in the sim and every two-way `mode === Till ? … : …` in this file silently kept
+ * answering for a third case it had never heard of.
+ */
+const TILL_EMPTY_LABEL: Readonly<Record<TillMode, string>> = {
+  [TillMode.Till]: 'nothing here to till',
+  [TillMode.Unplant]: 'nothing here to lift',
+  [TillMode.Untill]: 'nothing to return to grass',
+};
+
+/**
  * The till band: exactly the tiles this drag would convert, filled; everything the sim will
- * skip — machines, water, crops, ground already in the asked-for state — shows through.
+ * skip — machines, water, ground already in the asked-for state, tiles that do not match the
+ * mode the anchor picked — shows through.
  *
  * PER-TILE, LIKE TEARDOWN AND FOR THE SAME REASON: a till is N independent conversions and
  * the tiles genuinely disagree, so a single fill would have to lie about the sprinkler
- * standing mid-rectangle. Green (`zone`) going to farmland, red (`erase`) going back to
- * grass — the erase tone because un-tilling releases ground exactly as un-zoning does. An
- * empty result keeps the plain outline in the refusal tone, like a teardown over bare dirt.
+ * standing mid-rectangle. An empty result keeps the plain outline in the refusal tone, like a
+ * teardown over bare dirt.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  THE UN-PLANT NAMES WHAT COMES BACK, AND IT IS SPENT ONLY WHERE THE LIFT HAPPENS ([[127]]).
+ *
+ *  Item 121 taught the placement ghost to say *"returns 1 potato seed"* before a sprinkler
+ *  uproots a row, and a drag that lifts sixty tiles owes the player that sentence far more
+ *  than a single click did. Same function, same nouns, same sim slugs — `handBackOver`, which
+ *  is item 121's `handBackPhrase` with its footprint loop lifted out so both callers can hand
+ *  it a set of tiles.
+ *
+ *  **AND THE TRAP THAT CAUGHT ITEM 121 CANNOT BE SPRUNG HERE, BY CONSTRUCTION.** Over there
+ *  the tell was computed from the ghost's BOUNDS and then gated on a legality flag assembled
+ *  separately — so when `footprintClear` (a refusal with no words) started failing, the gate
+ *  and the tell disagreed and a blocked click went on advertising a seed it would never pay.
+ *  The fix was to gate the tell on `free`. Here there is nothing to gate: the phrase is
+ *  computed from `cells`, which IS the set of tiles `tillConverts` said the reducer will take.
+ *  A tile the sim will skip is not in that list, so it cannot contribute a noun — and a
+ *  rectangle that converts nothing returns above, before the phrase is ever built. The tell
+ *  is not permitted to outlive the action because it is derived from the action.
+ * ────────────────────────────────────────────────────────────────────────────────────
  */
 function tillBand(view: WorldView, bounds: Bounds, mode: TillMode): BandState {
-  const tone: BandTone = mode === TillMode.Till ? 'zone' : 'erase';
+  const tone = TILL_TONE[mode];
   const cells: BandCell[] = [];
   for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
@@ -2454,25 +2544,25 @@ function tillBand(view: WorldView, bounds: Bounds, mode: TillMode): BandState {
   }
 
   if (cells.length === 0) {
-    return {
-      ...bounds,
-      tone: 'blocked',
-      label: mode === TillMode.Till ? 'nothing here to till' : 'nothing to return to grass',
-      dir: Direction.None,
-    };
+    return { ...bounds, tone: 'blocked', label: TILL_EMPTY_LABEL[mode], dir: Direction.None };
   }
 
   const n = cells.length;
-  return {
-    ...bounds,
-    tone,
-    cells,
-    label:
-      mode === TillMode.Till
-        ? `till ${n} tile${n === 1 ? '' : 's'}`
-        : `${n} tile${n === 1 ? '' : 's'} → grass`,
-    dir: Direction.None,
-  };
+  const tiles = `${n} tile${n === 1 ? '' : 's'}`;
+  let label: string;
+  if (mode === TillMode.Till) {
+    label = `till ${tiles}`;
+  } else if (mode === TillMode.Untill) {
+    label = `${tiles} → grass`;
+  } else {
+    // Every cell here is laden — that is what `tillConverts` asked — so the phrase is never
+    // empty in practice. It is still checked, because "never in practice" is how the last
+    // ghost that lied got written.
+    const handBack = handBackOver(view, cells);
+    label = handBack === '' ? `lift ${tiles}` : `lift ${tiles} · ${handBack}`;
+  }
+
+  return { ...bounds, tone, cells, label, dir: Direction.None };
 }
 
 /**
@@ -2900,38 +2990,65 @@ function farmRefusal(view: WorldView, bounds: Bounds, fieldPlaceable: boolean): 
  */
 function handBackPhrase(view: WorldView, bounds: Bounds, fieldPlaceable: boolean): string {
   if (!fieldPlaceable) return '';
+  // A footprint is 2×2 at the very largest (the Irrigation Hub), so this list costs four
+  // objects on a hover frame that already builds twenty-five `BandCell`s for the coverage
+  // square below. Spelling the tiles out is what lets the till hand its own set in.
+  const tiles: TileXY[] = [];
+  for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
+    for (let x = bounds.x; x < bounds.x + bounds.w; x++) tiles.push({ x, y });
+  }
+  return handBackOver(view, tiles);
+}
 
+/** A tile named by the two coordinates `BandCell` already carries, so a cell list is one. */
+interface TileXY {
+  x: number;
+  y: number;
+}
+
+/**
+ * The body of `handBackPhrase`, over AN ARBITRARY SET OF TILES rather than a rectangle
+ * ([[127]]).
+ *
+ * WHY THE LOOP CAME OUT. A placement lifts every tile of its footprint, so "the footprint" and
+ * "the tiles that will actually be lifted" were the same list and the distinction did not
+ * exist. A till drag breaks that: the rectangle is whatever the player waved over, and the
+ * tiles the reducer will genuinely take are the subset `tillConverts` accepts — grass, water,
+ * machines and bare dirt all sit inside the same rect and none of them hands anything back.
+ * Passing the SET rather than the BOUNDS is what keeps this tell honest under a drag, and it
+ * is the structural version of the `free` gate item 121 had to add after the fact.
+ */
+function handBackOver(view: WorldView, tiles: readonly TileXY[]): string {
   let seeds = 0;
   let compost = 0;
   let crop = 0;
   let mixed = false;
   const produce: number[] = [];
 
-  for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
-    for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
-      const query = tileAtView(view, x, y);
-      if (!query.isField) continue;
-      compost += query.compost;
-      if (query.crop === 0) continue;
-      // ONE SEED PER PLANT IN THE GROUND, ripe or not — including a regrowing crop, which a
-      // hand harvest leaves standing and a placement uproots (the sim's ruling).
-      seeds += 1;
-      if (crop === 0) crop = query.crop;
-      else if (crop !== query.crop) mixed = true;
-      if (!query.ready) continue;
-      const spec = cropSpec(query.crop as CropId);
-      if (spec === null) continue;
-      // The Day-Old grade is the sim's opinion, read through the sim's own scalar rather than
-      // re-derived from `wilt` here. `wilt` is a `FieldView` column, so this reads it by index
-      // instead of widening `TileQuery`, which every drag frame builds for every tile.
-      // `FieldView.wilt` crosses the seam as a bare number (§12), the same way `PipeView.liquid`
-      // and `GrabberView.dir` do — branded here, at the one place that reads it.
-      const wilt = (
-        query.fieldIndex >= 0 ? (view.field.wilt[query.fieldIndex] ?? 0) : 0
-      ) as WiltStage;
-      const item = harvestItemForWilt(wilt, spec);
-      if (!produce.includes(item)) produce.push(item);
-    }
+  for (let i = 0; i < tiles.length; i++) {
+    const at = tiles[i]!;
+    const query = tileAtView(view, at.x, at.y);
+    if (!query.isField) continue;
+    compost += query.compost;
+    if (query.crop === 0) continue;
+    // ONE SEED PER PLANT IN THE GROUND, ripe or not — including a regrowing crop, which a
+    // hand harvest leaves standing and a placement uproots (the sim's ruling).
+    seeds += 1;
+    if (crop === 0) crop = query.crop;
+    else if (crop !== query.crop) mixed = true;
+    if (!query.ready) continue;
+    const spec = cropSpec(query.crop as CropId);
+    if (spec === null) continue;
+    // The Day-Old grade is the sim's opinion, read through the sim's own scalar rather than
+    // re-derived from `wilt` here. `wilt` is a `FieldView` column, so this reads it by index
+    // instead of widening `TileQuery`, which every drag frame builds for every tile.
+    // `FieldView.wilt` crosses the seam as a bare number (§12), the same way `PipeView.liquid`
+    // and `GrabberView.dir` do — branded here, at the one place that reads it.
+    const wilt = (
+      query.fieldIndex >= 0 ? (view.field.wilt[query.fieldIndex] ?? 0) : 0
+    ) as WiltStage;
+    const item = harvestItemForWilt(wilt, spec);
+    if (!produce.includes(item)) produce.push(item);
   }
 
   if (seeds === 0 && compost === 0) return '';

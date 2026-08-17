@@ -619,16 +619,48 @@ function applyWalkAndAct(state: WorldState, command: WalkAndActCommand): boolean
  *   and breaking ground is making a build surface), not already farm, and not under anything —
  *   a machine, a belt, a grabber, a pipe, or water. The soil it gets is rolled once per
  *   position ever; see `tillTile`.
+ * - `Unplant` (item 127): the tile must currently be farm and LADEN — a crop in the ground, a
+ *   compost heap on it, or both. It hands everything back through `clearFieldTileForMachine`
+ *   and the tile STAYS FARMLAND. See the header below for the three rulings this rung makes.
  * - `Untill`: the tile must currently be farm and EMPTY — a planted or compost-bearing tile
  *   refuses inside `untillTile`, because the till never destroys what a hand would have to
  *   pick up (plan §4). A zoned tile may go; the zone loses the tile and an emptied zone is
  *   pruned, exactly as painting it out would.
  *
+ * **`Unplant` AND `Untill` PARTITION THE FARM TILES, WHICH IS THE POINT OF THE LADDER.** One
+ * takes tiles with something on them and one takes tiles with nothing on them, and their two
+ * predicates are exact complements — `laden` here is the negation of the pair `untillTile`
+ * refuses on. So there is no farm tile the till has no answer for, and no tile both modes want.
+ * Before item 127 a composted bare tile was a dead end: `Till` passed it over as already-farm
+ * and `Untill` refused it for the heap, and the only way forward was to go and harvest the heap
+ * by hand. It is the middle rung's now, on the same sentence as everything else laden.
+ *
+ * **THE RIPE TILE IS UN-PLANTED, NOT SKIPPED**, agreeing with item 121 — and the argument is
+ * in `clearFieldTileForMachine`, which pays the produce out through `takeHarvest`, the same
+ * pull a hand makes. The case FOR skipping it was real and is written down on work item 127:
+ * placing a machine on a ripe tile has a purpose beyond clearing it, tilling one does not, and
+ * the player already owns a strictly better verb for a finished crop. What kills it is that its
+ * own justification — "a tool that could silently shovel away a finished crop" — is false here.
+ * Nothing is shovelled away: the player is paid precisely what harvesting first would have
+ * paid, Day-Old grade and fertility wear included. Set against that, skipping costs two real
+ * things. Legality would depend on a growth timer, so a tile could change category under a
+ * stationary cursor — WORSE under a rect than under item 121's single placement, because a
+ * sixty-tile drag would come back with holes in it wherever a crop happened to be ahead of its
+ * neighbours, and the player would have to work out why. And the till would then be reusing
+ * two thirds of the seed-return primitive and writing its own third, which is the second way to
+ * get the conservation accounting wrong that item 121 exists to prevent.
+ *
  * Applied — and traced, and counted as ONE `handCarry` touch — only when at least one tile
  * actually changed.
  */
 function applyTillTile(state: WorldState, command: TillTileCommand): boolean {
-  if (command.mode !== TillMode.Till && command.mode !== TillMode.Untill) return false;
+  if (
+    command.mode !== TillMode.Till &&
+    command.mode !== TillMode.Unplant &&
+    command.mode !== TillMode.Untill
+  ) {
+    return false;
+  }
   const clipped = clipRectToField(command.rect);
   if (clipped === null) return false;
 
@@ -640,6 +672,21 @@ function applyTillTile(state: WorldState, command: TillTileCommand): boolean {
         // `tileOccupied` is machines, belts, grabbers, pipes, and water in one question.
         if (tileOccupied(state, x, y)) continue;
         if (tillTile(state, x, y) !== null) changed += 1;
+      } else if (command.mode === TillMode.Unplant) {
+        // The same floor rule as `Untill` one branch down, for the same reason — and it is a
+        // belt-and-braces skip rather than a live one, since `applyPlaceMachine` clears a tile
+        // on the way in and a machine therefore never stands on a laden one.
+        if (tileOccupied(state, x, y)) continue;
+        const tile = tileAt(state, x, y);
+        if (tile === null) continue;
+        // LADEN, and this line is the predicate a client mirrors to draw the ghost.
+        if (tile.crop === CropId.None && tile.compost <= 0) continue;
+        // **ITEM 121'S TRANSFER, NOT A SECOND ONE.** A waterer dropped on a planted tile and a
+        // till swung over one are the same hand-back with two triggers, so they are one
+        // function — and the bag doors that function owns are already on the move census, which
+        // is why this rung adds no row to it.
+        clearFieldTileForMachine(state, tile);
+        changed += 1;
       } else {
         // A field-placed machine (item 067) keeps its floor: the ground under it cannot be
         // pulled away while it stands, for the same reason till skips occupied tiles.
@@ -3159,10 +3206,27 @@ function advanceOrchard(machine: Machine, spec: MachineSpec): void {
  * head cannot run dry mid-patch, cannot serve the near rows and abandon the far ones, and
  * cannot spend a fraction of a charge on a fraction of a job.
  *
- * **METERED (`chargeMl === 0`) — the piped head.** Pays `SPRINKLER_POUR_ML` per tile out of a
- * ledger-fed buffer and stops the moment the buffer cannot cover the next one. This is
- * byte-for-byte what it always did, and it has to be: item 097 is the barrel's ruling and the
- * Hub and the piped heads are required to come through it unchanged.
+ * **METERED (`chargeMl === 0`) — the Irrigation Hub, and nothing else since item 128.** Pays
+ * `SPRINKLER_POUR_ML` per tile out of a ledger-fed buffer and stops the moment the buffer
+ * cannot cover the next one. The Hub keeps it because the Hub's sweep is a BOUNDED SCAN across
+ * many ticks rather than one activation — there is no "whole sweep" for it to buy up front, and
+ * `advanceIrrigationHub` has its own loop and its own cursor for exactly that reason.
+ *
+ * The piped head was metered until item 128, and the owner found what that cost in play:
+ * *"the pipette sprinkler should work just like the regular sprinkler and water around it 5 by
+ * 5."* It always covered the same 5×5 — `coverageRadiusTiles` was never the bug — but a head
+ * whose network could not keep the buffer full broke out of the sweep mid-patch, so it watered
+ * the near rows and abandoned the far ones. That is item 086's complaint, one rung up, and it
+ * has item 097's answer: an affordable cycle is a completable cycle.
+ *
+ * **WHAT THE PIPED HEAD TRADED AWAY FOR IT, SAID OUT LOUD.** A metered head starved of water
+ * still wets *some* tiles; a charged one wets NONE, because it cannot afford to start. That is
+ * a real regression for a network running short and it is accepted knowingly: a partial patch
+ * is not a kindness, it is the machine looking like it works while the back row dies, and the
+ * head already owns the vocabulary for the honest version — `LampState.UtilityMissing`, the
+ * blue "a utility is missing" lamp, which now turns on A CHARGE short rather than a drop short
+ * (see `lampFor`). Nothing is lost while it waits: an unaffordable cycle sets no cooldown, so
+ * the head fires on the very tick the buffer comes good.
  *
  * **`machine.scanCursor` IS GONE FROM THIS FUNCTION, AND ITS ABSENCE IS THE POINT.** Item
  * 086 made a charge one tile's pour, so ten charges could not cross twenty-four thirsty
@@ -3173,7 +3237,8 @@ function advanceOrchard(machine: Machine, spec: MachineSpec): void {
  * affordable cycle is a completable cycle, so there is no "where it ran dry" left to
  * remember. Keeping a cursor here would be a fossil that never moves. The Hub keeps its own
  * (`advanceIrrigationHub`), which is a genuinely bounded scan across ticks and a different
- * mechanism; the metered piped head never wrote one and still does not.
+ * mechanism; the piped head never wrote one, and since item 128 made it charged it has the same
+ * reason the barrel has never to want one.
  */
 function advanceSprinkler(
   state: WorldState,
@@ -3258,9 +3323,11 @@ function advancePipedSprinkler(state: WorldState, machine: Machine, spec: Machin
     advanceIrrigationHub(state, machine, spec);
     return;
   }
-  // `chargeMl` 0: METERED. The piped head pays per tile out of the buffer the ledger keeps
-  // topped up, exactly as it always has — item 097 moved the barrel's unit, not this one's.
-  advanceSprinkler(state, machine, spec, 0, 0);
+  // `chargeMl` `SPRINKLER_CHARGE_ML`: CHARGED, since item 128 — the head buys the whole 5×5 up
+  // front, exactly as the barrel has since item 097, so a cycle it begins is a cycle it
+  // finishes. `wearPerCycle` stays 0: the piped head has no wear by design, and parity of UNIT
+  // is not parity of entropy.
+  advanceSprinkler(state, machine, spec, SPRINKLER_CHARGE_ML, 0);
   if (machine.wateredCount > 0) markCeremony(state, CeremonyId.PipedSprinkler);
 }
 

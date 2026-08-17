@@ -36,17 +36,32 @@ export interface SetMoveDirectionCommand {
   dir: Direction;
 }
 
-/** Which way the till is being swung: breaking ground, or turning it back to grass. */
+/**
+ * Which way the till is being swung. THREE RUNGS, AND THE TOOL ALWAYS TAKES BACK EXACTLY ONE
+ * LAYER OF WHAT YOU DID (item 127) — which is what makes the ladder guessable rather than
+ * memorised:
+ *
+ *   - `Till` — grass becomes farmland. You broke ground.
+ *   - `Unplant` — a farm tile with something on it hands that something back and STAYS
+ *     FARMLAND. You planted; this un-plants.
+ *   - `Untill` — bare farmland becomes grass. You tilled; this un-tills.
+ *
+ * `Unplant` is the middle rung item 127 added, and it sits between the two on purpose: the
+ * owner's ask was *"if I use a shovel on a planted tile that is not fully grown, I want it to
+ * give me back the seed and keep it as dirt — if I click again, turn it to grass"*. Two swings
+ * to take a planted tile back to grass, in the order the two swings were made.
+ */
 export const TillMode = {
   Till: 'till',
+  Unplant: 'unplant',
   Untill: 'untill',
 } as const;
 
 export type TillMode = (typeof TillMode)[keyof typeof TillMode];
 
 /**
- * Swing the till over a run of tiles: grass becomes farmland, or — in `Untill` mode — empty
- * farmland becomes grass again.
+ * Swing the till over a run of tiles: grass becomes farmland, a laden farm tile hands its crop
+ * back in `Unplant` mode, or empty farmland becomes grass again in `Untill` mode.
  *
  * **ONE DRAG IS ONE COMMAND**, exactly the zone-paint grammar and for the same reasons: a
  * sixty-tile run is one trace entry, one replay step, and one eventual undo. The mode is
@@ -54,11 +69,19 @@ export type TillMode = (typeof TillMode)[keyof typeof TillMode];
  * flipped each tile to its opposite would be a command whose meaning depends on what it
  * happened to land on — unreadable in a trace and hostile under a drag.
  *
+ * **AND THAT IS WHY A THIRD MODE DID NOT BECOME A THIRD RULE** (item 127). The alternative
+ * considered and rejected was a drag that takes ONE LAYER off each tile independently: it
+ * would un-till the empty squares and un-plant the growing ones in a single gesture, which is
+ * exactly the "what did this drag mean?" ambiguity the anchor grammar exists to prevent. The
+ * anchor picks one of the three, the whole rect does that one thing, and tiles that do not
+ * match are skipped — the existing per-tile skip, extended rather than replaced.
+ *
  * **HAND-TOOL DOCTRINE: free, indestructible, always works** (plan §1). No cost, no wear, no
- * failure state — tiles the swing cannot convert (unowned ground, occupied ground, a planted
- * or compost-bearing farm tile, ground that already is what the mode asks for) are SKIPPED
- * GENTLY and cost nothing. Refused only when nothing at all changed, so the trace keeps its
- * "every applied command changed the world" contract.
+ * failure state — tiles the swing cannot convert (unowned ground, occupied ground, a farm tile
+ * that is bare when the swing wants it laden or laden when the swing wants it bare, ground that
+ * already is what the mode asks for) are SKIPPED GENTLY and cost nothing. Refused only when
+ * nothing at all changed, so the trace keeps its "every applied command changed the world"
+ * contract.
  *
  * **NOT REACH-GATED**, like `PaintZone` and unlike the watering can. A run of tiles cannot be
  * walked to one errand at a time (the player holds ONE intent), and the drag gesture is the

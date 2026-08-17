@@ -45,15 +45,33 @@ export const ToolMode = {
   PlaceChipKitchen: 5,
 
   /**
-   * The till ([[066]]): drag grass, get farmland; drag empty farmland, get grass back.
+   * The till ([[066]], third rung [[127]]): drag grass, get farmland; drag a laden tile, get
+   * what was on it back; drag bare farmland, get grass back.
    *
    * A HAND TOOL, NOT A PURCHASE — free, indestructible, mandatory on the hotbar like the
    * other five verbs, which is why it lives up here with them rather than in the build
    * palette. One drag is ONE `TillTile` (zone-paint grammar, §16), and the ANCHOR decides
-   * the mode exactly as the anchor decides which zone a paint grows: press on grass and the
-   * drag tills, press on farmland and it un-tills. The sim skips per tile — occupied ground,
-   * planted or compost-bearing tiles — and soil quality stays roll-once-per-position-ever
-   * (`soilMemory`), so tilling is never a reroll.
+   * the mode exactly as the anchor decides which zone a paint grows.
+   *
+   * **THREE MODES NOW, AND THE ANCHOR STILL PICKS EXACTLY ONE** ([[127]]). The tool always
+   * takes back one layer of what you did, so the ladder is guessable rather than memorised:
+   *
+   *   - press on grass → `Till`, and the whole rect breaks ground.
+   *   - press on a LADEN farm tile — a crop in it, a compost heap on it, or both → `Unplant`,
+   *     and the whole rect hands that back and STAYS FARMLAND.
+   *   - press on BARE farmland → `Untill`, and the whole rect goes back to grass.
+   *
+   * `Unplant` and `Untill` PARTITION the farm tiles — laden and bare, one rung each — so
+   * there is no farm tile the till has no answer for and no tile two modes both want. That
+   * partition is the sim's (`applyTillTile`), mirrored here and pinned tile-for-tile against
+   * the real reducer in `till-mirror.test.ts`; `tillModeFor` and `tillConverts` in
+   * `pointer.ts` are the two halves of the mirror.
+   *
+   * ONE MODE PER DRAG, and a tile that does not match it is skipped rather than converted the
+   * other way — the sim's ruling, and the reason a rect over mixed ground is readable at all.
+   * The sim skips per tile on its own account too: occupied ground (machines, belts, arms,
+   * pipes, water) is passed over in every mode, and soil quality stays
+   * roll-once-per-position-ever (`soilMemory`), so tilling is never a reroll.
    */
   Till: 34,
 
@@ -365,9 +383,12 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
   },
   [ToolMode.Till]: {
     label: 'Till',
-    // Both halves of the verb in one sentence, because the anchor decides which one a drag
-    // means and the player should learn that here rather than by surprise.
-    hint: 'drag grass into farmland — start on dirt to turn it back',
+    // ALL THREE RUNGS IN ONE SENTENCE ([[127]]), each keyed on WHERE YOU START, because the
+    // anchor is the only thing the player controls about which one a drag means — so the hint
+    // is written in that grammar rather than listing what the tool can do in the abstract.
+    // "or compost" is not padding: a bare composted tile was a dead end for this tool until
+    // item 127, and this line is where a player finds out it is not one any more.
+    hint: 'start on grass to till, on a crop or compost to lift it, on bare dirt for grass',
     costCents: 0,
     // A rect, like zone painting: a click is a 1×1 drag, so single tiles still work.
     gesture: 'rect',

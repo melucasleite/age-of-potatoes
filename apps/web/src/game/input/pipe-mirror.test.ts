@@ -1,5 +1,11 @@
-// The two legality MIRRORS this app keeps, pinned against the sim predicates they mirror —
+// Two of the legality MIRRORS this app keeps, pinned against the sim predicates they mirror —
 // and the picking rule that item 120 made necessary by letting a tile hold two things.
+//
+// THE THIRD IS NEXT DOOR, in `till-mirror.test.ts` ([[127]]): the till's anchor and per-tile
+// ghost. It is a separate file rather than a third block here because it cannot do what the
+// two below do — `applyTillTile` exports no predicate to import, keeping its verdict as an
+// inline `continue` — so it asks the real reducer a 1×1 command per tile and reads the answer
+// out of the trace. Same standard, different instrument.
 //
 // ────────────────────────────────────────────────────────────────────────────────────
 //  A MIRROR THAT DRIFTS IS A GHOST THAT LIES, AND BOTH OF THESE HAD JUST DRIFTED.
