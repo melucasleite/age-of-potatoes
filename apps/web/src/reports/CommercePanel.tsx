@@ -39,7 +39,7 @@ import { useState } from 'react';
 import { formatCents, formatTicks } from './format';
 import { r, cx } from './styles';
 import { destinationFor, reportsStore } from './store';
-import type { CartRow, CommerceSlice, ContractRow } from './types';
+import type { CartRow, CommerceSlice, ContractRow, DepotRow } from './types';
 import { useReportsSlice } from './use-reports';
 
 /** Quantities a route can be written for. Round numbers; the player is not doing algebra. */
@@ -51,8 +51,25 @@ export function CommercePanel() {
 
   const [item, setItem] = useState(0);
   const [quantity, setQuantity] = useState(25);
+  const [depotId, setDepotId] = useState(0);
 
   const chosenItem = item !== 0 ? item : (commerce.sellable[0]?.item ?? 0);
+
+  // ────────────────────────────────────────────────────────────────────────────────────
+  //  WHICH DEPOT, AND WHY THIS DEFAULT.
+  //
+  //  This used to be `commerce.depots[0]`, full stop, so a SECOND depot could never be given
+  //  a route: its tell said "click to sign a contract" forever while every signature landed on
+  //  the first one. The first depot worked only because it happened to be index zero.
+  //
+  //  The default is now the first depot with NO routes on it, falling back to the first depot
+  //  at all. That is the one the player is almost certainly looking at — an unrouted depot is
+  //  the only one whose tell is asking to be clicked — and it means the common case (build a
+  //  depot, sign a route) still takes zero interactions with the picker.
+  // ────────────────────────────────────────────────────────────────────────────────────
+  const fallbackDepot =
+    commerce.depots.find((d) => d.contractIds.length === 0) ?? commerce.depots[0];
+  const chosenDepot = commerce.depots.find((d) => d.id === depotId) ?? fallbackDepot;
 
   return (
     <div className={cx(r.card, r.panel)}>
@@ -100,8 +117,10 @@ export function CommercePanel() {
         commerce={commerce}
         item={chosenItem}
         quantity={quantity}
+        depot={chosenDepot}
         onItem={setItem}
         onQuantity={setQuantity}
+        onDepot={setDepotId}
         live={live}
       />
 
@@ -245,24 +264,51 @@ function NewContract({
   commerce,
   item,
   quantity,
+  depot,
   onItem,
   onQuantity,
+  onDepot,
   live,
 }: {
   commerce: CommerceSlice;
   item: number;
   quantity: number;
+  depot: DepotRow | undefined;
   onItem: (item: number) => void;
   onQuantity: (quantity: number) => void;
+  onDepot: (depotId: number) => void;
   live: boolean;
 }) {
-  const depot = commerce.depots[0];
   const priced = commerce.sellable.find((entry) => entry.item === item);
   const runValue = priced === undefined ? 0 : priced.priceCents * quantity;
 
   return (
     <div className={r.commerceRow}>
       <div className={r.actions}>
+        {/* Only when there is a choice to make. One depot needs no picker, and a select with
+            a single option is furniture that teaches the player nothing. */}
+        {commerce.depots.length > 1 ? (
+          <select
+            className={r.select}
+            value={depot?.id ?? 0}
+            onChange={(event) => {
+              onDepot(Number(event.target.value));
+            }}
+            aria-label="Depot to ship from"
+          >
+            {commerce.depots.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.label}
+                {row.contractIds.length === 0
+                  ? ' — no routes'
+                  : row.contractIds.length === 1
+                    ? ' — 1 route'
+                    : ` — ${String(row.contractIds.length)} routes`}
+              </option>
+            ))}
+          </select>
+        ) : null}
+
         <select
           className={r.select}
           value={item}
