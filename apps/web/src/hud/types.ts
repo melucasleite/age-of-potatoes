@@ -250,6 +250,33 @@ export interface BenchSlice {
 export interface ZoneRow {
   readonly id: number;
   readonly name: string;
+  /**
+   * `CropId`, or `CropId.None` for a rectangle nobody has filled in yet.
+   *
+   * ⚠️ **THIS FIELD, `priority` AND `autoReplant` WERE SILENTLY DROPPED FOR THE WHOLE LIFE OF
+   * THE HUD** ([[102]]). `ZoneView` has published all three since zones landed; `deriveLot`
+   * copied the counts and left them on the floor, so the zone card could not have shown a crop
+   * even if it had wanted to, and no surface in the app could tell whether a hopper was armed.
+   * Restoring the copy is the whole of the data half of that item — no sim change, no new
+   * projection. If a future zone control needs a fact, check `ZoneView` before adding one.
+   */
+  readonly crop: number;
+  /** The crop's yield spelled for a player — "Sugar Cane". Empty when no crop is set. */
+  readonly cropName: string;
+  /** 1 when this crop grows back after a harvest. §5's whole pacing argument, as a flag. */
+  readonly regrows: number;
+  /** 0–9. Who the seed hopper serves first when seed is short, and nothing else ([[102]]). */
+  readonly priority: number;
+  /** 1 when the seed hopper is armed on this zone. */
+  readonly autoReplant: number;
+  /**
+   * Seeds for this zone's crop in the player's own bag.
+   *
+   * The hopper plants FROM THE PLAYER'S STOCK (`zones.ts`'s `replantOneTile`), so an armed zone
+   * with an empty seed bag does nothing whatsoever and looks identical to a broken one. This is
+   * the number that lets the panel say which of the two it is looking at.
+   */
+  readonly seeds: number;
   readonly tiles: number;
   readonly planted: number;
   readonly mature: number;
@@ -262,6 +289,27 @@ export interface ZoneRow {
   readonly atRiskCents: number;
   /** The slice of `atRiskCents` on crops within ~a minute of turning Day-Old ([[021]]). */
   readonly imminentCents: number;
+}
+
+/**
+ * One crop a zone may be set to — the picker's row ([[102]]).
+ *
+ * BUILT FROM THE SIM'S OWN GATE, never from a list kept here. `applySetZoneCrop` refuses any
+ * crop whose `requiresTech` is unresearched, so the picker asks `techSatisfied` the same
+ * question the reducer will and simply does not draw the ones that would be thrown away. A
+ * control that dispatches a command the sim discards is not a control, it is a rumour.
+ */
+export interface ZoneCropOption {
+  /** `CropId`. `CropId.None` is a legal, offered choice: "leave it fallow". */
+  readonly id: number;
+  /** `ItemId` of the yield, for the sprite. 0 for the fallow row, which draws no icon. */
+  readonly item: number;
+  readonly name: string;
+  /** 1 when it grows back — the fact that decides whether a harvester alone can sustain it. */
+  readonly regrows: number;
+  /** `ItemId` of the seed, so the panel can say how many of them are in the bag. */
+  readonly seedItem: number;
+  readonly seeds: number;
 }
 
 /**
@@ -300,6 +348,24 @@ export interface LotSlice {
   readonly starved: number;
   readonly blocked: number;
   readonly sprinklers: number;
+  /**
+   * Every crop the sim would accept for a zone right now, fallow first ([[102]]).
+   *
+   * LOT-WIDE RATHER THAN PER-ZONE because the gate is the player's research, which is one fact
+   * about the world and not five facts about five rectangles. Rebuilt only when the set of
+   * satisfied techs actually changes — see `setLot`.
+   */
+  readonly cropOptions: readonly ZoneCropOption[];
+  /**
+   * 1 when `agronomy-seed-hopper` is researched.
+   *
+   * ⚠️ THE $1,200 NODE THAT DID NOTHING ([[102]]). `applySetZoneAutoReplant` refuses outright
+   * until this is true — the lock is in the simulation, not in the UI — so the toggle reads
+   * this to decide whether it is a control or an explanation. It is published rather than
+   * re-derived in the component because a panel asking the tech tree a question is a panel
+   * with a second opinion about what is unlocked.
+   */
+  readonly autoReplantOwned: number;
 }
 
 /**
@@ -601,6 +667,8 @@ export const ZERO_LOT: LotSlice = Object.freeze({
   starved: 0,
   blocked: 0,
   sprinklers: 0,
+  cropOptions: Object.freeze([]),
+  autoReplantOwned: 0,
 });
 
 export const ZERO_SHOP: ShopSlice = Object.freeze({

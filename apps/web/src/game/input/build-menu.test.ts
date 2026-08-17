@@ -131,6 +131,116 @@ describe('the maintenance rows ([[039]], [[090]])', () => {
   });
 });
 
+// --- the coverage invariant ([[100]]) ------------------------------------------------------
+//
+// ────────────────────────────────────────────────────────────────────────────────────
+//  THE TEST THAT WOULD HAVE CAUGHT FIFTEEN MACHINES AT ONCE, AND CAUGHT NONE OF THEM.
+//
+//  Every assertion above this line is PER ROW, and this file says so in its own words further
+//  up: "a row that was never added passes every per-row assertion by not being there." That is
+//  exactly what happened. `MachineKind` had 35 members and `toolMachineKind` had 18 cases; the
+//  owner found it by playing — "there are a lot of items that exist in the research, but they
+//  are not available to build" — and a sweep then proved the sim placed 34 of the 35 kinds
+//  quite happily. The whole loss was in the input layer, and it was invisible here because
+//  nothing in this file ever counted.
+//
+//  SO THE ASSERTION IS COVERAGE, AND THE ALLOWLIST IS THE FEATURE. Absence is only ever legal
+//  when somebody has written down why, and the entry carries the reason in the same line the
+//  test reads — which turns a silent hole into an enumerated debt with an item number on it.
+//  Pinned in BOTH directions, exactly as `KNOWN_FRAMELESS` is: a kind that gains a row while
+//  still on this list fails too, and that failure is the reminder to shorten the list rather
+//  than a bug. When the list is down to the two permanent entries, every machine in the game
+//  is buildable.
+//
+//  IT IS DOWN TO THE TWO PERMANENT ENTRIES. [[100]] wrote this list with twelve names on it and
+//  [[101]] deleted ten of them in the same wave by giving the pipe a build verb. Both survivors
+//  are rules rather than debts — one machine the world gives away and one the game stopped
+//  selling — so a third name appearing here is news, and the comment beside it had better say
+//  which item is going to remove it again.
+// ────────────────────────────────────────────────────────────────────────────────────
+
+interface Exemption {
+  readonly kind: MachineKind;
+  /** Why this machine has no build row. Read aloud in the failure message. */
+  readonly why: string;
+}
+
+const NO_BUILD_ROW: readonly Exemption[] = [
+  // --- permanent, and neither of these is an oversight -------------------------------------
+  {
+    kind: MachineKind.SellBin,
+    why: 'the world spawns it at creation — it is a gift, not a purchase',
+  },
+  {
+    kind: MachineKind.PartsBench,
+    why: 'retired by [[090]]; `applyPlaceMachine` refuses it and `isMachineRetired` says so',
+  },
+
+  // --- the pipe-dependent ten went here, and [[101]] took them out --------------------------
+  //
+  // The deferral was [[056]]'s and it was right: "Pipes/pump/tank/soda line stay unbuildable
+  // pending a pipe-run drag gesture — a Pump you cannot plumb is worse than none." What made it
+  // a bug rather than a plan is that the research tree kept selling all six HYDRAULICS nodes at
+  // full price, $6,100 of them, under a footer reading EVERY NODE UNLOCKS SOMETHING YOU CAN DO.
+  // `ToolMode.PlacePipe` is the gesture, so the condition the deferral named is met and the ten
+  // names below it are gone. Leave this paragraph: it is the only record of why they were here.
+];
+
+describe('every machine the sim ships ([[100]])', () => {
+  const kinds = Object.values(MachineKind) as MachineKind[];
+  const rowFor = new Map<number, ToolMode>();
+  for (const entry of BUILD_CATALOGUE) {
+    const kind = toolMachineKind(entry.tool);
+    if (kind !== null) rowFor.set(kind, entry.tool);
+  }
+  const exempt = new Map(NO_BUILD_ROW.map((item) => [item.kind as number, item.why]));
+
+  it('has a build row, or an exemption that says why not', () => {
+    const orphans: string[] = [];
+    for (const kind of kinds) {
+      if (rowFor.has(kind)) continue;
+      if (exempt.has(kind)) continue;
+      orphans.push(`${machineSpec(kind)?.slug ?? kind} (kind ${kind})`);
+    }
+    // ONE MESSAGE LISTING ALL OF THEM rather than a failure per kind: the thing that went
+    // wrong here was a count, and a reader who sees eleven slugs in one line understands the
+    // shape of the bug in a way eleven separate red lines do not.
+    expect(orphans, `unbuildable with no exemption: ${orphans.join(', ')}`).toEqual([]);
+  });
+
+  it('keeps no exemption for a machine that has since become buildable', () => {
+    for (const item of NO_BUILD_ROW) {
+      const tool = rowFor.get(item.kind);
+      expect(
+        tool === undefined,
+        `${machineSpec(item.kind)?.slug} is buildable now — drop its exemption ("${item.why}")`,
+      ).toBe(true);
+    }
+  });
+
+  it('exempts every retired kind, and exempts nothing else that the sim would refuse', () => {
+    // The two halves of the list have different lifetimes and the difference matters: a RETIRED
+    // kind can never come back (`applyPlaceMachine` reads `isMachineRetired`), while a deferred
+    // one is waiting on work that has an item number. Anything the sim outright refuses must be
+    // in here; anything else in here is a debt, not a rule.
+    for (const kind of kinds) {
+      if (!isMachineRetired(kind)) continue;
+      expect(exempt.has(kind), `${machineSpec(kind)?.slug} is retired and must be exempt`).toBe(
+        true,
+      );
+    }
+  });
+
+  it('gives every exemption a reason worth reading', () => {
+    for (const item of NO_BUILD_ROW) {
+      expect(
+        item.why.length,
+        `${machineSpec(item.kind)?.slug} is exempt for no stated reason`,
+      ).toBeGreaterThan(20);
+    }
+  });
+});
+
 /**
  * FIXTURE STORY: the two machines the art lane has not painted yet.
  *
@@ -144,8 +254,28 @@ describe('the maintenance rows ([[039]], [[090]])', () => {
  *
  * It was a list of two until [[090]] retired the Parts Bench off the menu entirely, which is
  * the other way an entry leaves this list.
+ *
+ * The two packers joined it in [[100]] and for a different reason from the bay's: nobody
+ * decided to draw them procedurally, the art lane simply has no `machine_six_packer` or
+ * `machine_combo_packer` in `art/manifest.json` yet. The WORLD is fine either way —
+ * `registerMachinePlaceholders` synthesises a body for any kind — so what degrades is this
+ * menu cell, to a lettered chip, because `resolveFrameIcon` is a bare manifest lookup. A
+ * lettered chip on a machine you can buy beats a machine you cannot buy at all, which is the
+ * trade [[100]] is making; the frames are an art-lane errand and this list is the reminder.
  */
-const KNOWN_FRAMELESS: readonly ToolMode[] = [ToolMode.PlaceDroneBay];
+const KNOWN_FRAMELESS: readonly ToolMode[] = [
+  ToolMode.PlaceDroneBay,
+  ToolMode.PlaceSixPacker,
+  ToolMode.PlaceComboPacker,
+  // [[101]]'s three. Seven of its ten machines — pump, tank, juicer, kettle, syrup mixer,
+  // carbonator, bottler — have finished 32×32 frames that have been sitting in the atlas
+  // unreachable, and `pipe_straight` is there too. These are the only gaps, and the two piped
+  // heads are the ones that sting: they sit in the Field group directly under a barrel
+  // Sprinkler that draws beautifully.
+  ToolMode.PlacePipedSprinkler,
+  ToolMode.PlaceIrrigationHub,
+  ToolMode.PlaceRecirculator,
+];
 
 describe('the build menu icons ([[071]])', () => {
   it('gives every entry a frame name, derived or declared', () => {

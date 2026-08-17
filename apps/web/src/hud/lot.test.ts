@@ -76,6 +76,17 @@ function viewWith(
     },
     zones: options.zones ?? [],
     machines: [],
+    // ⚠️ REQUIRED SINCE [[102]], and the reason is the point of that item: `deriveLot` now
+    // reads the player's RESEARCH and their SEED BAG, because the zone panel's crop picker
+    // offers exactly the crops `applySetZoneCrop` would accept and the hopper's copy reports
+    // the stock it plants from. Both are real fields on `WorldView`; this stub simply never
+    // had to carry them while the zone row was write-only spans.
+    //
+    // EMPTY, which is a MEANINGFUL default rather than a filler: a player who has researched
+    // nothing is offered fallow and the Russet, and every crop with a `requiresTech` is
+    // withheld — the sim's own gate, seen from this side.
+    unlocked: [],
+    inventory: [],
   } as unknown as WorldView;
 }
 

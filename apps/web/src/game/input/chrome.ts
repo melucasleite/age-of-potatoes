@@ -44,6 +44,12 @@ const CSS = `
   box-shadow:0 0 0 1px rgba(0,0,0,0.55) inset; }
 .sm-ix-band[data-tone="erase"] { border-color:rgba(233,124,110,0.95); background:rgba(233,124,110,0.18); }
 .sm-ix-band[data-tone="belt"] { border-color:rgba(226,190,101,0.95); background:rgba(226,190,101,0.16); }
+/* The pipe run ([[101]]). A TEAL OF ITS OWN rather than a reuse: the band already speaks in
+   four colours and every one of them was taken. Belt amber is the other buildable run and the
+   two must not be confused mid-drag; box blue means "into your bag"; mist blue is the faint,
+   deliberately unshouty coverage wash, which this would drown; zone green is the generic
+   legal-placement answer, and a pipe run is a specific thing rather than a footprint. */
+.sm-ix-band[data-tone="pipe"] { border-color:rgba(104,206,205,0.95); background:rgba(104,206,205,0.16); }
 .sm-ix-band[data-tone="blocked"] { border-color:rgba(233,124,110,0.9); background:rgba(233,124,110,0.10); }
 /* Per-tile cells, for the two bands that are not rectangles: a belt run that bends, and a
    teardown drag whose tiles disagree about what is going to happen to them. One div per
@@ -53,6 +59,7 @@ const CSS = `
   border:1px solid rgba(126,214,142,0.85); background:rgba(126,214,142,0.20); }
 .sm-ix-cell[data-tone="erase"] { border-color:rgba(233,124,110,0.9); background:rgba(233,124,110,0.22); }
 .sm-ix-cell[data-tone="belt"] { border-color:rgba(226,190,101,0.95); background:rgba(226,190,101,0.22); }
+.sm-ix-cell[data-tone="pipe"] { border-color:rgba(104,206,205,0.95); background:rgba(104,206,205,0.22); }
 .sm-ix-cell[data-tone="box"] { border-color:rgba(122,200,240,0.95); background:rgba(122,200,240,0.22); }
 .sm-ix-cell[data-tone="blocked"] { border-color:rgba(233,124,110,0.9); background:rgba(233,124,110,0.12); }
 /* Coverage mist: the tiles a watering machine will wet, drawn around its footprint. Fainter
@@ -145,7 +152,7 @@ function ensureStyle(): void {
  * borrowed from the walk-destination marker rather than invented, because both mean "this is
  * going to end up somewhere else" rather than "this is a problem".
  */
-export type BandTone = 'zone' | 'erase' | 'belt' | 'box' | 'blocked' | 'mist';
+export type BandTone = 'zone' | 'erase' | 'belt' | 'pipe' | 'box' | 'blocked' | 'mist';
 
 /**
  * One tile of a band that is not a rectangle.

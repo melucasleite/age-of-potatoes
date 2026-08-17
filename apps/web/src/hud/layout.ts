@@ -101,6 +101,23 @@ export function sidebarWidth(collapsed: boolean): number {
 }
 
 /**
+ * How wide the dock's CONTENTS are — the column minus the rail that outlives them.
+ *
+ * ONE READER, AND IT IS THE WHOLE REASON THIS EXISTS ([[106]]). Folded, the at-the-machine
+ * cards do not vanish with the body any more: they float over the canvas, at exactly this
+ * width. A card that changed shape depending on whether the dock beside it happened to be
+ * open would be two cards, and the entire claim of the float is that it is the SAME card in a
+ * different place — same dials, same grid, same line wraps, nothing to re-read.
+ *
+ * DERIVED, NEVER TYPED OUT, for the reason the function above exists at all: 416 written into
+ * a stylesheet is the second constant item 069 warned about, and it would go stale silently —
+ * the float would simply be a little wrong, on one state of one toggle, forever.
+ */
+export function sidebarBodyWidth(): number {
+  return SIDEBAR_WIDTH_PX - SIDEBAR_HANDLE_PX;
+}
+
+/**
  * `null` until something asks, because this module is imported by components that render on
  * the SERVER and reading `localStorage` at module scope would throw there. The first
  * `sidebarCollapsed()` on the client resolves it once and caches: `useSyncExternalStore`

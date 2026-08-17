@@ -77,6 +77,7 @@ import type {
   TechSlice,
   ToolSlice,
   ToolSlot,
+  ZoneCropOption,
   ZoneRow,
 } from './types';
 import {
@@ -631,6 +632,14 @@ export class HudStore {
    * thing that could have made it churn is the alert, which is why the sixty-second arming
    * lives in `RiskWatch` and produces a null-or-stable object rather than a countdown: an
    * alert carrying "58 seconds so far" would rebuild this slice on every publish forever.
+   *
+   * ⚠️ **THE ZONE COMPARISON IS NOW LOAD-BEARING FOR A CONTROL, NOT ONLY FOR A READOUT**
+   * ([[102]]). `crop`, `priority` and `autoReplant` are the three fields the zone panel writes,
+   * and a comparison that ignored them would leave a player who armed the seed hopper looking
+   * at an unlit toggle until some unrelated number in the field happened to move. That is
+   * exactly the "nothing happened" this item was filed about, reproduced one layer up. Every
+   * field a control can change must be compared here. `seeds` is compared too — it is what the
+   * panel's "no seed in the bag" line reads, and it falls as the hopper spends them.
    */
   private setLot(next: LotFields): boolean {
     const current = this.lot;
@@ -638,6 +647,8 @@ export class HudStore {
     const was = current.alert;
 
     if (
+      current.autoReplantOwned === next.autoReplantOwned &&
+      current.cropOptions.length === next.cropOptions.length &&
       current.wilting === next.wilting &&
       current.wilted === next.wilted &&
       current.atRiskCents === next.atRiskCents &&
@@ -654,7 +665,18 @@ export class HudStore {
       (was === null ? alert === null : alert !== null && was.text === alert.text)
     ) {
       let same = true;
-      for (let i = 0; i < next.zones.length; i++) {
+      // The picker's own rows: which crops are offered (a research change) and how many seeds
+      // are behind each (a purchase, a plant, a hopper spending one). Six entries at most, and
+      // every one of them is a number the player is reading while deciding what to sow.
+      for (let i = 0; i < next.cropOptions.length; i++) {
+        const a = current.cropOptions[i] as ZoneCropOption;
+        const b = next.cropOptions[i]!;
+        if (a.id !== b.id || a.seeds !== b.seeds) {
+          same = false;
+          break;
+        }
+      }
+      for (let i = 0; same && i < next.zones.length; i++) {
         const a = current.zones[i] as ZoneRow;
         const b = next.zones[i]!;
         if (
@@ -670,6 +692,19 @@ export class HudStore {
           same = false;
           break;
         }
+        // The four things a zone control writes, plus the seed stock the panel reports. None
+        // of these can move on their own; each one moving means a command landed, and a
+        // command landing is precisely when the panel has to redraw ([[102]]).
+        if (
+          a.name !== b.name ||
+          a.crop !== b.crop ||
+          a.priority !== b.priority ||
+          a.autoReplant !== b.autoReplant ||
+          a.seeds !== b.seeds
+        ) {
+          same = false;
+          break;
+        }
       }
       if (same) return false;
     }
@@ -677,6 +712,8 @@ export class HudStore {
     this.lot = Object.freeze({
       version: current.version + 1,
       zones: Object.freeze(next.zones.map((zone) => Object.freeze({ ...zone }))),
+      cropOptions: Object.freeze(next.cropOptions.map((option) => Object.freeze({ ...option }))),
+      autoReplantOwned: next.autoReplantOwned,
       wilting: next.wilting,
       wilted: next.wilted,
       atRiskCents: next.atRiskCents,

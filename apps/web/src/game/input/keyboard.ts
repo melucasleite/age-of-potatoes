@@ -151,8 +151,10 @@ export class KeyboardInput {
       case 'KeyR':
         this.system.rotate();
         return;
+      // C picks the crop — for the hand as well as for a new zone since [[103]], which is why
+      // it is no longer called the zone crop. Still cursor state: it emits nothing.
       case 'KeyC':
-        this.system.cycleZoneCrop();
+        this.system.cycleCrop();
         return;
       case 'Equal':
       case 'NumpadAdd':

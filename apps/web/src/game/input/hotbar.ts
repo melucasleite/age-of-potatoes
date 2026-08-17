@@ -68,12 +68,19 @@ export type HotbarSlot = HotbarEntry | null;
  * which cursor a boxed Fryer arms.
  */
 export function itemPlaceTool(item: number): ToolMode | -1 {
-  // The one usable consumable ([[009]]/tool-wiring): a repair kit is not a boxed machine, so
-  // the table below has never heard of it, but it IS a thing a digit can hold — its cursor
-  // spends the kit on a spot (`UseRepairKit`) instead of placing anything. Special-cased here
-  // rather than grown into a second table because this is the resolver both the bag's drag and
-  // the digit keys already ask; one branch makes the kit assignable everywhere at once.
+  // The usable consumables ([[009]]/tool-wiring, [[104]]): neither a repair kit nor a bag of
+  // fertilizer is a boxed machine, so the table below has never heard of either, but both ARE
+  // things a digit can hold — their cursors spend the item on a spot (`UseRepairKit`) or on a
+  // tile (`ApplyFertilizer`) instead of placing anything. Special-cased here rather than grown
+  // into a second table because this is the resolver both the bag's drag and the digit keys
+  // already ask; one branch makes a consumable assignable everywhere at once.
+  //
+  // THE FERTILIZER'S `-1` WAS THE WHOLE OF ITS EXILE FROM THE BAR. `Hotbar.assignItem` opens
+  // with `if (itemPlaceTool(item) === -1) return false;`, so the slot did not merely arm
+  // nothing — it visibly refused the drop and flashed, which reads as "this is not a thing",
+  // and the player has no way to learn that the game agrees it should be.
   if (item === ItemId.RepairKit) return ToolMode.UseRepairKit;
+  if (item === ItemId.Fertilizer) return ToolMode.ApplyFertilizer;
   const kind: MachineKind | null = machineKindForBoxedItem(item as ItemId);
   if (kind === null) return -1;
   return toolForMachineKind(kind) ?? -1;

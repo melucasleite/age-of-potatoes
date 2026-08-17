@@ -14,7 +14,14 @@
 // scope. Nothing here types a number that also lives in `packages/sim`.
 
 import type { WorldView } from '@snack/sim';
-import { beltSpec, grabberSpec, machineSpec, techSatisfied } from '@snack/sim';
+import {
+  PIPE_PRICE_CENTS_PER_TILE,
+  TechId,
+  beltSpec,
+  grabberSpec,
+  machineSpec,
+  techSatisfied,
+} from '@snack/sim';
 
 import { formatCents, formatCentsWhole } from '../../format/money';
 
@@ -76,6 +83,22 @@ const TECH_LABELS: Readonly<Record<string, string>> = {
   'commerce-upgrade-bench': 'Upgrade Bench',
   'fabrication-diagnostics': 'Diagnostics',
   'commerce-repair-drones': 'Repair Drones',
+  // [[100]]. THE WORDS ARE THE TECH PANEL'S OWN TITLES, not new ones invented here — the lock
+  // reason exists so the player can go and FIND the node, and a name that appears on only one
+  // of the two surfaces sends them looking for something that is not there. That is why
+  // `commerce-trucking` reads "Truck Depot" on a row also labelled "Truck Depot": the panel
+  // calls the node that, and a row that says "needs Root Cellar" under the label "Root Cellar"
+  // has shipped happily since the cellar did.
+  'commerce-bundles': 'Bundles',
+  'commerce-trucking': 'Truck Depot',
+  // [[101]]. Era II's whole column, which sold six nodes for $6,100 and unlocked no row at all
+  // — not even a locked one — because the pipe had no build verb to gate them behind.
+  'hydraulics-pumps': 'Pumps & Pipes',
+  'hydraulics-piped-sprinklers': 'Piped Sprinklers',
+  'hydraulics-recirculator': 'Recirculator',
+  'hydraulics-irrigation-hub': 'Irrigation Hub',
+  'hydraulics-soda-press': 'Press & Kettle',
+  'hydraulics-soda-mixing': 'Mixing & Bottling',
 };
 
 /** The art pipeline's naming rule, restated in one line: slugs dash, frames underscore. */
@@ -124,6 +147,27 @@ function grabberEntry(tool: ToolMode): BuildEntry {
   };
 }
 
+/**
+ * The pipe's row ([[101]]) — hand-built, like the belts', because a pipe is not a machine.
+ *
+ * PRICED PER TILE AND GATED ON THE SIM'S OWN CONSTANT. `applyPlacePipe` refuses without
+ * `TechId.Pumps` and charges `PIPE_PRICE_CENTS_PER_TILE` per tile of the path; both numbers are
+ * read from the sim here rather than typed, which is this file's rule and the reason the row
+ * cannot drift from the reducer that judges it.
+ */
+function pipeEntry(): BuildEntry {
+  return {
+    tool: ToolMode.PlacePipe,
+    group: 'Plumbing',
+    requiresTech: TechId.Pumps,
+    costCents: PIPE_PRICE_CENTS_PER_TILE,
+    perTile: true,
+    // One straight length of pipe, the same way the belt row wears one straight belt: the tiers
+    // and the corners and the tees are facts about the run, and a menu cell is not a run.
+    frame: 'pipe_straight',
+  };
+}
+
 /** Menu order. Zones first because zones are what v0.2 is about. */
 export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   // Both zone verbs wear the zone overlay itself — the picture the lot puts on a zoned tile,
@@ -157,6 +201,24 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   // which is the same argument `TechId.Splitters` makes about sitting behind `Belts`.
   machineEntry('Logistics', ToolMode.PlaceBeltJunction),
 
+  // PLUMBING SITS DIRECTLY UNDER LOGISTICS ([[101]]) because they are the same kind of thing and
+  // the menu should say so: belts and arms move solids, pipe moves liquid, and neither group
+  // makes a product. Everything below this line is a machine that consumes one or the other.
+  //
+  // The pipe is FIRST in its own group, which is the one ordering decision here that matters —
+  // the Pump is the expensive half of a purchase that is useless without the cheap half, and a
+  // player who buys a $200 pump before they know pipe exists has bought a statue.
+  //
+  // The Recirculator is here rather than in "Chip line", where its recipe argues it belongs (it
+  // catches the WASHER'S runoff and its node needs Wash & Slice as well as Pumps). This group's
+  // claim is "things that only make sense once you have pipe", and the Recirculator is exactly
+  // that: it returns water to a TANK, not to a machine, so it is plumbing that happens to be
+  // fed by a washer rather than chip-line kit that happens to be plumbed.
+  pipeEntry(),
+  machineEntry('Plumbing', ToolMode.PlacePump),
+  machineEntry('Plumbing', ToolMode.PlaceTank),
+  machineEntry('Plumbing', ToolMode.PlaceRecirculator),
+
   machineEntry('Chip line', ToolMode.PlaceWasher),
   machineEntry('Chip line', ToolMode.PlaceSlicer),
   machineEntry('Chip line', ToolMode.PlaceFryer),
@@ -164,7 +226,15 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   machineEntry('Chip line', ToolMode.PlaceBagger),
   machineEntry('Chip line', ToolMode.PlaceChipKitchen),
 
+  // THE THREE WATERING MACHINES ARE NOW A LADDER AND THEY ARE ADJACENT ([[101]]). §3 runs
+  // manual → assisted → automated through every system in the game, and this is the water
+  // column with all three rungs visible at once for the first time: a barrel you walk out to
+  // refill, a head that never runs dry, and a hub that skips a tile which is already wet. The
+  // two piped heads are Field rows rather than Plumbing ones because a player shopping for a
+  // way to water the field looks where the sprinkler is, not where the pipe is.
   machineEntry('Field', ToolMode.PlaceSprinkler),
+  machineEntry('Field', ToolMode.PlacePipedSprinkler),
+  machineEntry('Field', ToolMode.PlaceIrrigationHub),
   machineEntry('Field', ToolMode.PlaceComposter),
   // The two docks are Field rows rather than Logistics ones, and that is a claim about what the
   // player is shopping for: a bot is not a way of moving goods across the lot, it is a way of
@@ -179,6 +249,37 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
 
   machineEntry('Storage', ToolMode.PlaceHandCart),
   machineEntry('Storage', ToolMode.PlaceRootCellar),
+
+  // THE SODA LINE, IN THE ORDER THE LIQUID TRAVELS ([[100]] opened the group with the Grinder;
+  // [[101]] filled the other five seats). Cane becomes juice becomes syrup; kola becomes powder;
+  // the mixer takes syrup, powder and water and makes soda syrup; the carbonator makes the
+  // fizz; the bottler puts the two together into a bottle. Reading the group top to bottom is
+  // reading the recipe, which is the one ordering a six-machine chain can have that a player
+  // can act on — and it is the order `soda-line.json` builds them in.
+  //
+  // The Grinder is the third row and the odd one out: it is the only member with `ports: []`,
+  // belt in and belt out, which is exactly why it was buildable one item earlier than its five
+  // neighbours and why five separate auditors walked past it.
+  machineEntry('Soda line', ToolMode.PlaceJuicer),
+  machineEntry('Soda line', ToolMode.PlaceKettle),
+  machineEntry('Soda line', ToolMode.PlaceGrinder),
+  machineEntry('Soda line', ToolMode.PlaceSyrupMixer),
+  machineEntry('Soda line', ToolMode.PlaceCarbonator),
+  machineEntry('Soda line', ToolMode.PlaceBottler),
+
+  // DISPATCH, NAMED AFTER THE PANEL IT FEEDS ([[100]]) — `reports/CommercePanel.tsx` sits in the
+  // ribbon ungated from day one, explaining delivery carts and standing contracts in full
+  // paragraphs over a permanently empty list, because `projectCommerce` builds its rows from
+  // PLACED machines and none of these four could ever be placed. A player who read that panel
+  // and went looking for the cart now finds a group with the panel's own name on it.
+  //
+  // NOT "Logistics", which on this menu means moving goods AROUND the lot — belts, arms, the
+  // junction. These four are about goods LEAVING it, in §3's ladder order: bundle it, cart it
+  // (assisted — you load and send), truck it (automated — it never needs you again).
+  machineEntry('Dispatch', ToolMode.PlaceSixPacker),
+  machineEntry('Dispatch', ToolMode.PlaceComboPacker),
+  machineEntry('Dispatch', ToolMode.PlaceDeliveryCart),
+  machineEntry('Dispatch', ToolMode.PlaceTruckDepot),
 
   // The maintenance ladder ([[039]], [[090]]): the station that spends kits, and above it the
   // bay whose drone spends nothing. It was three rows in supply-chain order until item 090

@@ -165,3 +165,20 @@ describe('seeds whose crop is still locked', () => {
     expect(rowFor(viewWith(), ItemId.RepairKit)?.needsTech).toBe('');
   });
 });
+
+describe('the copy table keeps up with the price table ([[103]])', () => {
+  // FIVE PRICED ROWS STOOD ON THE BOARD WITH NOTHING TO SAY — kola nut, bottle, gold potato
+  // seed, push scythe, crate — because the fallback is a slug-derived name and an EMPTY note,
+  // which reads as a finished row rather than a missing one. That is invisible by construction,
+  // so it is a property test rather than five assertions: adding a purchasable item to the sim
+  // now fails here until somebody writes the one line that says what it is for.
+  it('gives every purchasable item a name and a note', () => {
+    const rows = deriveShop(viewWith(), createShopFields()).rows;
+    const purchasable = ITEM_SPECS.filter((spec) => spec.purchasable).map((spec) => spec.id);
+    expect(rows.map((row) => row.id).sort((a, b) => a - b)).toEqual(
+      [...purchasable].sort((a, b) => a - b),
+    );
+    const mute = rows.filter((row) => row.note === '').map((row) => row.name);
+    expect(mute).toEqual([]);
+  });
+});

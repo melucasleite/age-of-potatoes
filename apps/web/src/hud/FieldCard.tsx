@@ -2,6 +2,17 @@
 
 // The zone card readout, and the one alert that is allowed to interrupt ([[021]]).
 //
+// IT IS NOT A READOUT ANY MORE — the zone rows are OPENERS ([[102]]). For the whole life of
+// this card its rows were `<span>`s that emitted nothing, which is how four working zone
+// reducers (`SetZoneCrop`, `SetZoneAutoReplant`, `SetZonePriority`, `RenameZone`) ended up with
+// no caller anywhere in the app. The controls themselves are NOT here: they live in
+// `ZonePanel.tsx`, a floating window, because [[096]] unmounts this whole column when the
+// sidebar folds and a control in here would be unreachable for anyone who had pressed `[`.
+// A row click is `openZonePanel(zone.id)` — a second door to one panel, never a second copy of
+// its controls. The crop name IS shown here, because "what is growing in that rectangle" is a
+// readout, and until now the only place in the game that answered it was the dock card, gated
+// behind owning an Agri-Bot dock.
+//
 // TWO THINGS THAT LOOK LIKE POLISH AND ARE NOT.
 //
 // 1. THE CARD APPEARS ONLY WHEN IT HAS SOMETHING TO SAY. A permanent panel reporting "0
@@ -20,8 +31,10 @@
 // the right to be drawn, and this component's only job is to not bury it.
 
 import { formatCentsWhole } from './format';
+import { keepFocus } from './PanelFrame';
 import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
+import { openZonePanel } from './zone-focus';
 import type { ZoneRow } from './types';
 
 export function FieldCard() {
@@ -55,14 +68,22 @@ export function FieldCard() {
 }
 
 /**
- * "North Field · 47/60 planted · 12 mature · 3 wilting · 1 Day-Old · 3 dry"
+ * "North Field · Sugar Cane · 47/60 planted · 12 mature · 3 wilting · 1 Day-Old · 3 dry"
  *
  * Segments that are zero are dropped rather than printed as "0 wilting". A readout of
  * mostly zeroes reads as a form, and the two counts this item added would be the two easiest
  * to lose in it.
+ *
+ * A BUTTON SINCE [[102]], and it stays a readout while it is one: the row still says exactly
+ * what it said before, it can just be pressed now. The crop is the one new segment, and it
+ * leads — it is the fact the counts are all about, and a rectangle whose crop the player cannot
+ * see is the "decision made once, blind" the item was filed against.
  */
 function ZoneLine({ zone }: { zone: ZoneRow }) {
   const parts: React.ReactNode[] = [
+    <span key="crop" className={zone.cropName === '' ? s.fieldFallow : undefined}>
+      {zone.cropName === '' ? 'fallow' : zone.cropName}
+    </span>,
     <span key="planted">
       {zone.planted}/{zone.tiles} planted
     </span>,
@@ -84,10 +105,22 @@ function ZoneLine({ zone }: { zone: ZoneRow }) {
   if (zone.compost > 0) parts.push(<span key="compost">{zone.compost} compost</span>);
 
   return (
-    <div className={s.fieldRow}>
-      <div className={s.fieldName}>{zone.name}</div>
+    <button
+      type="button"
+      className={cx(s.fieldRow, s.fieldRowOpen)}
+      title={`${zone.name} — crop, seed hopper, priority, name`}
+      onMouseDown={keepFocus}
+      onClick={() => openZonePanel(zone.id)}
+    >
+      <div className={s.fieldName}>
+        {zone.name}
+        {/* The armed hopper, on the row that is always on screen. It is the one zone fact with
+            no sign of itself in the field — a tile that re-sows looks like a tile somebody
+            sowed — so if it is not said here it is not said anywhere the player is looking. */}
+        {zone.autoReplant === 1 ? <span className={s.fieldArmed}>hopper</span> : null}
+      </div>
       <div className={s.fieldReadout}>{join(parts)}</div>
-    </div>
+    </button>
   );
 }
 

@@ -45,9 +45,13 @@ import {
   directionStepY,
   machineAt,
   nextOutputItem,
+  nextStorageItem,
+  putStorage,
+  storageRoomFor,
   takeDockSeedShelf,
   takeDockShelf,
   takeOneOutput,
+  takeStorage,
 } from './state';
 import { effectiveInputCapacity } from './upgrades';
 import { SUBTILE, divFloor } from './units';
@@ -322,8 +326,8 @@ function placeOnFace(state: WorldState, machine: Machine, face: number, item: It
 // a different belt item, or a different accept-door than the delivery that follows. Two mirrored
 // functions that started identical is exactly the failure this item exists to prevent, and the
 // per-door predicates (`beltCanInsert`, `depotCanAcceptRoute`, `sellBinCanAccept`,
-// `dockCanAcceptDelivery`, `hopperLineFor`) are each called by both halves rather than copied
-// into one. Nothing on either path allocates: it runs per arm per swing.
+// `dockCanAcceptDelivery`, `storageRoomFor`, `hopperLineFor`) are each called by both halves
+// rather than copied into one. Nothing on either path allocates: it runs per arm per swing.
 
 /** Advance every grabber, in ascending id order. */
 export function advanceGrabbers(state: WorldState): void {
@@ -473,7 +477,24 @@ function grabberSource(
   }
 
   const spec = machineSpec(machine.kind);
-  if (spec === null || spec.outputItem === null) return 0;
+  if (spec === null) return 0;
+
+  // **A BOX HAS CONTENTS, NOT AN OUTPUT BUFFER** (item 105), and that one sentence is the whole
+  // reason nothing could ever drain a Root Cellar: `outputItem` is null on every storage spec, so
+  // the honest `outputItem === null` bail below refused the arm two lines early. Storage answers
+  // from the cargo pair instead, through the same door the player's hands come through.
+  //
+  // The filter judges what is on the shelf, exactly as it judges a dock's: an arm filtered to
+  // chips leaves a cellar of potatoes alone rather than emptying it.
+  if (spec.role === MachineRole.Storage) {
+    if (!storageIsParked(state, machine)) return 0;
+    const held = nextStorageItem(machine);
+    if (held === 0) return 0;
+    if (grabber.filter !== 0 && held !== grabber.filter) return 0;
+    return commit ? (takeStorage(machine, 1)?.item ?? 0) : held;
+  }
+
+  if (spec.outputItem === null) return 0;
 
   // The filter judges what is actually next out of the buffer, not what the machine makes
   // on a good day: a Fryer hands over its burnt chips first, and an arm filtered to plain
@@ -500,9 +521,17 @@ function grabberSource(
  * So the priority is now a TIE-BREAK rather than a search order. Both shelves stocked and no
  * filter means offering each item to `grabberWouldAccept` and taking the first the destination
  * will have; produce wins only when the destination would take either, which is what keeps a
- * dock→belt or dock→Root Cellar run doing precisely what it did before this item. The seed loop
- * needs no filter and no Mk2 any more — a plain Mk1 pointed at a planter reads the seed shelf
- * because the planter is the thing that says so.
+ * dock→belt run doing precisely what it did before this item. The seed loop needs no filter and no
+ * Mk2 any more — a plain Mk1 pointed at a planter reads the seed shelf because the planter is the
+ * thing that says so.
+ *
+ * **THIS PARAGRAPH USED TO NAME "dock→Root Cellar" AS THE SECOND EXAMPLE, AND THERE WAS NO SUCH
+ * RUN** (item 105 found it). A cellar had no accept-door of any kind until that item built one, so
+ * an arm pointed at one delivered nothing whichever shelf it read, and a sentence about preserving
+ * that run's behaviour was preserving a stall. It is a real example today — see the
+ * `MachineRole.Storage` branch in `grabberDeliver` — and it is real because the door was built,
+ * not because this comment said so. Worth remembering the next time a doc justifies a choice by an
+ * end-to-end path nobody has watched work.
  *
  * WHEN NEITHER SHELF WILL LAND IT STILL NAMES ONE, and that is deliberate rather than sloppy.
  * `grabberLamp` reads `grabberNextPickup` and calls a 0 "nothing to pick up" — amber, look
@@ -545,6 +574,31 @@ function dockShelfFor(state: WorldState, grabber: Grabber, dock: Machine): DockS
   if (grabberWouldAccept(state, grabber, seeds)) return DockShelf.Seed;
   // Neither will land. Name the produce so the refusal is the caller's to report — see above.
   return DockShelf.Produce;
+}
+
+/**
+ * **IS THIS CONTAINER A SHELF, OR IS IT IN THE PLAYER'S HANDS?** (item 105.)
+ *
+ * THE GATE THE TWO ARM DOORS SHARE, and it is a gate rather than a courtesy. `MACHINE_SPECS` says
+ * what a hand cart is in its own words — *"Hitch it and it follows you at a cost in speed; park it
+ * and it is a box"* — so a parked cart is a box an arm may fill and drain exactly as it fills and
+ * drains a Root Cellar, and a TOWED one is a barrow the player is pushing. An arm that reached
+ * into it would be picking a pocket that walks past, and an arm that filled it would be stuffing
+ * the player's own load with whatever came down the belt. Neither is automation; both are theft
+ * with extra steps.
+ *
+ * **IT LIVES HERE RATHER THAN IN THE DOOR PRIMITIVE, AND THAT IS THE ONE PLACE IT IS TRUE.**
+ * Item 083's gate sits inside `takeDockShelf` because it holds for every caller — nobody, hand or
+ * arm, may drain a planter's seed supply. This one does not: the hand must still load and unload a
+ * cart it is towing, which is the entire point of towing one. So the rule is put where the callers
+ * actually differ, and BOTH arm doors read this same function, so the look-ahead and the delivery
+ * cannot disagree about whether the thing in front of them is furniture.
+ *
+ * It reads the player rather than the machine because that is where the fact is: `towedCartId` is
+ * on the player precisely so two carts can never both claim to be hitched.
+ */
+function storageIsParked(state: WorldState, machine: Machine): boolean {
+  return state.player.towedCartId !== machine.id;
 }
 
 /**
@@ -634,6 +688,20 @@ function grabberDeliver(
     return commit
       ? dockAcceptDelivery(state, machine, item)
       : dockCanAcceptDelivery(state, machine, item);
+  }
+  // **A BOX IS A DESTINATION** (item 105). It has no recipe, so `hopperLineFor` below could never
+  // match one and a belt could never fill a Root Cellar — the machine the game sells for keeping
+  // things in was the one machine on the lot that nothing could put anything into. The door is the
+  // container's own, shared with the hand: `storageRoomFor` is the predicate, `putStorage` is the
+  // predicate plus the increment, so the two spellings here are one rule.
+  //
+  // Gated on the way in as well as the way out, by the same function, for the same reason: an arm
+  // must no more fill a cart the player is towing than empty one.
+  if (machineSpecFor.role === MachineRole.Storage) {
+    if (!storageIsParked(state, machine)) return false;
+    return commit
+      ? putStorage(machine, machineSpecFor, item, 1) > 0
+      : storageRoomFor(machine, machineSpecFor, item) > 0;
   }
   // An arm puts what it is holding into the line of the recipe that wants it. A Combo Packer
   // with a full chip hopper and an empty soda hopper takes the soda and refuses the chips —

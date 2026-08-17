@@ -1255,6 +1255,26 @@ describe('a grabber only takes what its destination will accept', () => {
       { name: 'truck depot', build: (s) => void spawnMachine(s, MachineKind.TruckDepot, 2, 0) },
       { name: 'planter dock', build: (s) => void spawnMachine(s, MachineKind.PlanterDock, 2, 0) },
       { name: 'drone bay', build: (s) => void spawnMachine(s, MachineKind.DroneBay, 2, 0) },
+      // Item 105's door, and both machines that wear it — an empty box takes anything, so these
+      // rows are the ones that would catch a predicate that said yes and an accept that did not.
+      { name: 'root cellar', build: (s) => void spawnMachine(s, MachineKind.RootCellar, 2, 0) },
+      { name: 'hand cart', build: (s) => void spawnMachine(s, MachineKind.HandCart, 2, 0) },
+      {
+        name: 'root cellar (already holding potatoes)',
+        build: (s) => {
+          const cellar = spawnMachine(s, MachineKind.RootCellar, 2, 0)!;
+          cellar.cargoItem = ItemId.RussetPotato;
+          cellar.cargoCount = 1;
+        },
+      },
+      {
+        name: 'root cellar (full)',
+        build: (s) => {
+          const cellar = spawnMachine(s, MachineKind.RootCellar, 2, 0)!;
+          cellar.cargoItem = ItemId.PlainChips;
+          cellar.cargoCount = machineSpec(MachineKind.RootCellar)!.inputCapacity;
+        },
+      },
       { name: 'belt', build: (s) => void spawnBelt(s, BeltTier.Basic, 2, 0, Direction.East, 1) },
       { name: 'bare ground', build: () => {} },
     ];
@@ -1286,6 +1306,249 @@ describe('a grabber only takes what its destination will accept', () => {
       }
     }
     expect(disagreements).toEqual([]);
+  });
+});
+
+// --- a box is a place on a belt line (item 105) --------------------------------------
+//
+// **THE MACHINE FOR KEEPING THINGS IN WAS THE ONE MACHINE NOTHING COULD PUT ANYTHING INTO.** A
+// Root Cellar built, placed, moved, boxed and invoiced perfectly; it simply had no door. A belt
+// could not fill it (`grabberDeliver` had no `MachineRole.Storage` branch and a box has no recipe
+// for `hopperLineFor` to match), a belt could not drain it (`grabberSource` bailed on
+// `spec.outputItem === null`, which is exactly what a box's spec says), and a click from out of
+// reach walked the farmer over to do nothing, because the errand dropped the item on the way.
+//
+// These tests are written against the ROLE and run twice — once on the $250 shed, once on the $80
+// barrow — because the bug was never about cellars. If the Hand Cart row ever disagrees with the
+// Root Cellar row, somebody has special-cased a kind.
+//
+// The one place they are allowed to differ is the last test, and it is not a special case: a cart
+// in tow is in the player's hands rather than standing on the ground.
+
+describe('a container is a destination and a source (item 105)', () => {
+  const BOXES: readonly { name: string; kind: MachineKind }[] = [
+    { name: 'Root Cellar', kind: MachineKind.RootCellar },
+    { name: 'Hand Cart', kind: MachineKind.HandCart },
+  ];
+
+  /** Belt → arm → box. The run that fills it. */
+  function fillRig(seed: number, kind: MachineKind, filter: ItemId | 0 = 0) {
+    const state = createWorld(seed);
+    const source = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 1)!;
+    const arm = spawnGrabber(state, GrabberTier.Mk1, 1, 0, Direction.East, filter)!;
+    const box = spawnMachine(state, kind, 2, 0)!;
+    return { state, source, arm, box };
+  }
+
+  /**
+   * Box → arm → belt. The run that empties it.
+   *
+   * The origin is derived from the footprint rather than written twice: a 2×2 cellar placed at
+   * (0,0) and a 1×1 cart placed at (1,0) both cover the tile the arm reaches back into, which is
+   * what makes the two rows of every test below the same rig rather than two rigs.
+   */
+  function drainRig(seed: number, kind: MachineKind, filter: ItemId | 0 = 0) {
+    const state = createWorld(seed);
+    const spec = machineSpec(kind)!;
+    const box = spawnMachine(state, kind, 2 - spec.tilesWide, 0)!;
+    const arm = spawnGrabber(state, GrabberTier.Mk1, 2, 0, Direction.East, filter)!;
+    const sink = spawnBelt(state, BeltTier.Basic, 3, 0, Direction.East, 3)!;
+    return { state, box, arm, sink };
+  }
+
+  function lampOf(state: WorldState, armId: number): number {
+    return view(state, createWorldView()).grabbers.find((g) => g.id === armId)!.lamp;
+  }
+
+  for (const { name, kind } of BOXES) {
+    it(`a belt fills a ${name} — the run that had never once moved an item`, () => {
+      const { state, source, arm, box } = fillRig(9101, kind);
+
+      for (let i = 0; i < 5; i++) {
+        beltInsert(source, 0, ItemId.RussetPotato);
+        stepMany(state, 60);
+      }
+
+      expect(box.cargoItem).toBe(ItemId.RussetPotato);
+      expect(box.cargoCount).toBe(5);
+      expect(source.items).toHaveLength(0);
+      expect(arm.held).toBe(0);
+    });
+
+    it(`a belt drains a ${name} — the direction every earlier pass missed`, () => {
+      const { state, box, arm, sink } = drainRig(9102, kind);
+      box.cargoItem = ItemId.RussetPotato;
+      box.cargoCount = 6;
+
+      stepMany(state, 600);
+
+      // Everything that left the box is on the belt or was handed off its end; nothing evaporated.
+      expect(box.cargoCount).toBeLessThan(6);
+      expect(sink.items.length + (arm.held === 0 ? 0 : 1)).toBeGreaterThan(0);
+      expect(sink.items.every((entry) => entry.item === ItemId.RussetPotato)).toBe(true);
+    });
+
+    it(`a ${name} holding one product refuses a second rather than mixing`, () => {
+      // "What is in this" has to stay one word. The arm reads that refusal before it grabs, so the
+      // chips stay on the belt where the player can see the jam rather than in a frozen claw.
+      const { state, source, arm, box } = fillRig(9103, kind);
+      box.cargoItem = ItemId.RussetPotato;
+      box.cargoCount = 1;
+      beltInsert(source, 0, ItemId.PlainChips);
+
+      stepMany(state, 400);
+
+      expect(arm.held).toBe(0);
+      expect(box.cargoItem).toBe(ItemId.RussetPotato);
+      expect(box.cargoCount).toBe(1);
+      expect(source.items).toHaveLength(1);
+      expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
+    });
+
+    it(`a full ${name} stops the arm, and one unit of room starts it again`, () => {
+      const { state, source, arm, box } = fillRig(9104, kind);
+      const spec = machineSpec(kind)!;
+      box.cargoItem = ItemId.RussetPotato;
+      box.cargoCount = spec.inputCapacity;
+      beltInsert(source, 0, ItemId.RussetPotato);
+
+      stepMany(state, 400);
+      expect(arm.held).toBe(0);
+      expect(source.items).toHaveLength(1);
+      expect(box.cargoCount).toBe(spec.inputCapacity);
+      expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
+
+      box.cargoCount -= 1;
+      stepMany(state, 200);
+      expect(source.items).toHaveLength(0);
+      expect(box.cargoCount).toBe(spec.inputCapacity);
+    });
+
+    it(`a filter reads a ${name} exactly as it reads a shelf`, () => {
+      const wrong = drainRig(9105, kind, ItemId.PlainChips);
+      wrong.box.cargoItem = ItemId.RussetPotato;
+      wrong.box.cargoCount = 4;
+      stepMany(wrong.state, 400);
+      expect(wrong.box.cargoCount, 'a filtered arm leaves what it did not ask for').toBe(4);
+      expect(wrong.sink.items).toHaveLength(0);
+
+      const right = drainRig(9106, kind, ItemId.RussetPotato);
+      right.box.cargoItem = ItemId.RussetPotato;
+      right.box.cargoCount = 4;
+      stepMany(right.state, 400);
+      expect(right.box.cargoCount).toBeLessThan(4);
+    });
+
+    it(`the hand and the arm agree about what a full ${name} is`, () => {
+      // Both doors are one function since this item, so this is a tautology by construction —
+      // which is precisely why it is worth pinning. The day somebody re-inlines the arithmetic
+      // into `applyLoadMachine`, this is the test that notices.
+      const { state, box } = fillRig(9107, kind);
+      const spec = machineSpec(kind)!;
+      standOn(state, box.tileX, box.tileY);
+      addItem(state, ItemId.RussetPotato, spec.inputCapacity + 10);
+
+      run(state, [
+        {
+          type: 'LoadMachine',
+          machineId: box.id,
+          count: spec.inputCapacity + 10,
+          item: ItemId.RussetPotato,
+        },
+      ]);
+      expect(box.cargoCount).toBe(spec.inputCapacity);
+      expect(itemCount(state, ItemId.RussetPotato)).toBe(10);
+
+      // And the same box refuses corn from the hand for the same reason it refuses it from a belt.
+      addItem(state, ItemId.PlainChips, 5);
+      run(state, [{ type: 'LoadMachine', machineId: box.id, count: 5, item: ItemId.PlainChips }]);
+      expect(box.cargoItem).toBe(ItemId.RussetPotato);
+      expect(itemCount(state, ItemId.PlainChips)).toBe(5);
+
+      // Emptied by hand, in one armful, since item 068 struck the cap.
+      run(state, [{ type: 'UnloadMachine', machineId: box.id, count: 999 }]);
+      expect(box.cargoCount).toBe(0);
+      expect(box.cargoItem).toBe(0);
+      expect(itemCount(state, ItemId.RussetPotato)).toBe(spec.inputCapacity + 10);
+    });
+
+    it(`a load with no item named is refused at a ${name}, and nothing is lost`, () => {
+      // The refusal that made the cellar look broken from the client: a box has no recipe, so
+      // "load whatever fits" names nothing it could fit. It is the CALLER's job to say — see the
+      // errand's `IntentAction.Load`, which used to forget.
+      const { state, box } = fillRig(9108, kind);
+      standOn(state, box.tileX, box.tileY);
+      addItem(state, ItemId.RussetPotato, 20);
+
+      run(state, [{ type: 'LoadMachine', machineId: box.id, count: 20 }]);
+
+      expect(box.cargoCount).toBe(0);
+      expect(itemCount(state, ItemId.RussetPotato)).toBe(20);
+    });
+  }
+
+  it('A CART IN TOW IS NOT A SHELF — an arm may not pick the player’s pocket', () => {
+    // The one place the two boxes differ, and it is the cart's own spec that says so: "hitch it
+    // and it follows you at a cost in speed; PARK IT AND IT IS A BOX". Parked, it is furniture an
+    // arm may empty. Towed, it is the load on the player's back, and it moves with them — an arm
+    // that drained it would be stealing from a target that walks past once a minute.
+    //
+    // The player stands ON the cart's tile, so hitching changes the geometry not at all and the
+    // tow is genuinely the only variable.
+    const { state, box, arm, sink } = drainRig(9109, MachineKind.HandCart);
+    box.cargoItem = ItemId.RussetPotato;
+    box.cargoCount = 6;
+    standOn(state, box.tileX, box.tileY);
+
+    run(state, [{ type: 'HitchCart', cartId: box.id }]);
+    expect(state.player.towedCartId).toBe(box.id);
+
+    stepMany(state, 400);
+    expect(box.cargoCount, 'the towed cart was raided').toBe(6);
+    expect(sink.items).toHaveLength(0);
+    expect(arm.held).toBe(0);
+
+    // CONTROL: let go, and the same arm empties the same cart within the minute. Without this the
+    // test above would pass on a rig that was never going to move.
+    run(state, [{ type: 'UnhitchCart' }]);
+    stepMany(state, 400);
+    expect(box.cargoCount).toBeLessThan(6);
+  });
+
+  it('and an arm may not stuff a towed cart either — the gate is on both doors', () => {
+    const { state, source, arm, box } = fillRig(9110, MachineKind.HandCart);
+    standOn(state, box.tileX, box.tileY);
+    run(state, [{ type: 'HitchCart', cartId: box.id }]);
+    beltInsert(source, 0, ItemId.RussetPotato);
+
+    stepMany(state, 400);
+    expect(box.cargoCount).toBe(0);
+    expect(source.items).toHaveLength(1);
+    expect(arm.held).toBe(0);
+    // Red, not amber: there IS something to take, and the thing in front will not have it.
+    expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
+
+    // CONTROL, again: park it and it is a box.
+    run(state, [{ type: 'UnhitchCart' }]);
+    stepMany(state, 200);
+    expect(box.cargoCount).toBe(1);
+  });
+
+  it('the hand still loads and unloads a cart it is towing — the gate is the ARM’s', () => {
+    // The reason the tow gate lives in `belts.ts` and not inside the door primitive both callers
+    // share. Loading the cart you are pushing is the entire point of pushing one.
+    const state = createWorld(9111);
+    const cart = spawnMachine(state, MachineKind.HandCart, 5, 5)!;
+    standOn(state, 5, 5);
+    addItem(state, ItemId.RussetPotato, 10);
+    run(state, [{ type: 'HitchCart', cartId: cart.id }]);
+
+    run(state, [{ type: 'LoadMachine', machineId: cart.id, count: 10, item: ItemId.RussetPotato }]);
+    expect(cart.cargoCount).toBe(10);
+
+    run(state, [{ type: 'UnloadMachine', machineId: cart.id, count: 10 }]);
+    expect(cart.cargoCount).toBe(0);
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(10);
   });
 });
 

@@ -72,6 +72,29 @@ const SHOP_COPY: Readonly<Record<number, ShopCopy>> = {
     name: 'Repair kit',
     note: 'Services every machine standing near you at once. It buys the walk, not the repair.',
   },
+  // THE FIVE PRICED ROWS THAT STOOD ON THE BOARD WITH NOTHING TO SAY ([[103]]). The fallback
+  // above is a name from the slug and an empty note, which is readable and completely silent —
+  // and one of the five is the seed for a crop the game could not plant at all until this item.
+  [ItemId.GoldPotatoSeed]: {
+    name: 'Gold potato seeds',
+    note: 'Three times a Russet at the till, and three times the water in the ground.',
+  },
+  [ItemId.KolaNut]: {
+    name: 'Kola nuts',
+    note: 'What the Grinder turns into powder. A Kola Tree grows them instead of buying them.',
+  },
+  [ItemId.Bottle]: {
+    name: 'Bottles',
+    note: 'Empty glass for the Bottler. Nothing else in the game wants one.',
+  },
+  [ItemId.PushScythe]: {
+    name: 'Push scythe',
+    note: 'Cuts the three tiles across your path in one swing. You still walk the row.',
+  },
+  [ItemId.Crate]: {
+    name: 'Crate',
+    note: 'Packs a stack in the bag and holds off the spoiling. Refused rather than eaten when it would not help.',
+  },
 };
 
 /** The mutable scratch the store fills each publish, mirroring `ShopSlice` minus its version. */

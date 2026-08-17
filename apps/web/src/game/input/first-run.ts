@@ -24,11 +24,12 @@
 // read time, and a tool somehow off the bar (impossible for mandatory tools, but cheap to
 // honour) drops the digit clause rather than inventing one.
 
-import type { WorldView } from '@snack/sim';
+import type { CropId, WorldView } from '@snack/sim';
 import { MachineKind } from '@snack/sim';
 
 import { hotbar, slotIndexToDigit } from './hotbar';
-import { ToolMode } from './tools';
+import { cropName } from './pointer';
+import { DEFAULT_CROP, ToolMode } from './tools';
 
 /** One world-anchored pointer. `tileX`/`tileY` may be fractional — the sign floats there. */
 export interface GuideSign {
@@ -70,6 +71,7 @@ export function hotbarDigit(tool: ToolMode): string {
 export function firstRunSigns(
   view: WorldView | null,
   digitOf: (tool: ToolMode) => string = hotbarDigit,
+  crop: CropId = DEFAULT_CROP,
 ): readonly GuideSign[] {
   if (view === null) return NO_SIGNS;
   const stats = view.stats;
@@ -83,6 +85,12 @@ export function firstRunSigns(
   if (stats.totalManualTouches === 0) {
     const f = view.field;
     const digit = digitOf(ToolMode.Plant);
+    // THE SIGN NAMES THE ARMED CROP RATHER THAN THE WORD "POTATOES" ([[103]]). It said potatoes
+    // because potatoes were all the hand could sow; now that `C` picks the crop, a fixed noun
+    // would be the tutorial telling a player who armed cane what somebody else is planting. On
+    // a brand-new save — the only save this sign appears on — it still reads "russet potato",
+    // because that is still what is armed.
+    const label = cropName(crop).toLowerCase();
     // BELOW the field, arrow up. Placed by trying it against the running game at the spawn
     // camera on a 1280×720 viewport: the field's top row sits just above the viewport, and
     // everything from its centre up hides behind the HUD's left rail of cards. The strip
@@ -96,8 +104,8 @@ export function firstRunSigns(
         title: 'YOUR FIELD',
         body:
           digit === ''
-            ? 'click the dirt to plant a potato'
-            : `press ${digit}, click the dirt — potatoes`,
+            ? `click the dirt to plant ${label}`
+            : `press ${digit}, click the dirt — ${label}`,
       },
     ];
   }

@@ -199,12 +199,20 @@ describe('the place affordance', () => {
     expect(toolMachineKind(row?.placeTool as ToolMode)).toBe(MachineKind.Fryer);
   });
 
-  it('reports -1 for a kind nothing in the UI builds yet, rather than guessing', () => {
+  it('reports -1 for a kind nothing in the UI builds, rather than guessing', () => {
+    // THE PUMP USED TO BE THE FIXTURE HERE, AND [[101]] TOOK IT AWAY by giving the pipe a build
+    // verb: with `ToolMode.PlacePump` in existence, `toolForMachineKind` finds it and this row
+    // grew a working Place button, which is the entire point of that item. Every machine the
+    // sim ships is buildable now except two, so the retired Parts Bench is the ONLY remaining
+    // instance of this case — and it is the better fixture anyway, because [[090]] deliberately
+    // kept `ItemId.BoxedPartsBench` alive ("a player who ran the parts line well may be holding
+    // a warehouse of these") while removing every way to put one back down. A box in the bag
+    // with no cursor is exactly what -1 is for.
     const row = rows([
-      slot(ItemId.BoxedPump, 1, {
+      slot(ItemId.BoxedPartsBench, 1, {
         sellable: 0,
-        boxedMachineKind: MachineKind.Pump,
-        boxes: [box(30_000)],
+        boxedMachineKind: MachineKind.PartsBench,
+        boxes: [box(80_000)],
       }),
     ])[0];
     expect(row?.placeTool).toBe(-1);

@@ -13,9 +13,14 @@ import {
   CAN_CHARGES_MAX,
   Direction,
   IntentAction,
+  ItemId,
+  MachineKind,
+  addItem,
   createWorld,
   fromPayload,
   hashState,
+  itemCount,
+  spawnMachine,
   step,
   toPayload,
   waterAtSubtile,
@@ -249,6 +254,80 @@ describe('the pond is not a floor (item 080)', () => {
     finishIntent(state);
     expect(state.player.canCharges).toBe(CAN_CHARGES_MAX);
     expect(waterAtSubtile(state, state.player.xSub, state.player.ySub)).toBe(false);
+  });
+});
+
+describe('the load errand carries what the click carried (item 105)', () => {
+  // **A WALK THAT ARRIVES AND DOES NOTHING IS WORSE THAN A REFUSAL**, because the player watches
+  // the farmer cross the yard and concludes the machine is broken. That is exactly what every
+  // out-of-reach click on a Root Cellar did: `intentCommand` built its `LoadMachine` without the
+  // item, and a box — which has no recipe to guess from — refuses a load that names nothing.
+  //
+  // The errand's payload always had an `item` field. Plant, Sell and Buy all used it. Load simply
+  // dropped it on the floor, and nothing noticed for as long as the only things worth walking to
+  // were recipe machines that can only eat one thing anyway.
+
+  function loadErrand(tileX: number, tileY: number, item: number, count: number) {
+    return {
+      type: 'WalkAndAct',
+      action: IntentAction.Load,
+      tileX,
+      tileY,
+      item,
+      count,
+    } as const;
+  }
+
+  function farmerAt(seed: number) {
+    const state = createWorld(seed);
+    state.player.xSub = tileCentreSubtiles(2);
+    state.player.ySub = tileCentreSubtiles(2);
+    return state;
+  }
+
+  it('walks to a Root Cellar and actually fills it', () => {
+    const state = farmerAt(90);
+    const cellar = spawnMachine(state, MachineKind.RootCellar, 12, 10)!;
+    addItem(state, ItemId.RussetPotato, 20);
+
+    step(state, { tick: state.tick, commands: [loadErrand(12, 10, ItemId.RussetPotato, 20)] });
+    expect(state.player.intent).not.toBeNull();
+
+    const walked = finishIntent(state);
+    expect(walked, 'the farmer teleported').toBeGreaterThan(0);
+    expect(cellar.cargoItem).toBe(ItemId.RussetPotato);
+    expect(cellar.cargoCount).toBe(20);
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(0);
+  });
+
+  it('and the same errand naming nothing still arrives at nothing — the box cannot guess', () => {
+    // Not a regression, a boundary: the sim refuses an unnamed load at a box on purpose, and the
+    // caller is what had to change. Pinned so a future "helpful" default in `applyLoadMachine`
+    // has to argue with a test rather than with a comment.
+    const state = farmerAt(91);
+    const cellar = spawnMachine(state, MachineKind.RootCellar, 12, 10)!;
+    addItem(state, ItemId.RussetPotato, 20);
+
+    step(state, { tick: state.tick, commands: [loadErrand(12, 10, 0, 20)] });
+    finishIntent(state);
+
+    expect(cellar.cargoCount).toBe(0);
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(20);
+  });
+
+  it('leaves a recipe machine exactly as it found it — 0 still means "whatever fits"', () => {
+    // The compatibility claim the golden hashes rest on. Every caller in the tree issues this
+    // errand with item 0 today, and 0 means the field is absent, so the command built here is
+    // byte-identical to the one built before this item.
+    const state = farmerAt(92);
+    const washer = spawnMachine(state, MachineKind.Washer, 12, 10)!;
+    addItem(state, ItemId.RussetPotato, 20);
+
+    step(state, { tick: state.tick, commands: [loadErrand(12, 10, 0, 20)] });
+    finishIntent(state);
+
+    expect(washer.inputCounts[0]).toBeGreaterThan(0);
+    expect(itemCount(state, ItemId.RussetPotato)).toBeLessThan(20);
   });
 });
 

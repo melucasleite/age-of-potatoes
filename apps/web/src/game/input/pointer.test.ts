@@ -1142,7 +1142,7 @@ function harness(view: WorldView, tool: ToolMode) {
   const system = {
     spaceHeld: false,
     placeDir: Direction.East,
-    zoneCrop: CropId.RussetPotato,
+    armedCrop: CropId.RussetPotato,
     manualWalkHeld: false,
   } as unknown as InputSystem;
   const pointer = new PointerInput(host, system);
@@ -1326,7 +1326,7 @@ describe('what R acts on, with belts in the world ([[084]])', () => {
     const system = {
       spaceHeld: false,
       placeDir: Direction.East,
-      zoneCrop: CropId.RussetPotato,
+      armedCrop: CropId.RussetPotato,
       manualWalkHeld: false,
     } as unknown as InputSystem;
     const pointer = new PointerInput(host, system);

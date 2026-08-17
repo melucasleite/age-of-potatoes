@@ -42,6 +42,7 @@ import {
   ItemId,
   type LiquidId,
   MachineKind,
+  MachineRole,
   type MachineSpec,
   POND_ORIGIN_X,
   POND_ORIGIN_Y,
@@ -2254,6 +2255,97 @@ export function takeDockSeedShelf(
   const taken = count < dock.seedShelfCount ? count : dock.seedShelfCount;
   dock.seedShelfCount -= taken;
   if (dock.seedShelfCount === 0) dock.seedShelfItem = 0;
+  return { item, taken };
+}
+
+/**
+ * **HOW MANY MORE OF `item` THIS CONTAINER WOULD TAKE RIGHT NOW** — the accept-door predicate for
+ * `MachineRole.Storage`, and 0 for everything it will not have.
+ *
+ * A BOX IS A ROLE, NOT A ROOT CELLAR (item 105). Everything below is written against the role and
+ * asks nothing about the kind, because the hand cart is `MachineRole.Storage` too and the whole
+ * bug this replaces was a verb that existed for neither. The cellar and the cart differ in price,
+ * footprint and capacity; nothing in this file needs to know which one it is holding.
+ *
+ * ONE PRODUCT AT A TIME, which is `MACHINE_SPECS`' rule and not this function's invention: a box
+ * holding potatoes refuses corn rather than mixing, so "what is in this" stays one word and one
+ * number. The refusal is a 0 rather than a throw — every caller here is asking, not asserting.
+ *
+ * **PURE, AND THAT IS THE POINT** (item 085's law). `putStorage` below is this plus two
+ * assignments, so an arm's look-ahead and an arm's delivery cannot disagree about whether a box
+ * had room; the hand's `applyLoadMachine` asks the same question through the same function, so
+ * the hand and the arm cannot disagree either.
+ */
+export function storageRoomFor(machine: Machine, spec: MachineSpec, item: ItemId | 0): number {
+  if (spec.role !== MachineRole.Storage) return 0;
+  if (item === 0) return 0;
+  if (machine.cargoItem !== 0 && machine.cargoItem !== item) return 0;
+  const room = spec.inputCapacity - machine.cargoCount;
+  return room > 0 ? room : 0;
+}
+
+/**
+ * Put up to `count` of `item` into a container and say how many went in.
+ *
+ * **THE ONE DOOR IN**, for the hand and for a grabber alike — `takeOneOutput`'s law applied to the
+ * other direction. Two code paths that both incremented `cargoCount` would eventually disagree
+ * about the mixing rule, and the disagreement would show up as a box holding two things with one
+ * name for them.
+ */
+export function putStorage(
+  machine: Machine,
+  spec: MachineSpec,
+  item: ItemId,
+  count: number,
+): number {
+  const room = storageRoomFor(machine, spec, item);
+  const moved = count < room ? count : room;
+  if (moved <= 0) return 0;
+
+  machine.cargoItem = item;
+  machine.cargoCount += moved;
+  return moved;
+}
+
+/**
+ * What a taker would get out of this container, without touching it, or 0 for nothing.
+ *
+ * GATED BY ROLE INSIDE THE DOOR, exactly as `takeDockShelf` is gated by kind and for the same
+ * reason: the cargo pair is shared furniture — a harvester dock's shelf, a planter dock's seed
+ * supply and a delivery cart's load are all `cargoItem`/`cargoCount` — so a peek that answered for
+ * any machine carrying the pair would happily name a planter's seeds as something to take away.
+ * The role is the only thing that says "this is a box, and its contents are for whoever wants
+ * them".
+ */
+export function nextStorageItem(machine: Machine): ItemId | 0 {
+  const spec = machineSpec(machine.kind);
+  if (spec === null || spec.role !== MachineRole.Storage) return 0;
+  if (machine.cargoCount <= 0) return 0;
+  return machine.cargoItem as ItemId;
+}
+
+/**
+ * Take up to `count` goods out of a container and say what they were.
+ *
+ * **THE ONE DOOR OUT**, and `nextStorageItem`'s partner: the peek names what this removes, by
+ * construction rather than by agreement. `takeDockShelf`'s shape, its gate moved from kind to
+ * role, its `null` meaning the same thing — nothing to take, nothing changed.
+ *
+ * FRESHNESS IS NOT THIS FUNCTION'S BUSINESS and deliberately so. Nothing inside any machine ages
+ * (see `InventorySlot.stacks`), and the window is stamped by whoever puts the goods somewhere that
+ * does — `addItem` for the hand, and nowhere at all for a belt, which is a place goods pass
+ * through rather than sit in.
+ */
+export function takeStorage(
+  machine: Machine,
+  count: number,
+): { item: ItemId; taken: number } | null {
+  const item = nextStorageItem(machine);
+  if (item === 0 || count <= 0) return null;
+
+  const taken = count < machine.cargoCount ? count : machine.cargoCount;
+  machine.cargoCount -= taken;
+  if (machine.cargoCount === 0) machine.cargoItem = 0;
   return { item, taken };
 }
 

@@ -28,6 +28,16 @@
 // Fryer with the tech tree open used to hide the bench, which was never a decision anybody
 // made, just what a slot with one occupant does.
 //
+// ...AND "UNCONDITIONALLY" HAD A HOLE IN IT FOR EXACTLY ONE DAY ([[106]]). The 093 ruling and
+// the 096 fold landed together and never met: the cards render whatever else is happening, and
+// the container they render INTO is unmounted by `[`. Folded, a click on an arm did nothing at
+// all — no card, no walk, no tell — which is the worst answer a click can get, because the
+// player cannot tell whether the game heard them. `MachineCards` below is the repair, and the
+// shape of it is the point: THE THREE CARDS ARE WRITTEN DOWN ONCE, in one component, which the
+// root then hands to one of two parents. A fourth card is a line inside that component and
+// inherits the fold for free — which is the test the item set, and the test 093's own prose
+// failed, having named a container rather than a rule.
+//
 // NOTE WHAT IS NOT HERE: there is no provider, no context, no `useState` holding world
 // data, and nothing passing sim numbers down as props from a common ancestor. Each panel
 // subscribes to its own slice and re-renders alone. A Context value changing 8×/sec would
@@ -56,6 +66,7 @@ import {
   SIDEBAR_HANDLE_PX,
   SIDEBAR_TOGGLE_CODE,
   SIDEBAR_TOGGLE_LABEL,
+  sidebarBodyWidth,
   sidebarCollapsed,
   sidebarServerSnapshot,
   sidebarWidth,
@@ -82,6 +93,7 @@ import { Ticker } from './Ticker';
 import { Toolbelt } from './Toolbelt';
 import { UpgradeBench } from './UpgradeBench';
 import { WelcomeBack } from './WelcomeBack';
+import { ZonePanel } from './ZonePanel';
 import { useHudSlice } from './use-hud';
 
 export default function HudRoot() {
@@ -89,6 +101,8 @@ export default function HudRoot() {
   // empty toolbelt is the tell, and it costs nothing to check because the slice is already
   // subscribed. Showing a confident "$0.00" over a boot failure would be a small lie.
   const tools = useHudSlice('tools');
+  // The zones row's badge only — the panel itself subscribes for its own reasons ([[102]]).
+  const lot = useHudSlice('lot');
   const panels = usePanels();
   const collapsed = useSidebar();
 
@@ -96,6 +110,14 @@ export default function HudRoot() {
   // from its backup copy, or one whose browser is out of room, has something to say before the
   // first tick publishes and would say it to an empty screen otherwise ([[041]]).
   if (tools.slots.length === 0) return <SaveNotices />;
+
+  // ONE ELEMENT, TWO POSSIBLE PARENTS, AND THEY ARE MUTUALLY EXCLUSIVE ([[106]]). Built here
+  // rather than written out in both branches below, because the failure this item exists to fix
+  // is a card list that got copied nowhere and therefore existed in exactly one place that can
+  // stop existing. React will unmount and remount the subtree when the parent changes, which is
+  // correct and cheap: the cards are pure reads of their stores, and the only state that goes
+  // with them is `usePending`'s optimistic "fitting…", worth losing on a deliberate fold.
+  const machineCards = <MachineCards floating={collapsed} onOpenResearch={panels.toggleResearch} />;
 
   return (
     <>
@@ -142,29 +164,17 @@ export default function HudRoot() {
                 <TechToggle open={panels.open === 'research'} onOpen={panels.toggleResearch} />
                 <ShopToggle open={panels.open === 'shop'} onOpen={panels.toggleShop} />
                 <BagToggle open={panels.open === 'bag'} onToggle={panels.toggleBag} />
+                <ZonesToggle
+                  open={panels.open === 'zones'}
+                  zones={lot.zones.length}
+                  onToggle={panels.toggleZones}
+                />
                 <BuildToggle open={panels.open === 'build'} />
               </div>
 
-              {/*
-          THE AT-THE-MACHINE CARDS, and nothing else queues for this space any more
-          ([[093]]). The first two decide for themselves whether the player is STANDING
-          somewhere they have something to say about, and they can never both speak: the
-          bench takes machines with a work cycle, the dock card takes Agri-Bot docks,
-          disjoint by construction (`derive-dock.ts`). On the vast majority of frames every
-          one of these returns null and this is an empty flex box that costs nothing.
-
-          THE GRABBER CARD ([[099]]) IS THE ODD ONE AND KNOWINGLY SO: it is a consequence of
-          a CLICK rather than of position, because the owner asked for a click and because
-          `SetGrabberFilter` is the one grabber command the sim does not reach-gate. So it
-          can be up beside the bench — standing at a Fryer, having clicked an arm across the
-          lot — and that is two true statements stacked rather than a collision: this is
-          where you are, and this is what you last pointed at.
-        */}
-              <div className={s.sideContext}>
-                <UpgradeBench onOpenResearch={panels.toggleResearch} />
-                <DockCard />
-                <GrabberCard />
-              </div>
+              {/* The at-the-machine cards, in the half of the dock that folds — see
+          `MachineCards`, which owns both this home and the one they fold out to. */}
+              {machineCards}
 
               {/*
           The field card, alone at the bottom now. THE CLIPBOARD IS GONE BY RULING ([[076]],
@@ -185,8 +195,10 @@ export default function HudRoot() {
 
         {/*
         THE STAGE — everything that is allowed over the canvas, exhaustively: the hotbar
-        stack, the rare welcome-back card, the dev overlay, and the two floating windows
-        ([[089]]), of which at most one exists at a time.
+        stack, the rare welcome-back card, the dev overlay, the floating panel window
+        ([[089]], [[093]]) of which at most one exists at a time — and, ONLY WHILE THE DOCK IS
+        FOLDED, the at-the-machine cards ([[106]]), which are here for the length of a
+        collapse and back in the sidebar the moment it opens.
       */}
         <div className={s.stage}>
           {/*
@@ -220,6 +232,20 @@ export default function HudRoot() {
           </div>
 
           {/*
+          THE FOLDED CARDS ([[106]]). The same element the sidebar had a moment ago, tucked into
+          the top-left of the stage under the reports rail — see `MachineCards` for the route and
+          `.machineFloat` for why it is a `.corner` rather than a second kind of window, and for
+          the ⚠️ on sharing that left edge with the reports dock.
+
+          RENDERED ONLY WHILE FOLDED, and the exclusion is what keeps 093 intact: expanded, the
+          cards are in the dock and behave to the pixel as they did before this item existed.
+          It is also why there is no need to ask whether any card HAS a subject — the wrapper
+          takes no pointer events itself, so an empty one is not on the screen in any sense the
+          lot can feel, and a fourth card never has to be added to a list somewhere else.
+        */}
+          {collapsed ? machineCards : null}
+
+          {/*
           THE FLOATING WINDOW — singular, and that is the point ([[093]]). All four panels
           come through here now, centred over the canvas region and never over the sidebar,
           which is why this lives inside the stage rather than the root. ONE `.floatWin`
@@ -238,6 +264,8 @@ export default function HudRoot() {
                 <ShopPanel onClose={panels.close} />
               ) : panels.open === 'bag' ? (
                 <InventoryWindow onClose={panels.close} />
+              ) : panels.open === 'zones' ? (
+                <ZonePanel onClose={panels.close} />
               ) : (
                 <BuildMenuPanel />
               )}
@@ -246,6 +274,71 @@ export default function HudRoot() {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * THE AT-THE-MACHINE CARDS, AND THE ONE PLACE THEY ARE WRITTEN DOWN ([[106]]).
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  WHY THE CARDS FLOAT RATHER THAN UNFOLDING THE DOCK OR REFUSING. The item offered three
+ *  routes and asked for one, argued, not a blend.
+ *
+ *  NOT AUTO-EXPAND. Clicking a machine could have unfolded the sidebar, which is discoverable
+ *  and would have needed no new markup at all. It loses on two counts and the second is the
+ *  fatal one. First, it overrides a choice the player made on purpose, and folds are made by
+ *  players who want the lot: taking the column back every time they touch a machine teaches
+ *  them not to touch machines. Second, IT DOES NOT ACTUALLY COVER THE CASE — the bench and the
+ *  dock card open because of where the farmer is STANDING, not because of a click, so a player
+ *  who walks up to a Fryer on WASD has performed no click to hang the expansion off, and the
+ *  card would go on being missing exactly as it is today. A fix that works for one of three
+ *  cards is not a fix, it is the same bug with a smaller footprint.
+ *
+ *  NOT AN HONEST REFUSAL. "Expand the panel to see this machine" is a tell the player can act
+ *  on, and it is genuinely better than silence — but it is a message about the HUD's own
+ *  plumbing, sent to somebody who asked about a Fryer, and the answer to "can I show you this
+ *  card" is never "press this other thing first".
+ *
+ *  SO: THE FLOAT. The player keeps the fold, the card is the same object it was in the dock
+ *  (`sidebarBodyWidth()` — same width, same wraps, nothing to re-read), and it costs one
+ *  positioned box on the stage. It is the direction the HUD was already going, per 089 and
+ *  093: panels float, chrome docks.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * THE THREE, AND WHY A FOURTH IS FREE. The first two decide for themselves whether the player
+ * is STANDING somewhere they have something to say about, and they can never both speak: the
+ * bench takes machines with a work cycle, the dock card takes Agri-Bot docks, disjoint by
+ * construction (`derive-dock.ts`). On the vast majority of frames all three return null and
+ * this is an empty flex box that costs nothing. A fourth card is a line in this list; it
+ * inherits the fold, the width and the corner without knowing any of them exist, which is the
+ * property the item asked for by name and the one 093 thought it had.
+ *
+ * THE GRABBER CARD ([[099]]) IS THE ODD ONE AND KNOWINGLY SO: it is a consequence of a CLICK
+ * rather than of position, because the owner asked for a click and because `SetGrabberFilter`
+ * is the one grabber command the sim does not reach-gate. So it can be up beside the bench —
+ * standing at a Fryer, having clicked an arm across the lot — and that is two true statements
+ * stacked rather than a collision: this is where you are, and this is what you last pointed
+ * at. It is also the card the fold broke most loudly, since the click had nowhere to land.
+ */
+function MachineCards({
+  floating,
+  onOpenResearch,
+}: {
+  /** Is the dock folded away under us. The only thing that differs between the two homes. */
+  floating: boolean;
+  onOpenResearch: () => void;
+}) {
+  return (
+    <div
+      className={floating ? cx(s.corner, s.machineFloat) : s.sideContext}
+      // Inline for the same reason the sidebar's own width is: `layout.ts` owns the number,
+      // and a 416 typed into the stylesheet is the second constant item 069 warned about.
+      style={floating ? { width: sidebarBodyWidth() } : undefined}
+    >
+      <UpgradeBench onOpenResearch={onOpenResearch} />
+      <DockCard />
+      <GrabberCard />
+    </div>
   );
 }
 
@@ -314,6 +407,39 @@ function useSidebar(): boolean {
 }
 
 /**
+ * THE ZONES ROW ([[102]]) — the fifth, and the one `PanelFrame.tsx` predicted.
+ *
+ * That file set the test for its own design in as many words: "a fifth row must be a `PanelRow`
+ * and nothing else." This is four props and no markup, which is the test passing.
+ *
+ * IT NEVER LIGHTS FOR "SOMETHING IS WAITING", and that is a decision rather than an omission.
+ * A `lit` row means the player has something to collect — research affordable, a box in the bag
+ * — and a zone that needs attention already has a louder voice than a sidebar row: the field
+ * card's alert, which plan §5 makes the one thing in the HUD allowed to interrupt. Lighting
+ * this row for a wilting zone would be that alert said twice, one of them quietly.
+ */
+function ZonesToggle({
+  open,
+  zones,
+  onToggle,
+}: {
+  open: boolean;
+  zones: number;
+  onToggle: () => void;
+}) {
+  return (
+    <PanelRow
+      name="The Zones"
+      badge={zones === 0 ? 'none drawn' : `${zones} ${zones === 1 ? 'zone' : 'zones'}`}
+      hotkey="Z"
+      title="Grow Zones — crop, seed hopper, priority, name"
+      open={open}
+      onToggle={onToggle}
+    />
+  );
+}
+
+/**
  * The BUILD row ([[076]]) — the fourth of four, and the one that proves the shape: it lives
  * in a different file from its panel, its truth lives in a different LAYER (the input seam,
  * [[071]]), and it is still just a `PanelRow` with four props ([[093]]). It is the only row
@@ -371,6 +497,7 @@ function usePanels(): {
   toggleResearch: () => void;
   toggleShop: () => void;
   toggleBag: () => void;
+  toggleZones: () => void;
   close: () => void;
 } {
   // A primitive snapshot (a name or null), so every build-seam publish that is not an
@@ -386,6 +513,9 @@ function usePanels(): {
   const toggleBag = useCallback(() => {
     togglePanel('bag');
   }, []);
+  const toggleZones = useCallback(() => {
+    togglePanel('zones');
+  }, []);
   const close = useCallback(() => {
     closeLocalPanel();
   }, []);
@@ -398,6 +528,13 @@ function usePanels(): {
       if (event.code === 'KeyT') togglePanel('research');
       else if (event.code === 'KeyG') togglePanel('shop');
       else if (event.code === 'KeyI') togglePanel('bag');
+      // Z for zones ([[102]]), taken from what the input layer leaves free: digits, B, R, C,
+      // +, −, Escape, F3, backtick, Space and WASD are spoken for, P belongs to the reports
+      // layer, T/G/I are the three above and `[` folds the dock. Z was unclaimed, and it is
+      // the letter in the word. IT IS BOUND HERE, OUTSIDE THE COLLAPSED BRANCH, and that is
+      // the whole reachability argument: `[` unmounts the sidebar body and every row in it,
+      // but this listener and the `.floatWin` it opens live in the always-mounted half.
+      else if (event.code === 'KeyZ') togglePanel('zones');
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -419,5 +556,5 @@ function usePanels(): {
     [],
   );
 
-  return { open, toggleResearch, toggleShop, toggleBag, close };
+  return { open, toggleResearch, toggleShop, toggleBag, toggleZones, close };
 }

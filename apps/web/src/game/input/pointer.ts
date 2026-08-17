@@ -42,17 +42,27 @@
 // leaves, and the band freezes mid-drag with the button still down. `setPointerCapture` on
 // the press keeps both coming, so the release lands and the rect is the one you drew.
 
-import type { Command, CropId, MachineView, WorldView } from '@snack/sim';
+import type { Command, MachineView, WorldView } from '@snack/sim';
 import {
+  CropId,
   Direction,
+  FERTILITY_MAX,
+  FERTILITY_MIN,
   IntentAction,
   ItemId,
+  LIQUID_SPECS,
   LampState,
+  LiquidId,
   MachineKind,
+  MachineRole,
+  PIPE_PRICE_CENTS_PER_TILE,
+  PortFlow,
   SUBTILE,
   TillMode,
   beltSpec,
   cropSpec,
+  itemSpec,
+  liquidSpec,
   listPriceCents,
   machineSpec,
 } from '@snack/sim';
@@ -72,7 +82,7 @@ import {
   runTiles,
   zoneIdAt,
 } from './gesture';
-import type { DragRun, RectRun, TilePoint } from './gesture';
+import type { DragRun, LineRun, RectRun, TilePoint } from './gesture';
 import { grabberCardTarget } from './grabber-card';
 import { grabberClicked } from './grabber-panel';
 import type { PanelRequest } from './panels';
@@ -90,9 +100,9 @@ import {
 import { teardownPlan } from './teardown';
 import type { InputSystem } from './system';
 import {
+  DEFAULT_CROP,
   TOOL_INFO,
   ToolMode,
-  V01_CROP,
   gestureFor,
   toolBeltTier,
   toolCoverageRadius,
@@ -149,6 +159,15 @@ export interface HoldState {
   watersEmitted: number;
   /** The empty-can refusal has been shown this dry spell. One tell, not one per tile. */
   canRefusalTold: boolean;
+  /**
+   * The crop this hold sows, frozen at the press ([[103]]).
+   *
+   * FROZEN RATHER THAN READ LIVE, which is the rule the till's anchor already establishes: the
+   * anchor picks the mode and the whole drag keeps it. A player who presses `C` halfway along a
+   * row is not asking for the second half of one gesture to come up a different plant, and the
+   * band under the cursor showed which crop before the button went down.
+   */
+  crop: CropId;
 }
 
 export class PointerInput {
@@ -345,7 +364,7 @@ export class PointerInput {
       // the byte. What `paint` adds happens after this dispatch: the hold begins, and each
       // NEW tile the held cursor crosses gets the verb once (`holdCommand`) — once per TILE,
       // never per frame, which is what keeps the trace from recording the mouse.
-      const command = primaryCommand(view, tile, tool, this.system.placeDir);
+      const command = primaryCommand(view, tile, tool, this.system.placeDir, this.system.armedCrop);
       if (command !== null) {
         const pushed = reachAdjusted(view, tile, command);
         this.host.queue.push(pushed);
@@ -433,7 +452,7 @@ export class PointerInput {
     //
     // TEARDOWN IS THE ONE THAT RETURNS SEVERAL, because it is several removals rather than one
     // decision; the argument is written out in full at the top of `teardown.ts`.
-    const commands = dragCommands(view, drag, this.system.zoneCrop);
+    const commands = dragCommands(view, drag, this.system.armedCrop);
     for (let i = 0; i < commands.length; i++) this.host.queue.push(commands[i]!);
   };
 
@@ -547,7 +566,11 @@ export class PointerInput {
    * the line away from it. The machine under the cursor only speaks into a silence.
    */
   statusTell(): string | null {
-    return this.queueTell() ?? machineTell(this.host.latestView(), this.hover);
+    const view = this.host.latestView();
+    // The soil is last because it is the least specific thing under the cursor: a machine
+    // standing on a farm tile is what the player is pointing AT, and the dirt beneath it is
+    // scenery. Same order, one more rung ([[104]]).
+    return this.queueTell() ?? machineTell(view, this.hover) ?? soilTell(view, this.hover);
   }
 
   /**
@@ -671,7 +694,7 @@ export class PointerInput {
     if (view === null) return null;
 
     const drag = this.drag;
-    if (drag !== null) return dragBand(view, drag, this.system.zoneCrop);
+    if (drag !== null) return dragBand(view, drag, this.system.armedCrop);
 
     const hover = this.hover;
     if (hover === null) return null;
@@ -703,6 +726,17 @@ export class PointerInput {
       return tillBand(view, bounds, tillModeFor(view, { tileX: hover.tileX, tileY: hover.tileY }));
     }
 
+    // The plant ghost ([[103]]), on the same 1×1 pattern the till's uses and for the same
+    // reason: the ARMED CROP has to be legible before the button goes down, or a dial nobody
+    // can see is a dial nobody will turn. It is also where a missing seed gets said out loud —
+    // the sim refuses that click silently, since a refusal spends nothing.
+    if (tool === ToolMode.Plant) return plantBand(view, hover, this.system.armedCrop);
+
+    // The fertilizer ghost ([[104]]): this tile's soil, and what a bag would do to it. Same 1×1
+    // pattern, and the same argument — the decision "which tile gets the bag I am holding" is
+    // one the player makes with the cursor, so the answer belongs under it.
+    if (tool === ToolMode.ApplyFertilizer) return fertilizerBand(view, hover);
+
     const grabber = this.grabberUnderCursor();
     if (grabber !== null && toolMachineKind(tool) === null) return grabberBand(hover, grabber);
 
@@ -712,12 +746,20 @@ export class PointerInput {
 
 // --- commands ---------------------------------------------------------------------------
 
-/** Left click: the current tool's verb. */
+/**
+ * Left click: the current tool's verb.
+ *
+ * `crop` IS THE ARMED CROP AND IT IS ONLY THE PLANT TOOL'S BUSINESS ([[103]]). It is a
+ * parameter rather than a module constant for the same reason `placeDir` is one: both are
+ * cursor state that lives in `system.ts`, and a function that reached for either of them
+ * directly would stop being drivable from a test with a plain view and a tile.
+ */
 export function primaryCommand(
   view: WorldView,
   tile: HoverTile,
   tool: ToolMode,
   placeDir: Direction,
+  crop: CropId = DEFAULT_CROP,
 ): Command | null {
   const kind = toolMachineKind(tool);
   if (kind !== null) {
@@ -779,8 +821,17 @@ export function primaryCommand(
     // cell" is the sim's shape, and this side only aims it.
     case ToolMode.UseRepairKit:
       return { type: 'UseRepairKit', tileX: tile.tileX, tileY: tile.tileY };
+    // The bag of fertilizer ([[104]]), on the kit's shape: a consumable aimed at a tile. The
+    // reducer refuses without spending — a bagless click, a tile already at 3★, ground that is
+    // not farmland — so this side only aims, exactly as it does for the kit.
+    case ToolMode.ApplyFertilizer:
+      return { type: 'ApplyFertilizer', tileX: tile.tileX, tileY: tile.tileY };
+    // THE ARMED CROP, NOT A CONSTANT ([[103]]). This line read `crop: V01_CROP` — "the only
+    // crop in v0.1" — for the whole of v0.2, which is how four researched crops, four
+    // purchasable seeds and the $25 cane node came to have no way into the ground. The sim
+    // never had this bug: `applyPlantTile` accepts any crop and gates on the spec's own node.
     case ToolMode.Plant:
-      return { type: 'PlantTile', tileX: tile.tileX, tileY: tile.tileY, crop: V01_CROP };
+      return { type: 'PlantTile', tileX: tile.tileX, tileY: tile.tileY, crop };
     case ToolMode.Harvest:
       return { type: 'HarvestTile', tileX: tile.tileX, tileY: tile.tileY };
     case ToolMode.Hand:
@@ -831,7 +882,24 @@ export function createHold(
     watersEmitted:
       pressed.type === 'WaterTile' && tileWithinReach(view, anchor.tileX, anchor.tileY) ? 1 : 0,
     canRefusalTold: tool === ToolMode.Water && view.player.canCharges === 0,
+    crop: cropOfPress(pressed),
   };
+}
+
+/**
+ * The crop a press committed to, read back off the command it produced ([[103]]).
+ *
+ * READ OFF THE PRESS RATHER THAN PASSED IN, so a hold and its work queue cannot disagree with
+ * each other or with the click that started them — there is one armed crop, it was consulted
+ * once, and this is that answer travelling with the gesture. The walk-to form carries the crop
+ * as `item`, which is `reachAdjusted`'s own encoding for a plant errand.
+ */
+function cropOfPress(pressed: Command): CropId {
+  if (pressed.type === 'PlantTile') return pressed.crop;
+  if (pressed.type === 'WalkAndAct' && pressed.action === IntentAction.Plant) {
+    return pressed.item as CropId;
+  }
+  return DEFAULT_CROP;
 }
 
 /**
@@ -878,7 +946,7 @@ export function holdCommand(
   const key = holdKey(tile.tileX, tile.tileY);
   if (hold.fired.has(key)) return null;
 
-  const direct = primaryCommand(view, tile, hold.tool, Direction.None);
+  const direct = primaryCommand(view, tile, hold.tool, Direction.None, hold.crop);
   if (direct === null) return null;
   if (direct.type !== 'WaterTile' && direct.type !== 'PlantTile' && direct.type !== 'HarvestTile') {
     return null;
@@ -963,6 +1031,14 @@ export interface WorkErrand {
 export interface WorkQueueState {
   /** The verb the whole queue carries. A different armed tool cancels it. */
   tool: ToolMode;
+  /**
+   * The crop the queue sows, taken from what the press actually sent ([[103]]).
+   *
+   * THE QUEUE RE-DERIVES ITS COMMANDS (`primaryCommand`, twice below), so without this the
+   * far half of a drag — every tile the player never got within arm's length of — would come
+   * up as the default crop while the near half came up as the armed one. One row, two plants.
+   */
+  crop: CropId;
   /** Out-of-reach crossed tiles, in crossing order. The pump works the head. */
   tiles: QueuedTile[];
   /** Dedupe over `tiles` AND the in-flight errand, as `"x,y"` keys. */
@@ -1001,6 +1077,7 @@ export function createWorkQueue(
       : null;
   return {
     tool,
+    crop: cropOfPress(dispatched),
     tiles: [],
     keys: new Set<string>(
       outstanding === null ? [] : [holdKey(outstanding.tileX, outstanding.tileY)],
@@ -1097,7 +1174,7 @@ export function pumpWorkQueue(
       remaining.push(tile);
       continue;
     }
-    const direct = primaryCommand(view, tile, queue.tool, Direction.None);
+    const direct = primaryCommand(view, tile, queue.tool, Direction.None, queue.crop);
     if (
       direct === null ||
       (direct.type !== 'WaterTile' && direct.type !== 'PlantTile' && direct.type !== 'HarvestTile')
@@ -1129,7 +1206,7 @@ export function pumpWorkQueue(
     while (queue.tiles.length > 0) {
       const tile = queue.tiles[0]!;
       const key = holdKey(tile.tileX, tile.tileY);
-      const direct = primaryCommand(view, tile, queue.tool, Direction.None);
+      const direct = primaryCommand(view, tile, queue.tool, Direction.None, queue.crop);
       if (
         direct === null ||
         (direct.type !== 'WaterTile' &&
@@ -1305,6 +1382,13 @@ export function reachAdjusted(view: WorldView, tile: HoverTile, direct: Command)
       );
     case 'HarvestTile':
       return tileErrand(view, direct, IntentAction.Harvest, direct.tileX, direct.tileY, 0, 0);
+    // Fertilizing walks ([[104]]). `IntentAction.Fertilize` has been in the sim's table since
+    // the verb existed, wired through `intentTargetSubtiles` and `intentCommand` exactly as
+    // Water is — it was simply the only one of the fourteen with no construction site anywhere
+    // in this app. Shipping the in-reach case alone would have made the bag work only while
+    // standing on the tile, which is the dead-click this wrapper exists to abolish.
+    case 'ApplyFertilizer':
+      return tileErrand(view, direct, IntentAction.Fertilize, direct.tileX, direct.tileY, 0, 0);
 
     // The refill carries no tile of its own — "fill the can" is a fact about the player, not
     // about a tile — so the errand is aimed at the WATER TILE THE PLAYER CLICKED. The sim
@@ -1323,8 +1407,12 @@ export function reachAdjusted(view: WorldView, tile: HoverTile, direct: Command)
     // arrives — the machine can finish another batch mid-walk. That is safe rather than
     // merely tolerable: `applyLoadMachine` and `applyUnloadMachine` clamp with `Math.min`, so
     // a stale count moves less than it could and never fails outright.
+    // THE ITEM RIDES ALONG NOW ([[105]]), and its absence was half of the Root Cellar's bug: the
+    // errand dropped `item` here and `intentCommand` rebuilt a `LoadMachine` naming nothing, which
+    // a box refuses permanently. Every recipe machine was and stays unaffected — they take
+    // "whatever fits", and a `LoadMachine` with no item still means exactly that.
     case 'LoadMachine':
-      return machineErrand(view, direct, IntentAction.Load, tile, 0, direct.count);
+      return machineErrand(view, direct, IntentAction.Load, tile, direct.item ?? 0, direct.count);
     case 'UnloadMachine':
       return machineErrand(view, direct, IntentAction.Unload, tile, 0, direct.count);
     case 'RefillHopper':
@@ -1460,9 +1548,188 @@ export function dragCommands(view: WorldView, drag: Drag, crop: CropId): Command
     return command === null ? [] : [command];
   }
 
+  // The pipe run ([[101]]). ONE DRAG, ONE `PlacePipe`, path included — the same rule the belt
+  // above follows and the shape `PlacePipeCommand` was built for ("a thirty-tile pipe run
+  // appends ONE entry carrying its whole path"). The tiles come out of `runTiles` in travel
+  // order, which is already contiguous, orthogonal and non-repeating, so it is the sim's
+  // `path` verbatim.
+  if (drag.tool === ToolMode.PlacePipe) {
+    const tiles = runTiles(run);
+    const liquid = pipeRunLiquid(view, tiles);
+    // NOTHING AGREES ON A LIQUID, SO THERE IS NOTHING TO SAY — and this is not the input layer
+    // deciding legality (§12), it is the input layer being unable to FORM a command. Every
+    // other doomed drag in this file is still sent because it is a well-formed sentence the sim
+    // gets to refuse; `LiquidId.None` is not a liquid, `pipePathRefusal` calls it `BadPath`, and
+    // a `PlacePipe` carrying it would be a malformed payload rather than a rejected one. Same
+    // rule, same silence, as an erase drag anchored on unzoned soil.
+    if (liquid === LiquidId.None) return [];
+    return [
+      {
+        type: 'PlacePipe',
+        liquid,
+        path: tiles.map((tile) => ({ x: tile.tileX, y: tile.tileY })),
+      },
+    ];
+  }
+
   const tier = toolBeltTier(drag.tool);
   if (tier === null) return [];
   return [beltCommandFor(tier, run)];
+}
+
+// --- the pipe run's liquid ([[101]]) -------------------------------------------------------
+//
+// ────────────────────────────────────────────────────────────────────────────────────
+//  THERE IS ONE PIPE TOOL AND NO LIQUID PICKER, AND THE RUN WORKS OUT WHAT IT CARRIES.
+//
+//  `PlacePipeCommand` needs a `liquid`, and the obvious answers were both bad. FIVE TOOLS —
+//  Water Pipe, Juice Pipe, Syrup Pipe, Fizz Pipe, Soda Pipe — asks the player to know which
+//  liquid a machine emits BEFORE they have built the machine, and puts five rows in a menu that
+//  is already nine groups long to sell one object the sim prices with one constant. A PICKER
+//  KEY is a new keyboard binding for a choice that, it turns out, is almost never free.
+//
+//  So the rule is the sim's own rule, run forwards. `pipePathRefusal` refuses a run that would
+//  join two liquids (`LiquidMismatch`) or present a liquid to a machine with no port for it
+//  (`PortMismatch`); intersect those same constraints over everything the run touches and what
+//  survives is the set of liquids this run COULD legally carry. Almost always it is exactly
+//  one — which means the player was never making a choice, they were typing in an answer the
+//  world already knew. Checked against the fixtures that are this feature's spec: all four of
+//  `soda-line.json`'s stubs (cane juice, simple syrup, soda syrup, carbonated water) and both
+//  water mains come out of this function with one candidate standing.
+//
+//  WHEN SEVERAL SURVIVE, THE DRAG'S DIRECTION BREAKS THE TIE, because a drag has a start and an
+//  end and that is a real thing the player expressed: pipe dragged AWAY from a machine takes
+//  what that machine sends out, pipe dragged INTO one takes what it draws in. A Kettle alone
+//  accepts cane juice and emits simple syrup; drag away from it and you are laying a syrup line,
+//  which is what you meant. If it still guesses wrong the fix is to drag from the other end, and
+//  the band names the liquid in words the whole time the button is down — so the answer is
+//  visible before the release, which is the criterion every other gesture in this file is held
+//  to.
+//
+//  WHEN NOTHING SURVIVES the run is genuinely illegal — the same runs `pipePathRefusal` would
+//  turn down — and the band says so instead of quoting a price.
+// ────────────────────────────────────────────────────────────────────────────────────
+
+const PIPE_NEIGHBOUR_DX: readonly number[] = [0, 1, 0, -1];
+const PIPE_NEIGHBOUR_DY: readonly number[] = [-1, 0, 1, 0];
+
+/**
+ * Every liquid a machine will let a pipe present to it, or empty for one with no plumbing.
+ *
+ * The client's mirror of the sim's `specAcceptsLiquid`: the single `liquid` field is the
+ * utility machines' one port (Pump, Tank, the heads, the Recirculator) and `ports` is a
+ * converter's list, and `machineHasPorts` is exactly "this list is not empty". Read off the
+ * spec, so a machine that gains a port gains it here too.
+ */
+function machineLiquids(kind: number): LiquidId[] {
+  const spec = machineSpec(kind as MachineKind);
+  if (spec === null) return [];
+  const liquids: LiquidId[] = [];
+  if (spec.liquid !== LiquidId.None) liquids.push(spec.liquid);
+  for (let i = 0; i < spec.ports.length; i++) {
+    const port = spec.ports[i]!;
+    if (!liquids.includes(port.liquid)) liquids.push(port.liquid);
+  }
+  return liquids;
+}
+
+/**
+ * What this run carries, or `LiquidId.None` when no liquid could legally fill it.
+ *
+ * Exported for the tests, which drive it against hand-built worlds and against the two golden
+ * fixtures' geometry. Pure: a projection and a list of tiles in, an integer out.
+ */
+export function pipeRunLiquid(view: WorldView, tiles: readonly TilePoint[]): LiquidId {
+  // The sim's own order, so the last-resort pick below is stable rather than incidental.
+  let candidates: LiquidId[] = LIQUID_SPECS.map((spec) => spec.id);
+
+  for (let i = 0; i < tiles.length && candidates.length > 0; i++) {
+    const tile = tiles[i]!;
+    for (let n = 0; n < 4; n++) {
+      const nx = tile.tileX + PIPE_NEIGHBOUR_DX[n]!;
+      const ny = tile.tileY + PIPE_NEIGHBOUR_DY[n]!;
+
+      // A pipe already there decides outright: two liquids never meet, so joining it is the
+      // only thing this run can be. (`BuildRefusal.LiquidMismatch`.)
+      const pipe = pipeAtView(view, nx, ny);
+      if (pipe !== null) candidates = candidates.filter((id) => id === pipe.liquid);
+
+      // A plumbed machine narrows to what its ports declare. An UNPLUMBED one narrows nothing
+      // and must not — a water main is allowed to run past a Fryer, which is the sim's rule in
+      // as many words: "Machines with no ports at all are invisible to this rule."
+      const machine = tileAtView(view, nx, ny).machine;
+      if (machine === null) continue;
+      const accepts = machineLiquids(machine.kind);
+      if (accepts.length > 0) candidates = candidates.filter((id) => accepts.includes(id));
+    }
+  }
+
+  if (candidates.length === 0) return LiquidId.None;
+  if (candidates.length === 1) return candidates[0]!;
+
+  // The tie-break, in the drag's own direction: out of what you started at, then into what you
+  // finished at. See the header — this is the half of the answer the player expressed.
+  const sending = portLiquidBeside(view, tiles[0]!, PortFlow.Outlet, candidates);
+  if (sending !== LiquidId.None) return sending;
+  const drawing = portLiquidBeside(view, tiles[tiles.length - 1]!, PortFlow.Intake, candidates);
+  if (drawing !== LiquidId.None) return drawing;
+
+  // A run touching nothing at all is a water main. Water is the only liquid with a source in
+  // the world rather than inside a machine, so it is the only one a run in open ground can be.
+  if (candidates.includes(LiquidId.Water)) return LiquidId.Water;
+  return candidates[0]!;
+}
+
+/** A liquid a machine beside this tile moves in the given direction, and that is still legal. */
+function portLiquidBeside(
+  view: WorldView,
+  tile: TilePoint,
+  flow: PortFlow,
+  candidates: readonly LiquidId[],
+): LiquidId {
+  for (let n = 0; n < 4; n++) {
+    const machine = tileAtView(
+      view,
+      tile.tileX + PIPE_NEIGHBOUR_DX[n]!,
+      tile.tileY + PIPE_NEIGHBOUR_DY[n]!,
+    ).machine;
+    if (machine === null) continue;
+    const spec = machineSpec(machine.kind as MachineKind);
+    if (spec === null) continue;
+    for (let i = 0; i < spec.ports.length; i++) {
+      const port = spec.ports[i]!;
+      if (port.flow === flow && candidates.includes(port.liquid)) return port.liquid;
+    }
+  }
+  return LiquidId.None;
+}
+
+/** The liquid's name in words, off the sim's own slug — never a second table of nouns. */
+function liquidName(liquid: LiquidId): string {
+  return (liquidSpec(liquid)?.slug ?? '').split('-').join(' ');
+}
+
+/**
+ * Would every tile of this run take a pipe? A hint for the band, never a gate (§12).
+ *
+ * Mirrors `pipePathRefusal`'s per-tile loop rather than reusing `tilesAreClear`, and the extra
+ * three lines are the point: that one was written for belts, which the projection cannot see on
+ * a tile, so it stops at "inside, owned, not field, no machine". A pipe run is refused by the
+ * reservoir it clips, the pipe it crosses and the arm it runs under as well, and all four of
+ * those ARE readable here — so the band can go red for the real reason instead of quoting a
+ * price for a run the reducer is about to throw away.
+ */
+function pipeTilesClear(view: WorldView, tiles: readonly TilePoint[]): boolean {
+  for (let i = 0; i < tiles.length; i++) {
+    const tile = tiles[i]!;
+    const query = tileAtView(view, tile.tileX, tile.tileY);
+    if (!query.insideWorld || !query.owned || query.isField || query.machine !== null) return false;
+    if (reservoirAtTile(view, tile.tileX, tile.tileY)) return false;
+    if (pipeAtView(view, tile.tileX, tile.tileY) !== null) return false;
+    if (beltAtView(view, tile.tileX, tile.tileY) !== null) return false;
+    if (grabberAtView(view, tile.tileX, tile.tileY) !== null) return false;
+  }
+  return true;
 }
 
 /**
@@ -1589,6 +1856,29 @@ export function machineTell(view: WorldView | null, tile: HoverTile | null): str
     return `barrel — ${machine.tankCharges} of ${machine.tankChargesMax} charges`;
   }
 
+  /*
+    WHAT IS IN THE BOX ([[105]]). A machine you can click owes you a sentence, and a Root Cellar
+    said nothing at all — `machineTell` had no branch and the render ribbon called it "root cellar
+    idle", which is true of a shed with ninety potatoes in it in the least useful possible way.
+
+    A READOUT, SO IT SITS BELOW THE COMPLAINT, per this function's stated order. Gated on the ROLE
+    like the hand verb it explains, so the Hand Cart says the same thing about itself; named from
+    the sim's own slugs, which is the game layer's idiom for machine and item names (see
+    `render/index.ts`) rather than a copy table over here.
+  */
+  const spec = machineSpec(machine.kind as MachineKind);
+  if (spec !== null && spec.role === MachineRole.Storage) {
+    const name = spec.slug.split('-').join(' ');
+    if (machine.cargoCount <= 0 || machine.cargoItem === 0) {
+      return `${name} — empty, ${spec.inputCapacity} slots`;
+    }
+    const goods =
+      itemSpec(machine.cargoItem as ItemId)
+        ?.slug.split('-')
+        .join(' ') ?? 'goods';
+    return `${name} — ${machine.cargoCount} of ${spec.inputCapacity} ${goods}`;
+  }
+
   return null;
 }
 
@@ -1608,6 +1898,29 @@ export function maintenanceCommand(view: WorldView, tile: HoverTile): Command | 
  */
 function handCommand(view: WorldView, machine: MachineView): Command | null {
   if (isJammed(machine)) return { type: 'WhackJam', machineId: machine.id };
+
+  /*
+    **THE BOX** ([[105]]). A `MachineRole.Storage` machine kept its contents in
+    `cargoItem`/`cargoCount` while `outputCount` stayed 0, so the unload branch below never
+    fired; and `machineInputItem` has no entry for a thing with no recipe, so the load branch
+    never fired either. A click on a $250 Root Cellar therefore produced **no command at all** —
+    not a refusal, not a tell, nothing — and the same was true of the $80 Hand Cart.
+
+    GATED ON THE ROLE, NEVER ON THE KIND, which is the whole shape of the fix: the cellar and the
+    cart are one bug, and the cart is the test that it was fixed in the right place. The sim's
+    doors are gated the same way (`putStorage`/`takeStorage`), so a machine that becomes a box
+    tomorrow gets this verb with no edit here.
+
+    THE TOW RULE IS THE ARM'S ALONE. `belts.ts` refuses a grabber at a cart the player is towing;
+    the HAND must still load one, because loading the cart you are pushing is the entire point of
+    pushing it. There is a sim test that fails if this branch ever inherits that gate.
+  */
+  // `MachineView.kind` crosses the seam as a plain number (§12), so the cast is the same one
+  // every other spec lookup on this side makes.
+  const spec = machineSpec(machine.kind as MachineKind);
+  if (spec !== null && spec.role === MachineRole.Storage) {
+    return storageCommand(view, machine, spec.inputCapacity);
+  }
 
   if (machine.kind === MachineKind.SellBin) {
     const item = bestSellable(view);
@@ -1645,6 +1958,64 @@ function handCommand(view: WorldView, machine: MachineView): Command | null {
   const have = countOf(view, wanted);
   if (have <= 0) return null;
   return { type: 'LoadMachine', machineId: machine.id, count: have };
+}
+
+/**
+ * What one click on a box means ([[105]]). Load if there is anything sensible to put in, empty
+ * it out otherwise, and `null` only when the box is empty and so are you.
+ *
+ * **THE COMMAND MUST NAME AN ITEM AND THE SIM REFUSES IT SILENTLY OTHERWISE.** A box has no
+ * recipe, so nothing in the world could work out what an unnamed `LoadMachine` meant;
+ * `applyLoadMachine` returns false on the spot. That refusal is exactly how the Root Cellar came
+ * to be a shed that did nothing when clicked, so the item is set here and asserted in the tests.
+ *
+ * **UNLOADING TAKES EVERYTHING**, which is the open question this item asked, answered: the bag
+ * has had no cap since [[068]], `applyUnloadMachine` clamps the ask with `Math.min` against what
+ * is actually in there, and one click beats a picker for a verb whose whole job is "give me my
+ * things back".
+ *
+ * **A PART-FULL BOX TOPS UP BEFORE IT EMPTIES.** A cellar holding potatoes with potatoes in your
+ * arms is a player stocking it, not raiding it — and if the box is full, or you are carrying
+ * something else, the click empties it instead, which is the only other thing it could mean.
+ */
+function storageCommand(view: WorldView, machine: MachineView, capacity: number): Command | null {
+  const held = machine.cargoItem;
+  if (machine.cargoCount > 0 && held !== 0) {
+    const have = countOf(view, held as ItemId);
+    if (have > 0 && machine.cargoCount < capacity) {
+      return { type: 'LoadMachine', machineId: machine.id, count: have, item: held as ItemId };
+    }
+    return { type: 'UnloadMachine', machineId: machine.id, count: machine.cargoCount };
+  }
+
+  const stash = bestStorable(view);
+  if (stash === null) return null;
+  return { type: 'LoadMachine', machineId: machine.id, count: stash.count, item: stash.item };
+}
+
+/**
+ * The stack an empty box gets: the BIGGEST one in the bag that is not a boxed machine.
+ *
+ * BIGGEST RATHER THAN MOST VALUABLE, which is the opposite of `bestSellable`'s rule and
+ * deliberately so — a box is for bulk, and the thing overflowing your arms is the thing you
+ * walked over to put down. The two verbs are answering different questions with the same gesture.
+ *
+ * BOXED MACHINES ARE EXCLUDED, gated on `boxedMachineKind` because that is the projection's own
+ * type tag for the row. A box will physically hold them — the sim's door asks nothing about what
+ * an item is — but "click your shed and the $50,000 dock in your arms goes in" is an accident a
+ * hand verb must not have, and a boxed machine's verb is placing it. Ties break on the earliest
+ * row, so the choice is stable between frames rather than flickering with the bag's order.
+ */
+function bestStorable(view: WorldView): { item: ItemId; count: number } | null {
+  let best: { item: ItemId; count: number } | null = null;
+  for (let i = 0; i < view.inventory.length; i++) {
+    const slot = view.inventory[i]!;
+    if (slot.count <= 0 || slot.boxedMachineKind !== 0) continue;
+    if (best === null || slot.count > best.count) {
+      best = { item: slot.item as ItemId, count: slot.count };
+    }
+  }
+  return best;
 }
 
 function machineInputItem(kind: number): ItemId | null {
@@ -1738,6 +2109,7 @@ function dragBand(view: WorldView, drag: Drag, crop: CropId): BandState {
   const bounds = runBounds(run);
 
   if (run.kind === 'line') {
+    if (drag.tool === ToolMode.PlacePipe) return pipeBand(view, run, bounds);
     const tier = toolBeltTier(drag.tool);
     const perTile = tier === null ? 0 : (beltSpec(tier)?.priceCentsPerTile ?? 0);
     const tiles = runTiles(run);
@@ -1801,6 +2173,53 @@ function dragBand(view: WorldView, drag: Drag, crop: CropId): BandState {
         : zoneId > 0
           ? `+ ${inField} tiles → zone ${zoneId}`
           : `new zone · ${inField} tiles · ${cropName(crop)}`,
+    dir: Direction.None,
+  };
+}
+
+/**
+ * The pipe band ([[101]]): the L the drag will lay, and — the whole reason it is its own
+ * function — **what the run is going to carry, in words, before the button comes up**.
+ *
+ * THE LABEL IS THE LIQUID PICKER. There is no picker key (see `pipeRunLiquid`), so the one
+ * thing this band owes the player is the answer the inference reached, spelled out and updated
+ * every frame as the run grows past one machine and up to the next. "17 tiles · $34.00 · water
+ * ←↑" is a sentence a player can disagree with while they still have a chance to — by dragging
+ * the other way — which is the standard the belt's own "R flips the corner" tag set.
+ *
+ * WHOLE-RUN COLOURING, LIKE THE BELT AND FOR THE IDENTICAL REASON: `applyPlacePipe` accepts or
+ * refuses the entire path and there is no partial lay ("A drag that clips a machine half way
+ * along should not leave the player with a stub"). Colouring per tile would advertise a mostly
+ * green L that builds nothing.
+ */
+function pipeBand(view: WorldView, run: LineRun, bounds: Bounds): BandState {
+  const tiles = runTiles(run);
+  const length = runLength(run);
+  const cost = PIPE_PRICE_CENTS_PER_TILE * length;
+  const liquid = pipeRunLiquid(view, tiles);
+  const clear = pipeTilesClear(view, tiles);
+  const ok = liquid !== LiquidId.None && clear && view.moneyCents >= cost;
+  const tone: BandTone = ok ? 'pipe' : 'blocked';
+  const bent = run.turnLengthTiles > 0;
+  const heading = bent ? `${arrow(run.dir)}${arrow(run.turnDir)}` : arrow(run.dir);
+
+  return {
+    ...bounds,
+    tone,
+    cells: tiles.map((tile) => ({ x: tile.tileX, y: tile.tileY, tone })),
+    // THE REFUSAL OUTRANKS THE PRICE. A run with no liquid is not a cheaper run, it is not a
+    // run, and quoting "$34.00" under a red band would be the tag answering a question nobody
+    // asked. The sentence names the rule the sim is about to enforce — one liquid per network,
+    // typed ports — rather than the tone.
+    label:
+      liquid === LiquidId.None
+        ? `${length} tiles · nothing here would share a liquid`
+        : bent
+          ? `${length} tiles · ${formatCents(cost)} · ${liquidName(liquid)} ${heading} · R flips the corner`
+          : `${length} tile${length === 1 ? '' : 's'} · ${formatCents(cost)} · ${liquidName(liquid)} ${heading}`,
+    // No chevron, for the belt's reason exactly: a pipe has no facing. Flow direction is the
+    // network's ledger, decided by where the pump is, and a shape that means "R turns this"
+    // must never appear on something R does not turn.
     dir: Direction.None,
   };
 }
@@ -1873,6 +2292,121 @@ function tillBand(view: WorldView, bounds: Bounds, mode: TillMode): BandState {
         : `${n} tile${n === 1 ? '' : 's'} → grass`,
     dir: Direction.None,
   };
+}
+
+/**
+ * **THE PLANT GHOST** ([[103]]): which crop is armed, and why this tile will refuse it.
+ *
+ * THE ARMED CROP HAD NO SURFACE UNTIL THE BUTTON WAS DOWN. `C` has cycled a crop since zones
+ * landed, and its only feedback was the label on a live zone drag — so a player hand-planting
+ * had no way to find out what they were about to sow, and no way to discover the key at all.
+ * This is the same 1×1 hover band the till already draws, saying the one thing the tool is
+ * currently about.
+ *
+ * THE SEED COUNT IS A READOUT AND NOT A GATE, in the sense §12 means: the band goes red on an
+ * empty bag because `applyPlantTile` will refuse the click, and it refuses SILENTLY (nothing is
+ * spent, so there is no sound and no flash). Every refusal below mirrors a line of that reducer
+ * — no crop on an occupied tile, no planting off the field, the tech gate — and the sim remains
+ * the authority for all of them.
+ */
+export function plantBand(view: WorldView, hover: HoverTile, crop: CropId): BandState {
+  const bounds = { x: hover.tileX, y: hover.tileY, w: 1, h: 1 };
+  const name = cropName(crop);
+  const spec = cropSpec(crop);
+  const query = tileAtView(view, hover.tileX, hover.tileY);
+
+  const refusal =
+    spec === null
+      ? 'no such crop'
+      : !query.insideWorld || !query.owned
+        ? 'not your land'
+        : query.machine !== null
+          ? 'a machine is in the way'
+          : !query.isField
+            ? 'till it first'
+            : query.crop !== 0
+              ? 'already planted'
+              : countOf(view, spec.seedItem) <= 0
+                ? 'no seed in the bag'
+                : '';
+
+  // "C" is on the green label only. A red band owes the player the reason it is red ([[067]]'s
+  // rule for the placement ghost), and "already planted · C to change" would be answering a
+  // question they did not ask with the answer to one they did not either.
+  return {
+    ...bounds,
+    tone: refusal === '' ? 'zone' : 'blocked',
+    label: refusal === '' ? `${name} · C to change` : `${name} · ${refusal}`,
+    dir: Direction.None,
+  };
+}
+
+/**
+ * **THE FERTILIZER GHOST** ([[104]]): this tile's soil, and whether a bag would help it.
+ *
+ * The refusals mirror `applyApplyFertilizer` line for line — an empty bag, ground that is not
+ * farmland, and a tile already at `FERTILITY_MAX`, which the reducer declines rather than
+ * consuming (`fertilizeTile` returns false and nothing is spent). A silent refusal is exactly
+ * what this band is for.
+ */
+export function fertilizerBand(view: WorldView, hover: HoverTile): BandState {
+  const bounds = { x: hover.tileX, y: hover.tileY, w: 1, h: 1 };
+  const query = tileAtView(view, hover.tileX, hover.tileY);
+  const bags = countOf(view, ItemId.Fertilizer);
+
+  const refusal = !query.isField
+    ? 'only farmland takes it'
+    : query.fertility >= FERTILITY_MAX
+      ? 'this soil is already rich'
+      : bags <= 0
+        ? 'no fertilizer in the bag'
+        : '';
+
+  return {
+    ...bounds,
+    tone: refusal === '' ? 'zone' : 'blocked',
+    label:
+      refusal === ''
+        ? `${soilStars(query.fertility)} → ${soilStars(query.fertility + 1)} · ${bags} left`
+        : `fertilizer · ${refusal}`,
+    dir: Direction.None,
+  };
+}
+
+/**
+ * Fertility as stars: `★★☆` for 2 of 3. The one rendering of the number, shared by the
+ * fertilizer ghost and the soil tell so the two cannot describe one tile differently.
+ */
+export function soilStars(fertility: number): string {
+  const filled = Math.max(0, Math.min(FERTILITY_MAX, fertility));
+  return '★'.repeat(filled) + '☆'.repeat(FERTILITY_MAX - filled);
+}
+
+/**
+ * **WHAT THE SOIL UNDER THE CURSOR IS WORTH** ([[104]]), or `null` off the field.
+ *
+ * FERTILITY IS THE YIELD, AS A DIRECT ADDITIVE TERM — `state.ts`'s harvest is
+ * `tile.fertility + bonus` — and it steps down every five harvests to a floor of 1★, so a farm
+ * quietly loses more than half its output over its first twenty pulls. Until this line, the
+ * number was published on the tile view, read by the picker, and displayed **nowhere**: one HUD
+ * surface launders it into a dollar total for crops already wilting, and nothing showed it as
+ * fertility. A wound you cannot see and a cure you cannot apply are the same bug from both ends.
+ *
+ * ON BARE SOIL AS WELL AS PLANTED SOIL, which is the criterion that decides the surface: the
+ * question it answers is "where do I plant next", and that is asked of empty ground.
+ *
+ * BELOW `machineTell` IN `statusTell`'s ORDER, honouring [[097]]'s rule rather than inventing a
+ * second one: a machine standing on the tile is the more specific thing to be pointing at, and a
+ * complaint from it outranks any readout.
+ */
+export function soilTell(view: WorldView | null, tile: HoverTile | null): string | null {
+  if (view === null || tile === null) return null;
+  const query = tileAtView(view, tile.tileX, tile.tileY);
+  if (!query.isField) return null;
+  const stars = soilStars(query.fertility);
+  if (query.fertility <= FERTILITY_MIN) return `soil ${stars} — worn thin`;
+  if (query.fertility >= FERTILITY_MAX) return `soil ${stars} — rich`;
+  return `soil ${stars}`;
 }
 
 /**
@@ -2132,11 +2666,18 @@ function arrow(dir: number): string {
   }
 }
 
+/**
+ * Keyed on `CropId` rather than on bare numbers, and complete — the Gold Potato's absence here
+ * was the second half of its exile ([[103]]): a crop the cycle could not reach and the band
+ * could not name. The HUD spells the same names from `itemName(spec.yieldItem)`; this table
+ * stays hand-written because the game layer does not import the HUD's copy modules.
+ */
 const CROP_NAMES: Readonly<Record<number, string>> = {
-  1: 'Russet Potato',
-  2: 'Sugar Cane',
-  3: 'Corn',
-  4: 'Chili Pepper',
+  [CropId.RussetPotato]: 'Russet Potato',
+  [CropId.SugarCane]: 'Sugar Cane',
+  [CropId.Corn]: 'Corn',
+  [CropId.ChiliPepper]: 'Chili Pepper',
+  [CropId.GoldPotato]: 'Gold Potato',
 };
 
 export function cropName(crop: number): string {

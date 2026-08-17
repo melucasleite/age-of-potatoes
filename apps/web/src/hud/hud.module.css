@@ -242,6 +242,77 @@
   z-index: 5;
 }
 
+/*
+ * THE AT-THE-MACHINE CARDS, WHILE THE DOCK IS FOLDED ([[106]]).
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  THE BUG THIS ENDS. Item 093 ruled the cards render UNCONDITIONALLY, so that standing at a
+ *  machine could never be hidden behind an open panel. Item 096 unmounts the sidebar's body
+ *  on `[`. Landing the same day and never meeting, the two made "unconditionally" mean "into
+ *  a container that no longer exists": folded, clicking an arm did nothing at all — no card,
+ *  no walk, no tell. Silence is the worst of the outcomes, because the player cannot tell
+ *  whether the game heard them.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * IT IS A `.corner`, NOT A SECOND FLOATING CHROME. The stage already has a vocabulary for
+ * parking a thing on it — `.corner` plus an anchor, three times over — and this is a fourth
+ * use of it, carrying only what the corner cannot know: which corner, how wide, how tall, and
+ * that its cards take their own clicks. The CARDS bring their own bevel (`.card`) unchanged,
+ * which is why nothing here draws a frame: they must be the same object in both states.
+ *
+ * TOP LEFT, BECAUSE IT IS WHERE THE CARDS ALREADY WERE. Bottom centre is the hotbar stack,
+ * top centre is the Welcome Back card, top right is the dev overlay, and the lower left
+ * belongs to the audio gate ([[014]]) by an older ruling. But the reason is not "the last
+ * corner left" — it is that this is the half of the screen the cards were on a moment ago,
+ * and a fold should move the chrome as little as it can get away with. Reading a bench in one
+ * place with the dock open and another with it shut is two HUDs.
+ *
+ * ⚠️ THE TOP LEFT IS NOT EMPTY, AND `top: 45px` IS THAT FACT. The reports dock ([[076]],
+ * `reports.module.css`) anchors at `sidebarWidth(collapsed) + 14` — THE SAME LEFT EDGE this
+ * computes, from the same function, by the same ruling that the canvas region's corner is
+ * where chrome starts. Its tab rail is always on screen (Shift · Bests · Dispatch ·
+ * Diagnostics) and measures 25px from `top: 10px`, so a card at 14 lands with its NAME ROW —
+ * the one line that says which machine you are looking at — underneath four tabs. Found in the
+ * browser, not by reading, because both files compute the number correctly and separately.
+ * 45 clears 35 with air. THE REPORTS LAYER OUTRANKS THIS OUTRIGHT at `z-index: 11`, above the
+ * whole HUD root, so an OPEN report covers the card and that ordering is already right —
+ * same rule as the window below: opened on purpose beats merely arrived.
+ *
+ * NOT CENTRED LIKE `.floatWin`, DELIBERATELY. These are not panels and do not obey the
+ * one-open-at-a-time invariant — item 093's guarantee is that standing at a Fryer says so
+ * even with the tech tree up — so a card and a window must be able to share the screen. Two
+ * things fighting for the middle would have made that guarantee a collision instead. Under
+ * the window in `z-index` for the same reason: the panel was opened on purpose, the card
+ * merely arrived.
+ *
+ * THE GAPS DO NOT SWALLOW CLICKS. The box inherits `pointer-events: none` from `.stage`, so
+ * an empty one — the common case, on almost every frame — is not there at all as far as the
+ * lot underneath is concerned. The CARDS opt back in, and that is a departure from
+ * `.welcome`, which stays transparent so the lot is playable through it: over here the player
+ * cannot see what a card is covering, so a click falling through would land on a tile they
+ * have no way to look at. Every control inside was already `pointer-events: auto` in its own
+ * right — the cards were written for floating corners before there was a dock to put them in.
+ */
+.machineFloat {
+  /* 45, not 14 — under the reports tab rail. See the ⚠️ above; it was measured, not derived. */
+  top: 45px;
+  left: 14px;
+  /* Width is inline from `sidebarBodyWidth()`, so the cards are the shape they just were. */
+  max-width: calc(100% - 28px);
+  /* 201 = the 45 above plus the same 156px of bottom clearance `.floatWin`'s 170 leaves from
+     its own inset, and for the same reason: the hotbar stack stays visible under it, and a
+     belt the player cannot see is not a drop target, it is a rumour. */
+  max-height: calc(100% - 201px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #46392f #14100e;
+  z-index: 4;
+}
+
+.machineFloat > * {
+  pointer-events: auto;
+}
+
 /* --- the card ------------------------------------------------------------------- */
 
 .card {
@@ -2871,6 +2942,258 @@
   white-space: nowrap;
 }
 
+/* --- the zones panel ([[102]]) ---------------------------------------------------- */
+
+/*
+ * THE FIFTH FLOATING PANEL, and it borrows more than it invents. Its shell, head, scroll and
+ * footer are `PanelWindow`'s; the zone list reuses `.dockZoneSwatch`, `.dockZoneName`,
+ * `.dockZoneCrop` and `.dockZoneCounts` class for class, because it is the same subject read
+ * the same way and two lists of zones laid out differently read as two games; the crop picker
+ * is `.armGrid` and `.armCell` unchanged. What is genuinely new is below: a rename field, a
+ * hopper toggle, and the priority pips.
+ */
+
+.zoneList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.zoneItem {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px 7px;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  background: #241c14;
+  box-shadow: inset 0 0 0 2px #14100e;
+}
+
+.zoneItem:hover {
+  background: #2b2119;
+}
+
+/* Gold, like every other "this is the one" in the HUD. */
+.zoneItemOn {
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #f5d382;
+}
+
+.zoneItemHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Which of six rectangles is replanting itself — the question the LIST answers. */
+.zoneItemArmed {
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f5d382;
+}
+
+.zoneDetail {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 2px solid #14100e;
+}
+
+.zoneSection {
+  margin-top: 13px;
+}
+
+.zoneSectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 7px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8a6234;
+}
+
+.zoneNote {
+  margin-top: 7px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #9a8873;
+}
+
+/*
+ * Amber, for an armed hopper that cannot actually sow: no crop, or no seed in the bag. The
+ * colour this HUD already uses for "there is a clock on this" and never the alert's red —
+ * the player has not broken anything, they have armed a thing that is waiting on them.
+ */
+.zoneNoteWarn {
+  color: #f2a93b;
+}
+
+/* --- rename ---------------------------------------------------------------------- */
+
+.zoneNameRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/*
+ * THE SECOND TEXT FIELD IN THE HUD. Its keydown guard is in `ZonePanel.tsx` and is load-bearing
+ * — see the note there. Styled as the cheat input is, because a text field that looked like a
+ * label would not read as somewhere to type.
+ */
+.zoneNameInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px 6px;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #efe2c6;
+  background: #14100e;
+  box-shadow: inset 0 0 0 2px #14100e;
+}
+
+.zoneNameInput:focus {
+  outline: 0;
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #f5d382;
+}
+
+.zoneNameInput:disabled {
+  opacity: 0.55;
+}
+
+.zoneTiles {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  color: #8a6234;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the seed hopper toggle ------------------------------------------------------ */
+
+/*
+ * THE CONTROL THIS WHOLE ITEM IS ABOUT. It is a lamp and a word rather than a checkbox, for
+ * the reason the item was filed: the player has to be able to see, across the room and without
+ * reading, that the $1,200 they spent is now doing something. The lamp is the same green the
+ * machine lamps use for Running, so "armed" means here what it means everywhere else.
+ */
+.zoneToggle {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px 9px;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  background: #241c14;
+  box-shadow: inset 0 0 0 2px #14100e;
+}
+
+.zoneToggle:hover:not(:disabled) {
+  background: #2b2119;
+}
+
+.zoneToggle:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.zoneToggleOn {
+  background: #26301f;
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #6ea84a;
+}
+
+.zoneToggleOn:hover:not(:disabled) {
+  background: #2c3823;
+}
+
+.zoneToggleLamp {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  background: #4a3d31;
+  box-shadow: inset 0 0 0 1px #14100e;
+}
+
+.zoneToggleLampOn {
+  background: #8ede5f;
+  box-shadow:
+    inset 0 0 0 1px #14100e,
+    0 0 6px rgba(142, 222, 95, 0.55);
+}
+
+.zoneToggleWord {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #efe2c6;
+}
+
+/* --- priority -------------------------------------------------------------------- */
+
+.zonePriorityValue {
+  font-size: 11px;
+  letter-spacing: 0;
+  color: #efe2c6;
+  font-variant-numeric: tabular-nums;
+}
+
+.zonePips {
+  display: flex;
+  gap: 4px;
+}
+
+/*
+ * Ten pips, from the sim's own `ZONE_PRIORITY_MIN`/`MAX`. The bench's dial vocabulary, at the
+ * bench's size — a control that means "how much" reads the same everywhere in this HUD.
+ */
+.zonePip {
+  cursor: pointer;
+  flex: 1 1 0;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  background: #241c14;
+  box-shadow: inset 0 0 0 2px #14100e;
+}
+
+.zonePip:hover:not(:disabled) {
+  background: #3a2e23;
+}
+
+.zonePip:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.zonePipOn {
+  background: #8a6234;
+}
+
+/* How many seeds are behind a crop, on the crop's own cell — the question is "what can I sow
+   right now", and the answer is in the bag rather than in the catalogue. */
+.zoneCellSeeds {
+  font-size: 9px;
+  color: #8a6234;
+  font-variant-numeric: tabular-nums;
+}
+
 /* --- the field card ------------------------------------------------------------- */
 
 /*
@@ -2887,9 +3210,54 @@
   margin-top: 6px;
 }
 
+/*
+ * A ZONE ROW IS A BUTTON NOW ([[102]]) — it opens the zones panel on the rectangle it names.
+ * Reset to nothing rather than styled as a control: it must still READ as the readout it has
+ * always been, and a row of chunky buttons where there used to be text would turn the quietest
+ * card in the HUD into a menu. The affordance is the hover and the cursor, which is enough for
+ * a thing whose label already says what it is.
+ */
+.fieldRowOpen {
+  pointer-events: auto;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  padding: 2px 4px;
+  margin-left: -4px;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  background: transparent;
+}
+
+.fieldRowOpen:hover {
+  background: #2b2119;
+}
+
 .fieldName {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   font-size: 11px;
   color: #cbb99b;
+}
+
+/*
+ * The armed seed hopper, on the always-visible card. Gold, like every other "this one is on"
+ * in the HUD, and small: it is a state, not an alert. This is the only sign auto-replant has
+ * anywhere outside its own panel — a tile that re-sows itself looks exactly like a tile the
+ * player sowed, so without this the $1,200 node is invisible again the moment the panel shuts.
+ */
+.fieldArmed {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f5d382;
+}
+
+/* A rectangle with no crop set. Quiet — it is an unfinished plan, not a fault. */
+.fieldFallow {
+  color: #6d5c4d;
 }
 
 .fieldReadout {

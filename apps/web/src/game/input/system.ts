@@ -22,20 +22,51 @@ import { publishBuildMenu, registerBuildMenuHooks } from './build-panel';
 import { InputChrome } from './chrome';
 import type { InputHost } from './context';
 import { publishDebugPanel, registerDebugPanelHooks } from './debug-panel';
-import { firstRunSigns } from './first-run';
+import { firstRunSigns, hotbarDigit } from './first-run';
 import { publishGrabberPanel, resetGrabberPanel } from './grabber-panel';
 import { KeyboardInput } from './keyboard';
 import { publishLod, viewLod, zoomInIndex, zoomOutIndex } from './lod';
 import { PointerInput } from './pointer';
-import { DEFAULT_ZONE_CROP, ToolMode } from './tools';
+import { DEFAULT_CROP, ToolMode } from './tools';
 
-/** Cycle order for `C`. Locked crops are skipped, not shown greyed — this is a toggle. */
+/**
+ * Cycle order for `C`. Locked crops are skipped, not shown greyed — this is a toggle.
+ *
+ * **THE GOLD POTATO WAS MISSING FROM THIS ARRAY** ([[103]]), and one absent element was a whole
+ * crop's exile: `C` could never select it, no zone could ever hold it, and the planter bot reads
+ * `zone.crop`, so there was no route to it anywhere in the game — era IV included — for the
+ * highest-priced crop on the roster ($6.00) behind a $150 node. It needs no extra gating here:
+ * `nextCrop` already skips anything unresearched.
+ */
 const CROP_CYCLE: readonly CropId[] = [
   Crop.RussetPotato,
   Crop.SugarCane,
   Crop.Corn,
   Crop.ChiliPepper,
+  Crop.GoldPotato,
 ];
+
+/**
+ * The next crop after `current` that this world can actually plant, or `current` when it is the
+ * only one — the whole of `C`, as a pure function so a test can drive two hundred presses
+ * without a canvas.
+ *
+ * SKIPPING RATHER THAN OFFERING-AND-REFUSING: `CreateZone` is rejected outright by the reducer
+ * for a crop whose node is not unlocked, and `applyPlantTile` refuses the same way, so arming one
+ * would build a gesture that cannot possibly work. The tech tree is where you learn chili exists;
+ * this is a dial.
+ */
+export function nextCrop(current: CropId, unlocked: readonly string[]): CropId {
+  const start = CROP_CYCLE.indexOf(current);
+  for (let step = 1; step <= CROP_CYCLE.length; step++) {
+    const candidate = CROP_CYCLE[(start + step) % CROP_CYCLE.length]!;
+    const spec = cropSpec(candidate);
+    if (spec === null) continue;
+    if (!techSatisfied(unlocked, spec.requiresTech)) continue;
+    return candidate;
+  }
+  return current;
+}
 
 /** Rotation order for `R`. Clockwise from north, because that is what a dial does. */
 const DIR_CYCLE: readonly Direction[] = [
@@ -52,8 +83,18 @@ export class InputSystem {
 
   /** Held space turns any left-drag into the camera's gesture. See `pointer.ts`. */
   spaceHeld = false;
-  /** The crop a brand-new zone is created with. */
-  zoneCrop: CropId = DEFAULT_ZONE_CROP;
+  /**
+   * **THE ARMED CROP: what the hand sows and what a brand-new zone is created with** ([[103]]).
+   *
+   * IT WAS `zoneCrop` AND IT ONLY DROVE ZONES, which is how the hand-plant verb came to sow a
+   * Russet and nothing else forever — `primaryCommand` read a constant. One dial for both is the
+   * choice this item made rather than a second picker: `C` already existed, already skipped
+   * unresearched crops, and already had a readout on the zone band, so promoting it costs the
+   * player one key they may already know and costs this layer no new modality. A zone and a
+   * furrow are the same decision made at two scales, and a player who has just armed cane to
+   * paint a field does not then want to hand-sow potatoes into the gap.
+   */
+  armedCrop: CropId = DEFAULT_CROP;
   /** The way the next grabber will face — the direction it moves goods. */
   placeDir: Direction = Direction.East;
 
@@ -154,7 +195,9 @@ export class InputSystem {
     this.chrome.setDeedSigns(view);
     // The first-run pointers stand on the world exactly as the deed signs do, and retire
     // themselves by reading the same projection — see `first-run.ts` for the gates.
-    this.chrome.setGuideSigns(firstRunSigns(view));
+    // The armed crop rides along so the sign names what will actually go in the ground rather
+    // than promising potatoes to a player who has armed cane ([[103]]).
+    this.chrome.setGuideSigns(firstRunSigns(view, hotbarDigit, this.armedCrop));
     // The status tell ([[074]], [[098]], [[097]]): "planting 6 more…" while the farmer marches
     // the row, the pause reason while the can is dry, one brief "already soaked" ([[081]]) —
     // and, when the player is doing nothing, whatever the machine under the cursor has to say
@@ -425,25 +468,11 @@ export class InputSystem {
   }
 
   /**
-   * Cycle the crop a new zone will be assigned, skipping anything unresearched.
-   *
-   * Skipping rather than offering-and-refusing: `CreateZone` is rejected outright by the
-   * reducer for a crop whose node is not unlocked, so arming one would build a gesture that
-   * cannot possibly work. The tech tree is where you learn chili exists; this is a dial.
+   * `C`: cycle the armed crop — the one the hand sows AND the one a new zone is created with
+   * ([[103]]). Cursor state; emits nothing, exactly as `rotatePlacement` does.
    */
-  cycleZoneCrop(): void {
-    const view = this.host.latestView();
-    const unlocked = view?.unlocked ?? [];
-    const start = CROP_CYCLE.indexOf(this.zoneCrop);
-
-    for (let step = 1; step <= CROP_CYCLE.length; step++) {
-      const candidate = CROP_CYCLE[(start + step) % CROP_CYCLE.length]!;
-      const spec = cropSpec(candidate);
-      if (spec === null) continue;
-      if (!techSatisfied(unlocked, spec.requiresTech)) continue;
-      this.zoneCrop = candidate;
-      return;
-    }
+  cycleCrop(): void {
+    this.armedCrop = nextCrop(this.armedCrop, this.host.latestView()?.unlocked ?? []);
   }
 
   /** Handy for a future zone card; nothing reads it yet. */

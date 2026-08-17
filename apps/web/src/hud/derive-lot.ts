@@ -35,22 +35,27 @@
 
 import {
   COMPOST_PER_CROP,
+  CROP_SPECS,
   CropId,
   ItemId,
   LampState,
   MachineKind,
   TICKS_PER_SECOND,
+  TechId,
   WILT_GRACE_TICKS,
   WILT_WINDOW_TICKS,
   WiltStage,
   cropSpec,
   dayOldPriceCents,
+  hasTech,
   listPriceCents,
+  techSatisfied,
 } from '@snack/sim';
 import type { WorldView } from '@snack/sim';
 
 import { formatCentsWhole, plural } from './format';
-import type { LotAlert, ZoneRow } from './types';
+import { itemName } from './item-copy';
+import type { LotAlert, ZoneCropOption, ZoneRow } from './types';
 
 /**
  * Plan §5's threshold, in ticks. Shares its value with `reports/idle.ts`'s constant of the
@@ -91,6 +96,8 @@ export interface LotFields {
   starved: number;
   blocked: number;
   sprinklers: number;
+  cropOptions: ZoneCropOption[];
+  autoReplantOwned: number;
 }
 
 export function createLotFields(): LotFields {
@@ -109,6 +116,8 @@ export function createLotFields(): LotFields {
     starved: 0,
     blocked: 0,
     sprinklers: 0,
+    cropOptions: [],
+    autoReplantOwned: 0,
   };
 }
 
@@ -216,11 +225,29 @@ export function deriveLot(view: WorldView, watch: RiskWatch, out: LotFields): Lo
   out.imminentCents = imminent;
   out.compost = compost;
 
+  // The picker's rows and the hopper's gate, both read straight off the world's own unlocked
+  // list ([[102]]). Built before the zones because each zone's seed count comes out of it.
+  deriveCropOptions(view, out);
+  out.autoReplantOwned = hasTech(view.unlocked, TechId.AutoReplant) ? 1 : 0;
+
   out.zones.length = 0;
   for (const zone of view.zones) {
+    // ⚠️ `crop`, `priority` and `autoReplant` USED TO BE DROPPED HERE and that was the whole
+    // data half of [[102]]: the sim published all three, this loop copied the counts, and four
+    // working reducers ended up with no caller in the app because the HUD could not see the
+    // state they wrote. Anything `ZoneView` carries belongs on the row.
+    const spec = cropSpec(zone.crop as CropId);
     out.zones.push({
       id: zone.id,
       name: zone.name,
+      crop: zone.crop,
+      cropName: spec === null ? '' : itemName(spec.yieldItem),
+      // READ, NEVER LISTED — `derive-dock.ts`'s rule, restated because it is the same fact and
+      // a second table of "which crops regrow" would be wrong the first time a crop was added.
+      regrows: spec !== null && spec.regrowTicks > 0 ? 1 : 0,
+      priority: zone.priority,
+      autoReplant: zone.autoReplant,
+      seeds: spec === null ? 0 : countOf(view, spec.seedItem),
       tiles: zone.tiles,
       planted: zone.planted,
       mature: zone.mature,
@@ -237,6 +264,50 @@ export function deriveLot(view: WorldView, watch: RiskWatch, out: LotFields): Lo
 
   out.alert = watch.armed(view.tick, atRisk) ? buildAlert(out) : null;
   return out;
+}
+
+/** How many of one item the player is carrying. 0 for a stack they have never held. */
+function countOf(view: WorldView, item: number): number {
+  for (const slot of view.inventory) {
+    if (slot.item === item) return slot.count;
+  }
+  return 0;
+}
+
+/**
+ * The crop picker's rows — every crop `applySetZoneCrop` would accept, and no others.
+ *
+ * THE GATE IS ASKED, NOT GUESSED. The reducer's `cropAssignable` is `techSatisfied(state,
+ * spec.requiresTech)`; this calls the same exported function on the same published list, so a
+ * crop appears in the picker on exactly the tick it becomes plantable. A hand-kept list here
+ * would offer Gold Potato to a player who cannot plant it, and the refusal would arrive as
+ * nothing happening at all — the failure mode this whole item exists to end.
+ *
+ * FALLOW IS A ROW, not an omission. `CropId.None` is assignable by the reducer's first line, and
+ * "stop this rectangle sowing anything" is a thing a player wants to say — particularly once the
+ * hopper is armed, where it is the difference between a plan and a runaway.
+ */
+function deriveCropOptions(view: WorldView, out: LotFields): void {
+  out.cropOptions.length = 0;
+  out.cropOptions.push({
+    id: CropId.None,
+    item: 0,
+    name: 'Fallow',
+    regrows: 0,
+    seedItem: 0,
+    seeds: 0,
+  });
+  for (const spec of CROP_SPECS) {
+    if (!techSatisfied(view.unlocked, spec.requiresTech)) continue;
+    out.cropOptions.push({
+      id: spec.id,
+      item: spec.yieldItem,
+      name: itemName(spec.yieldItem),
+      regrows: spec.regrowTicks > 0 ? 1 : 0,
+      seedItem: spec.seedItem,
+      seeds: countOf(view, spec.seedItem),
+    });
+  }
 }
 
 function censusMachines(view: WorldView, out: LotFields): void {

@@ -29,6 +29,7 @@ import {
   GrabberTier,
   MachineKind,
   MachineRole,
+  PIPE_PRICE_CENTS_PER_TILE,
   beltSpec,
   grabberSpec,
   machineSpec,
@@ -140,6 +141,102 @@ export const ToolMode = {
   // hand kit services, and `toolCoverageVerb` below keeps the ghost from claiming it "waters".
   PlaceMaintenanceStation: 31,
   PlaceDroneBay: 32,
+
+  // --- the five that had no cursor ([[100]]) -------------------------------------------
+  //
+  // NOT NEW MACHINES. Every one of these was shipped, priced, gated and tested in the sim, and
+  // a verifier placed all five through `applyPlaceMachine` in a researched world — they were
+  // unreachable purely because this enum stopped at eighteen entries and every road to
+  // `PlaceMachine` runs through it (no member → no `toolMachineKind` case → no
+  // `PLACEMENT_TOOLS` entry → no catalogue row → no command, and `toolForMachineKind` returns
+  // null so even a BOXED one in the bag has no place button). Fifteen machines were behind that
+  // wall; these are the five with `ports: []`, which need nothing but a row.
+  //
+  // WHY THE GRINDER IS HERE AND THE JUICER IS NOT. [[056]] deferred this whole set with a sound
+  // argument — "a Pump you cannot plumb is worse than none" — and then the Grinder was swept up
+  // with the plumbing it does not have. It is `liquid: None, ports: []`: kola nut in on a belt,
+  // kola powder out on a belt, and its node's own copy claiming "this half runs on pipe" is
+  // what sent five separate auditors straight past it.
+  PlaceGrinder: 35,
+  PlaceSixPacker: 36,
+  PlaceComboPacker: 37,
+  /**
+   * The one with no tech gate at all — `requiresTech: null`, unbuildable since the day it
+   * landed, on every save, forever. §3's ladder runs manual → assisted → automated for every
+   * system in the game, and selling was the column that stopped at the roadside stand because
+   * its assisted rung had a spec, a price, a sprite and no cursor.
+   */
+  PlaceDeliveryCart: 38,
+  PlaceTruckDepot: 39,
+
+  /**
+   * **LAY A RUN OF PIPE** ([[101]]) — the verb the game shipped without.
+   *
+   * `RemovePipe` had four issuers in this app and `PlacePipe` had ZERO: a demolition verb for a
+   * structure with no construction verb, and behind that hole all six HYDRAULICS nodes, $6,100
+   * of research that changed nothing about the game. [[056]] deferred it on a sound argument —
+   * "a Pump you cannot plumb is worse than none" — and this is the other half of that deferral
+   * finally arriving.
+   *
+   * A `line` GESTURE, WHICH IS THE BELT'S, UNCHANGED. `water-works.json` lays its water main as
+   * a single seventeen-tile L and `soda-line.json` lays four two-tile stubs and two single
+   * tiles; every one of those is `elbowBetween` output already, down to the tile ORDER. So the
+   * pipe drag inherits the corner, R flipping the corner, the whole-run-refused-together band
+   * and the one-drag-one-command rule for free, and `PlacePipeCommand.path` was built to carry
+   * exactly that shape ("ONE DRAG IS ONE COMMAND, exactly as it is for zone painting and for
+   * belts", `commands.ts`).
+   *
+   * WHAT IT DOES NOT HAVE IS A LIQUID PICKER, and that is a decision rather than an omission —
+   * see `pipeRunLiquid` in `pointer.ts`, which reads the liquid off the machines and pipes the
+   * run touches, by the same rule the reducer refuses on.
+   *
+   * NOT A `MachineKind`, so `toolMachineKind` returns null for it, it is not in
+   * `PLACEMENT_TOOLS`, and it will never appear in a machine-versus-tool count. Its catalogue
+   * row is hand-built for the same reason a belt's is.
+   */
+  PlacePipe: 40,
+
+  // --- the plumbing, and the soda line ([[101]]) ---------------------------------------
+  //
+  // TEN MORE ROWS OF PURE DATA, exactly like the eight storage/orchard/bot rows above: ordinary
+  // `PlaceMachine`s on spec-published footprints, no new gesture and no `pointer.ts` branch
+  // between them. What they were waiting on was never a placement rule — it was the pipe above,
+  // because a Pump, a Tank and a Bottler with nothing to connect them are furniture.
+  PlacePump: 41,
+  PlaceTank: 42,
+  PlacePipedSprinkler: 43,
+  PlaceIrrigationHub: 44,
+  PlaceRecirculator: 45,
+  PlaceJuicer: 46,
+  PlaceKettle: 47,
+  PlaceSyrupMixer: 48,
+  PlaceCarbonator: 49,
+  PlaceBottler: 50,
+  /**
+   * **WORK A BAG OF FERTILIZER INTO THE SOIL** ([[104]]) — the verb `agronomy-composting` has
+   * been promising for $120 and never had.
+   *
+   * `ApplyFertilizer` HAD ZERO EMITTERS IN THIS APP. The command existed, the reducer worked,
+   * `IntentAction.Fertilize` was wired end to end in the sim, and the Composter that makes the
+   * bags builds correctly — the only thing missing was a cursor, so the bag's one use was
+   * selling it back at 120¢, which `data.ts` calls the consolation prize *"so that a player who
+   * over-composts is not holding a good with no exit"*. Only the consolation prize shipped.
+   *
+   * SHAPED ON `UseRepairKit` DELIBERATELY, because it is the same object: a consumable, bought
+   * or made rather than built, aimed at a TILE rather than at a machine, with no build-menu row
+   * and no permanent digit. It reaches the hand the same way — `itemPlaceTool()` resolves
+   * `ItemId.Fertilizer` to this cursor, so dragging a bag out of the bag onto the hotbar gives
+   * it a digit. That resolver is also what `Hotbar.assignItem` asks, which is why a bag used to
+   * be refused by the bar with a flash: `-1` meant "not a thing a digit can hold".
+   *
+   * IT DOES WALK, UNLIKE THE KIT, and that is not an inconsistency — it is the one difference
+   * between them that the sim already decided. `IntentAction.Fertilize` exists, `intentCommand`
+   * builds `ApplyFertilizer` from it, and `intentTargetSubtiles` aims at the tile exactly as
+   * Water does. Nothing had to be invented on the far side of the seam; `reachAdjusted` simply
+   * had to name it.
+   */
+  ApplyFertilizer: 51,
+
   /**
    * **RETIRED** (item 090). The Parts Bench left the build catalogue when repair drones started
    * fixing machines for free, so this tool has no `BUILD_ROWS` entry, no `PLACE_TOOLS`
@@ -252,8 +349,11 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     gesture: 'paint',
   },
   [ToolMode.Plant]: {
+    // "C picks the crop" is on the tool rather than in a hint bar because there is no hint bar
+    // any more ([[bbf6782]]) and because this is the one line the player reads while holding
+    // the thing it is about. The band under the cursor says which crop is armed ([[103]]).
     label: 'Plant',
-    hint: 'click bare soil to sow a potato — hold and drag to sow a row',
+    hint: 'click bare soil to sow — C picks the crop, hold and drag to sow a row',
     costCents: 0,
     gesture: 'paint',
   },
@@ -445,10 +545,141 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     gesture: 'click',
   },
 
+  // --- the five that had no cursor ([[100]]) -------------------------------------------
+
+  [ToolMode.PlaceGrinder]: {
+    label: 'Grinder',
+    // Both ends of the recipe, because the whole reason this machine went missing is that
+    // everyone assumed it was plumbing. It is a belt machine standing in a pipe half, and the
+    // nut is $1.50 at the stand — so it earns from the moment it lands, with no orchard.
+    hint: 'kola nuts in, kola powder out — belt-fed, no pipe',
+    costCents: machinePrice(MachineKind.Grinder),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceSixPacker]: {
+    label: 'Six-Packer',
+    hint: 'six bottles into one six-pack, worth more than six',
+    costCents: machinePrice(MachineKind.SixPacker),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceComboPacker]: {
+    label: 'Combo-Packer',
+    // The hint IS the argument for the node: a bag and a bottle sold together beat the two
+    // sold apart, which is the only reason to run both districts at once.
+    hint: 'a bag of chips and a bottle, sold as one',
+    costCents: machinePrice(MachineKind.ComboPacker),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceDeliveryCart]: {
+    label: 'Delivery Cart',
+    // "It comes back" is the whole difference from the Hand Cart, which is the other cart on
+    // this menu and the one you drag around yourself. This one goes somewhere you do not.
+    hint: 'load it, send it — it comes back with the money',
+    costCents: machinePrice(MachineKind.DeliveryCart),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceTruckDepot]: {
+    label: 'Truck Depot',
+    hint: 'clear 2x2 — belt-fed, contract-driven, never needs you',
+    costCents: machinePrice(MachineKind.TruckDepot),
+    gesture: 'click',
+  },
+
+  // --- the plumbing, and the soda line ([[101]]) ---------------------------------------
+
+  [ToolMode.PlacePipe]: {
+    label: 'Pipe',
+    // The same sentence the belts wear, because it is the same gesture — a player who has run
+    // one belt already knows this tool. What it adds is the liquid, which the run works out
+    // from what it touches and the band says out loud the whole time the button is down.
+    hint: 'drag a run — it turns a corner; R flips it',
+    costCents: PIPE_PRICE_CENTS_PER_TILE,
+    gesture: 'line',
+  },
+
+  [ToolMode.PlacePump]: {
+    label: 'Pump',
+    // The bank rule is the one refusal a player cannot guess and cannot see (`NoWaterSource`),
+    // so it is the whole hint. A pump anywhere else is refused by the sim, silently.
+    hint: 'on the bank of the reservoir — one per network',
+    costCents: machinePrice(MachineKind.Pump),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceTank]: {
+    label: 'Tank',
+    hint: 'clear 2x2 — a buffer on the line, so a stall is not a drought',
+    costCents: machinePrice(MachineKind.Tank),
+    gesture: 'click',
+  },
+  [ToolMode.PlacePipedSprinkler]: {
+    label: 'Piped Sprinkler',
+    // Deliberately says what it is NOT: the barrel Sprinkler is one row above it in the same
+    // group at a sixth of the price, and the only difference that matters is the walk.
+    hint: 'plumbed, so it never runs dry and you never refill it',
+    costCents: machinePrice(MachineKind.PipedSprinkler),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceIrrigationHub]: {
+    label: 'Irrigation Hub',
+    hint: 'clear 2x2 — it skips a tile that is already wet',
+    costCents: machinePrice(MachineKind.IrrigationHub),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceRecirculator]: {
+    label: 'Recirculator',
+    hint: 'catches the Washer’s runoff and sends it back up the pipe',
+    costCents: machinePrice(MachineKind.Recirculator),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceJuicer]: {
+    label: 'Juicer',
+    hint: 'sugar cane in on a belt, cane juice out on a pipe',
+    costCents: machinePrice(MachineKind.Juicer),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceKettle]: {
+    label: 'Kettle',
+    hint: 'boils cane juice down to simple syrup — pipe both ends',
+    costCents: machinePrice(MachineKind.Kettle),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceSyrupMixer]: {
+    label: 'Syrup Mixer',
+    // §5's centrepiece and the only machine in the game with three inlets of two kinds — which
+    // is the fact the hint owes a player about to spend $300 on it.
+    hint: 'syrup, water and kola powder in — the belt and pipe layers meet here',
+    costCents: machinePrice(MachineKind.SyrupMixer),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceCarbonator]: {
+    label: 'Carbonator',
+    hint: 'water in, carbonated water out — both on pipe',
+    costCents: machinePrice(MachineKind.Carbonator),
+    gesture: 'click',
+  },
+  [ToolMode.PlaceBottler]: {
+    label: 'Bottler',
+    // The footprint is called out because it is the only 3×2 machine in the game and a player
+    // clearing a 2×2 hole for it will be refused with no idea why (§5: "Bottler 3×2 flagship").
+    hint: 'clear 3x2 — syrup and fizz on pipe, bottles on a belt',
+    costCents: machinePrice(MachineKind.Bottler),
+    gesture: 'click',
+  },
+
   /** The retired bench's tombstone row — see `ToolMode.PlacePartsBench`. Nothing offers it. */
   [ToolMode.PlacePartsBench]: {
     label: 'Parts Bench',
     hint: 'retired — drones fix machines for free now',
+    costCents: 0,
+    gesture: 'click',
+  },
+
+  [ToolMode.ApplyFertilizer]: {
+    label: 'Fertilizer',
+    // The star is the number the band and the hover tell both print, so the hint teaches the
+    // unit rather than restating the verb. A `click`, not a `paint`: one bag is one tile, and a
+    // held drag across a row would spend eight of them on ground that mostly did not need it.
+    hint: 'click a farm tile to work a bag in — one star of soil, and the wear resets',
     costCents: 0,
     gesture: 'click',
   },
@@ -481,11 +712,17 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
   },
 };
 
-/** The crop a brand-new zone is assigned. Others are picked with `C` once researched. */
-export const DEFAULT_ZONE_CROP = CropId.RussetPotato;
-
-/** The only crop in v0.1, still the only one the hand-plant verb sows. */
-export const V01_CROP = CropId.RussetPotato;
+/**
+ * **THE CROP THE PLAYER IS HOLDING BEFORE THEY PICK ONE** — for the hand and for a brand-new
+ * zone alike, since [[103]]. Others are chosen with `C` once researched.
+ *
+ * IT WAS TWO CONSTANTS AND ONE OF THEM WAS A WALL. `DEFAULT_ZONE_CROP` was this, and `V01_CROP`
+ * — *"the only crop in v0.1, still the only one the hand-plant verb sows"* — was hardwired into
+ * `primaryCommand`'s `PlantTile`, so four researched crops, four purchasable seeds and four tech
+ * nodes ($25 for cane, the cheapest in the game) could never reach the ground by hand. One
+ * constant now, because there is one armed crop: see `InputSystem.armedCrop`.
+ */
+export const DEFAULT_CROP = CropId.RussetPotato;
 
 export function gestureFor(tool: ToolMode): GestureKind {
   return TOOL_INFO[tool].gesture;
@@ -529,7 +766,44 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       return MachineKind.MaintenanceStation;
     case ToolMode.PlaceDroneBay:
       return MachineKind.DroneBay;
+    case ToolMode.PlaceGrinder:
+      return MachineKind.Grinder;
+    case ToolMode.PlaceSixPacker:
+      return MachineKind.SixPacker;
+    case ToolMode.PlaceComboPacker:
+      return MachineKind.ComboPacker;
+    case ToolMode.PlaceDeliveryCart:
+      return MachineKind.DeliveryCart;
+    case ToolMode.PlaceTruckDepot:
+      return MachineKind.TruckDepot;
+    case ToolMode.PlacePump:
+      return MachineKind.Pump;
+    case ToolMode.PlaceTank:
+      return MachineKind.Tank;
+    case ToolMode.PlacePipedSprinkler:
+      return MachineKind.PipedSprinkler;
+    case ToolMode.PlaceIrrigationHub:
+      return MachineKind.IrrigationHub;
+    case ToolMode.PlaceRecirculator:
+      return MachineKind.Recirculator;
+    case ToolMode.PlaceJuicer:
+      return MachineKind.Juicer;
+    case ToolMode.PlaceKettle:
+      return MachineKind.Kettle;
+    case ToolMode.PlaceSyrupMixer:
+      return MachineKind.SyrupMixer;
+    case ToolMode.PlaceCarbonator:
+      return MachineKind.Carbonator;
+    case ToolMode.PlaceBottler:
+      return MachineKind.Bottler;
     default:
+      // `ToolMode.PlacePipe` reaches this line and MUST: a pipe is not a `MachineKind` and
+      // never will be, so it has no spec, no footprint and no place in `PLACEMENT_TOOLS`.
+      // Its command is `PlacePipe`, built in `pointer.ts` from the drag.
+      // `ToolMode.PlacePartsBench` reaches this line ON PURPOSE and stays here: the bench is
+      // retired ([[090]]), so it has no kind, no row and no membership below — but the enum
+      // member survives because a saved hotbar is validated against `Object.values(ToolMode)`
+      // and one unknown number rejects the WHOLE layout. See the member's own note.
       return null;
   }
 }
@@ -573,6 +847,21 @@ const PLACEMENT_TOOLS: readonly ToolMode[] = [
   ToolMode.PlacePlanterDock,
   ToolMode.PlaceMaintenanceStation,
   ToolMode.PlaceDroneBay,
+  ToolMode.PlaceGrinder,
+  ToolMode.PlaceSixPacker,
+  ToolMode.PlaceComboPacker,
+  ToolMode.PlaceDeliveryCart,
+  ToolMode.PlaceTruckDepot,
+  ToolMode.PlacePump,
+  ToolMode.PlaceTank,
+  ToolMode.PlacePipedSprinkler,
+  ToolMode.PlaceIrrigationHub,
+  ToolMode.PlaceRecirculator,
+  ToolMode.PlaceJuicer,
+  ToolMode.PlaceKettle,
+  ToolMode.PlaceSyrupMixer,
+  ToolMode.PlaceCarbonator,
+  ToolMode.PlaceBottler,
 ];
 
 export function toolBeltTier(tool: ToolMode): BeltTier | null {

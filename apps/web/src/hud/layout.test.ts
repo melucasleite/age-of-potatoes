@@ -17,6 +17,7 @@ import {
   SIDEBAR_TOGGLE_CODE,
   SIDEBAR_WIDTH_PX,
   resetSidebarForTest,
+  sidebarBodyWidth,
   setSidebarCollapsed,
   sidebarCollapsed,
   sidebarServerSnapshot,
@@ -59,6 +60,15 @@ describe('the width contract', () => {
   it('never folds to nothing', () => {
     expect(SIDEBAR_HANDLE_PX).toBeGreaterThan(0);
     expect(SIDEBAR_HANDLE_PX).toBeLessThan(SIDEBAR_WIDTH_PX);
+  });
+
+  // ([[106]]) The folded at-the-machine cards float at the width the dock's body had, so a
+  // card is the same object in both states rather than two cards that wrap differently. The
+  // failure this catches is the ordinary one for a derived number: somebody moves the column
+  // and the float keeps the old width, which looks like nothing at all until you fold.
+  it('floats the folded cards at exactly the width the dock body had', () => {
+    expect(sidebarBodyWidth()).toBe(SIDEBAR_WIDTH_PX - SIDEBAR_HANDLE_PX);
+    expect(sidebarBodyWidth() + SIDEBAR_HANDLE_PX).toBe(sidebarWidth(false));
   });
 });
 
@@ -152,6 +162,8 @@ describe('the toggle key', () => {
     'KeyT',
     'KeyG',
     'KeyI',
+    // The zones panel ([[102]]), which landed after this sweep was written and belongs in it.
+    'KeyZ',
     'KeyP',
     'Escape',
     'Backquote',

@@ -40,8 +40,16 @@ import { buildMenuClose, buildMenuSnapshot, subscribeBuildMenu } from '../game/i
  * the shop as "the two occupants of the sidebar's contextual slot", and there is no slot any
  * more — all four panels are the same centred floating window, so the only distinction left
  * is which LAYER holds the truth, not which part of the screen it lands in.
+ *
+ * FIVE SINCE [[102]]. `PanelFrame.tsx` set the test for a new panel in as many words — "a fifth
+ * row must be a `PanelRow` and nothing else" — and the zones panel is it: one name added to
+ * this union, one row, one window, no new machinery. It is a FLOAT rather than a sidebar card
+ * for a reason that is not taste: [[096]] unmounts the sidebar's body when the dock is folded,
+ * so anything living in `.sideContext` or `.sidePapers` vanishes with it, and the four zone
+ * verbs would have shipped unreachable for every player who ever pressed `[`. The float lives
+ * in `.stage`, and its key is bound outside the fold — so the panel opens folded or not.
  */
-export type LocalPanel = 'research' | 'shop' | 'bag';
+export type LocalPanel = 'research' | 'shop' | 'bag' | 'zones';
 /** Everything `panelSnapshot` can answer — the build float's truth lives in the input layer. */
 export type PanelName = LocalPanel | 'build';
 

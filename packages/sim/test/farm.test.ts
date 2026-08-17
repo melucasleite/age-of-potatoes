@@ -144,6 +144,46 @@ describe('harvested goods spoiling', () => {
     expect(itemCount(state, ItemId.Compost)).toBe(0);
   });
 
+  it('THE CELLAR IS WORTH BUILDING: stored potatoes outlive the ones left in the bag', () => {
+    // **THE FIRST TIME THE FREEZE HAS BEEN OBSERVABLE THROUGH A VERB** (item 105). The clock has
+    // always stopped inside a box — the test above says so — but until this item nothing could put
+    // anything into one, so the mechanic was a fact about a field no player could reach. Here it
+    // is end to end, in the two commands a player types.
+    //
+    // The two armfuls are picked in the same tick and go different ways. One rides out the fifteen
+    // minutes in a shed and comes back an armful; the other becomes compost.
+    const state = world();
+    const cellar = spawnMachine(state, MachineKind.RootCellar, 0, 0)!;
+    state.player.xSub = 128;
+    state.player.ySub = 128;
+    addItem(state, ItemId.RussetPotato, 10);
+
+    step(state, {
+      tick: state.tick,
+      commands: [
+        { type: 'LoadMachine', machineId: cellar.id, count: 5, item: ItemId.RussetPotato },
+      ],
+    });
+    expect(cellar.cargoCount).toBe(5);
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(5);
+
+    // Long past the window the loose half had left.
+    stepMany(state, 20 * ACTIVE_MINUTE);
+    expect(itemCount(state, ItemId.RussetPotato), 'the loose half should be compost').toBe(0);
+    expect(itemCount(state, ItemId.Compost)).toBe(5);
+
+    // And the stored half comes out whole, with a full window ahead of it rather than the
+    // remainder of an old one — freshness is stamped on the way OUT, from now.
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'UnloadMachine', machineId: cellar.id, count: 5 }],
+    });
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(5);
+
+    stepMany(state, 14 * ACTIVE_MINUTE);
+    expect(itemCount(state, ItemId.RussetPotato), 'the cellar sold a short window').toBe(5);
+  });
+
   it('merges stacks into buckets and never grows past the cap', () => {
     // The save-size guard. A player harvesting one tile at a time would otherwise write one stack
     // per pull, forever — see `FRESHNESS_MAX_STACKS`.

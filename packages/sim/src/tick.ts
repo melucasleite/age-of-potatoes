@@ -221,6 +221,7 @@ import {
   ownParcel,
   peekBoxedMachine,
   plantCrop,
+  putStorage,
   removeBotsForDock,
   removeItem,
   rotateDirectionClockwise,
@@ -232,12 +233,14 @@ import {
   spawnMachine,
   spawnPipe,
   spawnZone,
+  storageRoomFor,
   streamFor,
   takeBoxedMachine,
   takeHarvest,
   takeDockSeedShelf,
   takeDockShelf,
   takeOneOutput,
+  takeStorage,
   tileAt,
   tileOccupied,
   tillTile,
@@ -1255,17 +1258,26 @@ function applyLoadMachine(state: WorldState, command: LoadMachineCommand): boole
   // pair of verbs is shared rather than duplicated. Which product is whichever the command names,
   // or whatever the box already holds; a box holding potatoes refuses corn rather than mixing,
   // because "what is in this" has to stay one word.
+  //
+  // THE MIXING RULE AND THE CAPACITY ARE `putStorage`'S, NOT THIS FUNCTION'S (item 105), and that
+  // moved for a reason: a belt can fill a box now, so this arithmetic has a second caller for the
+  // first time and two copies of it would eventually disagree about what a full cellar is. What
+  // stays here is the only part that is genuinely the hand's — the bag it comes out of.
+  //
+  // **`command.item` IS REQUIRED HERE AND OPTIONAL EVERYWHERE ELSE.** A recipe machine can be told
+  // "load whatever fits" because its spec names the possibilities; a box has no recipe, so nothing
+  // in the world could work out what the player meant. The refusal is silent and total, which is
+  // exactly how the Root Cellar came to be $250 of shed that did nothing when clicked — see
+  // `intentCommand`, which dropped the item on every walk-then-load errand in the game.
   if (spec.role === MachineRole.Storage) {
     if (command.item === undefined) return false;
-    if (machine.cargoItem !== 0 && machine.cargoItem !== command.item) return false;
-    const room = spec.inputCapacity - machine.cargoCount;
+    const room = storageRoomFor(machine, spec, command.item);
     const have = itemCount(state, command.item);
     const moved = Math.min(command.count, Math.min(room, have));
     if (moved <= 0) return false;
 
     removeItem(state, command.item, moved);
-    machine.cargoItem = command.item;
-    machine.cargoCount += moved;
+    putStorage(machine, spec, command.item, moved);
     handsOn(machine);
     touch(state, 'handCarry');
     return true;
@@ -1352,16 +1364,16 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
   // pair of commands. Freshness is stamped on the way OUT, from this tick, because nothing inside
   // any machine ages (see `InventorySlot.stacks`) and goods that have just come back into the
   // player's arms are loose again.
+  //
+  // Routed through `takeStorage` since item 105, for the reason the dock's shelf is routed through
+  // `takeDockShelf`: a grabber can empty a box now, so the hand is no longer the only thing that
+  // decrements `cargoCount` and two spellings of "how much comes off" would drift. Unbounded arms
+  // since item 068 — the ask is capped by what the box holds, and by nothing else.
   if (spec.role === MachineRole.Storage) {
-    if (machine.cargoItem === 0 || machine.cargoCount <= 0) return false;
-    // Unbounded arms since item 068: the ask is capped by what the shelf holds, nothing else.
-    const taken = Math.min(command.count, machine.cargoCount);
-    if (taken <= 0) return false;
+    const took = takeStorage(machine, command.count);
+    if (took === null) return false;
 
-    const item = machine.cargoItem;
-    machine.cargoCount -= taken;
-    if (machine.cargoCount === 0) machine.cargoItem = 0;
-    addItem(state, item, taken);
+    addItem(state, took.item, took.taken);
     handsOn(machine);
     touch(state, 'handCarry');
     return true;
@@ -2651,8 +2663,27 @@ function intentCommand(state: WorldState, intent: PlayerIntent): Command | null 
   if (machine === null) return null;
 
   switch (intent.action) {
-    case IntentAction.Load:
-      return { type: 'LoadMachine', machineId: machine.id, count: intent.count };
+    // **THE ERRAND CARRIES WHAT THE CLICK CARRIED** (item 105). This used to build the command
+    // without `item`, though `intent.item` was right here and Sell, Buy and Plant all used it, and
+    // that omission was invisible for as long as the only things a player walked over to load were
+    // recipe machines — a Washer takes potatoes whether or not you name them. A box is not a
+    // recipe machine: `applyLoadMachine` cannot guess what an unnamed load meant and refuses, so
+    // every out-of-reach click on a Root Cellar walked the farmer there to do nothing at all. The
+    // fix is not "storage support"; it is the errand stopping losing a field.
+    //
+    // ZERO IS ABSENT, not "item zero" — `PlayerIntent.item` is 0 for the verbs that need none, and
+    // the optional field means "whatever fits" (see `LoadMachineCommand`). So the errand issued by
+    // every caller in the tree today produces byte-identical commands to the ones it produced
+    // before this item, and only a caller that actually names an item sees any change.
+    case IntentAction.Load: {
+      const load: LoadMachineCommand = {
+        type: 'LoadMachine',
+        machineId: machine.id,
+        count: intent.count,
+      };
+      if (intent.item !== 0) load.item = intent.item as ItemId;
+      return load;
+    }
     case IntentAction.Unload:
       return { type: 'UnloadMachine', machineId: machine.id, count: intent.count };
     case IntentAction.RefillHopper:

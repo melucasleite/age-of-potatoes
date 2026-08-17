@@ -26,6 +26,9 @@ export type StyleName =
   | 'stage'
   | 'corner'
   | 'floatWin'
+  // Where the at-the-machine cards go when the dock is folded away under them ([[106]]) — a
+  // fourth use of `.corner`, not a second floating chrome.
+  | 'machineFloat'
   | 'topRight'
   | 'bottomCentre'
   | 'card'
@@ -307,10 +310,42 @@ export type StyleName =
   | 'armCellAny'
   | 'armCellAnyMark'
   | 'armCellName'
+  // --- the zones panel ([[102]]) ---
+  // Its shell, head, scroll and footer are the panel family's (`PanelWindow`), its zone list
+  // borrows the dock card's swatch/name/crop/counts spans class for class — same subject, same
+  // reading — and the crop picker is the grabber card's `.armGrid` unchanged. What is new is
+  // only the rename field, the hopper toggle and the priority pips.
+  | 'zoneList'
+  | 'zoneItem'
+  | 'zoneItemOn'
+  | 'zoneItemHead'
+  | 'zoneItemArmed'
+  | 'zoneDetail'
+  | 'zoneSection'
+  | 'zoneSectionHead'
+  | 'zoneNote'
+  | 'zoneNoteWarn'
+  | 'zoneNameRow'
+  | 'zoneNameInput'
+  | 'zoneTiles'
+  | 'zoneToggle'
+  | 'zoneToggleOn'
+  | 'zoneToggleLamp'
+  | 'zoneToggleLampOn'
+  | 'zoneToggleWord'
+  | 'zonePips'
+  | 'zonePip'
+  | 'zonePipOn'
+  | 'zonePriorityValue'
+  | 'zoneCellSeeds'
   // --- the field card ---
   | 'fieldCard'
   | 'fieldRow'
+  // A row is a button since [[102]] — it opens the zones panel on the zone it describes.
+  | 'fieldRowOpen'
   | 'fieldName'
+  | 'fieldArmed'
+  | 'fieldFallow'
   | 'fieldReadout'
   | 'fieldSep'
   | 'fieldWilting'
