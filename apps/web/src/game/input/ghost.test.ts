@@ -146,20 +146,35 @@ describe('ghostBand on farmland ([[067]])', () => {
     expect(band.tone).toBe('zone');
   });
 
-  it('a crop-bearing farm tile refuses, and the label says the reason', () => {
+  // ────────────────────────────────────────────────────────────────────────────────────
+  //  THESE TWO USED TO ASSERT A REFUSAL, AND ITEM 121 IS THE OWNER RULING THAT REMOVED IT.
+  //  They are kept here, flipped, rather than deleted — beside the refusals that SURVIVED
+  //  (the unflagged machine below) — because the pair is the actual rule and reads as one
+  //  thing: farmland refuses a machine that is not `fieldPlaceable`, and refuses a flagged
+  //  one for nothing at all.
+  //
+  //  Item 067's house rule that nothing is silently destroyed is NOT weakened by this; it is
+  //  paid instead. The crop is lifted and handed back, so what the assertions below check is
+  //  that the ghost is green AND that it names the goods — a green band that said nothing
+  //  would satisfy the sim and still lose the player a crop they were saving.
+  // ────────────────────────────────────────────────────────────────────────────────────
+
+  it('a crop-bearing farm tile is LEGAL now, and the label names the seed coming back', () => {
     const view = farmView([[HOVER.tileX, HOVER.tileY]]);
     view.field.crop[0] = CropId.RussetPotato;
     const band = ghostBand(view, HOVER, ToolMode.PlaceSprinkler, Direction.East)!;
-    expect(band.tone).toBe('blocked');
-    expect(band.label).toContain('a crop is in the way');
+    expect(band.tone).toBe('zone');
+    expect(band.label).toContain('returns 1 potato seed');
+    expect(band.label).not.toContain('a crop is in the way');
   });
 
-  it('compost refuses with its own reason — nothing is silently destroyed', () => {
+  it('compost is LEGAL too, and comes back counted — the number is exact', () => {
     const view = farmView([[HOVER.tileX, HOVER.tileY]]);
-    view.field.compost[0] = 1;
+    view.field.compost[0] = 2;
     const band = ghostBand(view, HOVER, ToolMode.PlaceSprinkler, Direction.East)!;
-    expect(band.tone).toBe('blocked');
-    expect(band.label).toContain('compost in the way');
+    expect(band.tone).toBe('zone');
+    expect(band.label).toContain('returns 2 compost');
+    expect(band.label).not.toContain('compost in the way');
   });
 
   it('a non-flagged machine stays banned from farmland, and the ghost says so', () => {

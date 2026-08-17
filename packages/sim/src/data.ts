@@ -2119,19 +2119,23 @@ export interface MachineSpec {
    * and dead-centre it waters all 24 neighbours.
    *
    * A SPEC FLAG RATHER THAN A CHECK ON KIND, exactly like `moistureSensing` above: the
-   * footprint rule (`footprintFree` in tick.ts) consults the flag and nothing else, so the
-   * Fryer stays behind the fence without a kind-switch at the rule site, and the day a
-   * moisture probe wants in it is a data change. The tile hosted is an EMPTY farm tile only
-   * — a crop or waiting compost refuses the placement (nothing is silently destroyed, house
-   * rule) — and the ground underneath is never touched: soil, fertility, and moisture ride
-   * through placement and deconstruction untouched.
+   * footprint rule (`machineFootprintFree` in tick.ts) consults the flag AND NOTHING ELSE, so
+   * the Fryer stays behind the fence without a kind-switch at the rule site, and the day a
+   * moisture probe wants in it is a data change. The ground underneath is never touched: soil,
+   * fertility, and moisture ride through placement and deconstruction untouched.
+   *
+   * **A PLANTED TILE NO LONGER REFUSES** (item 121, owner ask 2026-08-17). Item 067 hosted an
+   * EMPTY farm tile only, on the house rule that nothing is silently destroyed. The placement
+   * now HANDS THE CROP BACK instead — the seed always, the produce as well if it was ripe, and
+   * any waiting compost — which keeps the house rule by paying it rather than by refusing.
+   * `clearFieldTileForMachine` in tick.ts is the one place that happens.
    *
    * THE IRRIGATION HUB IS DELIBERATELY IN: it is the same watering family (`role` says so),
    * its coverage is anchored exactly like the heads', and standing mid-field is its entire
-   * pitch. Its 2×2 footprint eats four farm tiles, which is the player's own trade to make.
-   * Mind the plumbing, though — pipes still refuse farmland (`pipePathRefusal`), so a piped
-   * head or Hub placed deep mid-field only drinks if its network reaches a tile beside it;
-   * out of reach it stands dry showing the blue utility lamp, which is honest.
+   * pitch. Its 2×2 footprint eats four farm tiles, which is the player's own trade to make —
+   * and as of item 121 it hands back whatever was growing on all four. The plumbing is no
+   * longer the catch it was, either: since item 120 a pipe runs OVER farmland, so a piped head
+   * or a Hub deep mid-field can be reached by a main laid straight across the rows.
    */
   readonly fieldPlaceable: boolean;
 }

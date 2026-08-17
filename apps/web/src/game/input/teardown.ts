@@ -95,6 +95,16 @@ export interface TeardownTarget {
   /** Cash this returns, in cents. Zero for a boxed machine, and that is the point. */
   refundCents: number;
   /**
+   * What this click LEAVES STANDING on the same tile, named — or `null` when it leaves nothing.
+   *
+   * Only a single-tile pick can set this, and only since item 120 gave a tile two layers: a
+   * click on a pipe crossing a belt takes the pipe and leaves the belt, and this is the half of
+   * that sentence the player would otherwise have to discover by looking. A drag leaves `null`
+   * because a drag takes BOTH, so "leaves the belt tile" would be a lie there — which is
+   * exactly the class of lie this field exists to prevent.
+   */
+  beneath: string | null;
+  /**
    * True when the sim is expected to refuse this — jammed, or out of arm's reach.
    *
    * A PREVIEW OF THE SIM'S ANSWER, NEVER A SUBSTITUTE FOR IT. Both facts are read off the
@@ -139,17 +149,82 @@ const TONE_BY_OUTCOME: Readonly<Record<TeardownOutcome, BandTone>> = {
 /**
  * What the tool would take off a single tile, or `null` for bare ground.
  *
- * THE ORDER IS THE SIM'S OWN. `tileOccupied` refuses a build on a tile that holds a machine,
- * a belt, an arm or a pipe, so at most one of these can be there — the sequence below is a
- * search, not a priority, and no tile can answer twice. It is written machine-first anyway so
- * that the one target with a footprint is resolved before anything is asked about single
- * tiles.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  THE PICKING RULE (item 120), AND IT IS THE SIM'S OWN LAYER SPLIT READ BACKWARDS.
+ *
+ *  The comment that used to stand here said "`tileOccupied` refuses a build on a tile that
+ *  holds a machine, a belt, an arm or a pipe, so at most one of these can be there — the
+ *  sequence below is a search, not a priority, and no tile can answer twice." **Item 120 made
+ *  that false.** A pipe is overhead now, so a tile can hold a belt AND a pipe, and the moment
+ *  it can, this sequence stops being a search and silently becomes a priority — one nobody
+ *  chose, written as an accident of which `if` came first. A tile CAN answer twice.
+ *
+ *  **A CLICK TAKES THE TOPMOST THING, AND ONLY THAT THING.** The order is not invented here:
+ *  the sim already split the world into `groundOccupied` (machines, belts, arms, water) and
+ *  `tileOccupied` (that, plus the pipe above it). So picking is that split read from the top
+ *  down — the overhead layer first, then the ground layer, whose members remain mutually
+ *  exclusive and so still answer as a search among themselves. If plumbing ever gains a
+ *  neighbour up there, the rule already says where it goes, and this comment is where to
+ *  look.
+ *
+ *  Topmost is also the WYSIWYG answer, which is the reason it is the right one rather than
+ *  merely a consistent one: the renderer draws pipes above belts, so the topmost object is
+ *  the one the player's eye is on. The thing you can see is the thing you take.
+ *
+ *  **AND THE CLICK LEAVES THE OTHER ONE STANDING, ON PURPOSE.** Clear a crossing by clicking
+ *  twice: the first click takes the pipe, the ribbon then reads "the belt tile", the second
+ *  takes that. Each click did exactly what the ribbon promised before it, which is the whole
+ *  property being bought — the ribbon is a contract and no click may exceed it.
+ *
+ *  *THE ALTERNATIVE I REJECTED — "a click takes everything on the tile", which is both the
+ *  behaviour item 120 shipped by accident and the one a drag genuinely has.* It is the more
+ *  consistent-looking rule and it is wrong for one decisive reason: **the ribbon can only name
+ *  one thing.** It is a single line reading `${target.name} · ${outcomePhrase(target)}`, so a
+ *  click that took two objects would announce one of them and destroy both — the player points
+ *  at a pipe, reads "the pipe · +$2.00", clicks, and their belt goes too. That is not a
+ *  cosmetic mismatch, it is the exact bug report the item predicted ("every ambiguity here
+ *  becomes a bug report about the wrong thing vanishing"), and it would arrive as data loss on
+ *  a factory rather than as a wrong string. A gesture may only destroy what its own affordance
+ *  named, and a one-line affordance may only name one thing.
+ *
+ *  A DRAG IS UNAFFECTED and still takes everything it covers — see `teardownPlan`. That is not
+ *  an inconsistency, it is the same rule: a drag's affordance is a multi-cell ghost with a
+ *  counted label, so it may take many things because it showed many things. Making a drag
+ *  topmost-only would be the worse bug in the other direction — the player would have to drag
+ *  the identical rectangle twice, and the second drag would look exactly like the first.
+ * ────────────────────────────────────────────────────────────────────────────────────
  */
 export function teardownTargetAt(
   view: WorldView,
   tileX: number,
   tileY: number,
 ): TeardownTarget | null {
+  // THE OVERHEAD LAYER, FIRST AND ALONE (item 120). Everything below this line is the ground.
+  const pipe = pipeAtView(view, tileX, tileY);
+  if (pipe !== null) {
+    return {
+      // One tile's worth. A drag merges every pipe tile it finds into one path command;
+      // `teardownPlan` owns that, because it is the only caller that can see the whole run.
+      command: { type: 'RemovePipe', path: [{ x: tileX, y: tileY }] },
+      outcome: TeardownOutcome.Refunded,
+      tiles: [{ tileX, tileY }],
+      name: 'the pipe',
+      refundCents: PIPE_PRICE_CENTS_PER_TILE,
+      // What survives this click, named for the ribbon. Read off the ground layer BENEATH the
+      // pipe rather than assumed — a pipe over bare ground leaves nothing and says nothing.
+      beneath: groundNameAt(view, tileX, tileY),
+      // NOT REACH-GATED, and that is the sim's answer rather than a convenience: none of
+      // `applyRemoveBelt`, `applyRemoveGrabber` or `applyRemovePipe` checks reach, exactly as
+      // placement does not. Building a belt across the lot and taking it back up are the same
+      // verb in opposite directions, so gating one and not the other would be a new rule
+      // invented by the input layer. Machines are the exception because the SIM makes them one.
+      refused: false,
+    };
+  }
+
+  // THE GROUND LAYER. These three still cannot share a tile with each other — `groundOccupied`
+  // is what a belt, an arm and a machine footprint all ask — so among themselves this remains a
+  // search rather than a priority, and no tile can answer twice.
   const machine = machineAt(view, tileX, tileY);
   if (machine !== null) return machineTarget(view, machine);
 
@@ -170,30 +245,26 @@ export function teardownTargetAt(
       tiles: [{ tileX, tileY }],
       name: 'the grabber arm',
       refundCents: grabberSpec(grabber.tier as never)?.priceCents ?? 0,
-      // Not reach-gated in `applyRemoveGrabber` — see the note on `RemovePipe` below.
+      beneath: null,
+      // Not reach-gated in `applyRemoveGrabber` — see the note on `RemovePipe` above.
       refused: false,
     };
   }
 
-  const pipe = pipeAtView(view, tileX, tileY);
-  if (pipe !== null) {
-    return {
-      // One tile's worth. A drag merges every pipe tile it finds into one path command;
-      // `teardownPlan` owns that, because it is the only caller that can see the whole run.
-      command: { type: 'RemovePipe', path: [{ x: tileX, y: tileY }] },
-      outcome: TeardownOutcome.Refunded,
-      tiles: [{ tileX, tileY }],
-      name: 'the pipe',
-      refundCents: PIPE_PRICE_CENTS_PER_TILE,
-      // NOT REACH-GATED, and that is the sim's answer rather than a convenience: none of
-      // `applyRemoveBelt`, `applyRemoveGrabber` or `applyRemovePipe` checks reach, exactly as
-      // placement does not. Building a belt across the lot and taking it back up are the same
-      // verb in opposite directions, so gating one and not the other would be a new rule
-      // invented by the input layer. Machines are the exception because the SIM makes them one.
-      refused: false,
-    };
-  }
+  return null;
+}
 
+/**
+ * What is standing on the GROUND layer of a tile, named — or `null` for bare ground.
+ *
+ * Only ever consulted from under a pipe, so it never has to answer about the pipe itself. A
+ * machine cannot be here (a pipe may not cross a footprint — item 120's second ruling), and
+ * that is asserted by omission rather than by a branch: if the sim ever relaxes it, this
+ * returns `null` and the ribbon under-promises, which is the safe direction to be wrong in.
+ */
+function groundNameAt(view: WorldView, tileX: number, tileY: number): string | null {
+  if (beltAtView(view, tileX, tileY) !== null) return 'the belt tile';
+  if (grabberAtView(view, tileX, tileY) !== null) return 'the grabber arm';
   return null;
 }
 
@@ -216,6 +287,8 @@ function machineTarget(view: WorldView, machine: MachineView): TeardownTarget {
       tiles,
       name: `the ${machineName(machine.kind)}`,
       refundCents: 0,
+      // A pipe may not cross a footprint (item 120), so a machine never has one above it.
+      beneath: null,
       refused: false,
     };
   }
@@ -227,6 +300,7 @@ function machineTarget(view: WorldView, machine: MachineView): TeardownTarget {
     name: `the ${machineName(machine.kind)}`,
     // Zero, always. Boxing is not selling ([[054]]) and this is the number that says so.
     refundCents: 0,
+    beneath: null,
     refused: machine.lamp === LampState.Jammed || !machineWithinReach(view, machine),
   };
 }
@@ -239,6 +313,9 @@ function beltTarget(belt: BeltView, tiles = beltTiles(belt)): TeardownTarget {
     tiles,
     name: `${tiles.length} belt tile${tiles.length === 1 ? '' : 's'}`,
     refundCents: perTile * tiles.length,
+    // A belt is the GROUND layer, so nothing of ours is under it — a pipe would be above,
+    // and a pipe above is why this branch was not reached (see `teardownTargetAt`).
+    beneath: null,
     refused: false,
   };
 }
@@ -257,6 +334,7 @@ function beltTileTarget(belt: BeltView, tileX: number, tileY: number): TeardownT
     tiles: [{ tileX, tileY }],
     name: 'the belt tile',
     refundCents: beltSpec(belt.tier as never)?.priceCentsPerTile ?? 0,
+    beneath: null,
     refused: false,
   };
 }
@@ -289,6 +367,23 @@ export function teardownPlan(
   view: WorldView,
   rect: { x: number; y: number; w: number; h: number },
 ): TeardownPlan {
+  // A ONE-TILE RECT IS A CLICK, AND A CLICK IS `teardownTargetAt` — THE SAME CALL THE RIBBON
+  // MAKES (item 120's picking rule). Not a parallel implementation that agrees: the identical
+  // function, so the sentence the player read and the command that goes out cannot drift into
+  // disagreement, because there is only one of them. That is what makes it structurally
+  // impossible for this tool to delete the thing the player was not looking at, rather than
+  // merely unlikely — before this, the ribbon called `teardownTargetAt` and the click walked
+  // the object lists below, and on a belt/pipe crossing those two returned different answers.
+  //
+  // Every pre-existing one-tile case comes out byte-identical (whole machine footprint, a
+  // mid-run belt tile as `RemoveBeltTile`, a lone 1-tile segment as `RemoveBelt` by id, an arm,
+  // a pipe, and bare ground's "nothing to take up") — the only behaviour that moves is the
+  // stacked tile, which had no defined answer until today.
+  if (rect.w === 1 && rect.h === 1) {
+    const target = teardownTargetAt(view, rect.x, rect.y);
+    return onePick(target);
+  }
+
   const targets: TeardownTarget[] = [];
   const pipeTiles: { x: number; y: number }[] = [];
 
@@ -330,6 +425,8 @@ export function teardownPlan(
       tiles: [{ tileX: grabber.tileX, tileY: grabber.tileY }],
       name: 'the grabber arm',
       refundCents: grabberSpec(grabber.tier as never)?.priceCents ?? 0,
+      // A DRAG TAKES BOTH LAYERS, so it leaves nothing behind to name (item 120).
+      beneath: null,
       refused: false,
     });
   }
@@ -344,6 +441,7 @@ export function teardownPlan(
       tiles: [{ tileX: pipe.tileX, tileY: pipe.tileY }],
       name: 'the pipe',
       refundCents: PIPE_PRICE_CENTS_PER_TILE,
+      beneath: null,
       refused: false,
     });
   }
@@ -402,6 +500,43 @@ export function teardownPlan(
   };
 }
 
+/**
+ * One picked target as a whole plan — the click's answer, in the shape the drag's answer has.
+ *
+ * Kept beside `teardownPlan` rather than inlined into it because the ordering rules it does NOT
+ * have are the point: no object loops, no pipe-path chunking, no counting. One thing was picked,
+ * so one thing happens.
+ */
+function onePick(target: TeardownTarget | null): TeardownPlan {
+  if (target === null) {
+    return {
+      commands: [],
+      cells: [],
+      label: 'nothing to take up',
+      refundCents: 0,
+      boxCount: 0,
+      refusals: 0,
+      loneMachineTile: null,
+    };
+  }
+
+  const tone: BandTone = target.refused ? 'blocked' : TONE_BY_OUTCOME[target.outcome];
+  const boxed = target.outcome === TeardownOutcome.Boxed;
+  return {
+    // A `Kept` target ships no command, exactly as it does in a drag ([[076]]).
+    commands: target.outcome === TeardownOutcome.Kept ? [] : [target.command],
+    cells: target.tiles.map((t) => ({ x: t.tileX, y: t.tileY, tone })),
+    label: `${target.name} · ${outcomePhrase(target)}`,
+    refundCents: target.refundCents,
+    boxCount: boxed ? 1 : 0,
+    refusals: target.refused ? 1 : 0,
+    loneMachineTile:
+      target.command.type === 'DeconstructMachine' && target.outcome !== TeardownOutcome.Kept
+        ? (target.tiles[0] ?? null)
+        : null,
+  };
+}
+
 interface Counts {
   beltCount: number;
   armCount: number;
@@ -434,8 +569,19 @@ function planLabel(targets: readonly TeardownTarget[], counts: Counts): string {
   return `${cash}  ·  ${bag}`;
 }
 
-/** What happens to one target, said in the words the ribbon uses. */
+/**
+ * What happens to one target, said in the words the ribbon uses.
+ *
+ * **AND WHAT SURVIVES IT** (item 120). On a stacked tile the click takes the top thing only, so
+ * the sentence has to carry the other half or the player learns it by watching a belt not
+ * disappear and wondering whether the click registered. "leaves the belt tile" is a promise the
+ * click keeps exactly, because both come from the one `teardownTargetAt` call.
+ */
 export function outcomePhrase(target: TeardownTarget): string {
+  return `${outcomeVerb(target)}${target.beneath === null ? '' : ` · leaves ${target.beneath}`}`;
+}
+
+function outcomeVerb(target: TeardownTarget): string {
   if (target.outcome === TeardownOutcome.Kept) {
     // The owner's copy for the empty-handed hover on the sell bin ([[076]]): the tool has
     // nothing to take here, and saying so beats offering a take the sim always refuses.

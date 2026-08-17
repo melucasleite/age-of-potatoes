@@ -411,10 +411,18 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     layers.worldUi.attach(sprite);
   });
 
-  const pipes = new PipeLayer(app.renderer, art, (sprite) => {
-    contentRoot.addChild(sprite);
-    layers.pipes.attach(sprite);
-  });
+  const pipes = new PipeLayer(
+    app.renderer,
+    art,
+    (sprite) => {
+      contentRoot.addChild(sprite);
+      layers.pipes.attach(sprite);
+    },
+    (sprite) => {
+      contentRoot.addChild(sprite);
+      layers.pipeShade.attach(sprite);
+    },
+  );
 
   const beltStructures = new BeltStructureLayer(
     app.renderer,

@@ -315,6 +315,18 @@ export function goodsMoves(): string[] {
  * Door 8 was one `addItem` where an `addItemFresh` belonged. So the doors are enumerated by
  * CALLER, and every caller has to say which of those two sentences it is — which is a question a
  * grep for "addItem" cannot ask and a reviewer reading a 90-line function reliably forgets to.
+ *
+ * **AND BY CALL SITE WITHIN THE CALLER, NUMBERED** (item 121). Until this pass the keys were a
+ * `Set`, so every `addItem` in one function collapsed to one row — and `tick:harvestOneTile:addItem`
+ * was ONE row standing for FOUR call sites under the single verdict `MintsNew`. That is the same
+ * collapse `clockDoors()` was taught to stop making, and it fails in the same direction: item 121's
+ * new hand-back returns a crop (a genuine mint), a seed and a compost heap (both shelf-stable, and
+ * therefore FALSIFIABLE) from one function. Collapsed, the two checkable claims would have hidden
+ * behind the one judgement call that cannot be checked at all. Numbered, each has to be said out
+ * loud, and the live harness can go and look at what actually lands in the bag.
+ *
+ * The first occurrence keeps the bare key so adding a call site never renames its neighbour —
+ * `clockDoors()`' rule, for `clockDoors()`' reason.
  */
 export function bagDoors(): string[] {
   const doors: [string, RegExp][] = [
@@ -322,7 +334,8 @@ export function bagDoors(): string[] {
     ['addItem', /(?<![A-Za-z0-9_.])addItem\(/],
     ['removeItem', /(?<![A-Za-z0-9_.])removeItem\(/],
   ];
-  const found = new Set<string>();
+  const found: string[] = [];
+  const seen = new Map<string, number>();
   for (const [label, path] of sourceFiles(SRC)) {
     const lines = readFileSync(path, 'utf8').split('\n');
     const owners = enclosingFunctions(lines);
@@ -334,7 +347,11 @@ export function bagDoors(): string[] {
       for (const [door, pattern] of doors) {
         // The doors' own bodies call each other; that plumbing is the door, not a user of it.
         if (label === 'state' && doors.some(([name]) => name === owners[i])) continue;
-        if (pattern.test(line)) found.add(`${label}:${owners[i]}:${door}`);
+        if (!pattern.test(line)) continue;
+        const key = `${label}:${owners[i]}:${door}`;
+        const n = (seen.get(key) ?? 0) + 1;
+        seen.set(key, n);
+        found.push(n === 1 ? key : `${key}#${n}`);
       }
     }
   }
@@ -676,11 +693,20 @@ export const CLOCK_CROSSING_VERDICTS: Readonly<Record<string, ClockDoorVerdict>>
   'tick:applyRemoveGrabber:addItemFresh(spoilTickFromRemaining(state, grabber.heldFreshTicks))':
     ClockDoorVerdict.Carries, //                            whatever the arm was holding.
   'tick:applyUnloadMachine:addItemFresh(spoilTickFromRemaining(state, freshTicks))':
-    ClockDoorVerdict.Carries, //                            the basket, by hand.
+    ClockDoorVerdict.Carries, //                            the output basket, by hand.
   'tick:applyUnloadMachine:addItemFresh(spoilTickFromRemaining(state, took.freshTicks))':
-    ClockDoorVerdict.Carries, //                            a hopper line, by hand.
+    ClockDoorVerdict.Carries, //                            a container's cargo bay, by hand.
   'tick:applyUnloadMachine:addItemFresh(spoilTickFromRemaining(state, took.freshTicks))#2':
-    ClockDoorVerdict.Carries, //                            the cargo bay, by hand.
+    ClockDoorVerdict.Carries, //                            the dock's PRODUCE shelf, by hand.
+  //                                                        (These last two were labelled "a hopper
+  //                                                        line" and "the cargo bay" until item
+  //                                                        121 numbered the bag doors and made
+  //                                                        somebody read the line numbers:
+  //                                                        `applyUnloadMachine` has no hopper path
+  //                                                        at all. The verdicts were right and the
+  //                                                        captions were not, which is this
+  //                                                        family's oldest failure mode wearing a
+  //                                                        comment.)
   'tick:produceRecipe:outputFreshTicks = mergedFreshness(…)': ClockDoorVerdict.MintsNew, // §4's
   //                                                        "processing IS preservation": the output
   //                                                        is a NEW good with a new window.
@@ -873,33 +899,75 @@ export type BagDoorVerdict = (typeof BagDoorVerdict)[keyof typeof BagDoorVerdict
  * "mints a full window" four lines under four rows that do not.
  */
 export const BAG_DOOR_VERDICTS: Readonly<Record<string, BagDoorVerdict>> = {
-  'commerce:refundContract:addItemFresh': BagDoorVerdict.Carries, // a torn-up route hands back.
+  // --- commerce ---
+  'commerce:refundContract:addItemFresh': BagDoorVerdict.Carries, // the depot FLOOR hands back.
+  'commerce:refundContract:addItemFresh#2': BagDoorVerdict.Carries, // and the lorry on the road.
+  // --- the opening stock, and what spoilage leaves behind ---
   'state:createWorld:addItem': BagDoorVerdict.MintsShelfStable, // the opening seeds.
   'tick:advanceSpoilage:addItem': BagDoorVerdict.MintsShelfStable, // Compost.
+  // --- the hand's ordinary verbs ---
   'tick:applyApplyFertilizer:removeItem': BagDoorVerdict.Out,
   'tick:applyBuyItem:addItem': BagDoorVerdict.MintsNew, //     bought goods are new goods.
-  'tick:applyDeconstructMachine:addItem': BagDoorVerdict.MintsShelfStable, // **ONLY SINCE ITEM
-  //                                                          117**: the two lines here are the
-  //                                                          dock's seed shelf and the bot's seed
-  //                                                          pocket. The armful that used to be on
-  //                                                          this row was DOOR 8.
-  'tick:applyDeconstructMachine:addItemFresh': BagDoorVerdict.Carries, // basket, hoppers, cargo,
-  //                                                          and — since item 117 — the armful.
+  // --- boxing a machine: six doors in one function, and three of them were bugs ---
+  'tick:applyDeconstructMachine:addItem': BagDoorVerdict.MintsShelfStable, // the dock's seed
+  //                                                          shelf — **DOOR 8c**, which was on no
+  //                                                          line at all until item 117.
+  'tick:applyDeconstructMachine:addItem#2': BagDoorVerdict.MintsShelfStable, // the bot's seed
+  //                                                          pocket — **DOOR 8b**. The ARMFUL that
+  //                                                          used to sit on this line was DOOR 8,
+  //                                                          and it moved to `addItemFresh#4`.
+  'tick:applyDeconstructMachine:addItemFresh': BagDoorVerdict.Carries, // the output basket.
+  'tick:applyDeconstructMachine:addItemFresh#2': BagDoorVerdict.Carries, // every hopper line.
+  'tick:applyDeconstructMachine:addItemFresh#3': BagDoorVerdict.Carries, // the cargo bay.
+  'tick:applyDeconstructMachine:addItemFresh#4': BagDoorVerdict.Carries, // the bot's armful.
+  // --- loading things ---
   'tick:applyLoadCart:removeItem': BagDoorVerdict.Out,
-  'tick:applyLoadMachine:removeItem': BagDoorVerdict.Out,
+  'tick:applyLoadMachine:removeItem': BagDoorVerdict.Out, //   into a container.
+  'tick:applyLoadMachine:removeItem#2': BagDoorVerdict.Out, // into a hopper line.
   'tick:applyPackCrate:addItemFresh': BagDoorVerdict.Carries,
-  'tick:applyPackCrate:removeItem': BagDoorVerdict.Out,
+  'tick:applyPackCrate:removeItem': BagDoorVerdict.Out, //     the goods being crated.
+  'tick:applyPackCrate:removeItem#2': BagDoorVerdict.Out, //   and the crate itself.
   'tick:applyPlantTile:removeItem': BagDoorVerdict.Out,
   'tick:applyRefillHopper:removeItem': BagDoorVerdict.Out,
+  // --- taking infrastructure back up ---
   'tick:applyRemoveBelt:addItemFresh': BagDoorVerdict.Carries, // a belt hands its riders back.
-  'tick:applyRemoveBeltTile:addItemFresh': BagDoorVerdict.Carries, // ditto, one tile at a time.
+  'tick:applyRemoveBeltTile:addItemFresh': BagDoorVerdict.Carries, // a ONE-TILE belt taken whole.
+  'tick:applyRemoveBeltTile:addItemFresh#2': BagDoorVerdict.Carries, // the goods freed by a CUT.
   'tick:applyRemoveGrabber:addItemFresh': BagDoorVerdict.Carries, // whatever was in the claw.
   'tick:applySellItem:removeItem': BagDoorVerdict.Out,
-  'tick:applySwingScythe:addItem': BagDoorVerdict.MintsNew, // crop leaving the ground.
-  'tick:applyUnloadMachine:addItem': BagDoorVerdict.MintsShelfStable, // the seed shelf only.
-  'tick:applyUnloadMachine:addItemFresh': BagDoorVerdict.Carries, // basket, hoppers and cargo.
+  // --- the scythe: one swing, three doors ---
+  'tick:applySwingScythe:addItem': BagDoorVerdict.MintsNew, //  the crop leaving the ground.
+  'tick:applySwingScythe:addItem#2': BagDoorVerdict.MintsShelfStable, // compost off the tile.
+  'tick:applySwingScythe:addItem#3': BagDoorVerdict.MintsShelfStable, // the replanting seed.
+  // --- emptying a machine by hand ---
+  'tick:applyUnloadMachine:addItem': BagDoorVerdict.MintsShelfStable, // the dock's SEED shelf.
+  'tick:applyUnloadMachine:addItemFresh': BagDoorVerdict.Carries, // a container's cargo bay.
+  'tick:applyUnloadMachine:addItemFresh#2': BagDoorVerdict.Carries, // the dock's PRODUCE shelf.
+  'tick:applyUnloadMachine:addItemFresh#3': BagDoorVerdict.Carries, // the output basket.
   'tick:applyUseRepairKit:removeItem': BagDoorVerdict.Out,
-  'tick:harvestOneTile:addItem': BagDoorVerdict.MintsNew, //   the hand's own harvest.
+  // --- item 121: a waterer takes a planted tile and hands back what was growing on it ---
+  //
+  // **THREE ROWS RATHER THAN ONE, AND THAT IS THE WHOLE REASON `bagDoors()` NOW NUMBERS.** These
+  // three lines sit inside one function and make three DIFFERENT claims: the first is a judgement
+  // no sweep can check, the other two are claims of FACT about the goods and the harness goes and
+  // looks. Collapsed into a single `MintsNew` row — which is what this list did until item 121 —
+  // the two checkable ones would have been swallowed by the one that cannot be checked, and the
+  // row would have read "nothing needs to balance here" over a transfer whose entire point is that
+  // something does.
+  'tick:clearFieldTileForMachine:addItem': BagDoorVerdict.MintsNew, // the ripe crop, lifted out of
+  //                                                          the ground by the placement. A full
+  //                                                          window, because that is what the hand,
+  //                                                          the scythe and the bot all give a crop
+  //                                                          leaving the soil — a standing crop has
+  //                                                          no clock to carry, and the age it DOES
+  //                                                          carry crosses as the Day-Old grade.
+  'tick:clearFieldTileForMachine:addItem#2': BagDoorVerdict.MintsShelfStable, // waiting compost.
+  'tick:clearFieldTileForMachine:addItem#3': BagDoorVerdict.MintsShelfStable, // the seed back.
+  // --- the hand's own harvest: four doors, one of which is the bare-tile stoop ---
+  'tick:harvestOneTile:addItem': BagDoorVerdict.MintsShelfStable, // compost off a CROPLESS tile.
+  'tick:harvestOneTile:addItem#2': BagDoorVerdict.MintsNew, //  the crop leaving the ground.
+  'tick:harvestOneTile:addItem#3': BagDoorVerdict.MintsShelfStable, // compost beside the crop.
+  'tick:harvestOneTile:addItem#4': BagDoorVerdict.MintsShelfStable, // the replanting seed.
   'zones:replantOneTile:removeItem': BagDoorVerdict.Out,
 };
 

@@ -2293,7 +2293,22 @@ export interface HarvestResult {
  * tile that has not been pulled yet — which is exactly the moment anyone wants it.
  */
 export function harvestItemFor(tile: CropTile, spec: CropSpec): ItemId {
-  return wiltStageForAge(tile.readyAge) === WiltStage.Wilted ? spec.dayOldItem : spec.yieldItem;
+  return harvestItemForWilt(wiltStageForAge(tile.readyAge), spec);
+}
+
+/**
+ * **THE SAME QUESTION ASKED WITH A NUMBER INSTEAD OF A TILE** — for the renderer (item 121).
+ *
+ * `FieldView` carries `wilt` per tile and nothing else the answer depends on, so a ghost that has
+ * to say *"this hands you back a Day-Old Potato"* can ask the sim's own function rather than
+ * writing `wilt === 2 ? dayOld : yield` a second time in the input layer. A mirrored ternary is a
+ * mirrored ternary: it agrees today and disagrees the day a third wilt stage exists.
+ *
+ * §12-safe on purpose — it takes two plain values and reads no state, so the renderer calling it
+ * is a pure read and nothing flows back.
+ */
+export function harvestItemForWilt(wilt: WiltStage, spec: CropSpec): ItemId {
+  return wilt === WiltStage.Wilted ? spec.dayOldItem : spec.yieldItem;
 }
 
 /**
@@ -3169,17 +3184,41 @@ export function grabberAt(state: WorldState, tileX: number, tileY: number): Grab
 }
 
 /**
- * True when anything at all already occupies a tile — including a pipe, and including open
- * water. A pond is scenery you cannot build on; a Pump stands on the bank next to it.
+ * **THE GROUND LAYER: everything that stands ON a tile rather than OVER it** (item 120).
+ *
+ * Machines, belts, arms and open water all compete for the same square foot of dirt, and no two
+ * of them may have it. Plumbing does not appear here, and that omission is the whole of item
+ * 120: a pipe is **overhead**, so it neither takes the ground nor is refused by whatever already
+ * has it. The owner's words were "pipes can be above everything else. If there is a track
+ * underneath it or ground, it still can have a pipe running through, but above it."
+ *
+ * **THIS IS THE PREDICATE A BELT OR AN ARM ASKS**, and `tileOccupied` below is the one a machine
+ * and the till ask. Two names rather than a boolean argument, because "which layer are you
+ * building on" is a fact about the *thing being built* and belongs in the verb's own line.
  */
-export function tileOccupied(state: WorldState, tileX: number, tileY: number): boolean {
+export function groundOccupied(state: WorldState, tileX: number, tileY: number): boolean {
   return (
     machineAt(state, tileX, tileY) !== null ||
     beltAt(state, tileX, tileY) !== null ||
     grabberAt(state, tileX, tileY) !== null ||
-    pipeAtTile(state, tileX, tileY) !== null ||
     reservoirAtTile(state, tileX, tileY) !== null
   );
+}
+
+/**
+ * True when anything at all already occupies a tile — the ground layer **and** the pipe overhead
+ * of it, and including open water. A pond is scenery you cannot build on; a Pump stands on the
+ * bank next to it.
+ *
+ * **BOTH LAYERS, AND THE CALLERS THAT STILL WANT BOTH ARE THE ONES THAT WOULD DISTURB A PIPE.**
+ * A machine footprint refuses a pipe because machines meet plumbing through typed ports on their
+ * footprint and a pipe lying across one makes "which port is this?" ambiguous (item 120's second
+ * ruling, and item 101's liquid inference reads the machines a run touches). The till refuses one
+ * because you cannot pull the ground out from under standing infrastructure — the same rule item
+ * 067 gave a field-placed machine's floor.
+ */
+export function tileOccupied(state: WorldState, tileX: number, tileY: number): boolean {
+  return groundOccupied(state, tileX, tileY) || pipeAtTile(state, tileX, tileY) !== null;
 }
 
 /**

@@ -459,6 +459,7 @@ export {
   takeDockShelf,
   takeDockSeedShelf,
   harvestItemFor,
+  harvestItemForWilt,
   takeHarvest,
   takeOneOutput,
   takeStorage,
@@ -468,6 +469,7 @@ export {
   streamFor,
   tileAt,
   tileByKey,
+  groundOccupied,
   tileOccupied,
   tillTile,
   untillTile,
@@ -575,7 +577,7 @@ export type {
 } from './commands';
 
 // --- the tick ---------------------------------------------------------------------
-export { CHIP_LINE_KINDS, KNOWN_MACHINE_KINDS, step, stepMany } from './tick';
+export { CHIP_LINE_KINDS, KNOWN_MACHINE_KINDS, machineFootprintFree, step, stepMany } from './tick';
 export type { TickInput } from './tick';
 
 // --- stats ------------------------------------------------------------------------

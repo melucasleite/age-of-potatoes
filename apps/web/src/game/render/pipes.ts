@@ -91,6 +91,53 @@ const MAX_SPRITES = 8_192;
 /** Quarter turn in radians, screen space (y down), so a clockwise turn is positive. */
 const QUARTER = Math.PI / 2;
 
+// ────────────────────────────────────────────────────────────────────────────────────
+//  THE SHADOW A PIPE CASTS, AND WHY IT IS A SECOND SPRITE ([[120]]).
+//
+//  Item 120 put plumbing OVERHEAD: a run may now cross a belt, the goods riding it, and a
+//  planted tile. Occlusion alone does not say which of two things is nearer — a light grey
+//  bar lying across a belt reads just as easily as a gap CUT into the belt, and over pale
+//  dirt it reads as paint on the ground. A drop shadow is what turns "drawn after" into
+//  "above", and it has to survive `image-rendering: pixelated` at every rung of an integer
+//  zoom ladder, so it is measured in ART pixels and never in fractions of one.
+//
+//  TWO THINGS RULE OUT BAKING IT INTO THE SIX FRAMES, and either one alone would be fatal:
+//
+//    * THE FRAMES ROTATE. `pipe-shape.ts` draws each frame once facing EAST and turns it in
+//      quarter turns, which is the whole reason `PIPE` is a concentric palette rather than a
+//      top-lit one. A drop shadow baked into the texture would rotate with it — down-right on
+//      a horizontal run, down-LEFT on the vertical one below it. A shadow that changes
+//      direction with the plumbing is worse than no shadow, because it reads as lighting and
+//      then lies about it.
+//    * THE SPRITE IS TINTED. The pipe layer multiplies its frames by the liquid's colour, so
+//      a baked shadow would be multiplied too and a syrup line would cast an amber shadow.
+//
+//  A separate sprite fixes both at once: it carries its own tint, and its offset is applied to
+//  its WORLD POSITION rather than to its texture, so the shadow falls the same way on every
+//  tile no matter which way that tile's frame is turned. It costs one more sprite per visible
+//  pipe tile and exactly one more draw call, because the shade layer shares the pipe page's
+//  single texture source.
+// ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * How far the shadow falls, in ART pixels — one, in each axis.
+ *
+ * An integer, and it must stay one: the whole world is drawn at an integer zoom (2/3/4/6) onto
+ * a pixel-snapped camera, so an integer art offset lands on an exact 2, 3, 4 or 6 device pixels
+ * and never shimmers. A half-pixel offset would sample between texels at every rung and undo
+ * the reason `scaleMode` is `nearest` in the first place.
+ *
+ * One rather than two because the pipe's arm is only 6px thick: a 2px shadow on a 6px bar reads
+ * as a second, darker pipe rather than as height.
+ */
+const SHADE_OFFSET_PX = 1;
+
+/** Shadow strength. Dark enough to separate on pale dirt, light enough not to fake an outline. */
+const SHADE_ALPHA = 0.38;
+
+/** Pure black, so the shadow darkens whatever is under it rather than tinting it. */
+const SHADE_TINT = 0x000000;
+
 /**
  * One texture source for every pipe frame.
  *
@@ -166,7 +213,9 @@ interface PipeTile {
 export class PipeLayer {
   private readonly page: PipePage;
   private readonly sprites: Sprite[] = [];
+  private readonly shades: Sprite[] = [];
   private readonly attach: (sprite: Sprite) => void;
+  private readonly attachShade: (sprite: Sprite) => void;
 
   /** Resolved tiles, in projection order. Rebuilt on change, walked every frame. */
   private tiles: PipeTile[] = [];
@@ -176,9 +225,15 @@ export class PipeLayer {
   private signature = -1;
   private worldTilesWide = 0;
 
-  constructor(renderer: Renderer, art: ArtSet, attach: (sprite: Sprite) => void) {
+  constructor(
+    renderer: Renderer,
+    art: ArtSet,
+    attach: (sprite: Sprite) => void,
+    attachShade: (sprite: Sprite) => void,
+  ) {
     this.page = buildPipePage(renderer, art);
     this.attach = attach;
+    this.attachShade = attachShade;
   }
 
   /**
@@ -215,25 +270,44 @@ export class PipeLayer {
       if (used >= MAX_SPRITES) break;
 
       const sprite = this.spriteAt(used);
+      const shade = this.shadeAt(used);
       used += 1;
 
       const shape = pipeShape(tile.mask);
-      sprite.texture = this.page.texture(shape.frame);
+      const texture = this.page.texture(shape.frame);
+      const rotation = shape.quarterTurns * QUARTER;
+      const alpha = throttled.has(tile.network) ? pulse : 1;
+
+      sprite.texture = texture;
       // Anchored at the centre so a quarter turn pivots in place; the position carries the
       // half-tile offset rather than the anchor carrying the rotation.
       sprite.position.set(x + TILE_PX / 2, y + TILE_PX / 2);
-      sprite.rotation = shape.quarterTurns * QUARTER;
+      sprite.rotation = rotation;
       sprite.tint = liquidTint(tile.liquid);
-      sprite.alpha = throttled.has(tile.network) ? pulse : 1;
+      sprite.alpha = alpha;
       sprite.visible = true;
+
+      // Same frame, same turn, offset in WORLD space — see the block above `SHADE_OFFSET_PX`.
+      // Offsetting the position rather than the texture is what keeps the shadow falling
+      // down-right on a vertical run as well as a horizontal one.
+      shade.texture = texture;
+      shade.position.set(x + TILE_PX / 2 + SHADE_OFFSET_PX, y + TILE_PX / 2 + SHADE_OFFSET_PX);
+      shade.rotation = rotation;
+      // The shadow fades WITH the run it belongs to. A throttled network pulses (§5's amber),
+      // and a shadow that held still while its pipe faded would be a shadow with nothing above
+      // it — the one thing a drop shadow may never look like.
+      shade.alpha = SHADE_ALPHA * alpha;
+      shade.visible = true;
     }
 
     // The tail is contiguous: every frame fills from slot zero upward, so the first hidden
-    // slot is the start of everything hidden.
+    // slot is the start of everything hidden. Both pools are filled in lockstep from the same
+    // `used` counter, so one loop bound is honest for both.
     for (let i = used; i < this.sprites.length; i++) {
       const sprite = this.sprites[i]!;
       if (!sprite.visible) break;
       sprite.visible = false;
+      this.shades[i]!.visible = false;
     }
   }
 
@@ -255,7 +329,9 @@ export class PipeLayer {
 
   destroy(): void {
     for (const sprite of this.sprites) sprite.destroy();
+    for (const shade of this.shades) shade.destroy();
     this.sprites.length = 0;
+    this.shades.length = 0;
     this.tiles.length = 0;
     this.byTile.clear();
     this.page.destroy();
@@ -273,6 +349,24 @@ export class PipeLayer {
     this.sprites.push(sprite);
     this.attach(sprite);
     return sprite;
+  }
+
+  /**
+   * The shade twin of `spriteAt`, at the same index.
+   *
+   * Its tint is written ONCE, here, rather than every frame beside the pipe's: the pipe's tint
+   * changes when a network changes liquid, and the shadow's never does. Only `alpha` moves per
+   * frame, and only because the run it belongs to pulses.
+   */
+  private shadeAt(index: number): Sprite {
+    const existing = this.shades[index];
+    if (existing !== undefined) return existing;
+    const shade = new Sprite(this.page.texture('straight'));
+    shade.anchor.set(0.5, 0.5);
+    shade.tint = SHADE_TINT;
+    this.shades.push(shade);
+    this.attachShade(shade);
+    return shade;
   }
 
   /**

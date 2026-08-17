@@ -16,8 +16,10 @@ import {
   type Command,
   type Machine,
   type WorldState,
+  BeltTier,
   BuildRefusal,
   CeremonyId,
+  Direction,
   HAND_POUR_ML,
   IRRIGATION_HUB_SCAN_PER_TICK,
   LampState,
@@ -25,6 +27,7 @@ import {
   MOISTURE_DRY_THRESHOLD,
   CAN_CHARGES_MAX,
   MOISTURE_MAX,
+  GrabberTier,
   MachineKind,
   POND_ORIGIN_X,
   POND_ORIGIN_Y,
@@ -42,6 +45,7 @@ import {
   SUBTILE,
   TICKS_PER_MINUTE,
   TechId,
+  TillMode,
   WaterDraw,
   createWorld,
   createWorldView,
@@ -53,6 +57,8 @@ import {
   pumpSupplyMlPerMinute,
   rebuildNetworks,
   reservoirThrottle,
+  spawnBelt,
+  spawnGrabber,
   spawnMachine,
   spawnPipe,
   step,
@@ -918,9 +924,13 @@ describe('one pump and one liquid per network, enforced', () => {
       ]),
     ).toBe(BuildRefusal.BadPath);
     expect(check([{ x: -1, y: 13 }])).toBe(BuildRefusal.OutsideWorld);
-    expect(check([{ x: 6, y: 6 }])).toBe(BuildRefusal.OnField);
-    expect(check([{ x: 12, y: 13 }])).toBe(BuildRefusal.Occupied);
     expect(check([])).toBe(BuildRefusal.BadPath);
+
+    // **AND TWO TILES THAT USED TO REFUSE AND NO LONGER DO** (item 120). Farmland was `OnField`
+    // and the pond was `Occupied`; plumbing is overhead now, so a run crosses both. Kept HERE,
+    // beside the refusals that survived, so the pair is read together rather than as two lists.
+    expect(check([{ x: 6, y: 6 }]), 'farmland refused a pipe overhead').toBe(BuildRefusal.None);
+    expect(check([{ x: 12, y: 13 }]), 'the pond refused an aqueduct').toBe(BuildRefusal.None);
   });
 
   it('lays a whole run as ONE trace entry and takes it back up for a full refund', () => {
@@ -1129,5 +1139,172 @@ describe('the render projection', () => {
     const projected = view(state, createWorldView());
     projected.reservoirs[0]!.levelMl = -1;
     expect(state.reservoirs[0]!.levelMl).toBeGreaterThan(0);
+  });
+});
+
+// --- item 120: plumbing runs overhead ---------------------------------------------------------
+//
+// **THE OWNER ASK, 2026-08-17:** *"we need some kind of layer system. Pipes can be above
+// everything else. If there is a track underneath it or ground, it still can have a pipe running
+// through, but above it."*
+//
+// The sim is the authority on legality and the input layer only aims, so every combination the
+// ruling touches is pinned here — the ones that became legal AND the two that must not. A rule
+// stated only in the direction it was relaxed is half a rule, and the half nobody tested is the
+// half that grows an exception.
+
+describe('a pipe is a layer above the ground', () => {
+  function piped(seed: number): WorldState {
+    const state = createWorld(seed);
+    // The field is x 4..11, y 4..11, so row 12 and row 13 are open ground either side of it.
+    state.unlocked = [TechId.Pumps, TechId.Belts];
+    state.moneyCents = 1_000_000;
+    return state;
+  }
+
+  const at = (x: number, y: number) => [{ x, y }];
+
+  it('crosses a belt, and a belt is laid under an existing pipe — both orders', () => {
+    // The acceptance criterion in both directions, which is the whole of "it has to hold from
+    // both ends or it does not hold": a rule that depended on which the player built first is a
+    // rule they discover by losing a drag.
+    const state = piped(1_201);
+    spawnBelt(state, BeltTier.Basic, 3, 12, Direction.East, 4);
+    expect(
+      pipePathRefusal(state, at(4, 12), LiquidId.Water, PIPE_MAX_PATH_TILES),
+      'a pipe was refused by the belt beneath it',
+    ).toBe(BuildRefusal.None);
+    run(state, [{ type: 'PlacePipe', path: at(4, 12), liquid: LiquidId.Water }]);
+    expect(state.pipes, 'the crossing was refused by the reducer').toHaveLength(1);
+
+    // And now the other order, one row down: pipe first, belt across it.
+    run(state, [
+      { type: 'PlacePipe', path: [{ x: 5, y: 13 }], liquid: LiquidId.Water },
+      {
+        type: 'PlaceBelt',
+        tier: BeltTier.Basic,
+        tileX: 3,
+        tileY: 13,
+        dir: Direction.East,
+        lengthTiles: 4,
+      },
+    ]);
+    expect(
+      state.belts.some((belt) => belt.tileY === 13),
+      'the belt was refused by the pipe above it',
+    ).toBe(true);
+  });
+
+  it('crosses farmland, a zone, and open water', () => {
+    const state = piped(1_202);
+    expect(
+      pipePathRefusal(state, at(6, 6), LiquidId.Water, PIPE_MAX_PATH_TILES),
+      'farmland refused a pipe',
+    ).toBe(BuildRefusal.None);
+
+    tileAt(state, 6, 6)!.zone = 7;
+    expect(
+      pipePathRefusal(state, at(6, 6), LiquidId.Water, PIPE_MAX_PATH_TILES),
+      'a zone paint refused a pipe',
+    ).toBe(BuildRefusal.None);
+
+    expect(
+      pipePathRefusal(state, at(POND_ORIGIN_X, POND_ORIGIN_Y), LiquidId.Water, PIPE_MAX_PATH_TILES),
+      'the pond refused an aqueduct',
+    ).toBe(BuildRefusal.None);
+  });
+
+  it('crosses a grabber, whose swing arc is a drawing and not a rule', () => {
+    // Item 094 gave arms a real arc that sweeps overhead. Nothing in the sim reads it — the claw
+    // takes and gives on the four neighbouring TILES — so it cannot decide a legality question,
+    // and a rule that consulted it would be the renderer feeding back into the sim (§12).
+    const state = piped(1_203);
+    spawnGrabber(state, GrabberTier.Mk1, 5, 12, Direction.East, 0);
+    expect(pipePathRefusal(state, at(5, 12), LiquidId.Water, PIPE_MAX_PATH_TILES)).toBe(
+      BuildRefusal.None,
+    );
+
+    // And the arm goes in under an existing pipe, the same rule read backwards.
+    run(state, [
+      { type: 'PlacePipe', path: [{ x: 5, y: 13 }], liquid: LiquidId.Water },
+      {
+        type: 'PlaceGrabber',
+        tier: GrabberTier.Mk1,
+        tileX: 5,
+        tileY: 13,
+        dir: Direction.East,
+        filter: 0,
+      },
+    ]);
+    expect(
+      state.grabbers.some((grabber) => grabber.tileY === 13),
+      'the arm was refused by the pipe above it',
+    ).toBe(true);
+  });
+
+  it('**STILL REFUSES A MACHINE FOOTPRINT AND ANOTHER PIPE** — the two rules that survived', () => {
+    const state = piped(1_204);
+    // Every tile of a multi-tile footprint, not just its origin: `machineAt` covers the whole
+    // rectangle, and a 3×2 Bottler's far corner is as much a port surface as its near one.
+    const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 3, 1)!;
+    const spec = machineSpec(MachineKind.ChipKitchen)!;
+    for (let dy = 0; dy < spec.tilesHigh; dy++) {
+      for (let dx = 0; dx < spec.tilesWide; dx++) {
+        expect(
+          pipePathRefusal(state, at(kitchen.tileX + dx, kitchen.tileY + dy), LiquidId.Water, 32),
+          `(${String(dx)},${String(dy)}) of the footprint took a pipe`,
+        ).toBe(BuildRefusal.Occupied);
+      }
+    }
+
+    spawnPipe(state, 8, 12, LiquidId.Water);
+    rebuildNetworks(state);
+    expect(
+      pipePathRefusal(state, at(8, 12), LiquidId.Water, PIPE_MAX_PATH_TILES),
+      'two pipes shared a tile',
+    ).toBe(BuildRefusal.Occupied);
+  });
+
+  it('and a MACHINE still refuses the pipe, which is the same rule from the machine’s side', () => {
+    const state = piped(1_205);
+    run(state, [{ type: 'PlacePipe', path: at(4, 12), liquid: LiquidId.Water }]);
+    expect(state.pipes).toHaveLength(1);
+    run(state, [{ type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: 4, tileY: 12 }]);
+    expect(
+      state.machines.some((machine) => machine.kind === MachineKind.ChipKitchen),
+      'a machine was built on top of a pipe run',
+    ).toBe(false);
+  });
+
+  it('a crossing carries water to the far side, so the run is one network and not two', () => {
+    // The criterion behind the criterion: crossing a belt must not CUT the main. Networks are
+    // rebuilt from adjacency, so a run that spans a belt has to come out as one id.
+    const state = piped(1_206);
+    spawnBelt(state, BeltTier.Basic, 5, 12, Direction.North, 1);
+    const path = [
+      { x: 3, y: 12 },
+      { x: 4, y: 12 },
+      { x: 5, y: 12 },
+      { x: 6, y: 12 },
+      { x: 7, y: 12 },
+    ];
+    run(state, [{ type: 'PlacePipe', path, liquid: LiquidId.Water }]);
+    expect(state.pipes, 'the run was clipped at the belt').toHaveLength(5);
+    expect(new Set(state.pipes.map((pipe) => pipe.network)).size, 'the belt split the main').toBe(
+      1,
+    );
+  });
+
+  it('leaves the till alone: standing infrastructure still keeps its ground', () => {
+    // A DELIBERATE NON-CHANGE, recorded so the next reader knows it was looked at. `applyTillTile`
+    // asks `tileOccupied` — both layers — so farmland under a pipe cannot be un-tilled and grass
+    // under one cannot be tilled. Widening the till to ignore the overhead layer is a third
+    // ruling nobody has made, and the asymmetry it leaves (pipe over farmland: yes; farmland
+    // under pipe: no) is written up in item 120's log rather than fixed on the way past.
+    const state = piped(1_207);
+    run(state, [{ type: 'PlacePipe', path: at(6, 6), liquid: LiquidId.Water }]);
+    expect(state.pipes).toHaveLength(1);
+    run(state, [{ type: 'TillTile', rect: { x: 6, y: 6, w: 1, h: 1 }, mode: TillMode.Untill }]);
+    expect(tileAt(state, 6, 6), 'the ground was pulled out from under a pipe').not.toBeNull();
   });
 });

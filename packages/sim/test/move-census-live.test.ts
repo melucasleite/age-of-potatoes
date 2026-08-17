@@ -356,7 +356,11 @@ const CHECKS: readonly MoveCheck[] = [
   {
     name: 'a hand loads a machine hopper, and boxing a STARVED one hands it back',
     covers: ['state:putHopper:inputCounts[]', 'state:takeHopper:inputCounts[]'],
-    doors: ['tick:applyDeconstructMachine:addItemFresh'],
+    // **`#2` IS THE HOPPER, AND THE NUMBER IS LOAD-BEARING.** This scenario boxes a STARVED
+    // Seasoner, so its output basket — call site `#1` — is empty and this drives nothing there.
+    // Until item 121 numbered the bag doors, the bare key covered both and this claim read as
+    // coverage of a basket nobody had put anything in.
+    doors: ['tick:applyDeconstructMachine:addItemFresh#2'],
     build() {
       // A Seasoner with peppers but no chips is starved, so it never runs and stays boxable —
       // `freshness-doors.test.ts`' trick, and the supported way to hold a hopper still.
@@ -377,7 +381,8 @@ const CHECKS: readonly MoveCheck[] = [
   {
     name: 'a belt is laid, loaded, and taken up one tile at a time',
     covers: ['state:beltInsert:items[]', 'belts:beltTakeFromTile:items[]'],
-    doors: ['tick:applyRemoveBeltTile:addItemFresh'],
+    // `#2` is the CUT: this belt is three tiles, so the one-tile branch above it never runs.
+    doors: ['tick:applyRemoveBeltTile:addItemFresh#2'],
     build() {
       const state = agedBag(12_004, ItemId.RussetPotato, 1);
       const belt = spawnBelt(state, BeltTier.Basic, 4, 4, Direction.East, 3)!;
@@ -582,7 +587,9 @@ const CHECKS: readonly MoveCheck[] = [
     // to see identity rather than looking away, and this scenario is the proof.
     name: 'a burnt chip is unloaded out of a stopped Fryer’s basket',
     covers: ['state:takeOneOutput:outputCount', 'state:takeOneOutput:overcookedCount'],
-    doors: ['tick:applyUnloadMachine:addItemFresh'],
+    // `#3` is the OUTPUT BASKET, which is the door a Fryer's burnt chips come off. `#1` is a
+    // container's cargo bay and `#2` is a dock's produce shelf; neither exists here.
+    doors: ['tick:applyUnloadMachine:addItemFresh#3'],
     clockless:
       'PlainChips and RusticStyleChips are both shelf-stable — which is exactly why door 10 ' +
       'is an IDENTITY bug and not a clock one, and why no amount of clock-watching found it.',
@@ -637,6 +644,40 @@ const CHECKS: readonly MoveCheck[] = [
       const left = remainingFreshness(state, ItemId.RussetPotato);
       for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.RussetPotato, left);
       return { state, act: () => stepMany(state, 3_000) };
+    },
+  },
+  {
+    // **ITEM 121'S TRANSFER, DRIVEN THROUGH A REAL WORLD** — because a verdict is not checked for
+    // truth by being written down. All three doors at once: a ripe crop, waiting compost, and the
+    // seed, off one tile, through one placement of one sprinkler.
+    //
+    // A SOURCE, and the ledger says why: a crop standing in the ground is not on the books at all
+    // — `goodsLedger` counts bags, hoppers, baskets, belts and shelves, and a tile is none of
+    // those. So the grand total can only RISE here, exactly as it does when a bot pulls a row.
+    // What it may never do is fall, and that is the assertion: nothing is destroyed on the way
+    // out of the soil. The exact counts, the Day-Old grade and the seed are pinned tile-by-tile in
+    // `field-machines.test.ts`, which can afford to be specific because it is not generic.
+    name: 'a sprinkler is dropped on a ripe, composted row and hands the whole tile back',
+    covers: [],
+    doors: [
+      'tick:clearFieldTileForMachine:addItem',
+      'tick:clearFieldTileForMachine:addItem#2',
+      'tick:clearFieldTileForMachine:addItem#3',
+    ],
+    verdict: MoveVerdict.Source,
+    build() {
+      const state = createWorld(12_019);
+      state.moneyCents = 1_000_000;
+      const tile = state.field.find((entry) => entry.tileX === 6 && entry.tileY === 6)!;
+      plantCrop(state, tile, cropSpec(CropId.RussetPotato)!);
+      tile.growth = tile.growthTarget;
+      tile.compost = 2;
+      standOn(state, 6, 6);
+      return {
+        state,
+        act: () =>
+          run(state, { type: 'PlaceMachine', kind: MachineKind.Sprinkler, tileX: 6, tileY: 6 }),
+      };
     },
   },
 ];
@@ -763,6 +804,37 @@ const UNREACHED_DOORS: Readonly<Record<string, string>> = {
   // `tick:applyUnloadMachine:addItemFresh` used to be excused here, on the grounds that this
   // harness drove the container and the same verb also serves baskets and hoppers. Item 118's
   // burnt-chip scenario drives the basket, so the excuse is gone rather than reworded.
+  //
+  // **THE SEVEN BELOW ARE ITEM 121'S NUMBERING BILL, AND THEY ARE PAID IN FULL BY THE CLOCK
+  // CENSUS.** Numbering the bag doors by call site split six functions into their real doors, and
+  // each of the new halves is a `Carries` claim that this harness does not drive. It does not need
+  // to: `clockDoors()` already keys every one of these call sites — more finely than a door list
+  // can, by the clock EXPRESSION it hands over — and `clock-doors.test.ts` holds each of them to a
+  // live scenario or to a written reason of its own. Two lists of the same fact is how a census
+  // starts drifting from itself, so this one defers and says where it is deferring to.
+  'commerce:refundContract:addItemFresh#2':
+    'the LORRY’s half of a torn-up route; the scenario above cancels before a truck rolls, so it ' +
+    'drives the floor. `contract.inTransitFreshTicks` is on the clock census, driven by the ' +
+    'commerce scenarios that cancel a route mid-journey.',
+  'tick:applyDeconstructMachine:addItemFresh':
+    'boxing a machine with goods in its OUTPUT BASKET. One of item 119’s nine, and it has a live ' +
+    'clock scenario of its own — the reason the starved-Seasoner check above had to be re-pointed ' +
+    'to `#2` rather than left claiming this.',
+  'tick:applyDeconstructMachine:addItemFresh#3':
+    'boxing a loaded container or cart, so the cargo bay comes home; on the clock census as ' +
+    '`machine.cargoFreshTicks`.',
+  'tick:applyDeconstructMachine:addItemFresh#4':
+    'boxing a dock with a bot mid-errand — **this line was DOOR 8**, and the ' +
+    '“BOXING A DOCK MINTS ONLY SEEDS” test in this same file weighs the armful it hands back.',
+  'tick:applyRemoveBeltTile:addItemFresh':
+    'taking up a ONE-TILE belt whole. One of item 119’s nine, driven by name in ' +
+    '`clock-crossings.ts`; the scenario above uses a three-tile belt and so drives the CUT.',
+  'tick:applyUnloadMachine:addItemFresh':
+    'a container’s cargo bay emptied by hand — driven through `state:takeStorage:cargoCount` by ' +
+    'the aged-container scenarios above, and clocked on the clock census.',
+  'tick:applyUnloadMachine:addItemFresh#2':
+    'a harvester dock’s PRODUCE shelf emptied by hand; the shelf’s clock is on the clock census ' +
+    'and bots.test.ts drives the shelf by name.',
 };
 
 const UNREACHED: Readonly<Record<string, string>> = {
@@ -810,7 +882,15 @@ describe('the doors that mint a fresh window', () => {
       'state:createWorld:addItem',
       'tick:advanceSpoilage:addItem',
       'tick:applyDeconstructMachine:addItem',
+      'tick:applyDeconstructMachine:addItem#2',
+      'tick:applySwingScythe:addItem#2',
+      'tick:applySwingScythe:addItem#3',
       'tick:applyUnloadMachine:addItem',
+      'tick:clearFieldTileForMachine:addItem#2',
+      'tick:clearFieldTileForMachine:addItem#3',
+      'tick:harvestOneTile:addItem',
+      'tick:harvestOneTile:addItem#3',
+      'tick:harvestOneTile:addItem#4',
     ]);
   });
 

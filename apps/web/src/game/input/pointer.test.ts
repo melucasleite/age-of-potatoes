@@ -1442,6 +1442,21 @@ describe('what R acts on, with belts in the world ([[084]])', () => {
     expect(h.pointer.rotateCommand()).toEqual({ type: 'RotateGrabber', grabberId: 5 });
   });
 
+  // Item 120's picking rule, third surface. Until pipes went overhead this case could not
+  // exist, and R's correctness here rested on a comment claiming a tile could hold only one
+  // thing. It can hold two now, so the behaviour needs pinning as a DECISION: R acts on the
+  // topmost thing that CAN turn, and a pipe is not one — there is no `RotatePipe`, because a
+  // run is a set of tiles with no facing. Swallowing the key to honour "topmost" would be the
+  // rule enforcing itself against the player for the sake of its own symmetry.
+  it('is NOT intercepted by a pipe overhead: R turns the belt underneath ([[120]])', () => {
+    const view = standingOn(2, 2);
+    view.belts.push({ id: 3, tileX: 4, tileY: 2, dir: Direction.East, lengthTiles: 5 } as never);
+    view.pipes.push({ id: 7, tileX: 6, tileY: 2, liquid: 1, network: 1 } as never);
+    const h = harness(view);
+    h.hoverAt(6, 2);
+    expect(h.pointer.rotateCommand()).toEqual({ type: 'RotateBelt', tileX: 6, tileY: 2 });
+  });
+
   it('still means the ghost over a junction: a machine, not a belt, and facing-less', () => {
     const view = standingOn(2, 2);
     view.machines.push({

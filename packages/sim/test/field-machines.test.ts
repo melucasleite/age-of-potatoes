@@ -17,9 +17,12 @@ import {
   SPRINKLER_CHARGE_ML,
   SPRINKLER_PERIOD_TICKS,
   TillMode,
+  WILT_GRACE_TICKS,
+  WILT_WINDOW_TICKS,
   addItem,
   createWorld,
   cropSpec,
+  freshnessTicks,
   itemCount,
   machineSpec,
   plantCrop,
@@ -63,24 +66,208 @@ describe('who may stand on farmland', () => {
     );
   });
 
-  it('refuses a crop-bearing tile and a compost-bearing tile — nothing is silently destroyed', () => {
+  it('takes a growing tile and hands the seed back — item 121 supersedes item 067’s refusal', () => {
+    // The owner's ask, 2026-08-17: *"when I place a sprinkler in an already planted tile, it
+    // should remove the seed and give it back to me and place the sprinkler"*. Item 067 refused
+    // this on the rule that nothing is silently destroyed. The rule survives: nothing IS
+    // destroyed, because the seed comes back.
     const state = funded(672);
     const spec = cropSpec(CropId.RussetPotato)!;
-    plantCrop(state, tileAt(state, 6, 6)!, spec);
-    expect(place(state, MachineKind.Sprinkler, 6, 6), 'placed on a growing crop').toBe(false);
+    const tile = tileAt(state, 6, 6)!;
+    plantCrop(state, tile, spec);
+    tile.growth = 1; // Under way, and a long way from ready.
+    const seedsBefore = itemCount(state, ItemId.PotatoSeed);
 
-    tileAt(state, 8, 8)!.compost = 2;
-    expect(place(state, MachineKind.Sprinkler, 8, 8), 'placed on waiting compost').toBe(false);
+    expect(place(state, MachineKind.Sprinkler, 6, 6), 'the growing tile turned the head away').toBe(
+      true,
+    );
+    expect(machineAt(state, 6, 6), 'nothing was standing there afterwards').not.toBeNull();
+    expect(tileAt(state, 6, 6)!.crop, 'the crop is still in the ground under the machine').toBe(
+      CropId.None,
+    );
+    expect(itemCount(state, ItemId.PotatoSeed), 'the seed did not come back').toBe(seedsBefore + 1);
   });
 
-  it('holds the whole footprint to the rule: a 2×2 Hub with one crop under any corner refuses', () => {
+  it('takes waiting compost too, rather than being blocked by it', () => {
+    const state = funded(6721);
+    tileAt(state, 8, 8)!.compost = 2;
+    expect(place(state, MachineKind.Sprinkler, 8, 8), 'waiting compost blocked the head').toBe(
+      true,
+    );
+    expect(itemCount(state, ItemId.Compost), 'the compost was left in the ground').toBe(2);
+    expect(tileAt(state, 8, 8)!.compost).toBe(0);
+  });
+
+  it('**A RIPE TILE PAYS THE HARVEST, WHICH IS THE RULING** — produce, compost and seed', () => {
+    // The open question item 121 left open, settled here and argued in `clearFieldTileForMachine`:
+    // return the produce rather than refuse. What the player gets is EXACTLY what pulling the tile
+    // by hand first would have paid them, because it is the same `takeHarvest`.
+    const state = funded(6722);
+    const spec = cropSpec(CropId.RussetPotato)!;
+    const tile = tileAt(state, 6, 6)!;
+    plantCrop(state, tile, spec);
+    tile.growth = tile.growthTarget;
+    tile.compost = 3;
+    const fertility = tile.fertility;
+    const seedsBefore = itemCount(state, ItemId.PotatoSeed);
+
+    expect(place(state, MachineKind.Sprinkler, 6, 6), 'a ripe tile refused the head').toBe(true);
+    // The yield is `fertility + a 0-or-1 roll`, so this brackets it rather than pinning the roll.
+    const picked = itemCount(state, ItemId.RussetPotato);
+    expect(picked, 'the ripe crop was destroyed instead of handed back').toBeGreaterThanOrEqual(
+      fertility,
+    );
+    expect(picked).toBeLessThanOrEqual(fertility + 1);
+    expect(itemCount(state, ItemId.Compost), 'the compost went with it').toBe(3);
+    expect(itemCount(state, ItemId.PotatoSeed), 'a one-shot crop owes a seed back').toBe(
+      seedsBefore + 1,
+    );
+    expect(tileAt(state, 6, 6)!.crop).toBe(CropId.None);
+  });
+
+  it('a TURNED tile pays the Day-Old grade, exactly as a hand harvest of it would', () => {
+    // The age a standing crop carries crosses this boundary as the GRADE, which is the whole
+    // reason a full freshness window on the way out is honest rather than a laundering trick:
+    // the tile's `readyAge` is not thrown away, it is spent here.
+    const state = funded(6723);
+    const spec = cropSpec(CropId.RussetPotato)!;
+    const tile = tileAt(state, 6, 6)!;
+    plantCrop(state, tile, spec);
+    tile.growth = tile.growthTarget;
+    tile.readyAge = WILT_GRACE_TICKS + WILT_WINDOW_TICKS + 1;
+
+    expect(place(state, MachineKind.Sprinkler, 6, 6)).toBe(true);
+    expect(itemCount(state, ItemId.DayOldPotato), 'a turned crop came back fresh').toBeGreaterThan(
+      0,
+    );
+    expect(itemCount(state, ItemId.RussetPotato), 'a turned crop paid the full grade').toBe(0);
+  });
+
+  it('a REGROWING crop loses its plant, so it gets a seed back a hand harvest would not give', () => {
+    // Cane and chili regrow: `takeHarvest` leaves the plant standing and returns no seed, because
+    // you still own the plant. A placement uproots it, so the seed is what the plant is worth.
+    const state = funded(6724);
+    state.unlocked = [TechId.Chili];
+    const spec = cropSpec(CropId.ChiliPepper)!;
+    const tile = tileAt(state, 6, 6)!;
+    plantCrop(state, tile, spec);
+    tile.growth = tile.growthTarget;
+
+    expect(place(state, MachineKind.Sprinkler, 6, 6)).toBe(true);
+    expect(itemCount(state, ItemId.ChiliPepper), 'the ripe chilis vanished').toBeGreaterThan(0);
+    expect(itemCount(state, ItemId.ChiliSeed), 'the uprooted plant paid nothing back').toBe(1);
+    expect(tileAt(state, 6, 6)!.crop, 'the plant regrew under the machine').toBe(CropId.None);
+  });
+
+  it('holds the whole footprint to the rule: a 2×2 Hub clears all four tiles it lands on', () => {
     const state = funded(673);
     state.unlocked = [TechId.IrrigationHub];
     const spec = cropSpec(CropId.RussetPotato)!;
-    plantCrop(state, tileAt(state, 8, 7)!, spec);
-    expect(place(state, MachineKind.IrrigationHub, 7, 7), 'a corner crop was overlooked').toBe(
-      false,
+    for (const [x, y] of [
+      [7, 7],
+      [8, 7],
+      [7, 8],
+      [8, 8],
+    ]) {
+      plantCrop(state, tileAt(state, x!, y!)!, spec);
+    }
+    const seedsBefore = itemCount(state, ItemId.PotatoSeed);
+
+    expect(place(state, MachineKind.IrrigationHub, 7, 7), 'a corner crop turned the Hub away').toBe(
+      true,
     );
+    expect(itemCount(state, ItemId.PotatoSeed), 'the Hub kept some of the four seeds').toBe(
+      seedsBefore + 4,
+    );
+    for (const [x, y] of [
+      [7, 7],
+      [8, 7],
+      [7, 8],
+      [8, 8],
+    ]) {
+      expect(tileAt(state, x!, y!)!.crop, `(${String(x)},${String(y)}) was left planted`).toBe(
+        CropId.None,
+      );
+    }
+  });
+
+  it('**DOES NOT WIDEN PAST `fieldPlaceable`** — a kitchen still cannot take a planted tile', () => {
+    // The one boundary item 121 draws explicitly. A machine that was never allowed on farmland is
+    // not allowed on farmland now, and it certainly does not get to harvest one on the way.
+    const state = funded(6725);
+    const spec = cropSpec(CropId.RussetPotato)!;
+    plantCrop(state, tileAt(state, 6, 6)!, spec);
+    const seedsBefore = itemCount(state, ItemId.PotatoSeed);
+
+    expect(place(state, MachineKind.ChipKitchen, 6, 6), 'the kitchen took a crop').toBe(false);
+    expect(tileAt(state, 6, 6)!.crop, 'a refused placement cleared the tile anyway').toBe(
+      CropId.RussetPotato,
+    );
+    expect(itemCount(state, ItemId.PotatoSeed), 'a refused placement paid out').toBe(seedsBefore);
+  });
+
+  it('a MOVE onto a planted tile hands the seed back too — the same rule, the other verb', () => {
+    const state = funded(6726);
+    const spec = cropSpec(CropId.RussetPotato)!;
+    plantCrop(state, tileAt(state, 9, 9)!, spec);
+    expect(place(state, MachineKind.Sprinkler, 6, 6)).toBe(true);
+    const machine = machineAt(state, 6, 6)!;
+    const seedsBefore = itemCount(state, ItemId.PotatoSeed);
+
+    state.player.xSub = 9 * 256 + 128;
+    state.player.ySub = 9 * 256 + 128;
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'MoveMachine', machineId: machine.id, tileX: 9, tileY: 9 }],
+    });
+    expect(machineAt(state, 9, 9), 'the move was refused by the crop').not.toBeNull();
+    expect(itemCount(state, ItemId.PotatoSeed), 'the moved head ate the seed').toBe(
+      seedsBefore + 1,
+    );
+    expect(tileAt(state, 9, 9)!.crop).toBe(CropId.None);
+  });
+
+  it('**NOTHING CAN VANISH FOR WANT OF ROOM, BECAUSE THE BAG HAS NO BOTTOM**', () => {
+    // Item 121 asks for a refusal when the bag is full. That refusal is unwritable, and this is
+    // the fact rather than the excuse: `addItem` is unbounded and has been since item 068 struck
+    // the armful cap, so there is no reachable state in which a returned crop has nowhere to go.
+    // Pinned as an executed statement, because the day somebody adds a cap this hand-back becomes
+    // a deletion — and this test is what will say so.
+    const state = funded(6727);
+    addItem(state, ItemId.RussetPotato, 1_000_000);
+    expect(itemCount(state, ItemId.RussetPotato), 'the bag turned goods away').toBe(1_000_000);
+
+    const spec = cropSpec(CropId.RussetPotato)!;
+    const tile = tileAt(state, 6, 6)!;
+    plantCrop(state, tile, spec);
+    tile.growth = tile.growthTarget;
+    const before = itemCount(state, ItemId.RussetPotato);
+
+    expect(place(state, MachineKind.Sprinkler, 6, 6), 'a laden bag refused the placement').toBe(
+      true,
+    );
+    expect(
+      itemCount(state, ItemId.RussetPotato),
+      'the crop was destroyed rather than added to a bag that was already enormous',
+    ).toBeGreaterThan(before);
+  });
+
+  it('what the hand-back MINTS on the shelf-stable doors really is shelf-stable', () => {
+    // **THE VERDICT, FALSIFIED RATHER THAN ASSERTED.** Two of the three bag doors on
+    // `clearFieldTileForMachine` claim `MintsShelfStable` — a claim of FACT about the goods, and
+    // the one verdict in the table a machine can actually check. Door 8 made this exact claim
+    // while carrying potatoes.
+    expect(freshnessTicks(ItemId.Compost), 'compost keeps a clock').toBe(0);
+    for (const crop of [
+      CropId.RussetPotato,
+      CropId.SugarCane,
+      CropId.Corn,
+      CropId.ChiliPepper,
+      CropId.GoldPotato,
+    ]) {
+      const seed = cropSpec(crop)!.seedItem;
+      expect(freshnessTicks(seed), `seed ${String(seed)} keeps a clock`).toBe(0);
+    }
   });
 });
 

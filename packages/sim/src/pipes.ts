@@ -52,12 +52,10 @@ import {
   type Pipe,
   type PipeNetwork,
   type WorldState,
-  isFieldTile,
   isInsideWorld,
   isOwnedTile,
   machineAt,
   machineCoversTile,
-  tileOccupied,
   worldTileKey,
 } from './state';
 import {
@@ -66,13 +64,7 @@ import {
   effectiveTankCapacityMl,
 } from './upgrades';
 import { TICKS_PER_MINUTE, divFloor } from './units';
-import {
-  WaterDraw,
-  pumpSupplyMlPerMinute,
-  reservoirAdjacentToTile,
-  reservoirAt,
-  takeWater,
-} from './water';
+import { WaterDraw, pumpSupplyMlPerMinute, reservoirAdjacentToTile, takeWater } from './water';
 
 /** One tile of a drag-routed pipe run. A run is one command; see `commands.ts`. */
 export interface TilePoint {
@@ -88,7 +80,15 @@ export interface TilePoint {
 export const BuildRefusal = {
   None: 0,
   OutsideWorld: 1,
-  /** The field is for crops. Nothing is built on it — belts and machines follow this too. */
+  /**
+   * The field is for crops. Belts and arms are refused by it, and machines are unless they are
+   * `fieldPlaceable`.
+   *
+   * **NO LONGER REACHABLE FROM `pipePathRefusal`** (item 120): plumbing is overhead, so a run
+   * crosses farmland without asking. The code stays because two other verbs still speak it and
+   * because a refusal code is API the HUD reads — renumbering one would silently re-caption a
+   * saved trace.
+   */
   OnField: 2,
   Occupied: 3,
   /** Not a contiguous, non-repeating run of legal length. */
@@ -178,6 +178,35 @@ function createNetwork(id: number, liquid: LiquidId): PipeNetwork {
  * dragging. Writing the rule once is what makes "refused before it happens" true rather than
  * aspirational — a rule the preview and the reducer each implement separately is a rule that
  * eventually disagrees with itself.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────────
+ * **PLUMBING IS A LAYER ABOVE THE GROUND** (item 120, owner ask 2026-08-17). A run may cross
+ * ground, farmland, a zone, a belt, an arm and open water. Only two things refuse it, and both
+ * are about the pipe rather than about the ground:
+ *
+ *   - **ANOTHER PIPE.** There is one overhead, not a stack of them. Unchanged.
+ *   - **A MACHINE FOOTPRINT.** Machines meet plumbing through TYPED PORTS on their footprint,
+ *     and item 101's liquid inference reads the machines a run touches to decide what it
+ *     carries. A pipe lying on top of a Syrup Mixer makes "which port is this?" a question
+ *     with no answer, so the footprint stays sacred. This is the one refusal that got
+ *     *stricter* in wording and identical in effect: it used to arrive via `tileOccupied`.
+ *
+ * **A RESERVOIR IS CROSSED, NOT OCCUPIED.** An aqueduct over the pond is the most literal
+ * reading of "overhead" there is, and nothing draws from a pipe tile: an intake is the PUMP's
+ * adjacency rule (`liquidPlacementRefusal` → `reservoirAdjacentToTile`), which asks about the
+ * pump's own footprint and is untouched by this. Water stays unwalkable — item 080 blocks the
+ * footstep on `reservoirAt`, not on what is above it — so a pipe is not a bridge. The argument
+ * for refusing, rejected: keeping the pond clear would preserve the bank as a contested build
+ * surface. It would also make the pond the ONE terrain a pipe may not cross, and a rule with an
+ * exception in it is where this codebase keeps finding its bugs.
+ *
+ * **A GRABBER IS CROSSED TOO, AND ITS SWING ARC IS COSMETICS.** Item 094 gave arms a real arc
+ * that sweeps overhead, and no sim rule reads it: `grabberSource` and `grabberDeliver` look at
+ * the four neighbouring TILES, never at a swept volume. The arc lives in the renderer as a read
+ * of `WorldView` (§12), so a legality rule that consulted it would be the renderer feeding back
+ * into the sim — which is exactly the seam §12 forbids. An arm passing under a pipe is a
+ * drawing problem, and the layer order is the tool for it.
+ * ────────────────────────────────────────────────────────────────────────────────────────
  */
 export function pipePathRefusal(
   state: WorldState,
@@ -196,10 +225,13 @@ export function pipePathRefusal(
     // is on it" — a pipe dragged across the neighbour's grass is refused for the reason the
     // player can act on, and the price is standing right there.
     if (!isOwnedTile(state, node.x, node.y)) return BuildRefusal.Unowned;
-    if (isFieldTile(state, node.x, node.y)) return BuildRefusal.OnField;
-    if (reservoirAt(state, node.x, node.y) !== null) return BuildRefusal.Occupied;
+    // **THE OVERHEAD LAYER, AND THESE TWO LINES ARE ALL OF IT** (item 120). Everything a pipe
+    // used to be refused by — farmland, a zone, a belt, an arm, open water — it now passes over,
+    // because plumbing is above the ground rather than on it. What is left is the pair of rules
+    // that are about the pipe itself rather than about the ground: two pipes cannot share a tile
+    // (there is only one overhead), and a machine footprint is sacred. See the header note below.
     if (pipeAt(state, node.x, node.y) !== null) return BuildRefusal.Occupied;
-    if (tileOccupied(state, node.x, node.y)) return BuildRefusal.Occupied;
+    if (machineAt(state, node.x, node.y) !== null) return BuildRefusal.Occupied;
 
     if (i > 0) {
       const previous = path[i - 1]!;

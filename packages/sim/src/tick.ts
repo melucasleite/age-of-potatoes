@@ -187,6 +187,7 @@ import {
 } from './pipes';
 import { SystemId, nextBelow } from './rng';
 import {
+  type CropTile,
   type Machine,
   BotKind,
   CeremonyId,
@@ -209,6 +210,7 @@ import {
   directionStepY,
   fertilizeTile,
   grabberById,
+  groundOccupied,
   inventorySlot,
   isCompassDirection,
   isFieldTile,
@@ -923,13 +925,23 @@ function applyPackCrate(state: WorldState, command: PackCrateCommand): boolean {
 /**
  * Every tile of a footprint is inside the world, owned, and unoccupied — and off the field,
  * UNLESS the spec says `fieldPlaceable` (item 067: the watering family stands among the crops
- * it waters). A flagged machine may take an EMPTY farm tile only: a growing crop or waiting
- * compost refuses the placement, because nothing is ever silently destroyed (house rule), and
- * a hand would have had to pick those up. The ground itself is not touched — the `CropTile`
- * stays in the field with its soil, fertility, and moisture, so deconstruction hands the tile
- * back exactly as it stood.
+ * it waters). The ground itself is not touched — the `CropTile` stays in the field with its
+ * soil, fertility, and moisture, so deconstruction hands the tile back exactly as it stood.
+ *
+ * **THE FIELD BRANCH IS NOW ONE LINE, AND THAT IS ITEM 121** (owner ask 2026-08-17: *"when I
+ * place a sprinkler in an already planted tile, it should remove the seed and give it back to me
+ * and place the sprinkler"*). Item 067 refused a tile holding a crop or waiting compost, on the
+ * house rule that nothing is silently destroyed. The refusal is gone and the house rule is not:
+ * the placement **hands the crop back** (`clearFieldTileForMachine` below), which satisfies the
+ * rule by paying rather than by weakening it.
+ *
+ * **`fieldPlaceable` IS THE WHOLE TEST — DO NOT LET A SECOND CLAUSE GROW BACK HERE.** The mirror
+ * in the input layer is a mirror of exactly this: a farm tile is legal for a flagged machine and
+ * illegal for every other one, and nothing about what is growing on it enters the question. A
+ * legality that read the crop would flicker from legal to illegal under the player's cursor as a
+ * tile ripened, which is the worst shape a build rule can have.
  */
-function footprintFree(
+export function machineFootprintFree(
   state: WorldState,
   tileX: number,
   tileY: number,
@@ -946,18 +958,98 @@ function footprintFree(
       // A machine may not straddle the fence, not even by one tile of a 3×2 Bottler. Ownership
       // is asked per tile rather than per parcel for exactly that case.
       if (!isOwnedTile(state, x, y)) return false;
-      if (isFieldTile(state, x, y)) {
-        if (!fieldPlaceable) return false;
-        const tile = tileAt(state, x, y);
-        if (tile === null) return false;
-        if (tile.crop !== CropId.None || tile.compost > 0) return false;
-      }
+      if (isFieldTile(state, x, y) && !fieldPlaceable) return false;
       const occupant = machineAt(state, x, y);
       if (occupant !== null && occupant.id !== ignoreMachineId) return false;
+      // BOTH LAYERS, and this is the caller that wants both: a machine refuses a pipe overhead,
+      // because machines meet plumbing through typed ports on their footprint (item 120's second
+      // ruling). Belts and arms ask `groundOccupied` instead.
       if (occupant === null && tileOccupied(state, x, y)) return false;
     }
   }
   return true;
+}
+
+/**
+ * **LIFT WHATEVER IS GROWING HERE AND HAND IT TO THE PLAYER, LEAVING THE TILE BARE** (item 121).
+ *
+ * Called once per footprint tile the instant a field-placeable machine's placement has become
+ * certain — after every refusal, after the money, after `spawnMachine` returned a machine. A
+ * hand-back that ran before the placement was certain would be a misclick that harvested a row.
+ *
+ * **THE RULE IS ONE SENTENCE: every crop in the ground gives back its SEED, and a ripe one gives
+ * back its PRODUCE as well.** Which makes the three cases fall out rather than being enumerated:
+ *
+ *   - **Seeded or growing.** One seed, the same seed `applyPlantTile` took. Symmetry, and it is
+ *     the owner's ask verbatim.
+ *   - **RIPE — THE OPEN QUESTION, AND THE ANSWER IS "RETURN THE PRODUCE".** The alternative was
+ *     to refuse a ripe tile so the player harvests it themselves, and it is rejected for three
+ *     reasons. Refusing is the exact behaviour this item exists to remove. It would make
+ *     legality depend on a growth timer, so a ghost would turn red under a stationary cursor the
+ *     tick a crop matured. And the produce is not lost either way — `takeHarvest` is the same
+ *     pull a hand makes, so the player receives precisely what harvesting first would have paid
+ *     them, including the Day-Old grade on a turned tile and the fertility star this wears off.
+ *   - **Compost.** It comes back rather than blocking, exactly as `harvestOneTile`'s bare-tile
+ *     branch stoops for it.
+ *
+ * A REGROWING CROP LOSES ITS PLANT HERE, so it gets a seed back even though a hand harvest of
+ * cane or chili does not give one: the hand leaves the plant standing and this uproots it, and a
+ * plant that vanished with nothing in its place would be the very thing plan §4 forbids.
+ *
+ * **THE CLOCK, PRECISELY.** A standing crop has no freshness clock to carry — its age is
+ * `readyAge`, and the way that age is *already* carried across this boundary is the Day-Old swap
+ * inside `harvestItemFor`. So produce lifted from the ground gets a full window from `addItem`,
+ * which is what `harvestOneTile` and the scythe and the Agri-Bot all give it. Anything else
+ * would make a crop lifted by a sprinkler fresher or staler than the same crop pulled by hand off
+ * the same tile on the same tick, and there is no sentence that explains that to a player.
+ *
+ * **NOTHING CAN VANISH FOR WANT OF ROOM**, and that is a fact about the bag rather than a check
+ * here: `addItem` is unbounded and has been since item 068 struck the armful cap, so there is no
+ * reachable state in which the player has nowhere to put a returned crop. The refusal item 121
+ * asks for cannot be written because the condition that would trigger it cannot be built —
+ * pinned by a test in `field-machines.test.ts` rather than left as an assumption.
+ */
+function clearFieldTileForMachine(state: WorldState, tile: CropTile): void {
+  const spec = tile.crop === CropId.None ? null : cropSpec(tile.crop);
+
+  // The produce, when there is any: the same pull `HarvestTile` makes, through the same function,
+  // so the yield roll, the Day-Old grade and the fertility wear are not a second opinion.
+  if (spec !== null && isTileReady(tile)) {
+    const result = takeHarvest(state, tile, spec);
+    if (result !== null) addItem(state, result.item, result.count);
+  }
+  if (tile.compost > 0) {
+    addItem(state, ItemId.Compost, tile.compost);
+    tile.compost = 0;
+  }
+  // The seed, for anything that was in the ground at all — including the regrowing plant
+  // `takeHarvest` has just left standing, which the lines below are about to pull up.
+  if (spec !== null) addItem(state, spec.seedItem, 1);
+
+  tile.crop = CropId.None;
+  tile.growth = 0;
+  tile.growthTarget = 0;
+  tile.readyAge = 0;
+}
+
+/**
+ * Hand back every footprint tile's crop, in world order. The loop is `dy` outer, `dx` inner —
+ * the same order `machineFootprintFree` walks — so a 2×2 Hub over four ripe tiles rolls its four
+ * yields in an order that is a property of the world rather than of the loop somebody wrote.
+ */
+function clearFieldFootprint(
+  state: WorldState,
+  tileX: number,
+  tileY: number,
+  tilesWide: number,
+  tilesHigh: number,
+): void {
+  for (let dy = 0; dy < tilesHigh; dy++) {
+    for (let dx = 0; dx < tilesWide; dx++) {
+      const tile = tileAt(state, tileX + dx, tileY + dy);
+      if (tile !== null) clearFieldTileForMachine(state, tile);
+    }
+  }
 }
 
 /**
@@ -995,7 +1087,7 @@ function applyPlaceMachine(state: WorldState, command: PlaceMachineCommand): boo
   if (box === null && state.moneyCents < spec.priceCents) return false;
 
   if (
-    !footprintFree(
+    !machineFootprintFree(
       state,
       command.tileX,
       command.tileY,
@@ -1018,6 +1110,13 @@ function applyPlaceMachine(state: WorldState, command: PlaceMachineCommand): boo
 
   const machine = spawnMachine(state, command.kind, command.tileX, command.tileY);
   if (machine === null) return false;
+
+  // **THE PLACEMENT IS CERTAIN AS OF THE LINE ABOVE, SO NOW THE FIELD IS CLEARED** (item 121).
+  // Guarded on the flag rather than on "is there a crop here", because the flag is the ruling:
+  // this hand-back belongs to the watering family and is not widened to anything else.
+  if (spec.fieldPlaceable) {
+    clearFieldFootprint(state, command.tileX, command.tileY, spec.tilesWide, spec.tilesHigh);
+  }
 
   if (box === null) {
     state.moneyCents -= spec.priceCents;
@@ -1276,7 +1375,7 @@ function applyMoveMachine(state: WorldState, command: MoveMachineCommand): boole
   const spec = machineSpec(machine.kind);
   if (spec === null) return false;
   if (
-    !footprintFree(
+    !machineFootprintFree(
       state,
       command.tileX,
       command.tileY,
@@ -1292,6 +1391,16 @@ function applyMoveMachine(state: WorldState, command: MoveMachineCommand): boole
     liquidPlacementRefusal(state, machine.kind, command.tileX, command.tileY) !== BuildRefusal.None
   ) {
     return false;
+  }
+
+  // **A MOVE IS A PLACEMENT** (item 121), so dragging a sprinkler onto a planted row hands the
+  // seed back exactly as putting a new one there does. Refusing here while `PlaceMachine`
+  // accepted would be the same rule disagreeing with itself over which verb the player reached
+  // for — and this is the free verb, so the difference would be pure surprise. Cleared before
+  // the coordinates move, while `command.tileX/Y` is still the destination and the machine has
+  // not yet been counted as standing on it.
+  if (spec.fieldPlaceable) {
+    clearFieldFootprint(state, command.tileX, command.tileY, spec.tilesWide, spec.tilesHigh);
   }
 
   machine.tileX = command.tileX;
@@ -2083,7 +2192,11 @@ function applyPlaceBelt(state: WorldState, command: PlaceBeltCommand): boolean {
     // spans both legs, which is why this loop walks the run rather than one segment.
     if (!isOwnedTile(state, x, y)) return false;
     if (isFieldTile(state, x, y)) return false;
-    if (tileOccupied(state, x, y)) return false;
+    // **THE GROUND LAYER ONLY** (item 120). A belt may be laid UNDER an existing pipe run, which
+    // is the same ruling as "a pipe may cross a belt" read from the other end. It has to hold
+    // from both ends or it does not hold: a rule that depended on which the player built first
+    // would be a rule the player has to discover by losing a drag.
+    if (groundOccupied(state, x, y)) return false;
   }
 
   const cost = spec.priceCentsPerTile * totalTiles;
@@ -2232,7 +2345,9 @@ function applyPlaceGrabber(state: WorldState, command: PlaceGrabberCommand): boo
   if (!isInsideWorld(command.tileX, command.tileY)) return false;
   if (!isOwnedTile(state, command.tileX, command.tileY)) return false;
   if (isFieldTile(state, command.tileX, command.tileY)) return false;
-  if (tileOccupied(state, command.tileX, command.tileY)) return false;
+  // The ground layer only, exactly as a belt asks (item 120): an arm may be planted under an
+  // existing pipe run, and its swing arc is a drawing above it.
+  if (groundOccupied(state, command.tileX, command.tileY)) return false;
   if (state.moneyCents < spec.priceCents) return false;
 
   const grabber = spawnGrabber(

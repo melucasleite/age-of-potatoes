@@ -59,8 +59,10 @@ import {
   PortFlow,
   SUBTILE,
   TillMode,
+  WiltStage,
   beltSpec,
   cropSpec,
+  harvestItemForWilt,
   itemSpec,
   liquidSpec,
   listPriceCents,
@@ -647,11 +649,21 @@ export class PointerInput {
    * refused command changes nothing and writes nothing to the trace.
    *
    * A BELT TILE UNDER THE CURSOR ANSWERS TOO (item 084), after the arm: an arm and a belt
-   * cannot share a tile, so the order is a search rather than a priority, exactly as
-   * `teardownTargetAt`'s is. The payload is the hovered TILE, not a belt id — segment surgery
-   * mints fresh ids, so the tile is the stable name for the thing the player owns (see
-   * `RotateBeltCommand`). A junction is a machine, so neither branch answers on one and R
-   * keeps meaning the ghost there — byte-identical to the old behaviour.
+   * cannot share a tile — they are both the GROUND layer, which is exactly what `groundOccupied`
+   * means — so the order is a search rather than a priority. The payload is the hovered TILE,
+   * not a belt id — segment surgery mints fresh ids, so the tile is the stable name for the
+   * thing the player owns (see `RotateBeltCommand`). A junction is a machine, so neither branch
+   * answers on one and R keeps meaning the ghost there.
+   *
+   * **AND A PIPE OVERHEAD DOES NOT INTERCEPT IT** (item 120's picking rule, third surface). R
+   * acts on the topmost thing that CAN turn, and a pipe is not one: there is no `RotatePipe`
+   * command, because a pipe run is a SET of tiles with no facing to change. So R over a crossing
+   * turns the belt underneath, which is the only reading that does anything at all — swallowing
+   * the key to honour "topmost" would be a rule enforcing itself against the player for the sake
+   * of its own symmetry. Teardown's topmost-wins rule exists because BOTH objects answer there
+   * and one had to be chosen; here only one answers, so there is nothing to choose. Pinned in
+   * `pipe-mirror.test.ts` so it stays a decision rather than reverting to an accident — until
+   * today it was correct only because a comment claimed the two could never share a tile.
    */
   rotateCommand(): Command | null {
     const grabber = this.grabberUnderCursor();
@@ -1823,22 +1835,31 @@ function liquidName(liquid: LiquidId): string {
 /**
  * Would every tile of this run take a pipe? A hint for the band, never a gate (§12).
  *
- * Mirrors `pipePathRefusal`'s per-tile loop rather than reusing `tilesAreClear`, and the extra
- * three lines are the point: that one was written for belts, which the projection cannot see on
- * a tile, so it stops at "inside, owned, not field, no machine". A pipe run is refused by the
- * reservoir it clips, the pipe it crosses and the arm it runs under as well, and all four of
- * those ARE readable here — so the band can go red for the real reason instead of quoting a
- * price for a run the reducer is about to throw away.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  A MIRROR OF `pipePathRefusal`'s PER-TILE LOOP, AND IT IS SHORT NOW BECAUSE THAT ONE IS
+ *  (item 120). Plumbing moved to its own overhead layer, so four of the six checks that used
+ *  to stand here are gone: farmland, the reservoir, the belt underneath and the arm underneath.
+ *  A pipe crosses all four. What is left is the pair of rules that are about the PIPE rather
+ *  than about the ground — there is only one overhead, so two pipes cannot share a tile — plus
+ *  ownership and the machine footprint, which stays sacred because machines meet plumbing
+ *  through typed ports on it.
+ *
+ *  THE SIM'S ORDER, TILE FOR TILE: `isInsideWorld`, `isOwnedTile`, `pipeAt`, `machineAt`
+ *  (`packages/sim/src/pipes.ts`). Pinned against the real predicate in `pipe-mirror.test.ts`
+ *  rather than by reading the two side by side, because this drifted once already and a mirror
+ *  that drifts is a ghost that lies about what the click will do.
+ *
+ *  Ownership stays checked here even though it is not about the pipe, for the reason
+ *  `tilesAreClear` gives: a run across the fence is refused WHOLE, so the band has to redden
+ *  for the whole run rather than for the two tiles that crossed it.
+ * ────────────────────────────────────────────────────────────────────────────────────
  */
-function pipeTilesClear(view: WorldView, tiles: readonly TilePoint[]): boolean {
+export function pipeTilesClear(view: WorldView, tiles: readonly TilePoint[]): boolean {
   for (let i = 0; i < tiles.length; i++) {
     const tile = tiles[i]!;
     const query = tileAtView(view, tile.tileX, tile.tileY);
-    if (!query.insideWorld || !query.owned || query.isField || query.machine !== null) return false;
-    if (reservoirAtTile(view, tile.tileX, tile.tileY)) return false;
+    if (!query.insideWorld || !query.owned || query.machine !== null) return false;
     if (pipeAtView(view, tile.tileX, tile.tileY) !== null) return false;
-    if (beltAtView(view, tile.tileX, tile.tileY) !== null) return false;
-    if (grabberAtView(view, tile.tileX, tile.tileY) !== null) return false;
   }
   return true;
 }
@@ -2662,6 +2683,10 @@ export function ghostBand(
   const farmReason = farmRefusal(view, bounds, fieldPlaceable);
   // The liquid layer's own three refusals, in words, BEFORE the click ([[109]]).
   const liquidReason = liquidRefusal(view, bounds, kind);
+  // What this placement would lift out of the ground and hand back ([[121]]). Not a refusal —
+  // the tile is legal — which is why it is kept apart from the two reasons above and only
+  // reaches the label where they are silent.
+  const handBack = handBackPhrase(view, bounds, fieldPlaceable);
   const free =
     farmReason === '' &&
     liquidReason === '' &&
@@ -2671,6 +2696,19 @@ export function ghostBand(
   // reason it outranks the coverage boast below: "not on farmland" is about the ground the
   // player is pointing at, and the pipe two tiles away is the subtler complaint.
   const refusal = farmReason !== '' ? farmReason : liquidReason;
+  // ONE CLAUSE, IN PRIORITY ORDER: why not, else what you give up, else what it does. The
+  // hand-back sits above the coverage boast because it is a consequence of THIS click on THIS
+  // tile, while "waters 5×5" is a fact about the machine that is true wherever it lands — and
+  // a player about to uproot a row needs the first sentence more than the second ([[121]]).
+  //
+  // AND THE HAND-BACK IS GATED ON `free`, WHICH IS THE HALF ITEM 121 GOT WRONG. The comment
+  // above `handBack` says "not a refusal — the tile is legal", and that was only ever true of
+  // the two reasons that HAVE words. `footprintClear` is a third refusal and it is mute: when
+  // it fails, `refusal` is still `''`, so the tell fell through and a blocked placement went on
+  // advertising *"returns 1 potato seed"*. Item 120 made that reachable by letting a pipe lie
+  // on farmland. Promising goods for a click that cannot happen is the one thing this tell
+  // exists to prevent, so it is spent only where the click is genuinely free.
+  const aside = refusal !== '' ? refusal : free ? handBack : '';
   const isGrabber = toolGrabberTier(tool) !== null;
   const tone: BandTone = free ? 'zone' : 'blocked';
 
@@ -2717,8 +2755,8 @@ export function ghostBand(
       // A farm refusal outranks the coverage boast: the one fact a red band owes the player
       // is WHY ([[067]]), and "waters 5×5" is not an answer to "why not here".
       label:
-        refusal !== ''
-          ? `${TOOL_INFO[tool].label} · ${refusal}`
+        aside !== ''
+          ? `${TOOL_INFO[tool].label} · ${aside}`
           : `${TOOL_INFO[tool].label} · ${toolCoverageVerb(tool)} ${span}×${span}`,
       dir: Direction.None,
     };
@@ -2728,8 +2766,8 @@ export function ghostBand(
     ...bounds,
     tone,
     label:
-      refusal !== ''
-        ? `${TOOL_INFO[tool].label} · ${refusal}`
+      aside !== ''
+        ? `${TOOL_INFO[tool].label} · ${aside}`
         : isGrabber
           ? `${TOOL_INFO[tool].label} ${arrow(placeDir)} · R`
           : TOOL_INFO[tool].label,
@@ -2792,6 +2830,14 @@ function footprintClear(view: WorldView, bounds: Bounds): boolean {
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
       const query = tileAtView(view, x, y);
       if (!query.insideWorld || !query.owned || query.machine !== null) return false;
+      // THE PIPE, AND ITEMS 120 AND 121 TOGETHER ARE WHY IT IS HERE. The sim's
+      // `machineFootprintFree` asks `tileOccupied`, which counts a pipe; this mirror did not,
+      // and before item 120 that could not matter, because a pipe could never be on farmland
+      // and so never under a field-placeable machine's footprint. Item 120 made it reachable
+      // and item 121 made it LOUD: the band went green and offered back a seed
+      // ("Buy Sprinkler · returns 1 potato seed") for a click the reducer then refused. A
+      // ghost that names goods it will not hand over is worse than one that simply refuses.
+      if (pipeAtView(view, x, y) !== null) return false;
     }
   }
   return true;
@@ -2801,23 +2847,116 @@ function footprintClear(view: WorldView, bounds: Bounds): boolean {
  * Why a footprint's overlap with FARMLAND refuses, phrased for the tag — or `''` when the
  * farmland raises no objection ([[067]]).
  *
- * Mirrors the sim's `footprintFree` exactly: a machine whose spec is not `fieldPlaceable`
- * may not touch a farm tile at all, and a flagged one may take only EMPTY farm tiles — a
- * crop or compost refuses per tile, because nothing is silently destroyed (house rule).
- * Every input is view-readable (`TileQuery.isField`/`crop`/`compost` + the spec flag); the
- * sim re-checks all of it and this string only explains the red (§12).
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  ONE CLAUSE, AND ITEM 121 IS WHY IT IS ONE. This used to refuse a flagged machine over a
+ *  crop ("a crop is in the way") or over compost, on item 067's house rule that nothing is
+ *  silently destroyed. The owner's ruling supersedes it and keeps the rule intact by paying
+ *  instead: the placement lifts the crop and hands back the seed, the produce and the compost
+ *  (`clearFieldTileForMachine` in the sim). So both clauses are DELETED here, and what is left
+ *  mirrors `machineFootprintFree`'s field branch exactly — `fieldPlaceable` is the whole test.
+ *
+ *  **DO NOT LET A SECOND CLAUSE GROW BACK.** A legality that read the crop would flicker from
+ *  legal to illegal under a stationary cursor as a tile ripened, which is the worst shape a
+ *  build rule can have and the reason the sim's own predicate reads nothing about what is
+ *  growing. What the crop feeds is the TELL (`handBackPhrase`), never the tone.
+ *
+ *  Pinned against the sim's exported `machineFootprintFree` in `pipe-mirror.test.ts`.
+ * ────────────────────────────────────────────────────────────────────────────────────
  */
 function farmRefusal(view: WorldView, bounds: Bounds, fieldPlaceable: boolean): string {
+  if (fieldPlaceable) return '';
+  for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
+    for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
+      if (tileAtView(view, x, y).isField) return 'not on farmland';
+    }
+  }
+  return '';
+}
+
+/**
+ * What this placement would HAND BACK, named for the tag — or `''` when it takes nothing up
+ * (item 121).
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  THE POINT IS THAT THE PLAYER IS NOT SURPRISED. A sprinkler dropped on a planted row is legal
+ *  now and quietly performs a harvest, and "legal" plus "quiet" is how a player loses a crop
+ *  they were saving. So the ghost names the goods before the click: *"Buy Sprinkler · returns 1
+ *  potato seed"*.
+ *
+ *  EVERY NOUN COMES OFF THE SIM'S OWN SLUGS, never a second table — `harvestItemForWilt` is
+ *  exported precisely so this does not mirror the Day-Old ternary, and the seed is
+ *  `CropSpec.seedItem`. A tell that invented its own names would eventually name the wrong
+ *  thing, which is worse than saying nothing.
+ *
+ *  COUNTS ARE GIVEN ONLY WHERE THEY ARE CERTAIN. Seeds and compost are exact — one seed per
+ *  cropped tile, and `compost` is a number on the view. The PRODUCE count is deliberately not
+ *  quoted: it is `fertility + a 0-or-1 RNG roll`, and the roll is drawn from a stream that
+ *  `nextBelow` MUTATES, so peeking it for a tooltip would risk a determinism bug for a string.
+ *  The produce is named and left uncounted, which is the honest half of what is known.
+ *
+ *  AGGREGATED OVER THE WHOLE FOOTPRINT, because a 2×2 Irrigation Hub lifts four tiles and a
+ *  tell that described only the anchor would undercount by three.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ */
+function handBackPhrase(view: WorldView, bounds: Bounds, fieldPlaceable: boolean): string {
+  if (!fieldPlaceable) return '';
+
+  let seeds = 0;
+  let compost = 0;
+  let crop = 0;
+  let mixed = false;
+  const produce: number[] = [];
+
   for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
     for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
       const query = tileAtView(view, x, y);
       if (!query.isField) continue;
-      if (!fieldPlaceable) return 'not on farmland';
-      if (query.crop !== 0) return 'a crop is in the way';
-      if (query.compost > 0) return 'compost in the way';
+      compost += query.compost;
+      if (query.crop === 0) continue;
+      // ONE SEED PER PLANT IN THE GROUND, ripe or not — including a regrowing crop, which a
+      // hand harvest leaves standing and a placement uproots (the sim's ruling).
+      seeds += 1;
+      if (crop === 0) crop = query.crop;
+      else if (crop !== query.crop) mixed = true;
+      if (!query.ready) continue;
+      const spec = cropSpec(query.crop as CropId);
+      if (spec === null) continue;
+      // The Day-Old grade is the sim's opinion, read through the sim's own scalar rather than
+      // re-derived from `wilt` here. `wilt` is a `FieldView` column, so this reads it by index
+      // instead of widening `TileQuery`, which every drag frame builds for every tile.
+      // `FieldView.wilt` crosses the seam as a bare number (§12), the same way `PipeView.liquid`
+      // and `GrabberView.dir` do — branded here, at the one place that reads it.
+      const wilt = (
+        query.fieldIndex >= 0 ? (view.field.wilt[query.fieldIndex] ?? 0) : 0
+      ) as WiltStage;
+      const item = harvestItemForWilt(wilt, spec);
+      if (!produce.includes(item)) produce.push(item);
     }
   }
-  return '';
+
+  if (seeds === 0 && compost === 0) return '';
+
+  const parts: string[] = [];
+  for (let i = 0; i < produce.length; i++) parts.push(goodsName(produce[i]!));
+  if (seeds > 0) {
+    const seedSpec = mixed || crop === 0 ? null : cropSpec(crop as CropId);
+    parts.push(
+      seedSpec === null
+        ? `${seeds} seed${seeds === 1 ? '' : 's'}`
+        : `${seeds} ${goodsName(seedSpec.seedItem)}${seeds === 1 ? '' : 's'}`,
+    );
+  }
+  if (compost > 0) parts.push(`${compost} compost`);
+  return `returns ${parts.join(' + ')}`;
+}
+
+/**
+ * An item's name in words, off the sim's own slug — the same trick `liquidName` plays, and for
+ * the same reason: the game layer does not import the HUD's copy modules, and a hand-written
+ * table here would be a second set of nouns to drift.
+ */
+function goodsName(item: number): string {
+  return (itemSpec(item as ItemId)?.slug ?? 'goods').split('-').join(' ');
 }
 
 /**
