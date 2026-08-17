@@ -2281,6 +2281,22 @@ export interface HarvestResult {
 }
 
 /**
+ * **WHICH OF A CROP'S TWO ITEM IDS A PULL OF THIS TILE WOULD PRODUCE**, without pulling it.
+ *
+ * One zone can produce two goods — that is what a wilting row IS — and every caller that has to
+ * decide *before* the pull whether it can accept the answer needs to ask the same question
+ * `takeHarvest` answers, in the same words. It is a function rather than a repeated ternary for
+ * the reason `takeHarvest` itself is one: two copies of "is this tile turned yet" would drift,
+ * and the drift would be a bot that refuses a tile it could have carried, or takes one it cannot.
+ *
+ * ASK IT BEFORE THE MUTATION. `takeHarvest` clears `readyAge`, so this is only meaningful on a
+ * tile that has not been pulled yet — which is exactly the moment anyone wants it.
+ */
+export function harvestItemFor(tile: CropTile, spec: CropSpec): ItemId {
+  return wiltStageForAge(tile.readyAge) === WiltStage.Wilted ? spec.dayOldItem : spec.yieldItem;
+}
+
+/**
  * Pull a ready tile: roll the yield, wear the soil, and leave the tile regrown or bare.
  *
  * **ONE HARVEST, TWO HANDS.** The player's `HarvestTile`, the scythe's three-tile swing and the
@@ -2306,7 +2322,9 @@ export function takeHarvest(
 
   const bonus = nextBelow(streamFor(state, SystemIds.Harvest), 2);
   const count = tile.fertility + bonus;
-  const wilted = wiltStageForAge(tile.readyAge) === WiltStage.Wilted;
+  // Read before the mutation below clears `readyAge`, and read through the same function every
+  // caller that has to decide in advance uses (item 117).
+  const item = harvestItemFor(tile, spec);
 
   if (spec.regrowTicks > 0) {
     // A regrowing crop keeps its plant and returns no seed — you already own the plant.
@@ -2331,7 +2349,7 @@ export function takeHarvest(
     if (tile.fertility > FERTILITY_MIN) tile.fertility -= 1;
   }
 
-  return { item: wilted ? spec.dayOldItem : spec.yieldItem, count };
+  return { item, count };
 }
 
 /**

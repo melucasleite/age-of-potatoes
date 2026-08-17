@@ -458,6 +458,7 @@ export {
   takeBoxedMachine,
   takeDockShelf,
   takeDockSeedShelf,
+  harvestItemFor,
   takeHarvest,
   takeOneOutput,
   takeStorage,

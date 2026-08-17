@@ -1142,12 +1142,41 @@ function applyDeconstructMachine(state: WorldState, command: DeconstructMachineC
   machine.cargoItem = 0;
   machine.cargoCount = 0;
   machine.cargoFreshTicks = 0;
+  // The dock's SEED SHELF, which is a fourth container on this machine and not the cargo pair
+  // above (item 088 gave it its own field so a full produce shelf could never strand the seeds).
+  //
+  // **DOOR 8c** (item 117): it was never listed here at all, so twenty seeds went into a box and
+  // nothing came out — a deletion, under the "nothing vanishes" comment eight lines down. It was
+  // found by the move census rather than reported, which is the census' whole argument: doors 8
+  // and 8b were spotted by a human reading this function, and the third hole in the same function
+  // was not. No clock travels with it because there is none to travel: a seed is shelf-stable and
+  // the shelf keeps no freshness field, the same answer item 115's node sweep gives for it.
+  if (machine.seedShelfItem !== 0 && machine.seedShelfCount > 0) {
+    addItem(state, machine.seedShelfItem, machine.seedShelfCount);
+  }
+  machine.seedShelfItem = 0;
+  machine.seedShelfCount = 0;
   // A boxed dock takes its bot with it, and whatever the bot was carrying comes back too. Nothing
   // vanishes (plan §4), and a bot whose shed is in the player's bag has nowhere to walk to.
+  //
+  // **BOTH POCKETS, AND THE ARMFUL KEEPS ITS CLOCK** (item 117). This loop was the family's
+  // last mint and its plainest deletion, side by side in the function that lectures three times
+  // about the clock leaving with the goods: `addItem` stamped a fresh window on an armful that
+  // had stood at a jammed shed for an hour, and the seed pocket was not mentioned on any line.
   const orphans = removeBotsForDock(state, machine.id);
   for (let i = 0; i < orphans.length; i++) {
     const bot = orphans[i]!;
-    if (bot.carryItem !== 0 && bot.carryCount > 0) addItem(state, bot.carryItem, bot.carryCount);
+    if (bot.carryItem !== 0 && bot.carryCount > 0) {
+      addItemFresh(
+        state,
+        bot.carryItem,
+        bot.carryCount,
+        spoilTickFromRemaining(state, bot.carryFreshTicks),
+      );
+    }
+    // The pocket, through `addItem` and deliberately: `Bot` has no `seedFreshTicks` because a
+    // seed has no clock, so there is nothing here to carry across and a stamp costs nothing.
+    if (bot.seedItem !== 0 && bot.seedCount > 0) addItem(state, bot.seedItem, bot.seedCount);
   }
   // And a boxed hand cart cannot still be in tow. Cleared here rather than left for the mover to
   // notice, so `towedCartId` never names a machine that is not on the lot.

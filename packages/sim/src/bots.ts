@@ -58,6 +58,7 @@ import {
   BotKind,
   BotPhase,
   CeremonyId,
+  harvestItemFor,
   isTileReady,
   machineAt,
   machineById,
@@ -575,8 +576,9 @@ function advancePlanter(state: WorldState, bot: Bot, dock: Machine): void {
  * balance choice anyone made. The test for "does it come back" is `spec.regrowTicks <= 0`, the
  * SAME expression the hand uses, so the two paths cannot drift apart.
  *
- * Returns whether the bot should head home now — either because it refused a tile it could not
- * pocket the seed of, or because it changed product mid-round.
+ * Returns whether the bot should head home now — because it refused a tile, either one whose seed
+ * it could not pocket or one whose produce it could not add to the armful it is already carrying.
+ * Both refusals leave the tile standing, and neither is a loss.
  */
 function harvestUnderBot(state: WorldState, bot: Bot): boolean {
   const tile = tileByKey(state, bot.targetTile);
@@ -592,16 +594,29 @@ function harvestUnderBot(state: WorldState, bot: Bot): boolean {
   // after it noticed.
   if (spec.regrowTicks <= 0 && !pocketRoomFor(bot, spec.seedItem)) return true;
 
+  // **AND THE SAME CHECK FOR THE ARMS, FOR THE SAME REASON** (item 117, DOOR 9). One zone can
+  // produce TWO item ids — `harvestItemFor` returns the Day-Old good for a turned tile — so "a
+  // bot only ever holds one product at a time" was a rule about zones that the crop clock breaks
+  // for free, with no keypress and no exploit: a row that turns under a working bot is an
+  // ordinary Tuesday.
+  //
+  // The old code pulled first and sorted it out afterwards, which it could not do. It set
+  // `phase = Returning` — the right idea, and the comment describing it survives below — and then
+  // overwrote `carryItem` and zeroed `carryCount` on the very next line, DELETING the armful it
+  // had just decided to send home. Three potatoes, measured, in plain play.
+  //
+  // Asking first is the only shape that keeps both: the armful goes home whole and the turned
+  // tile is still standing when the bot comes back with empty arms. That is this function's own
+  // house rule four lines up, applied to the other pocket — and it is what the old comment
+  // claimed was happening all along.
+  if (bot.carryItem !== 0 && bot.carryItem !== harvestItemFor(tile, spec)) return true;
+
   const result = takeHarvest(state, tile, spec);
   if (result === null) return false;
 
-  if (bot.carryItem !== 0 && bot.carryItem !== result.item) {
-    // Two products, one pair of arms. Everything it is already holding goes home first; this
-    // tile has been pulled and its goods would otherwise vanish, so they are what it carries and
-    // the rest is impossible by construction — a bot only ever holds one product at a time.
-    bot.phase = BotPhase.Returning;
-  }
-  if (bot.carryItem === 0 || bot.carryItem !== result.item) {
+  // Empty arms take the new product's id. Anything else was refused above, so this cannot be
+  // reached with an armful of something different — the case the old code handled by deleting it.
+  if (bot.carryItem === 0) {
     bot.carryItem = result.item;
     bot.carryCount = 0;
     bot.carryFreshTicks = 0;

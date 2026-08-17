@@ -71,6 +71,7 @@ import {
   step,
   stepMany,
 } from '../src/index';
+import { itemBearingPaths } from './goods';
 
 const ACTIVE_MINUTE = 1_200;
 const ACTIVE_HOUR = 60 * ACTIVE_MINUTE;
@@ -491,38 +492,11 @@ describe('a harvester bot that cannot deliver', () => {
 });
 
 // --- and the proof that there is no door eight --------------------------------------------
-
-/**
- * Every path in `WorldState` that names a good, found by walking a world rather than by reading
- * the types — because a type is what somebody wrote down and a world is what is actually there.
- *
- * Array indices are collapsed to `[]`, so one machine stands for all of them.
- */
-function itemBearingPaths(state: WorldState): string[] {
-  const found = new Set<string>();
-  const seen = new Set<object>();
-
-  const walk = (node: unknown, path: string): void => {
-    if (node === null || typeof node !== 'object') return;
-    if (seen.has(node)) return;
-    seen.add(node);
-
-    if (Array.isArray(node)) {
-      for (const entry of node) walk(entry, `${path}[]`);
-      return;
-    }
-    for (const [key, value] of Object.entries(node)) {
-      const here = path === '' ? key : `${path}.${key}`;
-      // `held` is the grabber's claw, which names a good without saying "item" — the one place
-      // this sweep would miss if it trusted the naming convention.
-      if (/item$/i.test(key) || key === 'held') found.add(here);
-      walk(value, here);
-    }
-  };
-
-  walk(state, '');
-  return [...found].sort();
-}
+//
+// **THERE WERE THREE** (item 117). The sweep below is unchanged and still true — it moved to
+// `goods.ts` so that the EDGE census could be derived from it rather than written beside it, and
+// what it missed it missed for a reason it states itself: it enumerates places, and every bug in
+// this family has been a journey between two places that were both fine.
 
 describe('the whole family of doors', () => {
   it('has a clock on every place in the world a perishable can sit, and nowhere else left', () => {

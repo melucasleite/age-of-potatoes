@@ -46,6 +46,7 @@ import {
   hashState,
   itemCount,
   plantCrop,
+  remainingFreshness,
   spawnBelt,
   spawnBot,
   spawnGrabber,
@@ -371,20 +372,34 @@ describe('a bot meeting the pond (item 080)', () => {
 });
 
 describe('a dock leaving the lot', () => {
-  it('takes its bot with it and hands back what the bot was carrying', () => {
+  it('takes its bot with it and hands back what the bot was carrying, at the clock it held', () => {
+    // **THIS TEST IS THIS FAMILY'S SIGNATURE, AND IT USED TO BE COUNT-ONLY** (item 117's audit).
+    // It boxed a dock with a laden bot in it and asserted `before + 3 + shelf` — which is exactly
+    // the shape of assertion that let doors 8, 8b and 8c through: a count survives a transfer that
+    // minted a clock, dropped a seed pocket and deleted a whole seed shelf, and the count is the
+    // only thing anybody looked at. Every number that crosses this verb is now asserted.
     const { state, dock, zoneId } = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester);
     ripenZone(state, zoneId);
     stepMany(state, 1_500);
 
     const bot = state.bots[0]!;
-    // Put something in its arms so the hand-back is observable, whatever the walk happened to do.
+    // Put something in its arms so the hand-back is observable, whatever the walk happened to do —
+    // and give it a REAL clock, two thirds spent, because a fresh armful cannot tell a carried
+    // window from a minted one.
     bot.carryItem = ItemId.RussetPotato;
     bot.carryCount = 3;
+    bot.carryFreshTicks = 6_000;
+    bot.seedItem = ItemId.PotatoSeed;
+    bot.seedCount = 2;
+    dock.seedShelfItem = ItemId.PotatoSeed;
+    dock.seedShelfCount = 4;
     const before = itemCount(state, ItemId.RussetPotato);
+    const seedsBefore = itemCount(state, ItemId.PotatoSeed);
     // The shelf comes back too, now that it has an identity (item 083). Under the old
     // anonymous buffer, deconstructing a stocked dock silently DELETED everything on it —
     // the same swallow, one verb further along.
     const shelf = dock.cargoCount;
+    const shelfClock = dock.cargoFreshTicks;
     expect(shelf).toBeGreaterThan(0);
 
     // Stand next to the dock and box it.
@@ -397,6 +412,15 @@ describe('a dock leaving the lot', () => {
 
     expect(state.bots.length).toBe(0);
     expect(itemCount(state, ItemId.RussetPotato)).toBe(before + 3 + shelf);
+    // **THE SEED POCKET AND THE SEED SHELF** — doors 8b and 8c, which this verb used to eat.
+    expect(itemCount(state, ItemId.PotatoSeed)).toBe(seedsBefore + 2 + 4);
+    // **AND THE CLOCK** — door 8. The armful and the shelf both arrive in the bag, and the bag's
+    // soonest deadline is the sooner of the two rather than a brand-new window.
+    const worst = Math.min(6_000, shelfClock > 0 ? shelfClock : 6_000);
+    expect(
+      remainingFreshness(state, ItemId.RussetPotato),
+      'boxing a shed is not a way to un-wait',
+    ).toBeLessThanOrEqual(worst);
     expect(itemCount(state, ItemId.BoxedHarvesterDock)).toBe(1);
   });
 });
@@ -466,6 +490,7 @@ describe('the dock shelf (item 083)', () => {
 
     const before = itemCount(state, ItemId.RussetPotato);
     const carryBefore = state.bots[0]!.carryCount;
+    const shelfClock = dock.cargoFreshTicks;
     const touchesBefore = state.stats.touches.handCarry;
     state.player.xSub = 128;
     state.player.ySub = 128;
@@ -480,13 +505,21 @@ describe('the dock shelf (item 083)', () => {
     expect(dock.cargoCount + state.bots[0]!.carryCount).toBe(shelf + carryBefore - 5);
     expect(state.stats.touches.handCarry).toBe(touchesBefore + 1);
 
-    // Freshness is stamped on the way OUT, from this tick, exactly as the Root Cellar does
-    // it: nothing ages inside a machine, and goods back in the player's arms are loose again.
+    // **AND THE CLOCK COMES OUT WITH THEM, WHICH THIS TEST USED TO STATE BACKWARDS** (item 117's
+    // audit). It asserted only `spoilAtTick > state.tick` — true of any clock at all, including a
+    // freshly minted window — under a comment reading "nothing ages inside a machine". Since item
+    // 115 the shelf runs a real clock and `advanceStorageSpoilage` spends it, so the honest claim
+    // is the family's: what comes out is no fresher than what went in.
     const slot = state.inventory.find((entry) => entry.item === ItemId.RussetPotato)!;
     expect(slot.stacks.length).toBeGreaterThan(0);
     for (let i = 0; i < slot.stacks.length; i++) {
       expect(slot.stacks[i]!.spoilAtTick).toBeGreaterThan(state.tick);
     }
+    expect(shelfClock, 'the shelf was running a clock to begin with').toBeGreaterThan(0);
+    expect(
+      remainingFreshness(state, ItemId.RussetPotato),
+      'unloading a shed is not a way to un-wait',
+    ).toBeLessThanOrEqual(shelfClock);
   });
 
   it('stalls a bot delivering a different item than the shelf holds — nothing is deleted', () => {
@@ -819,6 +852,7 @@ describe('the seed comes home (item 088)', () => {
     stepMany(state, 6_000);
     const potatoes = dock.cargoCount;
     const seeds = dock.seedShelfCount;
+    const shelfClock = dock.cargoFreshTicks;
     expect(potatoes).toBeGreaterThan(0);
     expect(seeds).toBeGreaterThan(0);
 
@@ -840,6 +874,13 @@ describe('the seed comes home (item 088)', () => {
     // hold afterwards is whatever the robot was carrying, which is less than it was.
     expect(dock.cargoCount).toBeLessThan(potatoes);
     expect(dock.seedShelfCount).toBeLessThan(seeds);
+    // And the produce brought its clock through the door with it (item 117's audit: a count
+    // across a transfer is half an assertion). Seeds keep none, which is why only one shelf is
+    // asked the question.
+    expect(
+      remainingFreshness(state, ItemId.RussetPotato),
+      'one verb, two shelves, and still not a way to un-wait',
+    ).toBeLessThanOrEqual(shelfClock);
   });
 
   it('CLOSES THE LOOP HANDS-FREE: harvester seeds ride a belt into a planter’s hopper', () => {
