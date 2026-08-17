@@ -42,6 +42,7 @@ import { LAMP_PX, lampAlpha, lampTint } from './lamps';
 import { liquidName, liquidTint, portHintTint } from './liquids';
 import { fillPulseAlpha } from './machine-motion';
 import type { MotionSample } from './machine-motion';
+import { blockedStatus, dockShelfStatus, starvedStatus, storageStatus } from './machine-tell';
 import { pipeAtTile } from './pipes';
 import { classifyShore } from './shore';
 import { walkStep } from './strips';
@@ -1325,19 +1326,21 @@ function machineStatus(view: WorldView, m: MachineView): string {
   // stops, and a player who cannot read it has no way to find out. Verified as missing before
   // it was added: the pip and the hopper column above are driven from the produce pair alone
   // and were never going to pick a second shelf up on their own.
+  //
+  // BOTH SENTENCES LIVE IN `machine-tell.ts` SINCE ITEM 114, for the reason the two lamp branches
+  // below do: this file cannot be imported by a test, and the shelf line now carries a freshness
+  // clock — a number that can be wrong in a way "12 potatoes" never could.
   if (m.kind === MachineKind.HarvesterDock) {
-    const shelved = m.cargoCount > 0 && m.cargoItem !== 0;
-    const seeded = m.seedShelfCount > 0 && m.seedShelfItem !== 0;
-    if (shelved && seeded) {
-      return `${name} — ${m.cargoCount} ${itemName(m.cargoItem)} and ${m.seedShelfCount} ${itemName(
-        m.seedShelfItem,
-      )} on the shelves`;
-    }
-    if (shelved) return `${name} — ${m.cargoCount} ${itemName(m.cargoItem)} on the shelf`;
-    if (seeded) {
-      return `${name} — ${m.seedShelfCount} ${itemName(m.seedShelfItem)} on the seed shelf`;
-    }
+    const shelves = dockShelfStatus(name, m);
+    if (shelves !== null) return shelves;
   }
+
+  // WHAT IS IN THE BOX (item 114). A container has no work cycle either, so it answered
+  // `LampState.Off` and fell all the way to "root cellar idle" at the bottom of this switch.
+  // Answered above the lamp for the docks' and the vehicles' reason, and gated on the ROLE inside
+  // the function so a hand cart gets the same sentence without this line knowing there is one.
+  const box = storageStatus(name, m);
+  if (box !== null) return box;
 
   switch (m.lamp) {
     case LampState.Jammed:
@@ -1345,11 +1348,17 @@ function machineStatus(view: WorldView, m: MachineView): string {
     case LampState.Halted:
       return `${name} worn out — right-click to repair`;
     // The two halves of plan §5's grammar, said out loud: red means look downstream, amber
-    // means look upstream. Naming the actual item is what turns a red lamp into an errand.
+    // means look upstream. Naming the actual item is what turns a red lamp into an errand —
+    // and item 113 is the reminder that a NAME THE MACHINE CANNOT SUPPORT turns it into a
+    // wild goose chase. Every branch below is answerable from what the machine is holding.
+    //
+    // Both live in `machine-tell.ts` because `index.ts` cannot be imported by a test — see the
+    // header there. These were the two branches that were lying, so these are the two that
+    // moved somewhere a test can reach them.
     case LampState.Blocked:
-      return `${name} full of ${itemName(m.outputItem)} — take some`;
+      return blockedStatus(name, m);
     case LampState.Starved:
-      return `${name} wants ${itemName(m.inputItem)}`;
+      return starvedStatus(name, m);
     case LampState.UtilityMissing:
       // ONE EMPTY AGAIN, AND ONLY ONE. The blue lamp used to mean two things — a sprinkler's
       // dry barrel, and a drone bay with no parts on its shelf ([[039]]) — so this branch had

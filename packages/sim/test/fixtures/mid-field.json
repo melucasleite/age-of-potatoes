@@ -3,7 +3,7 @@
   "description": "Machines on farm tiles (item 067): the gardener loop earns $150, the farmer walks to the field centre on a no-op walk errand (item 070), a barrel sprinkler stands ON a hand-watered farm tile, and ONE haul from the pond buys ONE charge that waters all 24 farm neighbours in a single cycle — including a growing crop, and never the machine’s own tile — after which the next cycle looks at the same 24 soaked tiles and spends nothing at all. Deconstruction hands the tile back with its soil, fertility, and decayed moisture untouched, and the freed ground takes a seed again. Pins the fieldPlaceable footprint rule, the occupied-tile watering skip, item 097’s charge-per-activation barrel with item 086’s thirst rule inside it, and IntentAction.Walk in the trace and the save shape.",
   "seed": 670670,
   "ticks": 5678,
-  "expectedHash": "fc4aa9fe",
+  "expectedHash": "6a0afa0e",
   "commands": [
     {
       "tick": 0,

@@ -184,7 +184,7 @@ describe('the Maintenance Station', () => {
     // potatoes arrive through, because the kit hopper IS a recipe line.
     const belt = spawnBelt(state, BeltTier.Basic, 6, 10, Direction.East, 3)!; // tiles (6..8,10)
     spawnGrabber(state, GrabberTier.Mk1, 9, 10, Direction.East, 0)!;
-    belt.items.push({ dist: 700, item: ItemId.RepairKit });
+    belt.items.push({ dist: 700, item: ItemId.RepairKit, freshTicks: 0 });
 
     const touchesBefore = totalManualTouches(state.stats.touches);
     stepMany(state, 100);
@@ -698,6 +698,15 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
     // one the spec always implied — with the `d.num` held out of the digest the watch
     // reproduces 9b28460d exactly. Every story assertion above is untouched: the wrench came
     // due, the drone answered, and the factory ended the watch healthy.
-    expect(hashState(state)).toBe('7906cb45');
+    // 7906cb45 -> ab8ef078 (save format 20, item 112): the digest gained the four other places a
+    // good can sit and grow old — `machine.inputFreshTicks`, `machine.outputFreshTicks`,
+    // `Grabber.heldFreshTicks`, and `freshTicks` on every belt item. **This one deserved the
+    // check more than any hash in the repository**, because unlike the two above it, item 112
+    // changed BEHAVIOUR: goods in hoppers, baskets, claws and belts now spend a clock, and this
+    // watch is ten thousand ticks of a factory doing exactly that with nobody touching it. If
+    // anything on this line was going to turn to compost mid-watch, here is where it would. With
+    // the four `d.num` families held out of the digest, the watch reproduces 7906cb45 exactly —
+    // so nothing spoiled, nothing composted, and every story assertion above is untouched.
+    expect(hashState(state)).toBe('ab8ef078');
   });
 });

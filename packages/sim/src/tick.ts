@@ -228,7 +228,11 @@ import {
   plantCrop,
   putStorage,
   removeBotsForDock,
+  machineOutputFreshness,
+  mergedFreshness,
+  putHopper,
   remainingFreshness,
+  takeHopper,
   runnableRecipe,
   removeItem,
   rotateDirectionClockwise,
@@ -1094,17 +1098,30 @@ function applyDeconstructMachine(state: WorldState, command: DeconstructMachineC
   // load of goods and a running clock in one keypress.
   if (isCartAway(machine)) return false;
 
+  // **THE BASKET'S CLOCK COMES OUT WITH THE BASKET** (item 112). Read before the take, because
+  // the last unit off a basket zeroes the field — `machineOutputFreshness` is that read.
   for (;;) {
+    const freshTicks = machineOutputFreshness(machine, spec);
     const item = takeOneOutput(machine, spec);
     if (item === null) break;
-    addItem(state, item, 1);
+    addItemFresh(state, item, 1, spoilTickFromRemaining(state, freshTicks));
   }
   // Every hopper, not just the plain recipe's — a boxed Seasoner hands back the peppers too.
+  //
+  // **AND WITH THE CLOCK EACH LINE IS RUNNING** (item 112). This is where the exploit lived after
+  // item 110 closed the container door beside it: `addItem` stamps a window from NOW, so twenty
+  // peppers with two minutes left went into a Seasoner that could never run, sat out an hour, and
+  // came back with 17,998 of 18,000. One door was fixed and its neighbour was not.
   const hoppers = machineHoppers(spec);
   for (let i = 0; i < hoppers.length; i++) {
-    const held = machine.inputCounts[i] ?? 0;
-    if (held > 0) addItem(state, hoppers[i]!.item, held);
-    machine.inputCounts[i] = 0;
+    const took = takeHopper(machine, i, machine.inputCounts[i] ?? 0);
+    if (took === null) continue;
+    addItemFresh(
+      state,
+      hoppers[i]!.item,
+      took.taken,
+      spoilTickFromRemaining(state, took.freshTicks),
+    );
   }
   // Cargo in a parked cart, a crate's contents, or a planter's seed hopper — all the same field,
   // and all of it comes back to the player's hands exactly as the recipe buffers do. The box
@@ -1325,8 +1342,12 @@ function applyLoadMachine(state: WorldState, command: LoadMachineCommand): boole
     const moved = Math.min(command.count, Math.min(space, have));
     if (moved <= 0) continue;
 
+    // THE CLOCK GOES IN WITH THE GOODS (item 112), read BEFORE the bag gives them up for the
+    // reason the storage branch above states: `removeItem` eats the soonest-expiring units, so
+    // this is the number those exact units were carrying rather than an average of the bag.
+    const freshTicks = remainingFreshness(state, line.item);
     removeItem(state, line.item, moved);
-    machine.inputCounts[i] = (machine.inputCounts[i] ?? 0) + moved;
+    putHopper(machine, i, line.item, moved, freshTicks);
     handsOn(machine);
     touch(state, 'handCarry');
     return true;
@@ -1430,7 +1451,12 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
     const took = takeDockShelf(machine, command.count);
     const seeds = takeDockSeedShelf(machine, command.count - (took?.taken ?? 0));
     if (took === null && seeds === null) return false;
-    if (took !== null) addItem(state, took.item, took.taken);
+    // The produce shelf hands its clock back with its goods (item 112) — it is a container like
+    // any other and it has been spending that clock since the bot put them there. The seed shelf
+    // does not, because seeds are shelf-stable and have no clock to hand.
+    if (took !== null) {
+      addItemFresh(state, took.item, took.taken, spoilTickFromRemaining(state, took.freshTicks));
+    }
     if (seeds !== null) addItem(state, seeds.item, seeds.taken);
     handsOn(machine);
     touch(state, 'handCarry');
@@ -1447,10 +1473,17 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
   // a buffer can hold two grades at once — a Fryer's burnt chips come out before its good
   // ones — and a hand that emptied it in one arithmetic step would have to reimplement that
   // rule to know what it was holding.
+  //
+  // **THIS LINE WAS THE THIRD DOOR** (item 112), and the cheapest of the three: it needs no
+  // boxing and no cart, just the unload key. `addItem` stamped a fresh window on whatever came
+  // off, so a Washer whose belt was missing held forty washed potatoes for an hour and handed
+  // back forty brand-new six-minute windows. The basket keeps a clock now, and it comes out with
+  // the goods exactly as a cart's does.
   for (let i = 0; i < moved; i++) {
+    const freshTicks = machineOutputFreshness(machine, spec);
     const item = takeOneOutput(machine, spec);
     if (item === null) break;
-    addItem(state, item, 1);
+    addItemFresh(state, item, 1, spoilTickFromRemaining(state, freshTicks));
   }
 
   handsOn(machine);
@@ -2069,8 +2102,11 @@ function applyRemoveBelt(state: WorldState, command: RemoveBeltCommand): boolean
     recordRefund(state.stats, refund);
   }
 
+  // Each with the clock it was riding on (item 112). Taking a belt up is the rearranging verb
+  // for a belt, and it must no more mint freshness than boxing a machine does.
   for (let i = 0; i < belt.items.length; i++) {
-    addItem(state, belt.items[i]!.item, 1);
+    const entry = belt.items[i]!;
+    addItemFresh(state, entry.item, 1, spoilTickFromRemaining(state, entry.freshTicks));
   }
 
   removeBeltById(state, belt.id);
@@ -2108,14 +2144,16 @@ function applyRemoveBeltTile(state: WorldState, command: RemoveBeltTileCommand):
 
   if (belt.lengthTiles === 1) {
     for (let i = 0; i < belt.items.length; i++) {
-      addItem(state, belt.items[i]!.item, 1);
+      const entry = belt.items[i]!;
+      addItemFresh(state, entry.item, 1, spoilTickFromRemaining(state, entry.freshTicks));
     }
     removeBeltById(state, belt.id);
   } else {
     const index = beltIndexOfTile(belt, command.tileX, command.tileY);
     const parts = splitBeltAtTile(state, belt, index, null);
     for (let i = 0; i < parts.freed.length; i++) {
-      addItem(state, parts.freed[i]!.item, 1);
+      const entry = parts.freed[i]!;
+      addItemFresh(state, entry.item, 1, spoilTickFromRemaining(state, entry.freshTicks));
     }
   }
 
@@ -2235,7 +2273,16 @@ function applyRemoveGrabber(state: WorldState, command: RemoveGrabberCommand): b
     state.moneyCents += spec.priceCents;
     recordRefund(state.stats, spec.priceCents);
   }
-  if (grabber.held !== 0) addItem(state, grabber.held as ItemId, 1);
+  // With the clock in the claw (item 112). An arm stalled against a full destination can stand
+  // there for an hour, and taking it up is not a way to undo that hour.
+  if (grabber.held !== 0) {
+    addItemFresh(
+      state,
+      grabber.held as ItemId,
+      1,
+      spoilTickFromRemaining(state, grabber.heldFreshTicks),
+    );
+  }
 
   for (let i = 0; i < state.grabbers.length; i++) {
     if (state.grabbers[i]!.id === grabber.id) {
@@ -2860,7 +2907,10 @@ function advanceMaintenanceStation(state: WorldState, machine: Machine, spec: Ma
   }
   if (!due) return;
 
-  machine.inputCounts[0] = (machine.inputCounts[0] ?? 0) - 1;
+  // Through the hopper's one door (item 112), like every other decrement. A repair kit is
+  // shelf-stable so there is no clock here to spend — what the door buys is that the day
+  // somebody puts a perishable in a station's hopper, this line does not have to be found.
+  takeHopper(machine, 0, 1);
   for (let i = 0; i < state.machines.length; i++) {
     const candidate = state.machines[i]!;
     if (!machineWithinRadiusOfTile(candidate, machine.tileX, machine.tileY, radius)) continue;
@@ -2909,10 +2959,17 @@ function advanceOrchard(machine: Machine, spec: MachineSpec): void {
   if (machine.progress < spec.workPerOperation) return;
 
   machine.progress -= spec.workPerOperation;
+  // A tree names its own basket (item 111) and, since item 112, starts its own clock — oranges
+  // and lemons are fifteen-minute produce, so an unpicked tree that also refrigerated would be
+  // the free fridge again, growing its own stock. It does not go through `produceRecipe`, so it
+  // is the one filler that has to say both itself.
+  machine.outputFreshTicks = mergedFreshness(
+    machine.outputCount,
+    machine.outputFreshTicks,
+    spec.outputItem,
+    freshnessTicks(spec.outputItem),
+  );
   machine.outputCount += 1;
-  // A tree names its own basket (item 111). It does not go through `produceRecipe`, so it is
-  // the one filler that has to say so itself — without this an orange tree's basket would be
-  // an unlabelled count, which is exactly the shape `Machine.outputItem` exists to end.
   machine.outputItem = spec.outputItem;
   machine.opCount += 1;
 }
@@ -3361,7 +3418,11 @@ function consumeRecipe(spec: MachineSpec, recipe: MachineRecipe, machine: Machin
     const line = recipe.consumes[i]!;
     const hopper = hopperIndexFor(spec, line.item);
     if (hopper < 0) continue;
-    machine.inputCounts[hopper] = (machine.inputCounts[hopper] ?? 0) - line.count;
+    // Through the hopper's one door (item 112), which throws the returned clock away on purpose:
+    // an ingredient consumed becomes a product, and a product's window starts at the basket. What
+    // this call is FOR is the other half of that door — a line drained to empty forgets its clock,
+    // so "empty" has one spelling in the hash and the next armful sets a fresh one.
+    takeHopper(machine, hopper, line.count);
   }
   for (let i = 0; i < spec.ports.length; i++) {
     const port = spec.ports[i]!;
@@ -3378,9 +3439,22 @@ function consumeRecipe(spec: MachineSpec, recipe: MachineRecipe, machine: Machin
  * rather than only on the first, which costs nothing and means the label cannot drift out of
  * step with the count — the caller has already established, in `selectRecipe`, that this is
  * the only product the basket can be holding.
+ *
+ * **AND ITS CLOCK IS STARTED HERE** (item 112), by the same argument and in the same line: a
+ * product is a NEW good, so it gets the full window its item is worth, merged at the sooner
+ * against whatever the basket is already holding. A washed potato made now, dropped in beside one
+ * washed five minutes ago, cannot rescue the older one — that is `mergedFreshness` doing on a
+ * basket what it does everywhere else, and without it a Washer left running would top its own
+ * basket up forever.
  */
 function produceRecipe(spec: MachineSpec, recipe: MachineRecipe, machine: Machine): void {
   if (recipe.output !== null) {
+    machine.outputFreshTicks = mergedFreshness(
+      machine.outputCount,
+      machine.outputFreshTicks,
+      recipe.output,
+      freshnessTicks(recipe.output),
+    );
     machine.outputCount += 1;
     machine.outputItem = recipe.output;
   }
@@ -3571,7 +3645,7 @@ function advanceSpoilage(state: WorldState): void {
 }
 
 /**
- * Run the clock down inside every container that has one, and turn what runs out (item 110).
+ * Run the clock down everywhere outside the player's own bag, and turn what runs out.
  *
  * **THIS IS THE HALF THAT MAKES THE ROOT CELLAR MEAN SOMETHING.** Carrying freshness through a box
  * kills the two-click reset on its own, but a box that merely *held* time still would: park ten
@@ -3580,27 +3654,46 @@ function advanceSpoilage(state: WorldState): void {
  * the Root Cellar alone**, which is §4's *"frozen in a Root Cellar"* and is now the only freeze
  * anyone can buy.
  *
- * **NOTHING VANISHES, INSIDE A BOX EITHER** (§4). A load that turns becomes Compost where it
- * stands rather than disappearing or teleporting into the player's arms — a player who walks back
- * to their cart finds what happened to it. If `COMPOST_PER_SPOILED_ITEM` were ever raised above
- * one, a turned box would sit over its stated capacity until emptied; `storageRoomFor` already
- * answers 0 for that, so it refuses loads rather than breaking an invariant.
+ * **THREE MORE PLACES SINCE ITEM 112, ALL AT THE LOOSE RATE.** Item 110 swept containers only, on
+ * the strength of item 035's ruling that *"machine hoppers are untouched: `inputCounts` are bare
+ * counts, nothing in them ages, and a backed-up line is a pause rather than a slow loss."* That
+ * ruling made the hopper, the output basket and the belt into free refrigerators — the last of
+ * which needed no clicking at all — so all three now spend the clock exactly as the player's arms
+ * do. `storageAgingPerTick` is not consulted for any of them: it is the table of what a CONTAINER
+ * you bought does, and nobody buys a hopper. There is one freeze in this game and it costs $250.
  *
- * MACHINE HOPPERS ARE UNTOUCHED and that is item 035's ruling standing: `inputCounts` are bare
- * counts, nothing in them ages, and a backed-up line is a pause rather than a slow loss. This
- * sweep asks `MachineRole.Storage` and nothing else, so a dock's shelf, a delivery cart's load and
- * a Fryer's hopper all keep the structural freeze they have always had.
+ * **WHAT RUNS OUT TURNS WHERE IT STANDS — EXCEPT A HOPPER, WHICH CANNOT** (§4's floor, and a
+ * representation fact). A container's load and a belt item both carry an item id, so each becomes
+ * Compost in place and the player finds what happened. A hopper line's identity comes from
+ * `machineHoppers(spec)[i]` and there is nowhere to write a different id, so its clock CLAMPS at
+ * 1: the goods sit there out of time, and the sweep that turns them is the ordinary inventory one,
+ * a tick after the player boxes the machine and takes them back. Nothing vanishes and nothing
+ * teleports; the player recovers exactly the compost they would have recovered from the ground.
  *
- * The scan is one integer per machine on almost every tick: `cargoFreshTicks` is 0 on everything
- * that is not a box holding perishables, which is nearly everything.
+ * The scan is a handful of integers per machine on almost every tick. Every one of these fields is
+ * 0 on anything not holding a perishable, which is nearly everything on a chip line — §4 puts the
+ * preservation step at the Fryer, so the whole back half of the factory hashes as zeroes.
  */
 function advanceStorageSpoilage(state: WorldState): void {
   for (let i = 0; i < state.machines.length; i++) {
     const machine = state.machines[i]!;
+    advanceHopperSpoilage(machine);
+    advanceBasketSpoilage(machine);
+
     if (machine.cargoFreshTicks <= 0 || machine.cargoCount <= 0) continue;
 
+    // **A HARVESTER DOCK'S SHELF IS A CONTAINER TOO** (item 112). It IS the cargo pair — the same
+    // three fields a cellar uses — and everything on it is field produce that an arm drains onto a
+    // belt with nobody clicking anything. Named by kind rather than folded into the role test, and
+    // the two machines NOT named here are the point of writing it out: a planter dock's cargo is
+    // seeds, which are shelf-stable and would age by exactly nothing, and a **Delivery Cart's load
+    // is on the road**. The cart is a $100 container that does not age its contents against a $250
+    // Root Cellar that does not either, which is a live balance question — but it is not this
+    // item's, because a cart mints nothing, and turning a delivery to compost mid-journey is a
+    // change to how contracts settle rather than a bug fix.
     const spec = machineSpec(machine.kind);
-    if (spec === null || spec.role !== MachineRole.Storage) continue;
+    if (spec === null) continue;
+    if (spec.role !== MachineRole.Storage && machine.kind !== MachineKind.HarvesterDock) continue;
 
     const spent = storageAgingPerTick(machine.kind);
     if (spent <= 0) continue;
@@ -3611,6 +3704,46 @@ function advanceStorageSpoilage(state: WorldState): void {
     machine.cargoItem = ItemId.Compost;
     machine.cargoCount = machine.cargoCount * COMPOST_PER_SPOILED_ITEM;
     machine.cargoFreshTicks = 0;
+  }
+
+  advanceBeltSpoilage(state);
+}
+
+/** One tick off every stocked hopper line. Clamps at 1 — see `advanceStorageSpoilage`. */
+function advanceHopperSpoilage(machine: Machine): void {
+  for (let i = 0; i < machine.inputFreshTicks.length; i++) {
+    const left = machine.inputFreshTicks[i]!;
+    if (left <= 1 || (machine.inputCounts[i] ?? 0) <= 0) continue;
+    machine.inputFreshTicks[i] = left - 1;
+  }
+}
+
+/** One tick off a stocked output basket. Clamps at 1, for `advanceHopperSpoilage`'s reason. */
+function advanceBasketSpoilage(machine: Machine): void {
+  if (machine.outputFreshTicks <= 1 || machine.outputCount <= 0) return;
+  machine.outputFreshTicks -= 1;
+}
+
+/**
+ * One tick off every item riding a belt, and Compost for whatever runs out.
+ *
+ * A BELT ITEM TURNS IN PLACE because it has somewhere to record that it turned. It keeps its
+ * distance and its slot in the queue — nothing is spliced out, so a jam does not clear itself by
+ * rotting, and the count of things on the belt is the same before and after (§4's floor). What
+ * arrives at the Bagger is compost, which is the diagnostic: the player can see exactly how far
+ * along the run the goods gave up.
+ */
+function advanceBeltSpoilage(state: WorldState): void {
+  for (let i = 0; i < state.belts.length; i++) {
+    const items = state.belts[i]!.items;
+    for (let j = 0; j < items.length; j++) {
+      const entry = items[j]!;
+      if (entry.freshTicks <= 0) continue;
+      entry.freshTicks -= 1;
+      if (entry.freshTicks > 0) continue;
+      entry.item = ItemId.Compost;
+      entry.freshTicks = 0;
+    }
   }
 }
 

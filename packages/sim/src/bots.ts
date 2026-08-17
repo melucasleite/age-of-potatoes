@@ -62,6 +62,7 @@ import {
   machineAt,
   machineById,
   markCeremony,
+  mergedFreshness,
   plantCrop,
   takeHarvest,
   tileByKey,
@@ -685,6 +686,22 @@ function unloadIntoDock(bot: Bot, dock: Machine): void {
     const room = effectiveOutputCapacity(spec, dock) - dock.cargoCount;
     if (room > 0) {
       const moved = bot.carryCount < room ? bot.carryCount : room;
+      // **THE SHELF'S CLOCK STARTS ON ARRIVAL** (item 112), merged at the sooner against whatever
+      // is already on it — otherwise a bot topping the shelf up every round would keep the bottom
+      // of the pile alive forever, which is `mergedFreshness`' whole reason for existing.
+      //
+      // A BOT'S POCKET DELIBERATELY KEEPS NO CLOCK OF ITS OWN, and this is where that decision
+      // shows. Its carry is a one-way transit buffer: goods only ever enter it by being harvested
+      // from a tile, which is the moment a full window is correct, and nothing in the game can put
+      // an old good into a bot. So the arrival is fresh to within the length of one walk home,
+      // and a seventh clock would buy that walk and nothing else. (`bot.carryItem` becoming
+      // Day-Old is the crop's own doing before the harvest, not a clock this file runs.)
+      dock.cargoFreshTicks = mergedFreshness(
+        dock.cargoCount,
+        dock.cargoFreshTicks,
+        bot.carryItem,
+        0,
+      );
       dock.cargoItem = bot.carryItem;
       dock.cargoCount += moved;
       bot.carryCount -= moved;

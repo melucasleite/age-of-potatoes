@@ -368,7 +368,7 @@ describe('the truck depot', () => {
     // the depot where the arm actually reaches.
     depot.tileX = 4;
     depot.tileY = 5;
-    belt.items.push({ dist: 0, item: ItemId.BaggedChips });
+    belt.items.push({ dist: 0, item: ItemId.BaggedChips, freshTicks: 0 });
 
     stepMany(state, 400);
     expect(arm.held).toBe(0);
@@ -729,7 +729,7 @@ describe('a grabber pointed into the sell bin', () => {
     // belt sale and the hand sale are literally the same multiplication — this pins that they
     // stay so, rather than a freshness rule quietly forking.
     const { state, belt } = chipLineToBin(8703, 0);
-    belt.items.push({ dist: 0, item: ItemId.DayOldPotato });
+    belt.items.push({ dist: 0, item: ItemId.DayOldPotato, freshTicks: 0 });
     const before = state.moneyCents;
     stepMany(state, 600);
 
@@ -759,7 +759,7 @@ describe('a grabber pointed into the sell bin', () => {
     // leaves the seed on the belt. Same refusal, one swing earlier, and the goods stay where
     // the player put them instead of being held hostage to make the point.
     const { state, teller, belt } = chipLineToBin(8704, 0);
-    belt.items.push({ dist: 0, item: ItemId.PotatoSeed });
+    belt.items.push({ dist: 0, item: ItemId.PotatoSeed, freshTicks: 0 });
     const moneyBefore = state.moneyCents;
 
     stepMany(state, 1_000);

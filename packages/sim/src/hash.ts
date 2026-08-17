@@ -204,10 +204,18 @@ export function hashStateUint32(state: WorldState): number {
     // otherwise — the same reason every other collection here is preceded by its count.
     d.num(machine.inputCounts.length);
     for (let j = 0; j < machine.inputCounts.length; j++) d.num(machine.inputCounts[j]!);
+    // And how much clock each of those lines is running (item 112). Length first for the reason
+    // directly above; the two arrays are always the same length, and hashing both lengths is a
+    // cheap way for a corrupt save to fail here rather than three systems later.
+    d.num(machine.inputFreshTicks.length);
+    for (let j = 0; j < machine.inputFreshTicks.length; j++) d.num(machine.inputFreshTicks[j]!);
     d.num(machine.outputCount);
     // And WHAT is in that buffer (item 111). A count with no name stopped being enough the day
     // a Seasoner could make four different things out of the same hopper.
     d.num(machine.outputItem);
+    // And how long what is in it keeps (item 112). Two Washers each holding forty washed
+    // potatoes, one of them made an hour earlier, are two different worlds.
+    d.num(machine.outputFreshTicks);
     d.num(machine.tankMl);
     d.num(machine.condition);
     d.num(machine.opCount);
@@ -390,6 +398,9 @@ export function hashStateUint32(state: WorldState): number {
       const entry = belt.items[j]!;
       d.num(entry.dist);
       d.num(entry.item);
+      // A belt runs a clock now (item 112). Two identical-looking belts whose potatoes were
+      // loaded ten minutes apart are two different worlds, and one of them is about to compost.
+      d.num(entry.freshTicks);
     }
   }
 
@@ -405,6 +416,9 @@ export function hashStateUint32(state: WorldState): number {
     d.num(grabber.tier);
     d.num(grabber.filter);
     d.num(grabber.held);
+    // And the clock on what it is holding (item 112) — a stalled arm can hold one potato for an
+    // hour, so the claw is a container like any other and hashes like one.
+    d.num(grabber.heldFreshTicks);
     d.num(grabber.cooldown);
     d.num(grabber.opCount);
   }
@@ -619,6 +633,9 @@ export function findNonIntegerFields(state: WorldState): string[] {
     for (let j = 0; j < machine.inputCounts.length; j++) {
       check(`machines[${i}].inputCounts[${j}]`, machine.inputCounts[j]!);
     }
+    for (let j = 0; j < machine.inputFreshTicks.length; j++) {
+      check(`machines[${i}].inputFreshTicks[${j}]`, machine.inputFreshTicks[j]!);
+    }
     for (let j = 0; j < machine.ports.length; j++) {
       check(`machines[${i}].ports[${j}].ml`, machine.ports[j]!.ml);
     }
@@ -633,6 +650,7 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].scanCursor`, machine.scanCursor);
     check(`machines[${i}].cargoCount`, machine.cargoCount);
     check(`machines[${i}].cargoFreshTicks`, machine.cargoFreshTicks);
+    check(`machines[${i}].outputFreshTicks`, machine.outputFreshTicks);
     check(`machines[${i}].seedShelfCount`, machine.seedShelfCount);
     check(`machines[${i}].runTicksRemaining`, machine.runTicksRemaining);
     check(`machines[${i}].untouchedTicks`, machine.untouchedTicks);
@@ -696,11 +714,13 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`belts[${i}].moveAccum`, belt.moveAccum);
     for (let j = 0; j < belt.items.length; j++) {
       check(`belts[${i}].items[${j}].dist`, belt.items[j]!.dist);
+      check(`belts[${i}].items[${j}].freshTicks`, belt.items[j]!.freshTicks);
     }
   }
 
   for (let i = 0; i < state.grabbers.length; i++) {
     check(`grabbers[${i}].cooldown`, state.grabbers[i]!.cooldown);
+    check(`grabbers[${i}].heldFreshTicks`, state.grabbers[i]!.heldFreshTicks);
   }
 
   const streamKeys = Object.keys(state.streams).sort();

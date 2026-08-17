@@ -106,7 +106,16 @@ describe('determinism', () => {
     // rather than assumed, the same way the line above was: with that one `d.num` held out of
     // the digest this script reproduces 976351e8 exactly, so the run's behaviour is unchanged
     // and the hash moved because the digest did.
-    expect(hashState(runScript(1234, 1000))).toBe('db18e797');
+    // db18e797 -> 401ffb95 (save format 20, item 112): the digest gained the other four places
+    // a good can sit and grow old — `machine.inputFreshTicks` (one per hopper line, length-
+    // prefixed), `machine.outputFreshTicks`, `Grabber.heldFreshTicks`, and `freshTicks` on every
+    // item riding a belt. Checked the same way and worth stating precisely, because this item
+    // changed BEHAVIOUR as well as shape: with those four `d.num` families held out of the
+    // digest, this script and all twenty golden fixtures reproduce their previous hashes
+    // EXACTLY. So nothing any of them does was altered — no fixture runs long enough for a
+    // clock to expire, and every remaining hashed byte, `stacks[].spoilAtTick` included, is
+    // identical. The hash moved because the digest did.
+    expect(hashState(runScript(1234, 1000))).toBe('401ffb95');
   });
 
   it('gives different seeds different worlds', () => {
@@ -465,7 +474,7 @@ describe('the view seam', () => {
     arm.held = 0;
     arm.cooldown = 0;
     const feed = spawnBelt(state, BeltTier.Basic, 4, 5, Direction.East, 1)!;
-    beltInsert(feed, 0, ItemId.PlainChips);
+    beltInsert(feed, 0, ItemId.PlainChips, 0);
     stepMany(state, 1);
     expect(view(state, createWorldView()).grabbers[0]!.lamp).toBe(LampState.Blocked);
     expect(arm.held).toBe(0);

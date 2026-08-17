@@ -1158,11 +1158,11 @@ describe('belts', () => {
   it('carries items forward and never lets two overlap', () => {
     const state = createWorld(11);
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 4)!;
-    expect(beltInsert(belt, 0, ItemId.RussetPotato)).toBe(true);
-    expect(beltInsert(belt, 64, ItemId.RussetPotato)).toBe(true);
+    expect(beltInsert(belt, 0, ItemId.RussetPotato, 0)).toBe(true);
+    expect(beltInsert(belt, 64, ItemId.RussetPotato, 0)).toBe(true);
     // Too close to the one already at 64 — a belt that accepted this would render as a
     // single smeared item and would silently double a line's throughput.
-    expect(beltInsert(belt, 100, ItemId.RussetPotato)).toBe(false);
+    expect(beltInsert(belt, 100, ItemId.RussetPotato, 0)).toBe(false);
 
     stepMany(state, 40);
     expect(belt.items[0]!.dist).toBeGreaterThan(0);
@@ -1177,7 +1177,7 @@ describe('belts', () => {
     const state = createWorld(12);
     const first = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 2)!;
     const second = spawnBelt(state, BeltTier.Basic, 2, 0, Direction.East, 2)!;
-    beltInsert(first, 0, ItemId.PlainChips);
+    beltInsert(first, 0, ItemId.PlainChips, 0);
 
     stepMany(state, 300);
     expect(first.items).toHaveLength(0);
@@ -1190,9 +1190,9 @@ describe('belts', () => {
     // dropped its head item would be a machine that eats money invisibly.
     const state = createWorld(13);
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 3)!;
-    beltInsert(belt, 0, ItemId.RussetPotato);
-    beltInsert(belt, 64, ItemId.RussetPotato);
-    beltInsert(belt, 128, ItemId.RussetPotato);
+    beltInsert(belt, 0, ItemId.RussetPotato, 0);
+    beltInsert(belt, 64, ItemId.RussetPotato, 0);
+    beltInsert(belt, 128, ItemId.RussetPotato, 0);
 
     stepMany(state, 500);
     expect(belt.items).toHaveLength(3);
@@ -1211,14 +1211,14 @@ describe('belts', () => {
     expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(0);
 
     // One item in four shoulder-to-shoulder slots: a quarter of the tier's 320.
-    beltInsert(belt, 0, ItemId.RussetPotato);
+    beltInsert(belt, 0, ItemId.RussetPotato, 0);
     expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(80);
 
     // Packed solid: exactly the tier speed, never more — a surface outrunning its goods
     // would be a lie told at the zoom where the player reads circulation.
-    beltInsert(belt, 64, ItemId.RussetPotato);
-    beltInsert(belt, 128, ItemId.RussetPotato);
-    beltInsert(belt, 192, ItemId.RussetPotato);
+    beltInsert(belt, 64, ItemId.RussetPotato, 0);
+    beltInsert(belt, 128, ItemId.RussetPotato, 0);
+    beltInsert(belt, 192, ItemId.RussetPotato, 0);
     expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(320);
   });
 
@@ -1226,8 +1226,8 @@ describe('belts', () => {
     const state = createWorld(91);
     const basic = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 1)!;
     const express = spawnBelt(state, BeltTier.Express, 0, 2, Direction.East, 4)!;
-    for (let slot = 0; slot < 4; slot++) beltInsert(basic, slot * 64, ItemId.RussetPotato);
-    beltInsert(express, 0, ItemId.RussetPotato); // One item on sixteen slots.
+    for (let slot = 0; slot < 4; slot++) beltInsert(basic, slot * 64, ItemId.RussetPotato, 0);
+    beltInsert(express, 0, ItemId.RussetPotato, 0); // One item on sixteen slots.
 
     const projected = view(state, createWorldView());
     const full = projected.belts[0]!.throughputSubtilesPer100Ticks;
@@ -1259,7 +1259,7 @@ describe('grabbers', () => {
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 1)!;
     const sink = spawnBelt(state, BeltTier.Basic, 2, 0, Direction.East, 1)!;
     spawnGrabber(state, GrabberTier.Mk2, 1, 0, Direction.East, ItemId.PlainChips);
-    beltInsert(belt, 0, ItemId.RussetPotato);
+    beltInsert(belt, 0, ItemId.RussetPotato, 0);
 
     stepMany(state, 200);
     expect(belt.items).toHaveLength(1);
@@ -1299,7 +1299,7 @@ describe('a grabber only takes what its destination will accept', () => {
     // arm would have taken the potato off the belt and held it for the rest of the session.
     const { state, source, arm } = armRig(8501);
     const bagger = spawnMachine(state, MachineKind.Bagger, 2, 0)!;
-    beltInsert(source, 0, ItemId.RussetPotato);
+    beltInsert(source, 0, ItemId.RussetPotato, 0);
 
     stepMany(state, 400);
 
@@ -1318,7 +1318,7 @@ describe('a grabber only takes what its destination will accept', () => {
     // No condition left, so the machine cannot work its way out of a full hopper and the test
     // is genuinely about the door rather than about how fast a Bagger bags.
     bagger.condition = 0;
-    beltInsert(source, 0, ItemId.SeasonedChips);
+    beltInsert(source, 0, ItemId.SeasonedChips, 0);
 
     stepMany(state, 400);
     expect(arm.held).toBe(0);
@@ -1339,9 +1339,9 @@ describe('a grabber only takes what its destination will accept', () => {
     // A one-tile belt that leads nowhere, packed nose to tail against its own end: the goods
     // compact to the far end and the drop point in the middle of the tile has no legal spacing
     // left, permanently. This is what a backed-up line looks like from the arm's side.
-    beltInsert(sink, SUBTILE - 1, ItemId.PlainChips);
-    beltInsert(sink, SUBTILE - 1 - BELT_ITEM_SPACING_SUBTILES, ItemId.PlainChips);
-    beltInsert(source, 0, ItemId.RussetPotato);
+    beltInsert(sink, SUBTILE - 1, ItemId.PlainChips, 0);
+    beltInsert(sink, SUBTILE - 1 - BELT_ITEM_SPACING_SUBTILES, ItemId.PlainChips, 0);
+    beltInsert(source, 0, ItemId.RussetPotato, 0);
 
     stepMany(state, 400);
     expect(arm.held).toBe(0);
@@ -1355,8 +1355,8 @@ describe('a grabber only takes what its destination will accept', () => {
     // different reasons, and the arm distinguishes them without holding either.
     const { state, source, arm } = armRig(8504, ItemId.PlainChips);
     const bagger = spawnMachine(state, MachineKind.Bagger, 2, 0)!;
-    beltInsert(source, 0, ItemId.RussetPotato);
-    beltInsert(source, SUBTILE - 1, ItemId.PlainChips);
+    beltInsert(source, 0, ItemId.RussetPotato, 0);
+    beltInsert(source, SUBTILE - 1, ItemId.PlainChips, 0);
     const before = source.items.length;
 
     stepMany(state, 400);
@@ -1375,7 +1375,7 @@ describe('a grabber only takes what its destination will accept', () => {
     const spec = machineSpec(MachineKind.Bagger)!;
     const line = spec.inputs.findIndex((input) => input.item === ItemId.SeasonedChips);
     bagger.condition = 0;
-    beltInsert(source, 0, ItemId.SeasonedChips);
+    beltInsert(source, 0, ItemId.SeasonedChips, 0);
 
     // One tick is enough: the hopper has room, so the claw closes.
     stepMany(state, 1);
@@ -1408,7 +1408,7 @@ describe('a grabber only takes what its destination will accept', () => {
     stepMany(state, 5);
     expect(lampOf(state, arm.id)).toBe(LampState.Starved);
 
-    beltInsert(source, 0, ItemId.RussetPotato);
+    beltInsert(source, 0, ItemId.RussetPotato, 0);
     stepMany(state, 5);
     expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
 
@@ -1416,7 +1416,7 @@ describe('a grabber only takes what its destination will accept', () => {
     const spec = machineSpec(MachineKind.Bagger)!;
     const line = spec.inputs.findIndex((input) => input.item === ItemId.SeasonedChips);
     source.items.length = 0;
-    beltInsert(source, 0, ItemId.SeasonedChips);
+    beltInsert(source, 0, ItemId.SeasonedChips, 0);
     stepMany(state, 2);
     expect(lampOf(state, arm.id)).toBe(LampState.Running);
     stepMany(state, 60);
@@ -1476,7 +1476,7 @@ describe('a grabber only takes what its destination will accept', () => {
       for (const item of goods) {
         const { state, source, arm } = armRig(8507);
         destination.build(state);
-        beltInsert(source, 0, item);
+        beltInsert(source, 0, item, 0);
 
         const predicted = grabberWouldAccept(state, arm, item);
         stepMany(state, 200);
@@ -1550,7 +1550,7 @@ describe('a container is a destination and a source (item 105)', () => {
       const { state, source, arm, box } = fillRig(9101, kind);
 
       for (let i = 0; i < 5; i++) {
-        beltInsert(source, 0, ItemId.RussetPotato);
+        beltInsert(source, 0, ItemId.RussetPotato, 0);
         stepMany(state, 60);
       }
 
@@ -1579,7 +1579,7 @@ describe('a container is a destination and a source (item 105)', () => {
       const { state, source, arm, box } = fillRig(9103, kind);
       box.cargoItem = ItemId.RussetPotato;
       box.cargoCount = 1;
-      beltInsert(source, 0, ItemId.PlainChips);
+      beltInsert(source, 0, ItemId.PlainChips, 0);
 
       stepMany(state, 400);
 
@@ -1595,7 +1595,7 @@ describe('a container is a destination and a source (item 105)', () => {
       const spec = machineSpec(kind)!;
       box.cargoItem = ItemId.RussetPotato;
       box.cargoCount = spec.inputCapacity;
-      beltInsert(source, 0, ItemId.RussetPotato);
+      beltInsert(source, 0, ItemId.RussetPotato, 0);
 
       stepMany(state, 400);
       expect(arm.held).toBe(0);
@@ -1704,7 +1704,7 @@ describe('a container is a destination and a source (item 105)', () => {
     const { state, source, arm, box } = fillRig(9110, MachineKind.HandCart);
     standOn(state, box.tileX, box.tileY);
     run(state, [{ type: 'HitchCart', cartId: box.id }]);
-    beltInsert(source, 0, ItemId.RussetPotato);
+    beltInsert(source, 0, ItemId.RussetPotato, 0);
 
     stepMany(state, 400);
     expect(box.cargoCount).toBe(0);
@@ -1761,7 +1761,7 @@ describe('the belt junction', () => {
       { tileX: 4, tileY: 5, dir: Direction.East },
       { tileX: 3, tileY: 4, dir: Direction.North },
     ]);
-    for (let i = 0; i < 6; i++) beltInsert(feed, i * 64, ItemId.PlainChips);
+    for (let i = 0; i < 6; i++) beltInsert(feed, i * 64, ItemId.PlainChips, 0);
 
     stepMany(state, 900);
 
@@ -1786,8 +1786,8 @@ describe('the belt junction', () => {
       { tileX: 3, tileY: 4, dir: Direction.North },
     ]);
     for (let i = 0; i < 5; i++) {
-      beltInsert(a.feed, i * 64, ItemId.PlainChips);
-      beltInsert(b.feed, i * 64, ItemId.PlainChips);
+      beltInsert(a.feed, i * 64, ItemId.PlainChips, 0);
+      beltInsert(b.feed, i * 64, ItemId.PlainChips, 0);
     }
 
     stepMany(a.state, 700);
@@ -1807,8 +1807,8 @@ describe('the belt junction', () => {
     const out = spawnBelt(state, BeltTier.Basic, 4, 5, Direction.East, 8)!;
 
     for (let i = 0; i < 4; i++) {
-      beltInsert(west, i * 64, ItemId.RussetPotato);
-      beltInsert(north, i * 64, ItemId.PlainChips);
+      beltInsert(west, i * 64, ItemId.RussetPotato, 0);
+      beltInsert(north, i * 64, ItemId.PlainChips, 0);
     }
 
     stepMany(state, 1200);
@@ -1831,8 +1831,8 @@ describe('the belt junction', () => {
     // can never be chosen as an output. With nowhere else to go the item simply stays put, and
     // the belt behind it backs up — which is the jam plan §5 wants the player to be able to see.
     const { state, feed } = junctionRig(404, []);
-    beltInsert(feed, 0, ItemId.PlainChips);
-    beltInsert(feed, 64, ItemId.PlainChips);
+    beltInsert(feed, 0, ItemId.PlainChips, 0);
+    beltInsert(feed, 64, ItemId.PlainChips, 0);
 
     stepMany(state, 400);
     expect(feed.items).toHaveLength(2);
@@ -1843,7 +1843,7 @@ describe('the belt junction', () => {
     // A junction has no buffer at all: an item crosses inside one tick or it is still on a belt.
     // Count the world's goods before and after a run that jams — none may be inside the tile.
     const { state, feed, out } = junctionRig(505, [{ tileX: 4, tileY: 5, dir: Direction.East }]);
-    for (let i = 0; i < 4; i++) beltInsert(feed, i * 64, ItemId.PlainChips);
+    for (let i = 0; i < 4; i++) beltInsert(feed, i * 64, ItemId.PlainChips, 0);
 
     stepMany(state, 2000);
     expect(feed.items.length + out[0]!.items.length).toBe(4);
@@ -2273,8 +2273,8 @@ describe('the anti-softlock floor', () => {
       },
     ]);
     const belt = state.belts[0]!;
-    beltInsert(belt, 0, ItemId.PlainChips);
-    beltInsert(belt, 128, ItemId.PlainChips);
+    beltInsert(belt, 0, ItemId.PlainChips, 0);
+    beltInsert(belt, 128, ItemId.PlainChips, 0);
 
     const money = state.moneyCents;
     run(state, [{ type: 'RemoveBelt', beltId: belt.id }]);

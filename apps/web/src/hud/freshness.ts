@@ -117,3 +117,32 @@ export function freshnessNote(ticksToSpoil: number, spoilingCount: number, count
   }
   return `Turns to compost in ${clock}.`;
 }
+
+/**
+ * The same clock, said about a BOX rather than about a bag slot (item 114) — a hover fragment, or
+ * `null` for a container with nothing to say.
+ *
+ * **A FRAGMENT AND NOT A SENTENCE**, which is the only thing that differs from `freshnessNote`
+ * above. The detail pane gets a capital and a full stop because it is a paragraph of one line; the
+ * status ribbon is a single lowercase clause after a dash — *"hand cart — 12 russet potatoes,
+ * 4:12 left"* — and a full stop dropped into the middle of it would be the second voice this file
+ * exists to prevent. `formatFreshness` is shared, so the two surfaces cannot disagree about what
+ * four minutes and twelve seconds looks like.
+ *
+ * **THE FROZEN CASE PRINTS THE NUMBER, DELIBERATELY, AND PUTS THE WORD IN FRONT OF IT.** The
+ * tempting alternative is to say only "frozen" and drop the clock, on the grounds that a figure
+ * which never moves reads as a bug. But a Root Cellar does not RESET a window — item 110's entire
+ * finding was that every box appeared to, and that the $250 cellar was therefore buying nothing —
+ * it BANKS one, and the potatoes come out with exactly what they went in with. A player deciding
+ * whether to cellar a load or run it to the Washer needs that remainder, and hiding it would
+ * re-teach the misconception the freshness rework was built to kill. Word first so the number is
+ * read as a balance rather than as a countdown.
+ *
+ * `null` rather than `''` for silence, so a caller has to decide what an empty box looks like in
+ * its own sentence instead of concatenating a stray comma.
+ */
+export function containerFreshnessNote(ticksToSpoil: number, frozen: boolean): string | null {
+  if (freshnessBand(ticksToSpoil) === 'never') return null;
+  const clock = formatFreshness(ticksToSpoil);
+  return frozen ? `frozen with ${clock} left` : `${clock} left`;
+}

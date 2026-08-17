@@ -252,3 +252,28 @@ falls and it can never jam, and the drone's eligibility test read only those two
 full of worn robots looked like a machine in perfect health, and the drone flew past it forever.
 The fixture preserves the trap exactly: `dock.condition` at maximum, `dock.jammed` false, and a
 harvester asleep inside at 120.
+
+`format-20.json` was recorded by `scripts/record-format-20.ts` (2026-08-17, item 112). It is the
+first save in which **every place a good can sit knows how old it is**. Format 18 gave a container
+the clock its cargo runs on; item 110's own adversarial verifier found within the hour that the bug
+had not died but MOVED — a hopper, an output basket, a grabber's claw and a belt all held goods and
+knew nothing about their age, so a Seasoner nobody could start was a free refrigerator and
+`cellar → arm → belt → arm → cellar` minted a full window with no player at all.
+
+The moment is the point, as always, and here it is four moments at once — **every clock in the
+world is caught part-spent**, because a clock at rest proves nothing: a machine with an empty
+hopper, an empty basket, an open claw and a bare belt round-trips perfectly and says nothing about
+the format it was written for. So: a Seasoner holding fourteen peppers with no chips to cook them
+with, which is the exploit's own shape and can never turn a batch; a Washer holding twelve washed
+potatoes made at a tick the file remembers; an arm that closed its claw on a potato and then found
+its cart full, which is the one stall item 085 left standing and the only way to record a clocked
+claw at all; and three goods on three different clocks riding one belt, which is exactly the state
+item 035's _"a belt is a sorted list of (dist, itemTypeId) and nothing else"_ made unrepresentable.
+A grandfathered hand cart stands beside them at `cargoFreshTicks: 0` — what migration 17 → 18
+writes — so the file also pins that the loader does not helpfully fill that 0 in, and that the
+first take heals it once rather than handing out a fresh window per armful.
+
+**A gap worth naming:** `format-18.json` and `format-19.json` were added by items 110 and 111
+without rows in the table above. The files are real recordings and `save.test.ts` pins both; only
+this document is behind, and item 112 has left it that way rather than inventing provenance for two
+saves it did not record.

@@ -3,7 +3,7 @@
   "description": "A belt-fed truck depot on a standing contract, and a hand-loaded delivery cart beside it. Ends with 5,000 commandless ticks in which the depot ships, the money arrives, and not one manual touch is recorded — which is what makes the Hands-Free board adjudicable.",
   "seed": 320320,
   "ticks": 388643,
-  "expectedHash": "4d705b8f",
+  "expectedHash": "66da13c0",
   "handsOffFromTick": 383643,
   "commands": [
     {

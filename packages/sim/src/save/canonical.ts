@@ -194,6 +194,12 @@ export interface SaveMachine {
   id: number;
   /** One count per line of the machine's recipe, in recipe order. */
   inputCounts: number[];
+  /**
+   * Freshness each hopper line has left, in ticks, parallel to `inputCounts`; 0 on a line with
+   * nothing to lose (item 112). Format 20 gave every line a 0, which reads as "no clock" and
+   * heals on the next armful — the same generous direction format 18 took for cargo.
+   */
+  inputFreshTicks: number[];
   investedCents: number;
   jammed: boolean;
   /** A junction's round-robin cursors, 0..3. Zero on every machine that is not one. */
@@ -203,6 +209,11 @@ export interface SaveMachine {
   network: number;
   opCount: number;
   outputCount: number;
+  /**
+   * Freshness the output basket has left, in ticks; 0 for a basket holding something
+   * shelf-stable, which after the Fryer is all of them (item 112).
+   */
+  outputFreshTicks: number;
   /**
    * What the output buffer is holding, or 0 when it is empty (item 111). Format 19 wrote it for
    * the first time; the 18 → 19 migration reads a non-empty buffer's identity back off the
@@ -268,9 +279,11 @@ export interface SavePipeNetwork {
   supplyMl: number;
 }
 
-/** One item on a belt: how far along it is, and what it is. Nothing else exists. */
+/** One item on a belt: how far along it is, what it is, and how long it has left. */
 export interface SaveBeltItem {
   dist: number;
+  /** Ticks of freshness remaining; 0 for a shelf-stable good and for anything grandfathered. */
+  freshTicks: number;
   item: number;
 }
 
@@ -291,6 +304,8 @@ export interface SaveGrabber {
   dir: number;
   filter: number;
   held: number;
+  /** Ticks of freshness the held unit has left; 0 for an empty claw or a shelf-stable good. */
+  heldFreshTicks: number;
   id: number;
   opCount: number;
   tier: number;
@@ -563,6 +578,7 @@ export function toPayload(state: WorldState): SavePayload {
       flowMlPerMinute: machine.flowMlPerMinute,
       id: machine.id,
       inputCounts: machine.inputCounts.slice(),
+      inputFreshTicks: machine.inputFreshTicks.slice(),
       investedCents: machine.investedCents,
       jammed: machine.jammed,
       junctionInCursor: machine.junctionInCursor,
@@ -571,6 +587,7 @@ export function toPayload(state: WorldState): SavePayload {
       network: machine.network,
       opCount: machine.opCount,
       outputCount: machine.outputCount,
+      outputFreshTicks: machine.outputFreshTicks,
       outputItem: machine.outputItem,
       overcookedCount: machine.overcookedCount,
       ports: machine.ports.map((port) => ({
@@ -601,7 +618,7 @@ export function toPayload(state: WorldState): SavePayload {
     const items: SaveBeltItem[] = [];
     for (let j = 0; j < belt.items.length; j++) {
       const entry = belt.items[j]!;
-      items.push({ dist: entry.dist, item: entry.item });
+      items.push({ dist: entry.dist, freshTicks: entry.freshTicks, item: entry.item });
     }
     belts.push({
       dir: belt.dir,
@@ -623,6 +640,7 @@ export function toPayload(state: WorldState): SavePayload {
       dir: grabber.dir,
       filter: grabber.filter,
       held: grabber.held,
+      heldFreshTicks: grabber.heldFreshTicks,
       id: grabber.id,
       opCount: grabber.opCount,
       tier: grabber.tier,
@@ -962,9 +980,32 @@ function readInputCounts(
   path: string,
   kind: MachineKind,
 ): number[] {
+  return readHopperArray(source, 'inputCounts', path, kind);
+}
+
+/**
+ * The clocks those buffers are running (item 112), sized from today's spec by the same rule and
+ * for the same reason — a line that appears out of a rebalance starts at 0, which reads as "no
+ * clock" and heals the next time anything is put in it.
+ */
+function readInputFreshTicks(
+  source: Record<string, unknown>,
+  path: string,
+  kind: MachineKind,
+): number[] {
+  return readHopperArray(source, 'inputFreshTicks', path, kind);
+}
+
+/** One array of per-hopper integers, resized to today's spec. Both readers above are this. */
+function readHopperArray(
+  source: Record<string, unknown>,
+  key: string,
+  path: string,
+  kind: MachineKind,
+): number[] {
   const spec = machineSpec(kind);
   const slots = spec === null ? 0 : machineHoppers(spec).length;
-  const raw = list(source, 'inputCounts', path);
+  const raw = list(source, key, path);
   const counts: number[] = [];
   for (let i = 0; i < slots; i++) {
     const value = raw[i];
@@ -1266,8 +1307,10 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       cargoFreshTicks: int(machine, 'cargoFreshTicks', path),
       runTicksRemaining: int(machine, 'runTicksRemaining', path),
       inputCounts: readInputCounts(machine, path, kind),
+      inputFreshTicks: readInputFreshTicks(machine, path, kind),
       ports: readPorts(machine, path, kind),
       outputCount: int(machine, 'outputCount', path),
+      outputFreshTicks: int(machine, 'outputFreshTicks', path),
       outputItem: idInt(machine, 'outputItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
       tankMl: int(machine, 'tankMl', path),
       condition: int(machine, 'condition', path),
@@ -1431,6 +1474,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       items.push({
         dist: int(entry, 'dist', itemPath),
         item: idInt(entry, 'item', itemPath, ITEM_IDS) as ItemId,
+        freshTicks: int(entry, 'freshTicks', itemPath),
       });
     }
     belts.push({
@@ -1458,6 +1502,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       tier: idInt(grabber, 'tier', path, GRABBER_TIERS) as GrabberTier,
       filter: idInt(grabber, 'filter', path, ITEM_IDS_OR_NONE),
       held: idInt(grabber, 'held', path, ITEM_IDS_OR_NONE),
+      heldFreshTicks: int(grabber, 'heldFreshTicks', path),
       cooldown: int(grabber, 'cooldown', path),
       opCount: int(grabber, 'opCount', path),
     });

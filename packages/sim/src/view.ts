@@ -53,6 +53,7 @@ import {
   machineKindForBoxedItem,
   machineHoppers,
   machineSpec,
+  storageAgingPerTick,
   wiltStageForAge,
 } from './data';
 import { grabberNextPickup, grabberWouldAccept } from './belts';
@@ -73,9 +74,11 @@ import {
   type Machine,
   type WorldState,
   CeremonyId,
+  basketBlocksRecipe,
   carriedCount,
   heldOutputItem,
   isParcelBuyable,
+  missingInputItem,
   runnableRecipe,
   nextDeedPriceCents,
   tileAt,
@@ -203,6 +206,28 @@ export interface MachineView {
   inputItem: number;
   outputItem: number;
   /**
+   * **THE INGREDIENT THIS MACHINE IS ACTUALLY SHORT OF**, or 0 when it is short of nothing —
+   * the amber lamp's errand, in one item (item 113).
+   *
+   * A SECOND FIELD RATHER THAN A REDEFINITION OF `inputItem`, deliberately. `inputItem` is
+   * hopper zero's label and travels as a pair with `inputCount`; making it mean "whatever is
+   * missing" would leave a view claiming a count of plain chips beside the word "pepper". So
+   * the old pair keeps its old meaning, and the question it was being asked by mistake gets
+   * its own answer.
+   *
+   * WHY IT WAS ASKED BY MISTAKE: the renderer printed `wants ${inputItem}` under any amber
+   * lamp, which was true of every machine in the game until item 111 gave five of them more
+   * than one recipe. After it, a Seasoner out of peppers said "wants plain chips" with twelve
+   * in the hopper, and a Combo Packer out of soda said it wanted the bags it was full of.
+   *
+   * **NON-ZERO ONLY UNDER `LampState.Starved`, AND ONLY FOR SOLIDS.** A running machine wants
+   * nothing, a basket-blocked one has an errand downstream instead (see `basketBlocksRecipe`),
+   * and a piped head short of WATER reports 0 here because its shortage has no item id — the
+   * sentence needs a branch for that rather than a fabricated item. The guarantee the HUD may
+   * rely on: this never names something the machine already holds enough of.
+   */
+  wantsItem: number;
+  /**
    * How many of `outputCount` have overcooked, and what they turned into (0 for machines
    * whose output cannot spoil).
    *
@@ -283,18 +308,40 @@ export interface MachineView {
   cargoItem: number;
   cargoCount: number;
 
-  // **THERE IS NO `cargoTicksToSpoil` HERE YET, AND ITS ABSENCE IS THE ONE THING ITEM 110 LEFT
-  // UNDONE.** A hand cart's load now ages and can turn to Compost where it stands, and a player
-  // has no way to see that coming: `cargoItem`/`cargoCount` say "12 potatoes" and nothing says
-  // "for another four minutes". The publisher is three lines — `machine.cargoFreshTicks` when the
-  // spec is `MachineRole.Storage` and `storageAgingPerTick(kind) > 0`, else -1, matching
-  // `InventoryView.ticksToSpoil`'s -1-means-never so `hud/freshness.ts` can read it unchanged.
-  //
-  // It was written and then taken back out on purpose: a REQUIRED field on this interface fails
-  // `apps/web/src/game/render/machine-motion.test.ts`, which spells out a whole `MachineView`
-  // literal, and that file belongs to another lane that was being edited in parallel. Adding it
-  // is a two-file change and wants the HUD half in the same breath anyway — the countdown is
-  // worth nothing until something draws it.
+  /**
+   * **HOW LONG THE LOAD IN THAT BOX HAS LEFT** (item 114), or **-1 when there is nothing to
+   * count**. The sentinel is `InventoryView.ticksToSpoil`'s, deliberately and to the letter, so
+   * `hud/freshness.ts` reads a container with the vocabulary it already had for the player's own
+   * bag — one voice for "4:12", not two.
+   *
+   * This is the half item 110 left undone and its absence was a live bug, not a gap: since 110 a
+   * hand cart SPENDS its contents' clock and turns them to Compost where they stand, and the two
+   * fields above say "12 potatoes" with no hint that eleven of them have four minutes to live. A
+   * box that quietly kills your food should say so.
+   *
+   * **-1 MEANS THE SIM HAS NO OPINION, WHICH IS THREE DIFFERENT SITUATIONS AND ONE SENTENCE.** An
+   * empty box; a box of shelf-stable goods (`freshnessTicks` 0 — chips, seeds, compost); and the
+   * format-18 grandfathered load whose clock was never recorded and which `advanceStorageSpoilage`
+   * therefore does not age either. All three are boxes that are killing nothing, so all three say
+   * nothing, and none of them may be drawn as a countdown.
+   */
+  cargoTicksToSpoil: number;
+  /**
+   * 1 when this container STOPS the clock instead of spending it — the Root Cellar, and today the
+   * Root Cellar alone (`STORAGE_AGING_BY_KIND`).
+   *
+   * **A SECOND FIELD RATHER THAN A SECOND SENTINEL**, because "frozen" and "nothing to count" are
+   * genuinely different facts and folding the cellar into -1 would throw away the number the
+   * player most wants from it. A cellar does not RESET the window — item 110's whole finding was
+   * that players believed boxes did — it BANKS it, and the potatoes come out with exactly the
+   * remainder they went in with. So a frozen container publishes both: the flag says the clock is
+   * held, and `cargoTicksToSpoil` says what is being held.
+   *
+   * **HUD CONTRACT**: `cargoTicksToSpoil` is a countdown only while this is 0. A surface that
+   * ignores this flag draws a Root Cellar as a timer that never moves, which is the exact
+   * misreading item 114 exists to prevent.
+   */
+  cargoFrozen: number;
 
   /**
    * The harvester dock's SEED shelf (item 088), beside the produce shelf above. Zero/0 on every
@@ -1101,6 +1148,7 @@ function projectMachines(state: WorldState, out: WorldView): void {
         outputCapacity: 0,
         inputItem: 0,
         outputItem: 0,
+        wantsItem: 0,
         overcookedCount: 0,
         overcookedItem: 0,
         speedLevel: 0,
@@ -1119,6 +1167,8 @@ function projectMachines(state: WorldState, out: WorldView): void {
         skippedCount: 0,
         cargoItem: 0,
         cargoCount: 0,
+        cargoTicksToSpoil: -1,
+        cargoFrozen: 0,
         seedShelfItem: 0,
         seedShelfCount: 0,
         bleedCentsLast60s: 0,
@@ -1171,6 +1221,11 @@ function projectMachines(state: WorldState, out: WorldView): void {
         : machine.outputCount > 0
           ? heldOutputItem(machine, spec)
           : (spec.outputItem ?? 0);
+    // Gated on the amber lamp, so "wants" and "is starved" cannot come apart: a machine that is
+    // running, blocked, jammed or dry names nothing, and the renderer needs no second condition
+    // to know when to believe this. Computed after `mv.lamp`, off the same projection pass.
+    mv.wantsItem =
+      spec === null || mv.lamp !== LampState.Starved ? 0 : missingInputItem(spec, machine);
     mv.overcookedCount = machine.overcookedCount;
     mv.overcookedItem =
       spec === null || spec.overcookOutputItem === null ? 0 : spec.overcookOutputItem;
@@ -1200,6 +1255,12 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.skippedCount = machine.skippedCount;
     mv.cargoItem = machine.cargoItem;
     mv.cargoCount = machine.cargoCount;
+    // The container clock, and whether it is running (item 114). `cargoFrozen` reads the same
+    // table `tick.ts` reads and tests it the same way (`spent <= 0`), and it is gated on there
+    // being a clock at all: an EMPTY Root Cellar is not "frozen", it is a shed, and a surface
+    // that said otherwise would be advertising preservation nobody had bought yet.
+    mv.cargoTicksToSpoil = cargoTicksToSpoil(machine, spec);
+    mv.cargoFrozen = mv.cargoTicksToSpoil >= 0 && storageAgingPerTick(machine.kind) <= 0 ? 1 : 0;
     mv.seedShelfItem = machine.seedShelfItem;
     mv.seedShelfCount = machine.seedShelfCount;
     mv.bleedCentsLast60s = bleedCentsWithinWindow(machine, state.tick);
@@ -1208,6 +1269,36 @@ function projectMachines(state: WorldState, out: WorldView): void {
   }
 
   out.machines.length = count;
+}
+
+/**
+ * What a container's load has left, or -1 for "nothing to count" (item 114).
+ *
+ * **EVERY LINE BELOW MIRRORS `advanceStorageSpoilage` IN `tick.ts`, AND THAT IS THE WHOLE RISK OF
+ * THIS FUNCTION.** The projection may not import the tick loop, so the gate deciding *which boxes
+ * spend a clock* is written twice — and the failure mode of the two drifting apart is precisely
+ * the one item 114 was filed against: a surface confidently counting down a machine the sim never
+ * ages, which is a stuck timer wearing a countdown's clothes. It is held together by behaviour
+ * rather than by hope: `container-clock-view.test.ts` ticks a real world holding every kind that
+ * can take cargo and asserts the projection's story against what the goods actually did.
+ *
+ * The gate, in the tick loop's own order:
+ *   · a load, and a load with a recorded clock — `cargoFreshTicks` of 0 is format 18's
+ *     grandfathered cargo, which `tick.ts` skips and which therefore has no countdown to publish;
+ *   · `MachineRole.Storage`, **or** the harvester dock by kind, whose shelf is the same three
+ *     fields and drains onto a belt with nobody clicking anything (item 112).
+ *
+ * **THE DELIVERY CART IS EXCLUDED HERE BECAUSE IT IS EXCLUDED THERE**, by role — its load is on
+ * the road and `tick.ts` spends nothing on it. Whether that is right is a live balance question
+ * item 112 left open for the owner; what is NOT open is that the view must describe the sim it
+ * has, and a cart drawn with a falling clock would be the first lie this field ever told.
+ */
+function cargoTicksToSpoil(machine: Machine, spec: MachineSpec | null): number {
+  if (spec === null) return -1;
+  if (machine.cargoCount <= 0 || machine.cargoItem === 0) return -1;
+  if (machine.cargoFreshTicks <= 0) return -1;
+  if (spec.role !== MachineRole.Storage && machine.kind !== MachineKind.HarvesterDock) return -1;
+  return machine.cargoFreshTicks;
 }
 
 /**
@@ -1761,7 +1852,14 @@ function lampFor(state: WorldState, index: number): LampState {
   // is not the same as "a hopper is empty" now that a Seasoner has four hoppers and needs two.
   // Walking `spec.inputs` here would have put a starved lamp on every plain chip line in the
   // game for want of a pepper the plain recipe never asked for.
-  if (runnableRecipe(spec, machine) === null) return LampState.Starved;
+  if (runnableRecipe(spec, machine) === null) {
+    // **AND AMBER IS STILL THE WRONG COLOUR FOR HALF OF THOSE** (item 113). A machine that has
+    // every ingredient and is stopped by a basket holding last flavour's chips is a DOWNSTREAM
+    // problem: red, "take some", exactly as a full basket is. Sending that player upstream for
+    // chips they are already standing on is the defect this line exists to prevent, and it is
+    // why the basket check is asked here rather than folded into the amber answer.
+    return basketBlocksRecipe(spec, machine) ? LampState.Blocked : LampState.Starved;
+  }
   return LampState.Running;
 }
 

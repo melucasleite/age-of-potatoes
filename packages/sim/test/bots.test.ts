@@ -37,6 +37,7 @@ import {
   createWorldView,
   cropSpec,
   createWorld,
+  freshnessTicks,
   dockAcceptDelivery,
   dockAcceptSeed,
   dockCanAcceptDelivery,
@@ -515,7 +516,13 @@ describe('the dock shelf (item 083)', () => {
 
     // Drain the shelf through its one door, and the stall resolves itself: the held row
     // becomes the shelf's next product. Five in, five on the shelf — nothing was deleted.
-    expect(takeDockShelf(dock, shelf)).toEqual({ item: ItemId.RussetPotato, taken: shelf });
+    // The shelf hands back its clock too since item 112 — it is a container like any other, and
+    // everything on it is field produce an arm can drain onto a belt with nobody clicking.
+    const drained = takeDockShelf(dock, shelf)!;
+    expect(drained.item).toBe(ItemId.RussetPotato);
+    expect(drained.taken).toBe(shelf);
+    expect(drained.freshTicks).toBeGreaterThan(0);
+    expect(drained.freshTicks).toBeLessThanOrEqual(freshnessTicks(ItemId.RussetPotato));
     stepMany(state, 600);
     expect(dock.cargoItem).toBe(ItemId.DayOldPotato);
     expect(dock.cargoCount).toBe(5);
@@ -1000,7 +1007,7 @@ describe('an arm at a dock looks before it grabs (item 085)', () => {
     // The dock sits at (0,0) and is two tiles wide, so the arm's drop tile is its east edge.
     dock.tileX = 4;
     dock.tileY = 3;
-    belt.items.push({ dist: 0, item: ItemId.CaneSeed });
+    belt.items.push({ dist: 0, item: ItemId.CaneSeed, freshTicks: 0 });
 
     stepMany(state, 500);
 
@@ -1011,7 +1018,7 @@ describe('an arm at a dock looks before it grabs (item 085)', () => {
     // CONTROL: the seed this zone actually asked for rides the same belt through the same arm
     // into the same hopper. The refusal above is about the seed, not about the plumbing.
     belt.items.length = 0;
-    belt.items.push({ dist: 0, item: ItemId.PotatoSeed });
+    belt.items.push({ dist: 0, item: ItemId.PotatoSeed, freshTicks: 0 });
     // Watched rather than read at the end: the planter's own bot eats out of that hopper, so a
     // final count of zero would mean "it worked" and "it never arrived" at the same time.
     let hopperEverHeldSeed = false;

@@ -50,7 +50,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 19;
+export const CURRENT_FORMAT_VERSION = 20;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -1360,6 +1360,72 @@ const migrateFormat18To19: SaveMigration = (payload) => {
 };
 
 /**
+ * Format 19 → 20: **the clock reaches every other place a good can sit** (item 112).
+ *
+ * Format 18 gave a CONTAINER the clock its cargo runs on, and item 110's own verifier found
+ * within the hour that the bug had not died, it had moved: a machine holds goods in a hopper, in
+ * an output basket, in a claw and on a belt, and not one of those four had anywhere to record how
+ * old anything was. So this step adds `inputFreshTicks` (one per hopper line), `outputFreshTicks`,
+ * `Grabber.heldFreshTicks`, and `freshTicks` on every item riding a belt.
+ *
+ * **EVERY ONE OF THEM GETS 0, AND 0 MEANS "NO CLOCK" RATHER THAN "OUT OF TIME"** — format 18's
+ * ruling, applied again for exactly the reason it was made the first time. Stamping a real window
+ * onto a stocked hopper during a migration would start that clock at the tick the player last
+ * saved, which for somebody who has been away a week is an instruction to hand them compost. A
+ * migration must destroy nothing a player owns.
+ *
+ * So a format-19 world is grandfathered EXACTLY as a format-17 cellar was: its held goods do not
+ * age, and they hand back a full window the first time anything takes them out. The healing is
+ * where this differs from its predecessor, and it is the other half of item 112. `takeStorage` and
+ * `takeDockShelf` now START a clockless container's clock on first contact rather than answering
+ * every take with a brand-new window — the *"two takes ten thousand ticks apart were both stamped
+ * 18,000"* bug — so a grandfathered container grants one window in total, which is what the word
+ * was always supposed to mean. `putHopper` and `putStorage` heal the same way through
+ * `mergedFreshness`, in the pessimistic direction, the moment anything is added.
+ *
+ * **THE HOPPER ARRAY IS SIZED HERE AND RESIZED AGAIN BY THE LOADER**, deliberately. `inputCounts`
+ * is the length this writes against, because that is the fact the FILE holds; `readInputFreshTicks`
+ * then trims or pads to today's spec exactly as `readInputCounts` does, because that is the fact
+ * the BUILD holds. A migration that guessed at the spec would be a migration that ages badly.
+ *
+ * Nothing is removed and no player loses a unit. `payload.version` is NOT rewritten, for the
+ * reason format 14 → 15 spells out.
+ */
+const migrateFormat19To20: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-19 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const machines = rows(p, 'machines').map((machine) => {
+    const counts = machine['inputCounts'];
+    const lines = Array.isArray(counts) ? counts.length : 0;
+    return {
+      ...machine,
+      inputFreshTicks: new Array<number>(lines).fill(0),
+      outputFreshTicks: 0,
+    };
+  });
+
+  const belts = rows(p, 'belts').map((belt) => {
+    const items = belt['items'];
+    if (!Array.isArray(items)) return belt;
+    return {
+      ...belt,
+      items: items.map((entry) =>
+        typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+          ? { ...(entry as Record<string, unknown>), freshTicks: 0 }
+          : entry,
+      ),
+    };
+  });
+
+  const grabbers = rows(p, 'grabbers').map((grabber) => ({ ...grabber, heldFreshTicks: 0 }));
+
+  return { ...p, machines, belts, grabbers };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -1383,6 +1449,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   16: migrateFormat16To17,
   17: migrateFormat17To18,
   18: migrateFormat18To19,
+  19: migrateFormat19To20,
 };
 
 export interface MigrationOutcome {

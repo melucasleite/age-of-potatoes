@@ -25,8 +25,21 @@
 // two readings. If one ever did, the count is low and the flag under-claims, which is the
 // safe direction for a number the player is being asked to believe.
 
-import { LampState, TICKS_PER_SECOND, listPriceCents, machineSpec } from '@snack/sim';
-import type { ItemId, MachineKind, MachineView, WorldView } from '@snack/sim';
+import {
+  LampState,
+  TICKS_PER_SECOND,
+  listPriceCents,
+  machineRecipes,
+  machineSpec,
+} from '@snack/sim';
+import type {
+  ItemId,
+  MachineKind,
+  MachineRecipe,
+  MachineSpec,
+  MachineView,
+  WorldView,
+} from '@snack/sim';
 
 import type { InefficiencyFlag } from './types';
 
@@ -184,20 +197,57 @@ export class IdleWatch {
   }
 }
 
-/** Cents one completed operation adds: what comes out at list, less what went in at list. */
+/**
+ * Cents one completed operation adds: what comes out at list, less what went in at list.
+ *
+ * **PRICED OFF THE RECIPE THE MACHINE IS ACTUALLY RUNNING, NOT OFF `spec.outputItem`** (item
+ * 113). Those were the same thing until item 111 gave five machines a choice of recipe, and the
+ * gap is not academic — it is exactly the premium the flavoured lines were added to earn:
+ *
+ *   Seasoner on chili   $6.50 a go, reported as $5.00 (its plain recipe's figure)
+ *   Seasoner on corn    $6.10, same
+ *   Washer on gold      $3.00, reported as $1.00 — the machine nobody thought to check
+ *
+ * The Bagger, the Slicer and the Fryer come out right by luck: their premium lines shift input
+ * and output by the same cents, so the subtraction lands in the same place. Luck is a poor
+ * reason for a number the report asks the player to believe, so all five now read the table.
+ *
+ * `MachineView.outputItem` is what is in the BASKET, falling back to the spec's product for an
+ * empty one — so an idle machine is valued at what it is for, and a busy one at what it is
+ * doing. A view that predates the field (or a test fixture that omits it) reads 0 and lands on
+ * the implied recipe below, which is the arithmetic this function has always done.
+ */
 function valueAddedPerOp(machine: MachineView): number {
   // `MachineView.kind` is a plain number by design — the projection is structured-cloneable
   // data and carries no branded types across the seam. Widening it back is this reader's job.
   const spec = machineSpec(machine.kind as MachineKind);
-  if (spec === null || spec.outputItem === null) return 0;
-  const out = listPriceCents(spec.outputItem);
-  // Recipes are multi-input since the soda line (`inputs: RecipeInput[]`); the value a
-  // machine adds is its output at list less EVERY input line at list. Liquids drawn from
-  // ports are deliberately not counted — water has no list price, and juice/syrup cost is
-  // already paid at the machine that consumed the cane.
+  if (spec === null) return 0;
+  const recipe = operationRecipe(spec, (machine.outputItem || 0) as ItemId);
+  if (recipe.output === null) return 0;
+  const out = listPriceCents(recipe.output);
+  // Recipes are multi-input since the soda line; the value a machine adds is its output at
+  // list less EVERY line at list. Liquids drawn from ports are deliberately not counted —
+  // water has no list price, and juice/syrup cost is already paid at the machine that
+  // consumed the cane.
   let inn = 0;
-  for (const line of spec.inputs) inn += listPriceCents(line.item) * line.count;
+  for (const line of recipe.consumes) inn += listPriceCents(line.item) * line.count;
   return out - inn;
+}
+
+/**
+ * The recipe behind a basket holding `held`, or the machine's ordinary one for an empty basket.
+ *
+ * The fallback is written out rather than looked up because it is the definition of "ordinary":
+ * every solid line of `spec.inputs` producing `spec.outputItem`, which is what the thirty-five
+ * machines with no `MACHINE_RECIPES` row have always run and what this file has always priced.
+ */
+function operationRecipe(spec: MachineSpec, held: ItemId | 0): MachineRecipe {
+  if (held !== 0) {
+    for (const recipe of machineRecipes(spec)) {
+      if (recipe.output === held) return recipe;
+    }
+  }
+  return { consumes: spec.inputs, output: spec.outputItem };
 }
 
 const KIND_LABELS: Readonly<Record<number, string>> = {

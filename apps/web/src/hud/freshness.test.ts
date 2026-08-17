@@ -23,6 +23,7 @@ import { FRESHNESS_TICKS_BY_ITEM, ItemId, TICKS_PER_SECOND } from '@snack/sim';
 import {
   GOING_TICKS,
   TURNING_TICKS,
+  containerFreshnessNote,
   formatFreshness,
   freshnessBand,
   freshnessNote,
@@ -103,5 +104,45 @@ describe('the sentence in the detail pane', () => {
 
   it('states the reward for building the line on anything shelf-stable', () => {
     expect(freshnessNote(-1, 0, 4)).toBe('Keeps indefinitely.');
+  });
+});
+
+describe('the fragment a container gets (item 114)', () => {
+  it('shares the clock with the detail pane rather than formatting a second one', () => {
+    expect(containerFreshnessNote(TICKS_PER_SECOND * 252, false)).toBe('4:12 left');
+    expect(containerFreshnessNote(TICKS_PER_SECOND * 252, false)).toContain(
+      formatFreshness(TICKS_PER_SECOND * 252),
+    );
+  });
+
+  it('honours the sentinel, so a box of chips is silent rather than urgent', () => {
+    // The same trap this whole file exists for, at a fourth comparison: a Root Cellar of bagged
+    // chips reading "-1 left" would be the most urgent box on the lot.
+    expect(containerFreshnessNote(-1, false)).toBeNull();
+    expect(containerFreshnessNote(-1, true)).toBeNull();
+  });
+
+  it('leads with the word, so a frozen cellar is never read as a stuck timer', () => {
+    const note = containerFreshnessNote(TICKS_PER_SECOND * 252, true)!;
+    expect(note).toBe('frozen with 4:12 left');
+    // Word first is the whole difference between a balance and a countdown, so it is asserted
+    // rather than left to the phrasing.
+    expect(note.indexOf('frozen')).toBeLessThan(note.indexOf('4:12'));
+  });
+
+  it('keeps the banked remainder visible, because a cellar pauses the clock and never resets it', () => {
+    // Item 110's finding was that players believed every box handed back a fresh window. Hiding
+    // the number here — saying only "frozen" — would teach that misconception a second time.
+    expect(containerFreshnessNote(TICKS_PER_SECOND * 30, true)).toBe('frozen with 0:30 left');
+  });
+
+  it('is a fragment, not a sentence: no capital, no full stop, one voice per surface', () => {
+    for (const note of [
+      containerFreshnessNote(TICKS_PER_SECOND * 90, false)!,
+      containerFreshnessNote(TICKS_PER_SECOND * 90, true)!,
+    ]) {
+      expect(note).toBe(note.toLowerCase());
+      expect(note.endsWith('.')).toBe(false);
+    }
   });
 });

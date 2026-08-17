@@ -27,6 +27,7 @@ import {
   beltEndDist,
   beltInsert,
   createWorld,
+  freshnessTicks,
   hashState,
   itemCount,
   spawnBelt,
@@ -44,6 +45,16 @@ function run(state: WorldState, commands: Command[]): void {
  * at the tick boundary and the world then moves.
  */
 const DRIFT = 3;
+
+/**
+ * What a perishable inserted with no clock is carrying after that same one tick (item 112).
+ *
+ * The insert answers "no opinion" with a full window, and the world then spends one tick of it —
+ * the freshness twin of `DRIFT`, and for exactly the same reason: a command lands on the tick
+ * boundary and the world moves afterwards. Shelf-stable goods stay at 0 forever, which is why
+ * only the potatoes below carry a number.
+ */
+const CLOCK_AFTER_ONE_TICK = freshnessTicks(ItemId.RussetPotato) - 1;
 
 /** Put the player on a tile so the reach-gated rotate is in reach. Position is not a command. */
 function standOn(state: WorldState, tileX: number, tileY: number): void {
@@ -84,8 +95,8 @@ describe('RotateBelt', () => {
     const state = createWorld(7);
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 5)!;
     // One item on tile 1, one on tile 3 — either side of the cut, neither on it.
-    expect(beltInsert(belt, 1 * SUBTILE + 10, ItemId.RussetPotato)).toBe(true);
-    expect(beltInsert(belt, 3 * SUBTILE + 20, ItemId.PlainChips)).toBe(true);
+    expect(beltInsert(belt, 1 * SUBTILE + 10, ItemId.RussetPotato, 0)).toBe(true);
+    expect(beltInsert(belt, 3 * SUBTILE + 20, ItemId.PlainChips, 0)).toBe(true);
 
     standOn(state, 2, 1);
     run(state, [{ type: 'RotateBelt', tileX: 2, tileY: 0 }]);
@@ -104,15 +115,21 @@ describe('RotateBelt', () => {
     expect(after.lengthTiles).toBe(2);
 
     // Goods redistributed by physical position: nothing teleported, nothing vanished.
-    expect(before.items).toEqual([{ dist: 1 * SUBTILE + 10 + DRIFT, item: ItemId.RussetPotato }]);
+    expect(before.items).toEqual([
+      {
+        dist: 1 * SUBTILE + 10 + DRIFT,
+        item: ItemId.RussetPotato,
+        freshTicks: CLOCK_AFTER_ONE_TICK,
+      },
+    ]);
     expect(mid.items).toEqual([]);
-    expect(after.items).toEqual([{ dist: 20 + DRIFT, item: ItemId.PlainChips }]);
+    expect(after.items).toEqual([{ dist: 20 + DRIFT, item: ItemId.PlainChips, freshTicks: 0 }]);
   });
 
   it('keeps an item on the rotated tile, re-anchored to its new axis', () => {
     const state = createWorld(7);
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 3)!;
-    expect(beltInsert(belt, 1 * SUBTILE + 30, ItemId.RussetPotato)).toBe(true);
+    expect(beltInsert(belt, 1 * SUBTILE + 30, ItemId.RussetPotato, 0)).toBe(true);
 
     standOn(state, 1, 1);
     run(state, [{ type: 'RotateBelt', tileX: 1, tileY: 0 }]);
@@ -121,7 +138,9 @@ describe('RotateBelt', () => {
     expect(mid.lengthTiles).toBe(1);
     expect(mid.dir).toBe(Direction.South);
     // Same tile, same offset along the (new) axis — the item swings with its floor.
-    expect(mid.items).toEqual([{ dist: 30 + DRIFT, item: ItemId.RussetPotato }]);
+    expect(mid.items).toEqual([
+      { dist: 30 + DRIFT, item: ItemId.RussetPotato, freshTicks: CLOCK_AFTER_ONE_TICK },
+    ]);
   });
 
   it('splits into two segments when the tile is the head or the tail of the run', () => {
@@ -183,9 +202,9 @@ describe('RemoveBeltTile', () => {
   it('cuts one mid-run tile out, refunds one tile, and hands its goods to the player', () => {
     const state = createWorld(7);
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 5)!;
-    expect(beltInsert(belt, 0 * SUBTILE + 5, ItemId.RussetPotato)).toBe(true);
-    expect(beltInsert(belt, 2 * SUBTILE + 40, ItemId.PlainChips)).toBe(true);
-    expect(beltInsert(belt, 4 * SUBTILE + 50, ItemId.BaggedChips)).toBe(true);
+    expect(beltInsert(belt, 0 * SUBTILE + 5, ItemId.RussetPotato, 0)).toBe(true);
+    expect(beltInsert(belt, 2 * SUBTILE + 40, ItemId.PlainChips, 0)).toBe(true);
+    expect(beltInsert(belt, 4 * SUBTILE + 50, ItemId.BaggedChips, 0)).toBe(true);
     const money = state.moneyCents;
 
     run(state, [{ type: 'RemoveBeltTile', tileX: 2, tileY: 0 }]);
@@ -196,17 +215,19 @@ describe('RemoveBeltTile', () => {
     expect(itemCount(state, ItemId.PlainChips)).toBe(1);
     expect(state.belts).toHaveLength(2);
     expect(beltAt(state, 2, 0)).toBeNull();
-    expect(beltAt(state, 0, 0)!.items).toEqual([{ dist: 5 + DRIFT, item: ItemId.RussetPotato }]);
+    expect(beltAt(state, 0, 0)!.items).toEqual([
+      { dist: 5 + DRIFT, item: ItemId.RussetPotato, freshTicks: CLOCK_AFTER_ONE_TICK },
+    ]);
     expect(beltAt(state, 3, 0)!.items).toEqual([
-      { dist: SUBTILE + 50 + DRIFT, item: ItemId.BaggedChips },
+      { dist: SUBTILE + 50 + DRIFT, item: ItemId.BaggedChips, freshTicks: 0 },
     ]);
   });
 
   it('leaves both survivors working: goods still move on each half', () => {
     const state = createWorld(7);
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 5)!;
-    expect(beltInsert(belt, 10, ItemId.RussetPotato)).toBe(true);
-    expect(beltInsert(belt, 3 * SUBTILE + 10, ItemId.PlainChips)).toBe(true);
+    expect(beltInsert(belt, 10, ItemId.RussetPotato, 0)).toBe(true);
+    expect(beltInsert(belt, 3 * SUBTILE + 10, ItemId.PlainChips, 0)).toBe(true);
 
     run(state, [{ type: 'RemoveBeltTile', tileX: 2, tileY: 0 }]);
     const beforePart = beltAt(state, 0, 0)!;
@@ -224,7 +245,7 @@ describe('RemoveBeltTile', () => {
   it('takes a 1-tile belt out whole, goods and refund included', () => {
     const state = createWorld(7);
     const belt = spawnBelt(state, BeltTier.Basic, 3, 3, Direction.East, 1)!;
-    expect(beltInsert(belt, 12, ItemId.RussetPotato)).toBe(true);
+    expect(beltInsert(belt, 12, ItemId.RussetPotato, 0)).toBe(true);
     const money = state.moneyCents;
 
     run(state, [{ type: 'RemoveBeltTile', tileX: 3, tileY: 3 }]);
@@ -254,7 +275,7 @@ describe('splitBeltAtTile', () => {
       const state = createWorld(11);
       const belt = spawnBelt(state, BeltTier.Basic, 2, 3, Direction.South, 8)!;
       for (let d = 0; d + 64 <= beltEndDist(belt); d += 64) {
-        expect(beltInsert(belt, d, ItemId.RussetPotato)).toBe(true);
+        expect(beltInsert(belt, d, ItemId.RussetPotato, 0)).toBe(true);
       }
       const total = totalOnBelts(state);
       const posBefore = worldPositionsOf(state);
@@ -278,7 +299,7 @@ describe('splitBeltAtTile', () => {
     const state = createWorld(11);
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 6)!;
     for (let d = 32; d + 64 <= beltEndDist(belt); d += 96) {
-      expect(beltInsert(belt, d, ItemId.PlainChips)).toBe(true);
+      expect(beltInsert(belt, d, ItemId.PlainChips, 0)).toBe(true);
     }
     splitBeltAtTile(state, belt, 3, Direction.South);
     for (const part of state.belts) {
@@ -300,8 +321,8 @@ describe('surgery determinism', () => {
     const build = (): WorldState => {
       const state = createWorld(21);
       const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 6)!;
-      beltInsert(belt, 1 * SUBTILE, ItemId.RussetPotato);
-      beltInsert(belt, 4 * SUBTILE, ItemId.PlainChips);
+      beltInsert(belt, 1 * SUBTILE, ItemId.RussetPotato, 0);
+      beltInsert(belt, 4 * SUBTILE, ItemId.PlainChips, 0);
       standOn(state, 2, 1);
       run(state, [{ type: 'RotateBelt', tileX: 2, tileY: 0 }]);
       run(state, []);
@@ -330,7 +351,7 @@ function measureDeliveries(
   let delivered = 0;
   for (let t = 0; t < warmupTicks + windowTicks; t++) {
     const source = beltAt(state, startX, 0)!;
-    beltInsert(source, 0, ItemId.RussetPotato);
+    beltInsert(source, 0, ItemId.RussetPotato, 0);
     run(state, []);
     const sink = beltAt(state, endX, 0)!;
     const head = sink.items[sink.items.length - 1];
