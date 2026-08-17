@@ -25,6 +25,7 @@ import {
   type MachineSpec,
   beltSpec,
   grabberSpec,
+  machineHoppers,
   machineSpec,
 } from './data';
 import { dockAcceptDelivery, dockCanAcceptDelivery } from './bots';
@@ -486,6 +487,11 @@ function grabberSource(
   //
   // The filter judges what is on the shelf, exactly as it judges a dock's: an arm filtered to
   // chips leaves a cellar of potatoes alone rather than emptying it.
+  //
+  // THE CLOCK THE BOX HANDS BACK IS DROPPED HERE, ON PURPOSE (item 110). `takeStorage` returns the
+  // remaining freshness for the hand's sake, and a belt has nowhere to put it — a belt item is an
+  // `ItemId` and nothing else (item 035's ruling). So goods leaving a cellar by arm arrive at
+  // their destination clockless, exactly as they always have.
   if (spec.role === MachineRole.Storage) {
     if (!storageIsParked(state, machine)) return 0;
     const held = nextStorageItem(machine);
@@ -697,10 +703,18 @@ function grabberDeliver(
   //
   // Gated on the way in as well as the way out, by the same function, for the same reason: an arm
   // must no more fill a cart the player is towing than empty one.
+  //
+  // **A BELT HANDS OVER NO CLOCK, SO THE ARM PASSES 0** (item 110), which `putStorage` reads as
+  // "no opinion" and answers with a full window — merged against whatever the box already holds,
+  // so an arm can never make a half-spent cellar fresh again. That an EMPTY box filled off a belt
+  // starts a full window is item 035's standing ruling showing through, not a new hole: goods on a
+  // belt have no freshness at all, because a belt is a place goods pass through rather than sit
+  // in. Closing it means a spoil tick per belt item, which is a bigger change than this one and
+  // should be argued on its own.
   if (machineSpecFor.role === MachineRole.Storage) {
     if (!storageIsParked(state, machine)) return false;
     return commit
-      ? putStorage(machine, machineSpecFor, item, 1) > 0
+      ? putStorage(machine, machineSpecFor, item, 1, 0) > 0
       : storageRoomFor(machine, machineSpecFor, item) > 0;
   }
   // An arm puts what it is holding into the line of the recipe that wants it. A Combo Packer
@@ -726,8 +740,11 @@ function grabberDeliver(
  */
 function hopperLineFor(spec: MachineSpec, machine: Machine, item: ItemId): number {
   const capacity = effectiveInputCapacity(spec, machine);
-  for (let i = 0; i < spec.inputs.length; i++) {
-    if (spec.inputs[i]!.item !== item) continue;
+  // HOPPERS, not the recipe: a belt is asking where an item can be PUT, and a Seasoner accepts
+  // peppers it does not need for a plain batch (item 111).
+  const hoppers = machineHoppers(spec);
+  for (let i = 0; i < hoppers.length; i++) {
+    if (hoppers[i]!.item !== item) continue;
     if ((machine.inputCounts[i] ?? 0) >= capacity) return -1;
     return i;
   }

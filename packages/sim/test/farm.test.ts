@@ -14,6 +14,7 @@ import {
   CropId,
   FERTILITY_MAX,
   FERTILITY_MIN,
+  FRESHNESS_BUCKET_TICKS,
   FRESHNESS_MAX_STACKS,
   HARVESTS_PER_FERTILITY_STEP,
   ItemId,
@@ -172,8 +173,10 @@ describe('harvested goods spoiling', () => {
     expect(itemCount(state, ItemId.RussetPotato), 'the loose half should be compost').toBe(0);
     expect(itemCount(state, ItemId.Compost)).toBe(5);
 
-    // And the stored half comes out whole, with a full window ahead of it rather than the
-    // remainder of an old one — freshness is stamped on the way OUT, from now.
+    // And the stored half comes out whole, carrying the window it went in with — which was very
+    // nearly a full one, because it was boxed in the same tick it was picked. **THAT SENTENCE USED
+    // TO READ "a full window ahead of it rather than the remainder of an old one", which was the
+    // bug of item 110 stated as a feature.** The cellar keeps time; it does not manufacture it.
     step(state, {
       tick: state.tick,
       commands: [{ type: 'UnloadMachine', machineId: cellar.id, count: 5 }],
@@ -576,7 +579,14 @@ describe('the hand cart', () => {
     expect(Number.isInteger(state.player.moveAccum), 'no float multiplier anywhere').toBe(true);
   });
 
-  it('holds a real load, and stops the clock on what is inside', () => {
+  it('holds a real load, and never quietly loses part of it', () => {
+    // **THIS TEST USED TO BE CALLED "stops the clock on what is inside" AND THAT WAS THE BUG**
+    // (item 110): a barrow with a tarp over it is not a refrigerator, and while it was one the
+    // $250 Root Cellar was worth $80. What survives here is the capacity claim and the
+    // nothing-vanishes floor; the clock is `a trip through storage`'s subject now.
+    //
+    // The cargo is poked in rather than loaded, so it carries no clock at all — which is exactly
+    // the state format 18 grandfathers an old save into, and it must simply sit there.
     const state = world(52);
     const cart = spawnMachine(state, MachineKind.HandCart, 20, 20)!;
     const spec = machineSpec(MachineKind.HandCart)!;
@@ -588,6 +598,7 @@ describe('the hand cart', () => {
     cart.cargoCount = 20;
     stepMany(state, 30_000);
     expect(cart.cargoCount).toBe(20);
+    expect(cart.cargoFreshTicks, 'a clockless load stays clockless until it is touched').toBe(0);
   });
 
   it('lets go when the cart is boxed, rather than dragging a ghost', () => {
@@ -655,5 +666,183 @@ describe('the orchard', () => {
     });
     expect(itemCount(state, ItemId.Lemon)).toBe(fruit);
     expect(itemCount(state, ItemId.BoxedLemonTree)).toBe(1);
+  });
+});
+
+// --- item 110: a trip through storage does not reset the freshness clock ---------------
+//
+// THE BUG, VERBATIM, from item 105's adversarial verifier: *"a round trip through an eighty
+// dollar hand cart resets the freshness clock, so I kept ten potatoes alive for three and a half
+// times their natural lifespan by clicking twice. Rot is now opt-in."*
+//
+// Every test below is the same sentence asked of a different door. The first one is the
+// verifier's own session, replayed.
+
+describe('a trip through storage', () => {
+  /** The verifier's cart, parked on the player's toes so every reach check passes. */
+  function withCart(state: WorldState, kind: MachineKind = MachineKind.HandCart) {
+    state.player.xSub = 128;
+    state.player.ySub = 128;
+    return spawnMachine(state, kind, 0, 0)!;
+  }
+
+  it('THE EXPLOIT: ten potatoes cannot outlive their window by riding a hand cart', () => {
+    const state = world();
+    const cart = withCart(state);
+    addItem(state, ItemId.RussetPotato, 10);
+
+    // Ten active minutes in the arms, then in and straight back out — four times over. Under the
+    // old rule each unload stamped a brand-new fifteen minutes, so this session ran forty-plus
+    // minutes on a fifteen-minute window and never lost a potato.
+    for (let trip = 0; trip < 4; trip++) {
+      stepMany(state, 10 * ACTIVE_MINUTE);
+      step(state, {
+        tick: state.tick,
+        commands: [
+          { type: 'LoadMachine', machineId: cart.id, count: 10, item: ItemId.RussetPotato },
+        ],
+      });
+      step(state, {
+        tick: state.tick,
+        commands: [{ type: 'UnloadMachine', machineId: cart.id, count: 10 }],
+      });
+    }
+
+    expect(itemCount(state, ItemId.RussetPotato), 'rot is opt-in again').toBe(0);
+    // NOTHING VANISHES (§4): the potatoes were lost to time, not to this fix.
+    expect(itemCount(state, ItemId.Compost)).toBe(10);
+  });
+
+  it('gives back exactly the time it was handed, cart or cellar, on an instant round trip', () => {
+    // The round trip itself must be a no-op. This is the criterion in one line, and it holds for
+    // the Root Cellar too — the cellar buys the time goods spend INSIDE it, never a fresh window.
+    for (const kind of [MachineKind.HandCart, MachineKind.RootCellar]) {
+      const state = world();
+      const box = withCart(state, kind);
+      addItem(state, ItemId.RussetPotato, 10);
+      stepMany(state, 10 * ACTIVE_MINUTE);
+
+      const before = inventorySlot(state, ItemId.RussetPotato)!.stacks[0]!.spoilAtTick;
+      step(state, {
+        tick: state.tick,
+        commands: [
+          { type: 'LoadMachine', machineId: box.id, count: 10, item: ItemId.RussetPotato },
+        ],
+      });
+      step(state, {
+        tick: state.tick,
+        commands: [{ type: 'UnloadMachine', machineId: box.id, count: 10 }],
+      });
+      const after = inventorySlot(state, ItemId.RussetPotato)!.stacks[0]!.spoilAtTick;
+
+      // Never later than it was. (It may be a bucket earlier: every rounding in this feature is
+      // floored, and never in the player's favour.)
+      expect(after, `${String(kind)} handed back a later deadline`).toBeLessThanOrEqual(before);
+      expect(before - after).toBeLessThanOrEqual(FRESHNESS_BUCKET_TICKS + 2);
+    }
+  });
+
+  it('does not launder the clock through the box-it-up verb either', () => {
+    // The cheapest version of the same trick: load the cart, box the cart, and the goods come
+    // back in your arms without an `UnloadMachine` anywhere in sight.
+    const state = world();
+    const cart = withCart(state);
+    addItem(state, ItemId.RussetPotato, 10);
+    stepMany(state, 13 * ACTIVE_MINUTE);
+
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'LoadMachine', machineId: cart.id, count: 10, item: ItemId.RussetPotato }],
+    });
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'DeconstructMachine', machineId: cart.id }],
+    });
+    expect(itemCount(state, ItemId.RussetPotato), 'the load came home').toBe(10);
+    expect(itemCount(state, ItemId.BoxedHandCart)).toBe(1);
+
+    // Two more minutes and the window is spent, box or no box.
+    stepMany(state, 3 * ACTIVE_MINUTE);
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(0);
+    expect(itemCount(state, ItemId.Compost)).toBe(10);
+  });
+
+  it('AGES what is in a hand cart, at exactly the speed it ages in your arms', () => {
+    // `MACHINE_SPECS` said this before the code did: *"It preserves as well as a crate does not —
+    // 15 minutes, exactly what the goods had loose — because a cart is a barrow with a tarp over
+    // it, and a hand cart that also refrigerated would make the $250 Root Cellar the second-best
+    // fridge in the game."*
+    const state = world();
+    const cart = withCart(state);
+    addItem(state, ItemId.RussetPotato, 10);
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'LoadMachine', machineId: cart.id, count: 10, item: ItemId.RussetPotato }],
+    });
+    expect(cart.cargoCount).toBe(10);
+
+    stepMany(state, 14 * ACTIVE_MINUTE);
+    expect(cart.cargoCount, 'turned early').toBe(10);
+
+    stepMany(state, 2 * ACTIVE_MINUTE);
+    // NOTHING VANISHES, INSIDE A BOX EITHER: the load is still in the cart, and it is compost.
+    expect(cart.cargoItem).toBe(ItemId.Compost);
+    expect(cart.cargoCount).toBe(10);
+  });
+
+  it('STOPS the clock in a Root Cellar, which is the one thing in the game that does', () => {
+    // §4: "potato ~15 min loose / 45 crated / frozen in a Root Cellar." The freeze survives this
+    // item untouched — what it stops being is a way to make old goods new.
+    const state = world();
+    const cellar = withCart(state, MachineKind.RootCellar);
+    addItem(state, ItemId.RussetPotato, 10);
+    stepMany(state, 10 * ACTIVE_MINUTE);
+    step(state, {
+      tick: state.tick,
+      commands: [
+        { type: 'LoadMachine', machineId: cellar.id, count: 10, item: ItemId.RussetPotato },
+      ],
+    });
+
+    stepMany(state, 60 * ACTIVE_MINUTE);
+    expect(cellar.cargoItem).toBe(ItemId.RussetPotato);
+    expect(cellar.cargoCount).toBe(10);
+
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'UnloadMachine', machineId: cellar.id, count: 10 }],
+    });
+    // Out with the five minutes they went in with, not with fifteen.
+    stepMany(state, 4 * ACTIVE_MINUTE);
+    expect(itemCount(state, ItemId.RussetPotato), 'the cellar sold a fresh window').toBe(10);
+    stepMany(state, 2 * ACTIVE_MINUTE);
+    expect(itemCount(state, ItemId.RussetPotato)).toBe(0);
+  });
+
+  it('keeps the pessimistic merge when a second armful joins the first', () => {
+    // The box holds one clock, so a top-up takes the SOONER of the two deadlines — the same
+    // direction `addStack`'s cap merges in, and for the same reason: merging the other way lets a
+    // player keep a stack alive forever by adding one fresh potato to it.
+    const state = world();
+    const cart = withCart(state);
+    addItem(state, ItemId.RussetPotato, 5);
+    stepMany(state, 12 * ACTIVE_MINUTE);
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'LoadMachine', machineId: cart.id, count: 5, item: ItemId.RussetPotato }],
+    });
+
+    // A freshly picked armful goes in on top of one with three minutes left.
+    addItem(state, ItemId.RussetPotato, 5);
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'LoadMachine', machineId: cart.id, count: 5, item: ItemId.RussetPotato }],
+    });
+    expect(cart.cargoCount).toBe(10);
+
+    stepMany(state, 4 * ACTIVE_MINUTE);
+    expect(cart.cargoItem, 'the old armful did not drag the new one down with it').toBe(
+      ItemId.Compost,
+    );
   });
 });

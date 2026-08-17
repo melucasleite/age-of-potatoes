@@ -42,6 +42,7 @@ import {
   ItemId,
   type LiquidId,
   MachineKind,
+  type MachineRecipe,
   MachineRole,
   type MachineSpec,
   POND_ORIGIN_X,
@@ -60,8 +61,11 @@ import {
   beltSpec,
   deedPriceCents,
   grabberSpec,
+  hopperIndexFor,
   isParcelIndex,
   listPriceCents,
+  machineRecipes,
+  machineHoppers,
   machineSpec,
   parcelIndexAt,
   parcelsAdjacent,
@@ -567,16 +571,38 @@ export interface Machine {
   /** Work-points accrued toward the current operation. */
   progress: number;
   /**
-   * How many of each of the spec's `inputs` this machine is holding, in the spec's order.
+   * How many of each of this machine's hoppers it is holding, in hopper order.
    *
    * PARALLEL TO THE RECIPE, NOT KEYED BY ITEM. A map from item id to count would be a second
    * place the recipe is written down, and the two would disagree the first time a spec changed
-   * under a save. The array is sized from `spec.inputs.length` when the machine is built and
-   * re-sized on load, so index `j` is always recipe line `j` and a machine that eats nothing
-   * holds an empty array rather than a zero nobody reads.
+   * under a save. The array is sized from `machineHoppers()` when the machine is built and
+   * re-sized on load, so index `j` is always hopper `j` and a machine that eats nothing holds
+   * an empty array rather than a zero nobody reads. **Hoppers, not the recipe** (item 111): a
+   * Seasoner holds four things and eats at most two of them in any one operation.
    */
   inputCounts: number[];
   outputCount: number;
+  /**
+   * **WHAT IS ACTUALLY IN THE OUTPUT BUFFER**, or 0 when it is empty. The only state item 111
+   * added, and the reason a machine can know more than one recipe.
+   *
+   * `outputCount` used to be a bare number whose identity came from `spec.outputItem`, which
+   * was true right up until a Seasoner could make four different things. A count with no name
+   * is fine for a machine that makes one product and a lie for a machine that does not — the
+   * harvester dock's shelf learned this the hard way in the 15 → 16 migration, where a stranded
+   * `outputCount` had to be guessed back into an item.
+   *
+   * **A BUFFER HOLDS ONE PRODUCT AT A TIME, AND THAT IS THE WHOLE RULE.** It is the same rule
+   * `storageRoomFor` enforces on a Root Cellar and the same one `cargoItem` enforces on a
+   * cart — this is to the output basket exactly what `cargoItem` is to a cart's hold. A machine
+   * skips any recipe whose product is not what it is already holding, so a Seasoner with plain
+   * chips in the basket finishes them before it starts a chili batch, and a grabber never has
+   * to ask which of two items the next unit is. Nothing deadlocks: the plain line is always
+   * reachable, and draining the basket frees the choice again.
+   *
+   * Always 0 when `outputCount` is 0, so an empty buffer has exactly one spelling in the hash.
+   */
+  outputItem: ItemId | 0;
   /** Water held, in millilitres, for machines with a tank. */
   tankMl: number;
   /** 0..CONDITION_MAX. Wear is per completed operation, never per second. */
@@ -685,6 +711,34 @@ export interface Machine {
   cargoItem: ItemId | 0;
   /** Goods aboard. Never above `CART_CAPACITY`. */
   cargoCount: number;
+  /**
+   * **THE CLOCK THE CARGO CAME IN WITH**, in loose-equivalent ticks still to run, or 0 for a
+   * container holding nothing, holding something shelf-stable, or grandfathered by format 18.
+   *
+   * A REMAINDER, NOT A DEADLINE, and that is the whole design (item 110). An absolute spoil tick
+   * — which is what `FreshStack` carries and what a bag wants — cannot describe a Root Cellar,
+   * because the answer there is *never*; a remainder describes both, and the difference between
+   * the cellar and everything else becomes one question asked of `storageAgeTicksPerTick`: does
+   * this box's clock run? The cellar's does not. Nothing else in the game stops it.
+   *
+   * **WHY THIS FIELD EXISTS AT ALL.** Storage used to stamp freshness on the way OUT, from the
+   * tick the goods came back into the player's arms — sound reasoning (nothing inside a machine
+   * ages, so goods handed back are loose again) that became an exploit the moment item 105 made
+   * the round trip cheap: *"a round trip through an eighty dollar hand cart resets the freshness
+   * clock, so I kept ten potatoes alive for three and a half times their natural lifespan by
+   * clicking twice. Rot is now opt-in."* One integer per container buys back the invariant that
+   * a box can PRESERVE time and can never MINT it.
+   *
+   * ONE CLOCK FOR THE WHOLE BOX, because a box holds one product (`storageRoomFor`) and a list of
+   * stacks per machine would put `FreshStack[]` on every Fryer in the game to model a number that
+   * is almost always zero. A top-up takes the SOONER of the two deadlines — `addStack`'s cap rule
+   * exactly, and for the same reason: merging the other way would let a player keep an armful
+   * alive forever by dropping one fresh potato on top of it.
+   *
+   * Zero on every machine that is not holding perishables, counted in the hash anyway, for the
+   * reason the cart's three fields are: an absent field and a zero one must not encode differently.
+   */
+  cargoFreshTicks: number;
   /**
    * Ticks until the cart is back, or 0 when it is standing in the yard.
    *
@@ -1412,7 +1466,8 @@ export function createWorld(seed: number): WorldState {
  */
 export function emptyInputCounts(spec: MachineSpec): number[] {
   const counts: number[] = [];
-  for (let i = 0; i < spec.inputs.length; i++) counts.push(0);
+  const hoppers = machineHoppers(spec);
+  for (let i = 0; i < hoppers.length; i++) counts.push(0);
   return counts;
 }
 
@@ -1444,6 +1499,7 @@ export function spawnMachine(
     inputCounts: emptyInputCounts(spec),
     ports: emptyPorts(spec),
     outputCount: 0,
+    outputItem: 0,
     tankMl: 0,
     condition: CONDITION_MAX,
     opCount: 0,
@@ -1463,6 +1519,7 @@ export function spawnMachine(
     skippedCount: 0,
     cargoItem: 0,
     cargoCount: 0,
+    cargoFreshTicks: 0,
     runTicksRemaining: 0,
     seedShelfItem: 0,
     seedShelfCount: 0,
@@ -2175,12 +2232,71 @@ export function machineById(state: WorldState, id: number): Machine | null {
  * grabber closes on. Taking them last would let a player drain the good chips and leave the
  * burnt ones to be quietly forgotten, which is both wrong and unreadable.
  */
+/**
+ * **WHAT IS IN THE OUTPUT BUFFER**, or 0 for an empty one. The one definition of that question
+ * (item 111), and the reason it is a function rather than a field read is the third clause.
+ *
+ * The buffer's own label, except that **an unlabelled full basket is holding whatever its spec
+ * has always said it holds**. That clause is the entire 18 → 19 migration: a format-18 machine
+ * could not name its basket because nothing could, so the migration writes 0 to every machine
+ * and this line reads the identity straight back off the spec — which is precisely where it
+ * lived before the field existed. Grandfathered worlds behave exactly as they did, the label
+ * heals the next time the machine produces, and no table of frozen item ids had to be carried
+ * in `migrations.ts` to do it.
+ *
+ * It also covers a basket filled by something other than `produceRecipe` — see `advanceOrchard`,
+ * which now labels its fruit but does not have to for this to be right.
+ */
+export function heldOutputItem(machine: Machine, spec: MachineSpec): ItemId | 0 {
+  if (machine.outputCount <= 0) return 0;
+  if (machine.outputItem !== 0) return machine.outputItem;
+  return spec.outputItem ?? 0;
+}
+
+/**
+ * **WHICH OF THE THINGS THIS MACHINE KNOWS HOW TO MAKE IT COULD MAKE RIGHT NOW**, or null —
+ * the solid half of the question. Liquids are the caller's business; `advanceConverter` checks
+ * its intake ports before it asks, and `lampFor` has already answered for them in its own
+ * vocabulary by the time it gets here.
+ *
+ * IT LIVES IN `state.ts` SO THE TICK AND THE LAMP CANNOT DISAGREE. A Seasoner has four hoppers
+ * and needs at most two of them; the lamp used to walk `spec.inputs` and call any empty hopper
+ * starvation, which the day this shipped would have lit an amber lamp on every plain chip line
+ * in the game for want of a pepper it does not need. One machine, one answer, one function.
+ *
+ * The first recipe in `machineRecipes()` order that fits — order is priority, so the flavoured
+ * lines are tried before the plain one — subject to the basket holding one product at a time
+ * (see `heldOutputItem`). A recipe whose product is not what the basket already holds is
+ * SKIPPED rather than blocking, so a machine falls through to one it can place. Nothing can
+ * deadlock: whatever filled the basket can always fill it further.
+ */
+export function runnableRecipe(spec: MachineSpec, machine: Machine): MachineRecipe | null {
+  const held = heldOutputItem(machine, spec);
+  const recipes = machineRecipes(spec);
+  for (let r = 0; r < recipes.length; r++) {
+    const recipe = recipes[r]!;
+    if (recipe.output !== null && held !== 0 && held !== recipe.output) continue;
+    let ok = true;
+    for (let i = 0; i < recipe.consumes.length; i++) {
+      const line = recipe.consumes[i]!;
+      const hopper = hopperIndexFor(spec, line.item);
+      if (hopper < 0 || (machine.inputCounts[hopper] ?? 0) < line.count) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return recipe;
+  }
+  return null;
+}
+
 export function nextOutputItem(machine: Machine, spec: MachineSpec): ItemId | null {
   if (machine.outputCount <= 0) return null;
   if (machine.overcookedCount > 0 && spec.overcookOutputItem !== null) {
     return spec.overcookOutputItem;
   }
-  return spec.outputItem;
+  const held = heldOutputItem(machine, spec);
+  return held === 0 ? null : held;
 }
 
 /**
@@ -2199,6 +2315,9 @@ export function takeOneOutput(machine: Machine, spec: MachineSpec): ItemId | nul
   const burnt = machine.overcookedCount > 0 && spec.overcookOutputItem !== null;
   machine.outputCount -= 1;
   if (burnt) machine.overcookedCount -= 1;
+  // An empty basket forgets what it held, so "empty" has one spelling in the hash and the next
+  // recipe is free to be a different one. This is the line that lets a Seasoner change flavour.
+  if (machine.outputCount <= 0) machine.outputItem = 0;
   machine.blockedTicks = 0;
   return item;
 }
@@ -2291,20 +2410,53 @@ export function storageRoomFor(machine: Machine, spec: MachineSpec, item: ItemId
  * other direction. Two code paths that both incremented `cargoCount` would eventually disagree
  * about the mixing rule, and the disagreement would show up as a box holding two things with one
  * name for them.
+ *
+ * **`freshTicks` IS HOW MUCH CLOCK THE ARRIVALS BRING WITH THEM** (item 110), and passing 0 means
+ * "no opinion" rather than "no clock": the box starts a full window. That is what a belt hands it,
+ * because a belt is a place goods pass through rather than sit in and carries no clock at all —
+ * see `grabberDeliver`. The hand always has an opinion, and `remainingFreshness` is where it
+ * comes from.
  */
 export function putStorage(
   machine: Machine,
   spec: MachineSpec,
   item: ItemId,
   count: number,
+  freshTicks: number,
 ): number {
   const room = storageRoomFor(machine, spec, item);
   const moved = count < room ? count : room;
   if (moved <= 0) return 0;
 
+  const had = machine.cargoCount;
   machine.cargoItem = item;
   machine.cargoCount += moved;
+  machine.cargoFreshTicks = mergedCargoFreshness(had, machine.cargoFreshTicks, item, freshTicks);
   return moved;
+}
+
+/**
+ * The one clock a box keeps after an armful joins whatever was already in it.
+ *
+ * **THE SOONER OF THE TWO, ALWAYS** — `addStack`'s cap rule, moved to a container. Merging the
+ * other way is the exploit written down: a player could keep a cellar of month-old potatoes alive
+ * forever by dropping one fresh potato in every quarter of an hour.
+ *
+ * An EMPTY box takes the arrivals' clock outright, and so does a box whose contents have no clock
+ * at all. The second case is format 18's grandfathering — an old save's cargo arrives with no
+ * remainder recorded, because the format that wrote it had nowhere to record one — and it heals
+ * the moment anybody loads that box again, in the pessimistic direction.
+ */
+function mergedCargoFreshness(
+  hadCount: number,
+  hadTicks: number,
+  item: ItemId,
+  freshTicks: number,
+): number {
+  if (freshnessTicks(item) <= 0) return 0;
+  const arriving = freshTicks > 0 ? freshTicks : freshnessTicks(item);
+  if (hadCount <= 0 || hadTicks <= 0) return arriving;
+  return arriving < hadTicks ? arriving : hadTicks;
 }
 
 /**
@@ -2331,22 +2483,32 @@ export function nextStorageItem(machine: Machine): ItemId | 0 {
  * construction rather than by agreement. `takeDockShelf`'s shape, its gate moved from kind to
  * role, its `null` meaning the same thing — nothing to take, nothing changed.
  *
- * FRESHNESS IS NOT THIS FUNCTION'S BUSINESS and deliberately so. Nothing inside any machine ages
- * (see `InventorySlot.stacks`), and the window is stamped by whoever puts the goods somewhere that
- * does — `addItem` for the hand, and nowhere at all for a belt, which is a place goods pass
- * through rather than sit in.
+ * **FRESHNESS IS THIS FUNCTION'S BUSINESS SINCE ITEM 110, AND THE OLD COMMENT HERE IS WHY THE BUG
+ * EXISTED.** It read: *"freshness is not this function's business and deliberately so — nothing
+ * inside any machine ages, and the window is stamped by whoever puts the goods somewhere that
+ * does."* Every clause of that is true and the conclusion was still wrong, because the thing doing
+ * the stamping was `addItem`, and `addItem` stamps a window from NOW. So the door out of a box
+ * minted freshness rather than returning it, and a $80 hand cart became a way to opt out of rot.
+ *
+ * The clock the goods came in with rides back out with them. A partial take gives every unit the
+ * same remainder, which is the one answer available to a box that keeps one clock — and the one a
+ * player would guess, since the box holds one product with one history.
  */
 export function takeStorage(
   machine: Machine,
   count: number,
-): { item: ItemId; taken: number } | null {
+): { item: ItemId; taken: number; freshTicks: number } | null {
   const item = nextStorageItem(machine);
   if (item === 0 || count <= 0) return null;
 
   const taken = count < machine.cargoCount ? count : machine.cargoCount;
+  const freshTicks = machine.cargoFreshTicks;
   machine.cargoCount -= taken;
-  if (machine.cargoCount === 0) machine.cargoItem = 0;
-  return { item, taken };
+  if (machine.cargoCount === 0) {
+    machine.cargoItem = 0;
+    machine.cargoFreshTicks = 0;
+  }
+  return { item, taken, freshTicks };
 }
 
 export function machineCoversTile(machine: Machine, tileX: number, tileY: number): boolean {
@@ -2860,6 +3022,47 @@ export function soonestSpoilTick(slot: InventorySlot): number {
   return head === undefined ? 0 : head.spoilAtTick;
 }
 
+/**
+ * **HOW MUCH CLOCK THE GOODS LEAVING THE BAG STILL HAVE**, in ticks, or 0 for anything
+ * shelf-stable or absent. The other half of `spoilTickFromRemaining` below; between them they are
+ * the whole of item 110.
+ *
+ * IT READS THE SOONEST STACK BECAUSE `removeItem` EATS THE SOONEST STACK. The two agree by
+ * construction rather than by comment: the units a player hands to a box are the units that were
+ * about to turn, so the number that goes into the box is the number those units carried. An
+ * armful that spans several stacks therefore hands over the WORST of them, which is the same
+ * pessimistic direction every other rounding in this feature takes.
+ *
+ * Never 0 for a perishable that is present, even if its deadline has already passed — 0 means "no
+ * clock" everywhere downstream, and a stack one tick from compost must not be laundered into a
+ * clockless one by arithmetic.
+ */
+export function remainingFreshness(state: WorldState, item: ItemId): number {
+  const slot = slotFor(state, item);
+  if (slot === null) return 0;
+  const deadline = soonestSpoilTick(slot);
+  if (deadline <= 0) return 0;
+  const left = deadline - state.tick;
+  return left > 0 ? left : 1;
+}
+
+/**
+ * The bucketed deadline for goods coming back into the bag with `ticks` of clock left, or 0 when
+ * they have none — which is `addItemFresh`'s "stamp it fresh" and is what a shelf-stable good and
+ * a container grandfathered by format 18 both want.
+ *
+ * FLOORED TO THE BUCKET, exactly like `spoilTickFor`, so a round trip can cost the player up to
+ * one bucket and can never pay them one. That is the direction that matters: an unbucketed
+ * deadline would also work, but it would make a stack that merges with nothing, forever.
+ */
+export function spoilTickFromRemaining(state: WorldState, ticks: number): number {
+  if (ticks <= 0) return 0;
+  const bucketed = divFloor(state.tick + ticks, FRESHNESS_BUCKET_TICKS) * FRESHNESS_BUCKET_TICKS;
+  // A deadline of 0 would read as "no opinion" and hand back a full window. Only reachable in the
+  // first bucket of a world's life; 1 is a deadline in the past, which is the honest answer.
+  return bucketed > 0 ? bucketed : 1;
+}
+
 // --- the armful -------------------------------------------------------------------
 
 /**
@@ -2982,17 +3185,24 @@ export function computeNetWorthCents(state: WorldState): number {
       // A burnt batch is invoiced at what it will actually fetch, not at what it would have
       // fetched. Net worth that quietly counted twenty rustic chips as twenty good ones would
       // make neglect invisible on the one number plan §6's boards are read off.
+      //
+      // AND THE BASKET IS INVOICED AT WHAT IS IN IT (item 111), which is the same correction
+      // one rung further down: a Bagger holding gold bags is holding $26 apiece, and pricing
+      // them off `spec.outputItem` would have quietly valued the premium line at the plain
+      // line's rate. `held` falls back to the spec for a buffer that never named itself.
+      const held = heldOutputItem(machine, spec);
       const overcooked = spec.overcookOutputItem;
       const burnt = overcooked === null ? 0 : machine.overcookedCount;
-      total += listPriceCents(spec.outputItem) * (machine.outputCount - burnt);
+      if (held !== 0) total += listPriceCents(held) * (machine.outputCount - burnt);
       if (overcooked !== null && burnt > 0) total += listPriceCents(overcooked) * burnt;
     }
     // Every line of the recipe, at list. A Bottler holding six bottles is holding six bottles'
     // worth; liquid sitting in a port buffer is deliberately NOT counted, for the same reason a
     // growing crop is not — it is work in progress, not inventory, and there is no price on a
     // millilitre of anything anywhere in this game.
-    for (let j = 0; j < spec.inputs.length; j++) {
-      total += listPriceCents(spec.inputs[j]!.item) * (machine.inputCounts[j] ?? 0);
+    const hoppers = machineHoppers(spec);
+    for (let j = 0; j < hoppers.length; j++) {
+      total += listPriceCents(hoppers[j]!.item) * (machine.inputCounts[j] ?? 0);
     }
     // A cart's cargo, standing in the yard or halfway to town. Plan §6: goods in transit are
     // still the player's inventory, and a board that dropped them for the length of a run would

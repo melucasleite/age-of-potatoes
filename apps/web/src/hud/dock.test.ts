@@ -4,12 +4,12 @@
 // wrong here is loud — a button that does nothing is visible in one click. These are the parts
 // that are NOT:
 //
-//   · IF THE UNKNOWN BINDING WERE FOLDED INTO "UNBOUND", the card would print "No zone. Its bot
-//     has nothing to do" over a dock whose robot is visibly crossing the field. `MachineView` does
-//     not publish `Machine.boundZone` on this build (see `dockZoneOf`), and the whole design of
-//     the read is that a missing field reports a THIRD state rather than the wrong one of two.
-//   · IF THE READ BROKE WHEN THE FIELD LANDS, the handoff would be a silent regression instead of
-//     a feature switching on: the same function has to keep working when `boundZone` is published.
+//   · IF "IS A BOT DOCK" WERE ALLOWED TO MEAN "TAKES A ZONE" AGAIN, the Drone Bay would go back to
+//     drawing a rectangle-picker and a "No zone. Its bot has nothing to do" line over a drone that
+//     is working perfectly ([[107]]). That was live for three items and it is invisible to every
+//     other gate in the repo: the command it offered was accepted, the hash moved, and the robot
+//     carried on ignoring it. `isBotDockKind` stays broad on purpose, so the only thing standing
+//     between here and that bug is `dockTakesZone` — which is why it is pinned per kind below.
 //   · IF THE REACH TEST DRIFTED from the bench's, a card would offer a command the sim refuses, or
 //     fail to appear on a dock the player is plainly standing on.
 //   · IF `regrows` WERE A LIST OF CROP IDS kept on this side, §5's whole pacing argument would be
@@ -28,7 +28,7 @@ import type { WorldView } from '@snack/sim';
 
 // Relative rather than the `@/` alias, exactly as every other test in this directory: vitest runs
 // with no config in this repo, so the alias is not resolvable from a test.
-import { ZONE_UNKNOWN, createDockFields, deriveDock, zoneSwatch } from './derive-dock';
+import { createDockFields, deriveDock, dockTakesZone, zoneSwatch } from './derive-dock';
 
 const DOCK_TILE = 6;
 /** Subtile centre of the 2×2 dock standing at `DOCK_TILE`. */
@@ -57,11 +57,12 @@ function zone(id: number, options: Partial<FakeZone> = {}): FakeZone {
 
 interface DockOptions {
   kind: number;
-  /** Omitted entirely on the current build — `MachineView` has no such field. */
-  boundZone?: number;
+  boundZone: number;
   playerSub: number;
   zones: FakeZone[];
   bots: { id: number; dockId: number; phase: number; conditionPermille: number }[];
+  /** Extra machines standing elsewhere on the lot — what the drone's queue is counted over. */
+  others: { id: number; kind: number; wrenchDue: number }[];
 }
 
 function dockView(options: Partial<DockOptions> = {}): WorldView {
@@ -72,13 +73,24 @@ function dockView(options: Partial<DockOptions> = {}): WorldView {
     tileY: DOCK_TILE,
     tilesWide: 2,
     tilesHigh: 2,
+    boundZone: options.boundZone ?? 0,
+    wrenchDue: 0,
   };
-  if (options.boundZone !== undefined) machine.boundZone = options.boundZone;
+
+  // Far enough away to be out of reach, so they are counted and never adopted as the subject.
+  const others = (options.others ?? []).map((other) => ({
+    ...other,
+    tileX: DOCK_TILE + 30,
+    tileY: DOCK_TILE + 30,
+    tilesWide: 1,
+    tilesHigh: 1,
+    boundZone: 0,
+  }));
 
   const at = options.playerSub ?? DOCK_CENTRE_SUB;
   return {
     player: { xSub: at, ySub: DOCK_CENTRE_SUB },
-    machines: [machine],
+    machines: [machine, ...others],
     zones: options.zones ?? [],
     bots: options.bots ?? [],
   } as unknown as WorldView;
@@ -128,20 +140,76 @@ describe('finding the dock you are standing at', () => {
   });
 });
 
-describe('what the dock has been told', () => {
-  // THE HANDOFF, PINNED FROM BOTH SIDES. `MachineView` does not carry `Machine.boundZone` today.
-  it('reports "the view did not say" rather than "no zone" when the field is absent', () => {
-    expect(dockFor({ zones: [zone(1)] }).boundZone).toBe(ZONE_UNKNOWN);
-    expect(ZONE_UNKNOWN).not.toBe(0);
+describe('which docks take a zone at all', () => {
+  // THE SPLIT, PINNED PER KIND. `isBotDockKind` is true for all three and must stay that way;
+  // this is the narrower question, and the bay's answer is the whole of item 107.
+  it('says yes to the two farm docks and no to the Drone Bay', () => {
+    expect(dockTakesZone(MachineKind.HarvesterDock)).toBe(true);
+    expect(dockTakesZone(MachineKind.PlanterDock)).toBe(true);
+    expect(dockTakesZone(MachineKind.DroneBay)).toBe(false);
   });
 
-  it('reads the binding the moment the projection publishes one', () => {
+  it('offers a bay no zones to be pointed at, however many the lot has', () => {
+    const bay = dockFor({ kind: MachineKind.DroneBay, zones: [zone(1), zone(2), zone(3)] });
+    // Adopted as the subject — it is still a dock you stand at and it still gets a card.
+    expect(bay.machineId).toBe(11);
+    expect(bay.takesZone).toBe(0);
+    expect(bay.zones).toHaveLength(0);
+    expect(bay.boundName).toBe('');
+  });
+
+  it('never calls a bay a planter, though its retired hopper is still in the spec', () => {
+    // `MACHINE_SPECS` keeps the Drone Bay's `inputCapacity: 12` as frozen balance data for a
+    // hopper item 090 removed, so the seed-hopper question answers "yes" about a machine with no
+    // door. A bay reading `planter: 1` would put a seed line on a card that has no seeds.
+    expect(dockFor({ kind: MachineKind.DroneBay }).planter).toBe(0);
+  });
+
+  it('still gives the farm docks their zones', () => {
+    expect(dockFor({ kind: MachineKind.HarvesterDock, zones: [zone(1)] }).takesZone).toBe(1);
+    expect(dockFor({ kind: MachineKind.PlanterDock, zones: [zone(1)] }).zones).toHaveLength(1);
+  });
+});
+
+describe("the drone bay's queue", () => {
+  const bay = { kind: MachineKind.DroneBay };
+
+  it("counts the projection's own wrench flags rather than deciding when a machine is due", () => {
+    const dock = dockFor({
+      ...bay,
+      others: [
+        { id: 2, kind: MachineKind.Fryer, wrenchDue: 1 },
+        { id: 3, kind: MachineKind.Washer, wrenchDue: 0 },
+        { id: 4, kind: MachineKind.Slicer, wrenchDue: 1 },
+      ],
+    });
+    expect(dock.serviceDue).toBe(2);
+  });
+
+  it('reports an empty queue as zero, which the card reads as "the farm is well"', () => {
+    expect(
+      dockFor({ ...bay, others: [{ id: 2, kind: MachineKind.Fryer, wrenchDue: 0 }] }).serviceDue,
+    ).toBe(0);
+  });
+
+  // A zone dock's card has no room for this and no use for it, so it is not paid for there.
+  it('is not counted for a dock that takes a zone', () => {
+    const dock = dockFor({
+      kind: MachineKind.HarvesterDock,
+      others: [{ id: 2, kind: MachineKind.Fryer, wrenchDue: 1 }],
+    });
+    expect(dock.serviceDue).toBe(0);
+  });
+});
+
+describe('what the dock has been told', () => {
+  it('reads the binding straight off the projection', () => {
     const dock = dockFor({ boundZone: 2, zones: [zone(1), zone(2, { name: 'North Field' })] });
     expect(dock.boundZone).toBe(2);
     expect(dock.boundName).toBe('North Field');
   });
 
-  it('distinguishes a dock with no orders from a build that cannot tell', () => {
+  it('reports a dock with no orders as zero, which is the sim\'s own spelling of "none"', () => {
     const dock = dockFor({ boundZone: 0, zones: [zone(1)] });
     expect(dock.boundZone).toBe(0);
     expect(dock.boundName).toBe('');

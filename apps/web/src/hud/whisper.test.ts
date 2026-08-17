@@ -12,10 +12,11 @@
 //   · SPEAKING TO A PLAYER WHO OWNS THE DOCK is the game selling somebody their own car.
 
 import { describe, expect, it } from 'vitest';
-import { MachineKind } from '@snack/sim';
+import { ItemId, MachineKind, listPriceCents } from '@snack/sim';
 import type { WorldView } from '@snack/sim';
 
 import { HarvestPace, botCatchUpPhrase, createMachineCounts, deriveClipboard } from './derive';
+import { formatCents } from './format';
 
 function clipView(options: {
   harvested?: number;
@@ -104,5 +105,61 @@ describe('botCatchUpPhrase', () => {
     const big = botCatchUpPhrase(1200);
     expect(big).toMatch(/minutes/);
     expect(small).toMatch(/seconds/);
+  });
+});
+
+// The Clipboard's other computed line, and the one item 111 broke by adding products.
+//
+// It counted `BaggedChips` and multiplied by a literal 2000, which is two ways to be wrong
+// the moment there is a second bag: a pocket full of chili chips is worth $24.50 each and was
+// reported as no bags at all, and a gold bag would have been priced as a plain one. Neither
+// failure raises anything — the note simply does not appear, or appears with a smaller number
+// than the truth, on the surface whose whole job is telling the player what they have.
+describe('the chips-in-your-pocket note', () => {
+  function pocketView(rows: readonly { item: number; count: number }[]): WorldView {
+    const view = clipView({});
+    view.inventory = rows.map((row) => ({
+      item: row.item,
+      count: row.count,
+      sellable: 1,
+      boxedMachineKind: 0,
+      boxes: [],
+      ticksToSpoil: -1,
+      spoilingCount: 0,
+    })) as unknown as WorldView['inventory'];
+    return view;
+  }
+
+  function chipsNote(view: WorldView): string | null {
+    const note = deriveClipboard(view, createMachineCounts(), new HarvestPace()).find(
+      (n) => n.id === 'chips',
+    );
+    return note === undefined ? null : note.text;
+  }
+
+  it('counts every kind of bag, not only the plain one', () => {
+    const text = chipsNote(
+      pocketView([
+        { item: ItemId.BaggedChips, count: 2 },
+        { item: ItemId.BaggedChiliChips, count: 3 },
+      ]),
+    );
+    expect(text).not.toBeNull();
+    expect(text).toContain('five bags');
+  });
+
+  it('speaks at all for a pocket holding no plain chips whatsoever', () => {
+    expect(chipsNote(pocketView([{ item: ItemId.BaggedChiliChips, count: 4 }]))).not.toBeNull();
+  });
+
+  it('values each bag at its own list price rather than at the plain one', () => {
+    // A chili bag is a plain bag plus the flavour premium; two of them are not $40.
+    const plain = listPriceCents(ItemId.BaggedChips);
+    const chili = listPriceCents(ItemId.BaggedChiliChips);
+    expect(chili).toBeGreaterThan(plain);
+
+    const text = chipsNote(pocketView([{ item: ItemId.BaggedChiliChips, count: 2 }]))!;
+    expect(text).toContain(formatCents(chili * 2));
+    expect(text).not.toContain(formatCents(plain * 2));
   });
 });

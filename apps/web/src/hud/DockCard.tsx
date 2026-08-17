@@ -25,21 +25,22 @@
 //   a dock at it before planting is a sensible order to do things in and the sim allows it. The
 //   card says what a zone IS — one-shot or regrowing, planted or bare — and lets the player decide.
 //
-//   IT DOES NOT CLAIM WHAT IT CANNOT READ. See `dockZoneOf`: `Machine.boundZone` is real world
-//   state that `MachineView` does not publish yet, so on a build without it the card shows the
-//   picker and says nothing about the present rather than guessing and being wrong in front of a
-//   robot the player can see working.
+//   IT DOES NOT ASK A MACHINE FOR AN INSTRUCTION IT CANNOT FOLLOW ([[107]]). A Drone Bay is a bot
+//   dock and gets this card, but it takes no zone: its drone picks the next machine on the lot
+//   that wants a wrench and flies there. So the bay's half of this file has no picker, no "no
+//   zone" complaint and no stand-down — it reports the queue instead. `dock.takesZone` is the
+//   branch, and `derive-dock.ts` argues why that is a different question from `isBotDockKind`.
 
 import { useCallback } from 'react';
 
 import { BotPhase, CONDITION_EFFECT_THRESHOLD, CONDITION_MAX, permille } from '@snack/sim';
 
-import { ZONE_UNKNOWN, zoneSwatch } from './derive-dock';
+import { zoneSwatch } from './derive-dock';
 import { hudStore } from './store';
 import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
 import { usePending } from './use-pending';
-import type { DockZoneOption } from './types';
+import type { DockSlice, DockZoneOption } from './types';
 
 /** The bench's threshold, derived the same way and for the same reason its own note gives. */
 const ROUGH_PERMILLE = permille(CONDITION_EFFECT_THRESHOLD, CONDITION_MAX);
@@ -64,9 +65,11 @@ export function DockCard() {
   // rule and the reason neither of them has an open flag to manage.
   if (dock.machineId === 0) return null;
 
+  // The bay's card, which is a different card and not a disabled version of this one.
+  if (dock.takesZone === 0) return <BayCard dock={dock} />;
+
   const waiting = pending.isPending(`dock:${dock.machineId}`);
-  const known = dock.boundZone !== ZONE_UNKNOWN;
-  const bound = known && dock.boundZone !== 0;
+  const bound = dock.boundZone !== 0;
 
   return (
     // `.bench` wholesale rather than a card of its own: same corner, same control, same width,
@@ -78,24 +81,16 @@ export function DockCard() {
       </div>
 
       {/*
-        THE ORDERS LINE, AND ITS ABSENCE IS AS DELIBERATE AS ITS PRESENCE.
-
-        A dock with no zone is the failure this whole card exists to end — a $600 shed whose bot
-        stands in the doorway forever — so when the world says so, the card says so, loudly and in
-        the tone of an unfinished job rather than an error. When the world does NOT say (a build
-        whose projection has no `boundZone`), the card makes no claim at all: a wrong "no zone"
-        printed over a working dock would be worse than saying nothing, because the player would
-        believe the panel over the robot.
+        THE ORDERS LINE. A dock with no zone is the failure this whole card exists to end — a $600
+        shed whose bot stands in the doorway forever — so the card says so, loudly and in the tone
+        of an unfinished job rather than an error. It can say it plainly now: `boundZone` is
+        published, so there is no longer a third state where the panel had to keep quiet.
       */}
-      {known ? (
-        <div className={cx(s.dockOrders, !bound && s.dockOrdersNone)}>
-          {bound
-            ? `Working ${dock.boundName === '' ? 'a zone that no longer exists' : dock.boundName}.`
-            : 'No zone. Its bot has nothing to do and will stand here until it is given a rectangle.'}
-        </div>
-      ) : (
-        <div className={s.dockOrders}>One dock, one zone. Point it at the rows it should work.</div>
-      )}
+      <div className={cx(s.dockOrders, !bound && s.dockOrdersNone)}>
+        {bound
+          ? `Working ${dock.boundName === '' ? 'a zone that no longer exists' : dock.boundName}.`
+          : 'No zone. Its bot has nothing to do and will stand here until it is given a rectangle.'}
+      </div>
 
       <div className={s.benchDivider} />
 
@@ -114,7 +109,7 @@ export function DockCard() {
               key={zone.id}
               zone={zone}
               planter={dock.planter === 1}
-              active={known && zone.id === dock.boundZone}
+              active={zone.id === dock.boundZone}
               disabled={waiting}
               onPick={() => point(dock.machineId, zone.id)}
             />
@@ -124,11 +119,10 @@ export function DockCard() {
 
       {/*
         Unbinding is a real thing to want — the sim takes a zone id of 0 for exactly this, "how a
-        player retires a dock without boxing it" — and it is offered only when the dock might have
-        orders to drop. On a build that cannot read the binding it is offered too, because it is a
-        VERB rather than a claim: pressing it means "stop", and it is true whatever the dock was on.
+        player retires a dock without boxing it" — and it is offered only when there are orders to
+        drop, which the card can now tell for certain.
       */}
-      {dock.zones.length > 0 && dock.boundZone !== 0 ? (
+      {dock.zones.length > 0 && bound ? (
         <button
           type="button"
           className={s.dockStop}
@@ -139,6 +133,65 @@ export function DockCard() {
           Stand it down
         </button>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * THE DRONE BAY'S CARD — the same corner, the same head, and not one control ([[107]]).
+ *
+ * **WHY IT GETS A CARD AT ALL, since the honest alternative was none.** The item allowed "no card"
+ * if that was the simplest true thing, and it is not: a bay is a $200,000 machine the player walks
+ * up to, and the two facts they want when they do are *is my drone alright* and *is it keeping
+ * up*. Both are already in the slice — the head draws the drone's phase and condition through the
+ * same `BotCondition` the farm docks use, and `serviceDue` is the length of its queue. Deleting
+ * the card would have replaced a wrong answer with no answer, next to a robot that visibly does
+ * something.
+ *
+ * **AND NOT ONE CONTROL, WHICH IS THE ACTUAL FIX.** No zone picker, because the drone never reads
+ * `boundZone`. No "Stand it down", because there is nothing to stand down from — that button
+ * dispatches `SetDockZone(0)`, which on a bay is a command the reducer accepts and the world
+ * ignores. A bay is not configured; it is bought, and then it works.
+ *
+ * The three lines say, in order: what it is pointed at (nothing, deliberately), what it is doing
+ * about that, and what it costs to run. The last one exists because the shelf item 090 retired
+ * left a hole in the player's model — a bay that used to eat Drone Parts and now does not, with
+ * a `inputCapacity` of 12 still frozen in its spec, is exactly the machine somebody stands in
+ * front of wondering what to put in it.
+ */
+function BayCard({ dock }: { dock: DockSlice }) {
+  const due = dock.serviceDue;
+
+  return (
+    <div className={cx(s.card, s.bench)}>
+      <div className={s.benchHead}>
+        <span className={s.benchName}>{dock.label}</span>
+        <BotCondition phase={dock.botPhase} conditionPermille={dock.botConditionPermille} />
+      </div>
+
+      <div className={s.dockOrders}>
+        No zone, and none to give. Its drone serves the whole lot — it flies to whatever machine
+        wants a wrench next, wherever that is.
+      </div>
+
+      <div className={s.benchDivider} />
+
+      {/*
+        The queue, which is the only number on this card that moves. `serviceDue` counts the
+        projection's own `wrenchDue` flags, so it is exactly the set `nextServiceTarget` scans —
+        when it says nothing is due, a parked drone is a drone with nothing to do rather than a
+        drone that has been given no orders, and that distinction is the entire bug this fixed.
+      */}
+      <div className={cx(s.zoneNote, due > 0 && s.zoneNoteWarn)}>
+        {due === 0
+          ? 'Nothing on the lot wants a wrench. A parked drone means the whole farm is well.'
+          : `${String(due)} ${due === 1 ? 'machine wants' : 'machines want'} a wrench. It works through them one at a time, in a rotation that does not favour the machine you built first.`}
+      </div>
+
+      <div className={s.benchLocked}>
+        Nothing to feed it. A service costs no parts and no money — the drone spends only its own
+        condition, and any drone on the lot puts a worn one right, its own bay included.
+      </div>
     </div>
   );
 }

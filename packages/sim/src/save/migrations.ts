@@ -35,6 +35,11 @@
 // Agri-Bots) up to format 12 (the eight-pour can and the receipt ledgers — the can's charge
 // counter on the player, and per-item sales, dawn-aligned hour buckets, the open hour's mark,
 // and the dawn counter on the stats).
+//
+// This paragraph stopped being extended at format 12 and the chain has run on to 18 without it;
+// `MIGRATIONS` below is the authority, and each step carries its own story in its own doc comment.
+// The newest is format 18 — the clock inside a box, so a trip through storage preserves a good's
+// remaining freshness instead of minting a fresh window on the way out.
 
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
@@ -45,7 +50,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 17;
+export const CURRENT_FORMAT_VERSION = 19;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -1284,6 +1289,77 @@ const migrateFormat16To17: SaveMigration = (payload) => {
 };
 
 /**
+ * Format 17 → 18: **every machine gains the clock its cargo is running on** (item 110).
+ *
+ * THE ONE FACT NO FORMAT 17 SAVE CAN EXPRESS is how much freshness the goods inside a container
+ * have left. It could not, because until this item they had none: storage stamped a brand-new
+ * window on the way OUT, from the tick the goods came back into the player's arms, so a round trip
+ * through an $80 hand cart reset the clock and rot became something a player opted out of by
+ * clicking twice. `cargoFreshTicks` is the remainder that now rides through the box.
+ *
+ * **EVERY MACHINE GETS 0, AND 0 MEANS "NO CLOCK" RATHER THAN "OUT OF TIME".** That is the generous
+ * reading and it is chosen deliberately against the alternative of stamping a full window onto
+ * every stocked container, which sounds equivalent and is not: a full window would START the cart
+ * clock at load time for a player who is not here, and a returning owner would find an armful of
+ * compost where their potatoes were. A migration must destroy nothing a player owns, and while
+ * compost is not nothing (§4's floor), it is a ninety percent loss inflicted by a patch note.
+ *
+ * So an existing cellar or cart is GRANDFATHERED: its contents do not age, and they hand back a
+ * full window exactly as they did under format 17 — the old behaviour, preserved for the goods
+ * that were bought under it. It heals on contact and in the pessimistic direction: `putStorage`
+ * treats a clockless box as an empty one, so the next armful a player adds sets a real clock over
+ * the whole load, and `takeStorage` empties the container back to a true 0.
+ *
+ * Nothing else in the payload names this field, and nothing is removed. `payload.version` is NOT
+ * rewritten, for the reason format 14 → 15 spells out: it is hashed world state, and stamping the
+ * format number onto it would make a migrated world hash differently from an identical fresh one.
+ */
+const migrateFormat17To18: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-17 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const machines = rows(p, 'machines').map((machine) => ({ ...machine, cargoFreshTicks: 0 }));
+  return { ...p, machines };
+};
+
+/**
+ * Format 18 → 19: **every machine gains a name for what is in its output basket** (item 111).
+ *
+ * THE ONE FACT NO FORMAT 18 SAVE CAN EXPRESS is which product a full buffer is holding — and it
+ * could not, because until this item no machine could hold two. `outputCount` was a bare number
+ * whose identity came from `spec.outputItem`, which was true right up to the moment a Seasoner
+ * learned four recipes and a Washer learned two.
+ *
+ * **EVERY MACHINE GETS 0, AND 0 MEANS "ASK THE SPEC" RATHER THAN "EMPTY".** `heldOutputItem()`
+ * reads an unlabelled full basket as holding exactly what its spec has always said it holds, so
+ * a grandfathered world behaves identically: the same item comes off the same machine, net worth
+ * invoices it at the same price, and a basket of plain chips still has to be drained before that
+ * Seasoner will start a chili batch. The label heals the next time the machine produces, and
+ * `takeOneOutput` returns it to 0 when the basket empties.
+ *
+ * **NO FROZEN TABLE OF ITEM IDS, DELIBERATELY.** The obvious spelling of this migration is a
+ * literal map from machine kind to output item, pinned forever the way `FORMAT_17_BENCH_RECIPE`
+ * is. It is not needed here and it would be a liability: the fallback in `heldOutputItem` reads
+ * today's spec, which is the same answer the old code gave, and forty frozen literals would be
+ * forty chances to disagree with it. A migration that has nothing to write is allowed to write
+ * nothing.
+ *
+ * Nothing is removed and no player loses a unit. `payload.version` is NOT rewritten, for the
+ * reason format 14 → 15 spells out.
+ */
+const migrateFormat18To19: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-18 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const machines = rows(p, 'machines').map((machine) => ({ ...machine, outputItem: 0 }));
+  return { ...p, machines };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -1305,6 +1381,8 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   14: migrateFormat14To15,
   15: migrateFormat15To16,
   16: migrateFormat16To17,
+  17: migrateFormat17To18,
+  18: migrateFormat18To19,
 };
 
 export interface MigrationOutcome {

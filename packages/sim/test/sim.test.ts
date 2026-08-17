@@ -86,6 +86,11 @@ describe('determinism', () => {
   it('pins the scripted run to a known hash', () => {
     // If this changes, either the sim changed on purpose or determinism broke by accident.
     // There is no third option, which is the entire point of the fixture.
+    // f34ea50f -> 976351e8 in wave 14 (item 110): the digest gained `machine.cargoFreshTicks`
+    // (save format 18), the clock a container's cargo is running on. Checked rather than
+    // assumed: with that one line held out of the digest this script reproduces f34ea50f
+    // exactly. The hash moved because the digest did, which is the whole reason a format bump
+    // moves every world at once.
     // e97c57ee -> f48076eb with format 13 (item 066): the digest gained the field tiles'
     // coordinates and the soil-memory ledger; the scripted run's behaviour is unchanged.
     // ea1510a9 -> f34ea50f in wave 12 (item 088): the digest gained the bot seed pocket and the
@@ -95,7 +100,13 @@ describe('determinism', () => {
     // f48076eb -> ea1510a9 in wave 11 (items 073 + 075): the can starts at 20 charges
     // instead of 8 (`player.canCharges` is hashed), and the digest gained
     // `stats.cheatsUsed`. The script's behaviour is otherwise unchanged.
-    expect(hashState(runScript(1234, 1000))).toBe('f34ea50f');
+    // f34ea50f -> 976351e8 -> db18e797 (save format 19, item 111): the digest gained
+    // `machine.outputItem`, the name of whatever is in a machine's output basket, which a
+    // count alone stopped being able to carry the day a Seasoner learned four recipes. Checked
+    // rather than assumed, the same way the line above was: with that one `d.num` held out of
+    // the digest this script reproduces 976351e8 exactly, so the run's behaviour is unchanged
+    // and the hash moved because the digest did.
+    expect(hashState(runScript(1234, 1000))).toBe('db18e797');
   });
 
   it('gives different seeds different worlds', () => {

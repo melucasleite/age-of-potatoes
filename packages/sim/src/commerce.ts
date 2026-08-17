@@ -327,6 +327,9 @@ function advanceCart(state: WorldState, machine: Machine): void {
   const count = machine.cargoCount;
   machine.cargoItem = 0;
   machine.cargoCount = 0;
+  // The load is sold, so its clock goes with it (item 110). Cleared beside the pair it belongs to
+  // rather than left to decay to nothing on its own, so "empty cart" is one state and not two.
+  machine.cargoFreshTicks = 0;
   if (item === 0 || count <= 0) return;
   payForDelivery(state, item, count);
 }

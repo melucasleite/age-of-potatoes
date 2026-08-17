@@ -1166,7 +1166,7 @@
       "anchorMode": "center",
       "group": "belts"
     },
-    "item_bottle": {
+    "item_bagged_chili_chips": {
       "frame": {
         "x": 0,
         "y": 125,
@@ -1188,7 +1188,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_chip_bag": {
+    "item_bagged_gold_chips": {
       "frame": {
         "x": 17,
         "y": 125,
@@ -1210,7 +1210,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_crate": {
+    "item_bagged_sweetcorn_chips": {
       "frame": {
         "x": 34,
         "y": 125,
@@ -1232,7 +1232,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_day_old_gold_potato": {
+    "item_bottle": {
       "frame": {
         "x": 51,
         "y": 125,
@@ -1254,7 +1254,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_drone_part": {
+    "item_chili_chips": {
       "frame": {
         "x": 68,
         "y": 125,
@@ -1276,7 +1276,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_fertilizer": {
+    "item_chip_bag": {
       "frame": {
         "x": 85,
         "y": 125,
@@ -1298,7 +1298,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_gold_potato": {
+    "item_crate": {
       "frame": {
         "x": 102,
         "y": 125,
@@ -1320,7 +1320,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_gold_potato_seed": {
+    "item_day_old_gold_potato": {
       "frame": {
         "x": 119,
         "y": 125,
@@ -1342,7 +1342,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_kola_nut": {
+    "item_drone_part": {
       "frame": {
         "x": 136,
         "y": 125,
@@ -1364,7 +1364,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_kola_powder": {
+    "item_fertilizer": {
       "frame": {
         "x": 153,
         "y": 125,
@@ -1386,7 +1386,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_lemon": {
+    "item_gold_chips": {
       "frame": {
         "x": 170,
         "y": 125,
@@ -1408,7 +1408,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_orange": {
+    "item_gold_potato": {
       "frame": {
         "x": 187,
         "y": 125,
@@ -1430,7 +1430,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_plain_chips": {
+    "item_gold_potato_seed": {
       "frame": {
         "x": 204,
         "y": 125,
@@ -1452,7 +1452,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_potato": {
+    "item_gold_potato_slices": {
       "frame": {
         "x": 221,
         "y": 125,
@@ -1474,7 +1474,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_potato_slices": {
+    "item_kola_nut": {
       "frame": {
         "x": 238,
         "y": 125,
@@ -1496,7 +1496,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_push_scythe": {
+    "item_kola_powder": {
       "frame": {
         "x": 255,
         "y": 125,
@@ -1518,7 +1518,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_repair_kit": {
+    "item_lemon": {
       "frame": {
         "x": 272,
         "y": 125,
@@ -1540,7 +1540,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_rustic_style_chips": {
+    "item_orange": {
       "frame": {
         "x": 289,
         "y": 125,
@@ -1562,7 +1562,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_seasoned_chips": {
+    "item_plain_chips": {
       "frame": {
         "x": 306,
         "y": 125,
@@ -1584,7 +1584,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_six_pack": {
+    "item_potato": {
       "frame": {
         "x": 323,
         "y": 125,
@@ -1606,7 +1606,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_snack_combo": {
+    "item_potato_slices": {
       "frame": {
         "x": 340,
         "y": 125,
@@ -1628,7 +1628,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_soda": {
+    "item_push_scythe": {
       "frame": {
         "x": 357,
         "y": 125,
@@ -1650,9 +1650,207 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_washed_potato": {
+    "item_repair_kit": {
       "frame": {
         "x": 374,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_rustic_style_chips": {
+      "frame": {
+        "x": 391,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_seasoned_chips": {
+      "frame": {
+        "x": 408,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_seasoned_gold_chips": {
+      "frame": {
+        "x": 425,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_six_pack": {
+      "frame": {
+        "x": 442,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_snack_combo": {
+      "frame": {
+        "x": 459,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_soda": {
+      "frame": {
+        "x": 476,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_sweetcorn_chips": {
+      "frame": {
+        "x": 493,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_washed_gold_potato": {
+      "frame": {
+        "x": 510,
+        "y": 125,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "anchorMode": "center",
+      "group": "items"
+    },
+    "item_washed_potato": {
+      "frame": {
+        "x": 527,
         "y": 125,
         "w": 16,
         "h": 16
@@ -3126,7 +3324,7 @@
     },
     "tool_deconstruct": {
       "frame": {
-        "x": 391,
+        "x": 544,
         "y": 125,
         "w": 16,
         "h": 16
@@ -3148,7 +3346,7 @@
     },
     "tool_hand": {
       "frame": {
-        "x": 408,
+        "x": 561,
         "y": 125,
         "w": 16,
         "h": 16
@@ -3170,7 +3368,7 @@
     },
     "tool_harvest": {
       "frame": {
-        "x": 425,
+        "x": 578,
         "y": 125,
         "w": 16,
         "h": 16
@@ -3192,7 +3390,7 @@
     },
     "tool_plant": {
       "frame": {
-        "x": 442,
+        "x": 595,
         "y": 125,
         "w": 16,
         "h": 16
@@ -3214,7 +3412,7 @@
     },
     "tool_till": {
       "frame": {
-        "x": 459,
+        "x": 612,
         "y": 125,
         "w": 16,
         "h": 16
@@ -3236,7 +3434,7 @@
     },
     "tool_water": {
       "frame": {
-        "x": 476,
+        "x": 629,
         "y": 125,
         "w": 16,
         "h": 16
@@ -3258,7 +3456,7 @@
     },
     "tool_water_empty": {
       "frame": {
-        "x": 493,
+        "x": 646,
         "y": 125,
         "w": 16,
         "h": 16
@@ -3280,7 +3478,7 @@
     },
     "tool_water_half": {
       "frame": {
-        "x": 510,
+        "x": 663,
         "y": 125,
         "w": 16,
         "h": 16
@@ -3369,7 +3567,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.7710ddd5.png",
+    "image": "atlas.6d0fa4bf.png",
     "format": "RGBA8888",
     "size": {
       "w": 1024,
@@ -3421,9 +3619,9 @@
         "group": "items",
         "x": 0,
         "y": 125,
-        "width": 526,
+        "width": 679,
         "height": 16,
-        "count": 31
+        "count": 40
       },
       {
         "group": "machines",

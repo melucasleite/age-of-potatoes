@@ -20,6 +20,8 @@ import {
   SUBTILE,
   TICKS_PER_SECOND,
   itemSpec,
+  machineHoppers,
+  machineRecipes,
   machineSpec,
 } from '@snack/sim';
 import type { ItemSpec, WorldView } from '@snack/sim';
@@ -110,10 +112,24 @@ export function censusMachines(view: WorldView, out: MachineCounts): MachineCoun
 
 // --- the pouch ---------------------------------------------------------------------
 
+/**
+ * The pouch's own short register, for the things a person names in a word.
+ *
+ * **"CHIPS" WAS HERE AND ITEM 111 TOOK IT OUT**, because a short name has to be an
+ * unambiguous one and that entry stopped being one the day a second bag existed. A pouch
+ * holding both now reads "12 chips" beside "5 Bagged Chili Chips" — two registers arguing
+ * about the same shelf, and the shorter one silently claiming to be all of it. The plain bag
+ * falls through to `itemName` and reads "Bagged Chips", which is what the other three read.
+ *
+ * "seeds" IS THE SAME SHAPE AND IS DELIBERATELY LEFT, which is worth writing down rather
+ * than leaving for someone to spot: there are four seeds in the game, so "12 seeds" beside
+ * "8 Corn Seed" has exactly the chips problem. It is not item 111's — the second crop caused
+ * it — and it is the first line of the tutorial's pouch, so it wants its own decision rather
+ * than a drive-by from a flavour feature.
+ */
 const ITEM_LABELS: Readonly<Record<number, string>> = {
   [ItemId.PotatoSeed]: 'seeds',
   [ItemId.RussetPotato]: 'russets',
-  [ItemId.BaggedChips]: 'chips',
 };
 
 /**
@@ -407,8 +423,8 @@ export function deriveClipboard(
   }
 
   const seeds = countOf(view, ItemId.PotatoSeed);
-  const chips = countOf(view, ItemId.BaggedChips);
-  const russets = countOf(view, ItemId.RussetPotato);
+  const bags = baggedChips(view);
+  const bases = washableCrops(view);
   const sprinklerPrice = priceOf(MachineKind.Sprinkler);
   const stats = view.stats;
 
@@ -466,13 +482,13 @@ export function deriveClipboard(
       );
     }
   }
-  if (chips > 0) {
-    const worth = formatCents(chips * 2000);
+  if (bags.count > 0) {
+    const worth = formatCents(bags.cents);
     add(
       74,
       'chips',
       'nudge',
-      `${countWord(chips)} ${plural(chips, 'bag', 'bags')} of chips ${plural(chips, 'is', 'are')} in your pocket, worth ${worth}. Nothing sells itself.`,
+      `${countWord(bags.count)} ${plural(bags.count, 'bag', 'bags')} of chips ${plural(bags.count, 'is', 'are')} in your pocket, worth ${worth}. Nothing sells itself.`,
     );
   }
   if (counts.sprinklers === 0 && view.moneyCents >= sprinklerPrice) {
@@ -507,7 +523,7 @@ export function deriveClipboard(
       `${countWord(counts.wrenchDue)} ${plural(counts.wrenchDue, 'machine is', 'machines are')} running rough. Still working — just working worse.`,
     );
   }
-  if (counts.starved > 0 && russets === 0) {
+  if (counts.starved > 0 && bases === 0) {
     add(56, 'starved', 'nudge', 'The kitchen is idle with nothing to fry.');
   }
   // §2's promotion whisper, verbatim in spirit and computed in fact: hand output this hour
@@ -568,6 +584,55 @@ function countOf(view: WorldView, item: ItemId): number {
     if (slot.item === item) return slot.count;
   }
   return 0;
+}
+
+/**
+ * Bags in the pocket and what they are worth — **all four kinds** (item 111).
+ *
+ * The whisper counted `BaggedChips` and multiplied by a literal 2000, which was two separate
+ * ways to be wrong the moment a second bag existed: a player who had just run a chili batch
+ * was told nothing at all, and a player who had run a gold one would have been told the wrong
+ * price. The count is now every bag and the value is every bag's own list price.
+ *
+ * **"A BAG OF CHIPS" IS DEFINED AS "WHAT THE BAGGER MAKES"**, read off its recipes rather
+ * than written here as four item ids. That is the definition that stays true: a fifth flavour
+ * is a row in `data.ts` and this whisper picks it up on the same commit, where a list over
+ * here would go quietly short in exactly the way `reports/store.ts`'s label table twice did.
+ */
+function baggedChips(view: WorldView): { count: number; cents: number } {
+  const spec = machineSpec(MachineKind.Bagger);
+  if (spec === null) return { count: 0, cents: 0 };
+
+  let count = 0;
+  let cents = 0;
+  const recipes = machineRecipes(spec);
+  for (const recipe of recipes) {
+    const bag = recipe.output;
+    if (bag === null) continue;
+    const held = countOf(view, bag);
+    if (held <= 0) continue;
+    count += held;
+    cents += held * (itemSpec(bag)?.listPriceCents ?? 0);
+  }
+  return { count, cents };
+}
+
+/**
+ * Crops in the bag that the chip line could actually eat, which gates the "nothing to fry"
+ * whisper. Russets, and — since item 111 — gold potatoes.
+ *
+ * A whisper that says a starved kitchen has nothing to fry while the player is carrying six
+ * gold potatoes is not merely stale copy; it is the Clipboard telling them to go and do the
+ * thing they have already done. The Washer's hoppers are the list of what feeds the line, so
+ * they are what is counted.
+ */
+function washableCrops(view: WorldView): number {
+  const spec = machineSpec(MachineKind.Washer);
+  if (spec === null) return 0;
+
+  let held = 0;
+  for (const hopper of machineHoppers(spec)) held += countOf(view, hopper.item);
+  return held;
 }
 
 function ownsHarvesterDock(view: WorldView): boolean {

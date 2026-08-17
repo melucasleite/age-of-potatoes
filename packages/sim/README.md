@@ -338,15 +338,29 @@ could forget. The alternative was giving every buffer in the game per-stack spoi
 advancing them with the world while held, which turns one integer into a list of pairs on every
 machine, in the hash, in the save, in the migration, in the loader, in `advanceConverter`, in
 `consumeRecipe` and in every grabber hand-off — to model a clock whose only legal value is
-_stopped_. Goods handed back OUT of a machine are stamped fresh from that tick, and that is not a
-laundering exploit worth closing: it costs two hand-verbs and a walk to gain what running the
-machine for one operation would have gained anyway, and §4's thesis for the whole section is that
-**processing is preservation**.
+_stopped_. That half stands.
+
+**The other half of that paragraph used to say goods handed back OUT of a machine are stamped fresh
+from that tick, and that "is not a laundering exploit worth closing". It was, and item 110 closed
+it.** The reasoning was sound when it was written — the cost was two hand-verbs and a walk — and
+then item 105 built the storage verb and the walk went away: _"a round trip through an eighty dollar
+hand cart resets the freshness clock, so I kept ten potatoes alive for three and a half times their
+natural lifespan by clicking twice. Rot is now opt-in."_ So a **container** carries
+`Machine.cargoFreshTicks`, the remainder of its cargo's window, and hands it back on the way out —
+**a box may preserve time and may never mint it**. How fast a box spends that remainder is one line
+of data per kind (`STORAGE_AGING_BY_KIND`): the hand cart spends it at exactly the speed the
+player's arms do, and the **Root Cellar is the only 0 in the game**, which is §4's _"frozen in a
+Root Cellar"_ and is what its $250 now buys that a barrow does not. A load whose clock runs out in a
+box becomes Compost where it stands; nothing vanishes inside a box either. Recipe machines are
+untouched by any of it — their buffers are still bare counts, and **processing is still
+preservation**, which is §4's thesis for the whole section and the one thing that was never the
+problem.
 
 **A crate is an item, not a building, and that only becomes obvious when you try it the other way.**
-Since nothing inside any machine has a clock, a placeable Crate would freeze its contents exactly as
-a Root Cellar does and the two would be one object with two prices — the same "two names for one
-rule" the belt junction ruling refuses. The distinction §4 actually draws is between goods **loose**
+A placeable Crate would be a box that preserves, which is a Root Cellar with a smaller number on it
+— the same "two names for one rule" the belt junction ruling refuses. (When this was written the
+argument was stronger still, because back then _every_ box froze its contents; item 110 left only
+the cellar doing it, and the conclusion is the same one.) The distinction §4 actually draws is between goods **loose**
 and goods **crated**, and both of those are in your arms. So the Crate is a consumable you pack a
 stack into, refused rather than eaten when it would not help, and the Root Cellar is a hundred slots
 where the clock stops.

@@ -20,6 +20,7 @@ import {
   BuildRefusal,
   CONDITION_EFFECT_THRESHOLD,
   CONDITION_MAX,
+  CHILI_PREMIUM_CENTS,
   CROP_SPECS,
   COMPOST_AFTER_TICKS,
   CropId,
@@ -32,8 +33,10 @@ import {
   ItemId,
   LampState,
   LiquidId,
+  GOLD_POTATO_PREMIUM_CENTS,
   MACHINE_SPECS,
   MachineKind,
+  SWEETCORN_PREMIUM_CENTS,
   PIPE_MAX_PATH_TILES,
   PortFlow,
   OVERCOOK_BLOCKED_TICKS,
@@ -56,6 +59,8 @@ import {
   createWorldView,
   dayOldPriceCents,
   effectiveInputCapacity,
+  machineHoppers,
+  machineRecipes,
   effectiveWastePeriod,
   effectiveWear,
   effectiveWorkRate,
@@ -161,6 +166,186 @@ describe('the chip line', () => {
     stepMany(state, 200);
     expect(washer.inputCounts[0]!).toBe(5);
     expect(washer.outputCount).toBe(spec.outputCapacity);
+  });
+});
+
+// --- the flavour tier (item 111) ------------------------------------------------------
+
+/** Run a machine until it has finished one operation, or give up. Returns what it made. */
+function runOneOperation(state: WorldState, machine: Machine): ItemId | 0 {
+  for (let i = 0; i < 400; i++) {
+    stepMany(state, 1);
+    if (machine.outputCount > 0) return machine.outputItem;
+  }
+  return 0;
+}
+
+describe('the flavour tier', () => {
+  it('gives corn, chili and the gold potato a recipe that consumes them', () => {
+    // THE WHOLE POINT OF ITEM 111, pinned as a rule rather than as three separate examples.
+    // Before it, these three appeared nowhere in `src/` outside their own data rows: they grew,
+    // they sold, and nothing in the game wanted them. If this goes red, a crop went back to
+    // being decoration.
+    for (const crop of [ItemId.Corn, ItemId.ChiliPepper, ItemId.GoldPotato]) {
+      const eaten = MACHINE_SPECS.some((spec) =>
+        machineRecipes(spec).some((recipe) => recipe.consumes.some((line) => line.item === crop)),
+      );
+      expect(eaten).toBe(true);
+    }
+  });
+
+  it('leaves the plain line making plain chips, fed nothing but chips', () => {
+    // The non-negotiable: plain chips work end to end exactly as before. A Seasoner with three
+    // empty hoppers it never asked for must still reach the plain recipe every time.
+    const state = createWorld(11);
+    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
+    seasoner.inputCounts[0] = 4;
+
+    expect(runOneOperation(state, seasoner)).toBe(ItemId.SeasonedChips);
+  });
+
+  it('makes chili chips when a pepper is in the hopper, and falls back to salt when it is not', () => {
+    const state = createWorld(12);
+    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
+    const pepper = machineHoppers(machineSpec(MachineKind.Seasoner)!).findIndex(
+      (line) => line.item === ItemId.ChiliPepper,
+    );
+    seasoner.inputCounts[0] = 2;
+    seasoner.inputCounts[pepper] = 1;
+
+    expect(runOneOperation(state, seasoner)).toBe(ItemId.ChiliChips);
+    expect(seasoner.inputCounts[pepper]).toBe(0);
+
+    // One pepper, one chip. The second chip has nothing to be seasoned with, so the line does
+    // not stop — it goes back to salt. Drain the basket first, because a basket holds one
+    // product at a time.
+    seasoner.outputCount = 0;
+    seasoner.outputItem = 0;
+    expect(runOneOperation(state, seasoner)).toBe(ItemId.SeasonedChips);
+  });
+
+  it('turns corn into sweetcorn chips', () => {
+    const state = createWorld(13);
+    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
+    const corn = machineHoppers(machineSpec(MachineKind.Seasoner)!).findIndex(
+      (line) => line.item === ItemId.Corn,
+    );
+    seasoner.inputCounts[0] = 1;
+    seasoner.inputCounts[corn] = 1;
+
+    expect(runOneOperation(state, seasoner)).toBe(ItemId.SweetcornChips);
+  });
+
+  it('will not mix two products in one basket', () => {
+    // `Machine.outputItem`'s rule, and the reason the field exists at all: a Seasoner holding
+    // plain chips finishes them before it starts a chili batch. Without this the basket would
+    // be a count with no name and a grabber could not say what it was pulling.
+    const state = createWorld(14);
+    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
+    const pepper = machineHoppers(machineSpec(MachineKind.Seasoner)!).findIndex(
+      (line) => line.item === ItemId.ChiliPepper,
+    );
+    seasoner.outputCount = 1;
+    seasoner.outputItem = ItemId.SeasonedChips;
+    seasoner.inputCounts[0] = 4;
+    seasoner.inputCounts[pepper] = 4;
+
+    stepMany(state, 120);
+    // It kept working — it just kept making the thing already in the basket, and did not touch
+    // a pepper to do it.
+    expect(seasoner.outputItem).toBe(ItemId.SeasonedChips);
+    expect(seasoner.outputCount).toBeGreaterThan(1);
+    expect(seasoner.inputCounts[pepper]).toBe(4);
+  });
+
+  it('runs a gold potato down the same five machines to a premium bag', () => {
+    // The alternate BASE, which is the half of the fork that could not be a seasoning: a gold
+    // potato is a potato, and the only honest thing to do with it is wash it and fry it.
+    const state = createWorld(15);
+    const chain: [MachineKind, ItemId, ItemId][] = [
+      [MachineKind.Washer, ItemId.GoldPotato, ItemId.WashedGoldPotato],
+      [MachineKind.Slicer, ItemId.WashedGoldPotato, ItemId.GoldPotatoSlices],
+      [MachineKind.Fryer, ItemId.GoldPotatoSlices, ItemId.GoldChips],
+      [MachineKind.Seasoner, ItemId.GoldChips, ItemId.SeasonedGoldChips],
+      [MachineKind.Bagger, ItemId.SeasonedGoldChips, ItemId.BaggedGoldChips],
+    ];
+
+    let x = 0;
+    for (const [kind, input, output] of chain) {
+      const machine = spawnMachine(state, kind, x, 0)!;
+      x += 3;
+      const hopper = machineHoppers(machineSpec(kind)!).findIndex((line) => line.item === input);
+      expect(hopper).toBeGreaterThanOrEqual(0);
+      machine.inputCounts[hopper] = 1;
+      expect(runOneOperation(state, machine)).toBe(output);
+    }
+  });
+
+  it('keeps hopper zero where every save on disk already put it', () => {
+    // A SAVE-COMPATIBILITY RULE, not a style one. `machine.inputCounts` is parallel to the
+    // hoppers and is stored that way in every save; a new hopper that landed anywhere but the
+    // end would silently re-read every stocked machine in the world.
+    for (const spec of MACHINE_SPECS) {
+      const hoppers = machineHoppers(spec);
+      for (let i = 0; i < spec.inputs.length; i++) {
+        expect(hoppers[i]).toEqual(spec.inputs[i]);
+      }
+      // And every recipe line has somewhere to be held.
+      for (const recipe of machineRecipes(spec)) {
+        for (const line of recipe.consumes) {
+          expect(hoppers.some((h) => h.item === line.item)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('prices every new product off its input, and never off vibes', () => {
+    // Item 111's balance non-negotiable, checked as arithmetic rather than as literals: each
+    // flavoured rung is its plain counterpart plus 150% of the extra ingredient.
+    expect(listPriceCents(ItemId.ChiliChips)).toBe(
+      listPriceCents(ItemId.SeasonedChips) + CHILI_PREMIUM_CENTS,
+    );
+    expect(listPriceCents(ItemId.BaggedChiliChips)).toBe(
+      listPriceCents(ItemId.BaggedChips) + CHILI_PREMIUM_CENTS,
+    );
+    expect(listPriceCents(ItemId.SweetcornChips)).toBe(
+      listPriceCents(ItemId.SeasonedChips) + SWEETCORN_PREMIUM_CENTS,
+    );
+    expect(listPriceCents(ItemId.BaggedSweetcornChips)).toBe(
+      listPriceCents(ItemId.BaggedChips) + SWEETCORN_PREMIUM_CENTS,
+    );
+
+    // The gold line is the plain line shifted by ONE constant, which is what stops the premium
+    // being multiplied five times over on its way down the belt.
+    const gold: [ItemId, ItemId][] = [
+      [ItemId.WashedGoldPotato, ItemId.WashedPotato],
+      [ItemId.GoldPotatoSlices, ItemId.PotatoSlices],
+      [ItemId.GoldChips, ItemId.PlainChips],
+      [ItemId.SeasonedGoldChips, ItemId.SeasonedChips],
+      [ItemId.BaggedGoldChips, ItemId.BaggedChips],
+    ];
+    for (const [premium, plain] of gold) {
+      expect(listPriceCents(premium)).toBe(listPriceCents(plain) + GOLD_POTATO_PREMIUM_CENTS);
+    }
+  });
+
+  it('does not let the flavour tier out-earn the plain line per tile-second', () => {
+    // THE ANTI-ACCELERATION CHECK, and the one that would catch a well-meaning rebalance. Item
+    // 046 inherits an economy already paying ~5× too fast; this tier adds a decision, not a
+    // multiplier. A gold bag is worth more than a plain one — but the potato takes twice as
+    // long to grow, so per second of field it must NOT win.
+    const russet = CROP_SPECS.find((spec) => spec.yieldItem === ItemId.RussetPotato)!;
+    const goldCrop = CROP_SPECS.find((spec) => spec.yieldItem === ItemId.GoldPotato)!;
+
+    const plainPerTick = listPriceCents(ItemId.BaggedChips) / russet.growthTicks;
+    const goldPerTick = listPriceCents(ItemId.BaggedGoldChips) / goldCrop.growthTicks;
+    expect(goldPerTick).toBeLessThan(plainPerTick);
+
+    // What it DOES buy is more value per machine operation — five ops either way, more money
+    // out of them. That is the trade the player is being offered.
+    expect(listPriceCents(ItemId.BaggedGoldChips)).toBeGreaterThan(
+      listPriceCents(ItemId.BaggedChips),
+    );
   });
 });
 

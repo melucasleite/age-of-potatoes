@@ -51,6 +51,7 @@ import {
   isNetworkConsumer,
   isSellable,
   machineKindForBoxedItem,
+  machineHoppers,
   machineSpec,
   wiltStageForAge,
 } from './data';
@@ -73,7 +74,9 @@ import {
   type WorldState,
   CeremonyId,
   carriedCount,
+  heldOutputItem,
   isParcelBuyable,
+  runnableRecipe,
   nextDeedPriceCents,
   tileAt,
 } from './state';
@@ -279,6 +282,19 @@ export interface MachineView {
    */
   cargoItem: number;
   cargoCount: number;
+
+  // **THERE IS NO `cargoTicksToSpoil` HERE YET, AND ITS ABSENCE IS THE ONE THING ITEM 110 LEFT
+  // UNDONE.** A hand cart's load now ages and can turn to Compost where it stands, and a player
+  // has no way to see that coming: `cargoItem`/`cargoCount` say "12 potatoes" and nothing says
+  // "for another four minutes". The publisher is three lines — `machine.cargoFreshTicks` when the
+  // spec is `MachineRole.Storage` and `storageAgingPerTick(kind) > 0`, else -1, matching
+  // `InventoryView.ticksToSpoil`'s -1-means-never so `hud/freshness.ts` can read it unchanged.
+  //
+  // It was written and then taken back out on purpose: a REQUIRED field on this interface fails
+  // `apps/web/src/game/render/machine-motion.test.ts`, which spells out a whole `MachineView`
+  // literal, and that file belongs to another lane that was being edited in parallel. Adding it
+  // is a two-file change and wants the HUD half in the same breath anyway — the countdown is
+  // worth nothing until something draws it.
 
   /**
    * The harvester dock's SEED shelf (item 088), beside the produce shelf above. Zero/0 on every
@@ -1140,7 +1156,21 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.inputCapacity = spec === null ? 0 : effectiveInputCapacity(spec, machine);
     mv.outputCapacity = spec === null ? 0 : effectiveOutputCapacity(spec, machine);
     mv.inputItem = spec === null || spec.inputs.length === 0 ? 0 : spec.inputs[0]!.item;
-    mv.outputItem = spec === null || spec.outputItem === null ? 0 : spec.outputItem;
+    // **WHAT IS IN THE BASKET, NOT WHAT THE MACHINE USUALLY MAKES** (item 111). This field
+    // already existed and already meant "the item in the output buffer"; it was simply never
+    // able to be wrong before, because a machine made one thing. A Seasoner running chili now
+    // publishes chili chips here and the renderer draws the right bag with no new field and no
+    // change to `MachineView`'s shape — which is the reason this was the field to fix rather
+    // than a `heldItem` added beside it.
+    //
+    // It falls back to the spec's product for an empty basket, so an idle machine still
+    // advertises what it is for, exactly as it did before.
+    mv.outputItem =
+      spec === null
+        ? 0
+        : machine.outputCount > 0
+          ? heldOutputItem(machine, spec)
+          : (spec.outputItem ?? 0);
     mv.overcookedCount = machine.overcookedCount;
     mv.overcookedItem =
       spec === null || spec.overcookOutputItem === null ? 0 : spec.overcookOutputItem;
@@ -1202,9 +1232,11 @@ function bleedCentsWithinWindow(machine: Machine, tick: number): number {
  * exists to avoid. The arrays are truncated rather than emptied for the same reason.
  */
 function projectRecipe(machine: Machine, spec: MachineSpec | null, mv: MachineView): void {
-  const count = spec === null ? 0 : spec.inputs.length;
+  // Every hopper the machine has, so the HUD shows the peppers piling up beside the chips.
+  const hoppers = spec === null ? null : machineHoppers(spec);
+  const count = hoppers === null ? 0 : hoppers.length;
   for (let i = 0; i < count; i++) {
-    const line = spec!.inputs[i]!;
+    const line = hoppers![i]!;
     let lv = mv.recipe[i];
     if (lv === undefined) {
       lv = { item: 0, perOperation: 0, count: 0 };
@@ -1725,9 +1757,11 @@ function lampFor(state: WorldState, index: number): LampState {
     if (port.ml < portSpec.mlPerOperation) return LampState.UtilityMissing;
     if (port.throttled) return LampState.Starved;
   }
-  for (let i = 0; i < spec.inputs.length; i++) {
-    if ((machine.inputCounts[i] ?? 0) < spec.inputs[i]!.count) return LampState.Starved;
-  }
+  // **AMBER MEANS "IT CANNOT MAKE ANY OF THE THINGS IT KNOWS HOW TO MAKE"** (item 111), which
+  // is not the same as "a hopper is empty" now that a Seasoner has four hoppers and needs two.
+  // Walking `spec.inputs` here would have put a starved lamp on every plain chip line in the
+  // game for want of a pepper the plain recipe never asked for.
+  if (runnableRecipe(spec, machine) === null) return LampState.Starved;
   return LampState.Running;
 }
 

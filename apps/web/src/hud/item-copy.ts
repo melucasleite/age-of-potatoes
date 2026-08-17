@@ -26,12 +26,23 @@ import { machineLabel } from './tech-copy';
  *
  * "day-old-potato" title-cases to "Day Old Potato", and the compound adjective wants its
  * hyphen — it is the difference between produce that is a day old and a variety called Day Old.
+ *
+ * THREE ROWS WERE MISSING AND ITEM 111 FOUND THEM BY ACCIDENT, which is worth recording as
+ * the argument FOR this being a table of exceptions rather than against it. The reports lane
+ * kept a rival vocabulary — a hand-keyed table of item numbers — and it spelled all four of
+ * these correctly; deleting it in favour of this one would have quietly *regressed* three
+ * names, so they moved here instead of being lost. A gold potato has gone a day old since
+ * [[093]] and read "Day Old Gold Potato" in the bag the whole time: this table was not wrong
+ * about its rule, it had simply never been re-read against `ItemId` after the rule was set.
  */
 const NAME_OVERRIDES: Readonly<Record<number, string>> = {
   [ItemId.DayOldPotato]: 'Day-Old Potato',
   [ItemId.DayOldCane]: 'Day-Old Cane',
   [ItemId.DayOldCorn]: 'Day-Old Corn',
   [ItemId.DayOldChili]: 'Day-Old Chili',
+  [ItemId.DayOldGoldPotato]: 'Day-Old Gold Potato',
+  [ItemId.RusticStyleChips]: 'Rustic-Style Chips',
+  [ItemId.SixPack]: 'Six-Pack',
 };
 
 /** "bagged-chips" → "Bagged Chips". */

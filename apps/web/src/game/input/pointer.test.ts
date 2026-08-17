@@ -26,6 +26,8 @@ import {
   SUBTILE,
   TillMode,
   createWorldView,
+  machineHoppers,
+  machineSpec,
 } from '@snack/sim';
 import type { Command, WorldView } from '@snack/sim';
 
@@ -70,6 +72,18 @@ function standingOn(tileX: number, tileY: number): WorldView {
  * A machine occupying one tile. `reachAdjusted` finds it the same way a click does — by
  * asking `tileAtView` what covers the clicked tile — so it only has to be in `view.machines`.
  */
+/**
+ * A machine on the lot, with **the hoppers the projection would actually publish for it**.
+ *
+ * `recipe` used to be left off this literal, along with everything else the case under test
+ * did not read, and the cast made that legal. It stopped being harmless when the hand verb
+ * started reading hoppers instead of a hard-coded table of machine kinds (item 111): a
+ * fixture with no `recipe` is not a machine with no hoppers, it is a `MachineView` the sim
+ * could never produce, and it fails with a TypeError rather than with an answer. So the
+ * hoppers are derived here exactly as `projectRecipe` derives them, empty and in order —
+ * which is also what makes the drone-bay case below mean something, since the bay's emptiness
+ * is now the thing being asserted rather than a gap in a switch.
+ */
 function withMachine(
   view: WorldView,
   tileX: number,
@@ -77,6 +91,7 @@ function withMachine(
   kind: number,
   id = 1,
 ): WorldView {
+  const spec = machineSpec(kind as MachineKind);
   view.machines.push({
     id,
     kind,
@@ -84,6 +99,15 @@ function withMachine(
     tileY,
     tilesWide: 1,
     tilesHigh: 1,
+    inputCapacity: spec === null ? 0 : spec.inputCapacity,
+    recipe:
+      spec === null
+        ? []
+        : machineHoppers(spec).map((line) => ({
+            item: line.item,
+            perOperation: line.count,
+            count: 0,
+          })),
   } as WorldView['machines'][number]);
   return view;
 }
@@ -297,6 +321,66 @@ describe('hoppers answer the door', () => {
     // gone and a click that still offered `RefillHopper` would knock on a wall.
     const view = withMachine(standingOn(4, 4), 4, 5, MachineKind.DroneBay, 11);
     expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Hand, Direction.East)).toBe(null);
+  });
+
+  // Item 111, and the third instance of this same door being shut. A pepper is not part of
+  // the Seasoner's plain recipe, so the old chip-line switch answered `PlainChips`, the
+  // player holding only chilis had none of those, and the click produced nothing — the
+  // flavour tier reachable by conveyor and not by hand.
+  it('a Hand click on a Seasoner takes the chili in your arms ([[111]])', () => {
+    const view = withItem(
+      withMachine(standingOn(4, 4), 4, 5, MachineKind.Seasoner, 12),
+      ItemId.ChiliPepper,
+      4,
+      1,
+    );
+    expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Hand, Direction.East)).toEqual({
+      type: 'LoadMachine',
+      machineId: 12,
+      count: 4,
+    });
+  });
+
+  // The chip hopper is the Seasoner's first, so a full one used to be the end of the story.
+  // `applyLoadMachine` skips a hopper with no room and moves down the list; this side has to
+  // agree with it, or the click is refused on arrival after a walk across the lot.
+  it('offers the next hopper when the first one is full', () => {
+    const view = withItem(
+      withItem(
+        withMachine(standingOn(4, 4), 4, 5, MachineKind.Seasoner, 12),
+        ItemId.PlainChips,
+        9,
+        1,
+      ),
+      ItemId.ChiliPepper,
+      4,
+      1,
+    );
+    const seasoner = view.machines[0]!;
+    seasoner.recipe[0]!.count = seasoner.inputCapacity;
+
+    expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Hand, Direction.East)).toEqual({
+      type: 'LoadMachine',
+      machineId: 12,
+      count: 4,
+    });
+  });
+
+  // The whole soda line was in this hole too and nobody had noticed: the switch listed the
+  // five chip machines and returned null for everything else, so a Grinder with kola nuts in
+  // your arms ignored the click exactly as the planter dock had.
+  it('a Hand click on a Grinder takes the kola nuts, which it never used to ([[111]])', () => {
+    const view = withItem(
+      withMachine(standingOn(4, 4), 4, 5, MachineKind.Grinder, 13),
+      ItemId.KolaNut,
+      7,
+      1,
+    );
+    expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Hand, Direction.East)).toEqual({
+      type: 'LoadMachine',
+      machineId: 13,
+      count: 7,
+    });
   });
 });
 

@@ -1,0 +1,24 @@
+{
+  "id": "item_washed_gold_potato",
+  "provider": "local",
+  "model": "local:local/item_washed_gold_potato.png",
+  "seed": null,
+  "prompt": "One 16x16 washed gold potato — the Washer's output on the premium base line ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. Deliberately the RUSSET line's own shape in a different ramp: item 111 prices the gold line as the plain line shifted by one flat $6.00 at every rung, and a player can only read that off the pictures if the rungs share a silhouette and differ in hue. Ask a diffusion model for a premium potato and you get a different potato, which is the one thing this tier must not say. The blue wet patch is borrowed exactly from item_washed_potato rather than reinvented: it is this family's existing signal for \"this has been through the Washer\", and it is the whole difference between this and the raw gold potato the player just harvested.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0,
+  "generatedAt": "2026-08-17T05:47:51.960Z"
+}

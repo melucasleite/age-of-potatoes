@@ -13,7 +13,7 @@
 // into the world is `host.queue.push`, and only `pointer.ts` and `keyboard.ts` use it.
 
 import type { CropId, WorldView } from '@snack/sim';
-import { CropId as Crop, Direction, cropSpec, techSatisfied } from '@snack/sim';
+import { CropId as Crop, Direction, LiquidId, cropSpec, techSatisfied } from '@snack/sim';
 
 import { publishArmedTool } from './armed-tool';
 import { BUILD_GRID_COLS, buildRows, moveGridCursor } from './build-menu';
@@ -68,6 +68,42 @@ export function nextCrop(current: CropId, unlocked: readonly string[]): CropId {
   return current;
 }
 
+/**
+ * Cycle order for `L` ([[109]]), and `LiquidId.None` IS THE FIRST RUNG rather than an absence.
+ *
+ * "None" means AUTO — let the run work its own liquid out, and lay nothing if it cannot. It has
+ * to be in the ring, and it has to be where the game starts: a default of water is the exact bug
+ * item 109 reports (a run across bare ground silently becoming a water main), and a ring with no
+ * way back to auto would leave a player who once pressed L for cane juice laying cane juice into
+ * every silence forever after.
+ *
+ * The five liquids follow in `LIQUID_SPECS` order — the sim's own — and none of them is skipped
+ * for tech, unlike `CROP_CYCLE` above. There is no `requiresTech` on a liquid to read: what is
+ * gated is the MACHINES, and a player who picks soda syrup before owning a Bottler gets a pipe
+ * that carries nothing, which is a fair thing to have asked for out loud and a $2-a-tile mistake
+ * the Hand refunds. Inferring a lock from the machine roster would be a rule this layer invented.
+ */
+const LIQUID_CYCLE: readonly LiquidId[] = [
+  LiquidId.None,
+  LiquidId.Water,
+  LiquidId.CaneJuice,
+  LiquidId.SimpleSyrup,
+  LiquidId.CarbonatedWater,
+  LiquidId.SodaSyrup,
+];
+
+/**
+ * The next rung of `L`, or back to `None` — the whole of the key, as a pure function for the
+ * same reason `nextCrop` above is one: a test can drive the ring a hundred times without a
+ * canvas, a host or a projection.
+ *
+ * It takes no `unlocked` list because nothing here is gated; see `LIQUID_CYCLE`.
+ */
+export function nextLiquid(current: LiquidId): LiquidId {
+  const index = LIQUID_CYCLE.indexOf(current);
+  return LIQUID_CYCLE[(index + 1) % LIQUID_CYCLE.length]!;
+}
+
 /** Rotation order for `R`. Clockwise from north, because that is what a dial does. */
 const DIR_CYCLE: readonly Direction[] = [
   Direction.North,
@@ -97,6 +133,19 @@ export class InputSystem {
   armedCrop: CropId = DEFAULT_CROP;
   /** The way the next grabber will face — the direction it moves goods. */
   placeDir: Direction = Direction.East;
+  /**
+   * **THE LIQUID A RUN TAKES WHEN NOTHING IN THE WORLD SAYS** ([[109]]) — `None` for "work it
+   * out", which is where every session starts and the reason a bare-ground run now lays nothing
+   * instead of quietly becoming a water main.
+   *
+   * It is consulted ONLY among liquids that survived `pipeRunLiquid`'s intersection, so it can
+   * never argue with a machine or an existing pipe; see that function's header for the full
+   * argument, including why the sim was left alone.
+   *
+   * Cursor state, like `armedCrop` and `placeDir` beside it: never a `Command`, never traced,
+   * never hashed, never saved (§12).
+   */
+  pickedLiquid: LiquidId = LiquidId.None;
 
   // --- the build menu's state, owned here since [[071]] ------------------------------------
   //
@@ -473,6 +522,20 @@ export class InputSystem {
    */
   cycleCrop(): void {
     this.armedCrop = nextCrop(this.armedCrop, this.host.latestView()?.unlocked ?? []);
+  }
+
+  /**
+   * `L`: cycle the liquid a pipe run takes when the world does not say ([[109]]). Cursor state;
+   * emits nothing, exactly as `cycleCrop` and `rotatePlacement` do.
+   *
+   * NOT GATED ON THE PIPE TOOL BEING ARMED, and `C` is the precedent: pressing it with a wrench
+   * in hand quietly changes the crop for later rather than beeping, and a key whose behaviour
+   * depends on what you are holding is a key the fingers cannot learn. Nothing but the pipe
+   * run's band ever reads this, so a press with the Hand out is a press that changes what the
+   * NEXT run will do and says nothing — which is what it did.
+   */
+  cycleLiquid(): void {
+    this.pickedLiquid = nextLiquid(this.pickedLiquid);
   }
 
   /** Handy for a future zone card; nothing reads it yet. */

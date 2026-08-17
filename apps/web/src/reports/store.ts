@@ -29,8 +29,17 @@
 // a sink the host attaches; the sink is null until it does, and the panel disables itself
 // rather than pretending (§12: every mutation is a command applied at a tick).
 
-import { listPriceCents, machineSpec } from '@snack/sim';
-import type { ItemId, MachineKind, WorldView } from '@snack/sim';
+import {
+  ItemId,
+  itemSpec,
+  listPriceCents,
+  machineKindForBoxedItem,
+  machineRecipes,
+  machineSpec,
+} from '@snack/sim';
+import type { MachineKind, WorldView } from '@snack/sim';
+
+import { itemName } from '../hud/item-copy';
 
 import { deriveBoards, emptyBests, foldBests, readBoardValues } from './boards';
 import type { BoardValues, PersonalBests } from './boards';
@@ -534,6 +543,21 @@ export class ReportsStore {
   /**
    * Products the lot can write a contract for: whatever its machines actually make.
    *
+   * **EVERY RECIPE, NOT THE SPEC'S ONE OUTPUT** (item 111), and this was not a copy problem.
+   * `spec.outputItem` is what a machine makes on an ordinary day — a Bagger makes bagged
+   * chips — so a Bagger on the lot put exactly one row in this list however many flavours it
+   * could actually run. A depot only accepts an item it has a contract for
+   * (`depotCanAcceptRoute`), and this list is the only place a contract can be written from,
+   * so chili chips could not be routed through a depot AT ALL: not badly labelled, not priced
+   * wrong — belted in, refused at the door, with no row anywhere to explain it.
+   *
+   * IT LISTS WHAT THE MACHINES CAN MAKE RATHER THAN WHAT IS IN STOCK, which is the rule it
+   * has always followed (it lists washed potatoes and slices, and nobody stocks those) and
+   * the only rule that works: a contract is a standing order that waits for supply, so
+   * writing one BEFORE the first chili is grown is the ordinary way to use the feature. The
+   * cost of the wider list is a longer dropdown on a mature lot; the cost of the narrow one
+   * was a product with no way out of the factory.
+   *
    * Rebuilt only when the machine census changes shape, because the list is stable for
    * minutes at a time and allocating six objects seven times a second to hand React an
    * identical array is exactly the allocation the version dance exists to avoid.
@@ -546,10 +570,15 @@ export class ReportsStore {
     const items: number[] = [];
     for (let i = 0; i < view.machines.length; i++) {
       const spec = machineSpec(view.machines[i]!.kind as MachineKind);
-      if (spec === null || spec.outputItem === null) continue;
-      if (items.includes(spec.outputItem)) continue;
-      items.push(spec.outputItem);
-      key += `${spec.outputItem},`;
+      if (spec === null) continue;
+      const recipes = machineRecipes(spec);
+      for (let r = 0; r < recipes.length; r++) {
+        const output = recipes[r]!.output;
+        if (output === null) continue;
+        if (items.includes(output)) continue;
+        items.push(output);
+        key += `${output},`;
+      }
     }
     if (key === this.lastSellableKey) return;
     this.lastSellableKey = key;
@@ -652,56 +681,58 @@ function bestSellerFrom(view: WorldView): DawnCard['bestSeller'] {
 }
 
 /**
- * Item names for the paperwork.
+ * Names the receipt spells differently from the panel — and there are only two of them.
  *
- * Longer and more formal than `hud/derive.ts`'s pouch labels ("russets", "chips"), on
- * purpose: the pouch is what is in your hands and a receipt is a document. "Bagged chips ×
- * 40" belongs on a contract; "chips" belongs in a pocket.
+ * The paperwork's register is longer and more formal than `hud/derive.ts`'s pouch labels
+ * ("russets", "chips") on purpose: the pouch is what is in your hands and a receipt is a
+ * document. "Bagged chips × 40" belongs on a contract; "chips" belongs in a pocket. But that
+ * is a rule about CASE, not about vocabulary — a contract and a bag should call the same
+ * object the same word — so the names themselves come from `itemName`, and this table holds
+ * only the two the receipt genuinely says differently. A bottle in your hands is a bottle;
+ * a bottle on an invoice, sitting one line above the soda it will become, is an empty one.
  */
-const ITEM_LABELS: Readonly<Record<number, string>> = {
-  1: 'Potato seed',
-  2: 'Russet potato',
-  3: 'Bagged chips',
-  4: 'Washed potato',
-  5: 'Potato slices',
-  6: 'Plain chips',
-  7: 'Seasoned chips',
-  8: 'Day-old potato',
-  9: 'Compost',
-  10: 'Cane seed',
-  11: 'Sugar cane',
-  12: 'Day-old cane',
-  13: 'Corn seed',
-  14: 'Corn',
-  15: 'Day-old corn',
-  16: 'Chili seed',
-  17: 'Chili pepper',
-  18: 'Day-old chili',
-  // The soda era and everything after it. The table stopped at 18 while `ItemId` marched to
-  // 69, so a contract for kola powder read "Item 22" — a receipt naming its own line item
-  // by number, which is the exact credibility leak this vocabulary exists to prevent. Boxed
-  // machines are deliberately absent: no contract ships one and no dawn card sells one.
-  19: 'Rustic-style chips',
-  20: 'Repair kit',
-  21: 'Kola nut',
-  22: 'Kola powder',
-  23: 'Empty bottle',
-  24: 'Bottled soda',
-  25: 'Six-pack',
-  26: 'Snack combo',
-  50: 'Gold potato seed',
-  51: 'Gold potato',
-  52: 'Day-old gold potato',
-  53: 'Orange',
-  54: 'Lemon',
-  55: 'Fertilizer',
-  56: 'Push scythe',
-  57: 'Crate',
-  66: 'Drone part',
+const RECEIPT_NAMES: Readonly<Record<number, string>> = {
+  [ItemId.Bottle]: 'Empty bottle',
+  [ItemId.Soda]: 'Bottled soda',
 };
 
+/**
+ * The name of a line item, DERIVED rather than listed (item 111).
+ *
+ * **THIS WAS A HAND-KEYED TABLE OF NUMBERS AND IT WENT STALE TWICE.** Its own comment
+ * recorded the first time: it stopped at 18 while `ItemId` marched to 69, so a contract for
+ * kola powder read "Item 22" — "a receipt naming its own line item by number, which is the
+ * exact credibility leak this vocabulary exists to prevent". The repair added thirty rows and
+ * left the mechanism in place, so item 111 walked straight into the second one: nine new
+ * products landed in `data.ts`, and a chili contract — a thing a player deliberately set up
+ * and is waiting on — billed itself as "Item 76".
+ *
+ * A THIRD REPAIR WOULD HAVE BEEN THE SAME BUG WITH A LATER DATE. So the default is the sim's
+ * own slug, by way of `itemName`, which is the one place this app spells items; the whole
+ * table above is what is left. That is `hud/item-copy.ts`'s argument — a table of exceptions
+ * stays small, a table of everything goes stale the day an item is added, silently, in the
+ * one place the player is looking — and this is the surface that had not heard it yet.
+ *
+ * BOXED MACHINES KEEP THEIR CAPITALS. No contract ships one and no dawn card sells one, so
+ * this is a branch for a row that should never print — but the sentence-casing below is meant
+ * for produce, and a Root Cellar that arrived here as "Root cellar" would look like a typo
+ * rather than like the impossible row it actually is.
+ *
+ * AN ITEM WITH NO SPEC KEEPS ITS NUMBER, which is the one thing the old table did better and
+ * is worth carrying across. `itemName` answers "Unknown item" — right for a bag, where the
+ * player wants to know it is a save from the future rather than a bug — but a receipt is a
+ * document somebody may have to reconcile, and the id is the only handle it has.
+ */
 export function itemLabel(item: number): string {
-  return ITEM_LABELS[item] ?? `Item ${item}`;
+  const exception = RECEIPT_NAMES[item];
+  if (exception !== undefined) return exception;
+  if (itemSpec(item as ItemId) === null) return `Item ${item}`;
+
+  const name = itemName(item);
+  if (machineKindForBoxedItem(item as ItemId) !== null) return name;
+  // "Bagged Chili Chips" → "Bagged chili chips"; "Day-Old Potato" → "Day-old potato". One
+  // capital, at the front, exactly as a line on an invoice is written.
+  return name.charAt(0) + name.slice(1).toLowerCase();
 }
 
 /** A destination name for a new contract. Flavour only; every one of them pays list. */

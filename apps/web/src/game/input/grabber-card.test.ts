@@ -119,6 +119,13 @@ describe('grabberCard — which tile the arm reads', () => {
     { dir: Direction.South, sourceX: 5, sourceY: 4 },
   ];
 
+  // TRACER DYE, AND IT IS READ BY PRESENCE RATHER THAN BY EQUALITY (item 111). Each machine
+  // below is given an `outputItem` its kind could never actually make, so a candidate list
+  // that contains one names the tile it was read from. The lists stopped being singletons the
+  // day a machine could make several things — a Fryer now offers plain AND gold chips —
+  // which is real behaviour and not the claim these four cases are about. Asserting that the
+  // near tile's dye is in and the far tile's dye is out says exactly the thing (a reversed
+  // sign reads the destination) and says it without re-pinning the recipe graph here.
   for (const { dir, sourceX, sourceY } of CASES) {
     it(`takes from the -dir side, facing ${dir}`, () => {
       const view = withArm(createWorldView(), 5, 5, dir, GrabberTier.Mk2);
@@ -128,7 +135,9 @@ describe('grabberCard — which tile the arm reads', () => {
         outputItem: ItemId.RussetPotato,
       });
 
-      expect(grabberCard(view, 1)?.candidates).toEqual([ItemId.BaggedChips]);
+      const candidates = grabberCard(view, 1)!.candidates;
+      expect(candidates).toContain(ItemId.BaggedChips);
+      expect(candidates).not.toContain(ItemId.RussetPotato);
     });
   }
 
@@ -137,7 +146,24 @@ describe('grabberCard — which tile the arm reads', () => {
     withMachine(view, 4, 5, MachineKind.Fryer, { outputItem: ItemId.RussetPotato });
     withMachine(view, 3, 5, MachineKind.Washer, { outputItem: ItemId.BaggedChips });
 
-    expect(grabberCard(view, 1)?.candidates).toEqual([ItemId.BaggedChips]);
+    const candidates = grabberCard(view, 1)!.candidates;
+    expect(candidates).toContain(ItemId.BaggedChips);
+    expect(candidates).not.toContain(ItemId.RussetPotato);
+  });
+
+  // The reason the four cases above had to loosen, pinned on purpose so it is a decision
+  // rather than a casualty: an arm at a Bagger between batches must still be tunable to a
+  // flavour that machine has not made yet, because a filter is a standing instruction and a
+  // player sets one up BEFORE the first chili is grown. `outputItem` alone is the basket, and
+  // a basket is empty most of the time.
+  it('offers every flavour a machine can make, not only the one in its basket ([[111]])', () => {
+    const view = withArm(createWorldView(), 5, 5, Direction.East, GrabberTier.Mk2);
+    withMachine(view, 4, 5, MachineKind.Bagger, { outputItem: ItemId.BaggedChips });
+
+    const candidates = grabberCard(view, 1)!.candidates;
+    expect(candidates).toContain(ItemId.BaggedChiliChips);
+    expect(candidates).toContain(ItemId.BaggedSweetcornChips);
+    expect(candidates).toContain(ItemId.BaggedGoldChips);
   });
 });
 
@@ -352,7 +378,9 @@ describe('the seam: one card open at a time, closed by the same click that opene
     grabberClicked(1);
     publishGrabberPanel(view);
     expect(grabberPanelSnapshot().fromLot).toBe(true);
-    expect(grabberPanelSnapshot().candidates).toEqual([ItemId.BaggedChips]);
+    // Presence, not equality, for the reason the tile cases above give: the lot's fallback
+    // list carries what the Fryer can make as well as what is in its basket.
+    expect(grabberPanelSnapshot().candidates).toContain(ItemId.BaggedChips);
   });
 
   it('closes itself when the arm is torn down, and does not come back', () => {

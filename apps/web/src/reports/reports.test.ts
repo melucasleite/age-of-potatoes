@@ -21,7 +21,7 @@
 // Everything under test is pure. No DOM, no React, no IndexedDB.
 
 import { describe, expect, it } from 'vitest';
-import { TICKS_PER_ACTIVE_HOUR, createWorldView } from '@snack/sim';
+import { ItemId, MachineKind, TICKS_PER_ACTIVE_HOUR, createWorldView } from '@snack/sim';
 import type { WorldView } from '@snack/sim';
 
 import { TICKS_PER_DAY, dawnCount, dayNumber, dayPhase } from './day';
@@ -409,6 +409,56 @@ describe('the reports store across a dawn', () => {
     expect(card?.bestSeller?.label).toBe('Bagged chips');
     expect(card?.bestSeller?.count).toBe(8);
     expect(card?.bestSeller?.grossCents).toBe(4_800);
+
+    reportsStore.release(token);
+  });
+
+  it('offers a contract for every flavour a machine can make ([[111]])', () => {
+    // NOT A LABELLING BUG. A depot only accepts an item some contract names, and this list is
+    // the only place a contract can be written from — so while it was built from
+    // `spec.outputItem`, a Bagger offered "bagged chips" and nothing else, and a bag of chili
+    // chips had no way out of the factory by depot at all.
+    const token = {};
+    reportsStore.claim(token, 618);
+    const at = viewWith({ tick: 100 });
+    at.machines.push({
+      id: 1,
+      kind: MachineKind.Bagger,
+    } as unknown as (typeof at.machines)[number]);
+    publish(token, at);
+
+    const offered = reportsStore.getSnapshot().commerce.sellable.map((row) => row.item);
+    expect(offered).toContain(ItemId.BaggedChips);
+    expect(offered).toContain(ItemId.BaggedChiliChips);
+    expect(offered).toContain(ItemId.BaggedSweetcornChips);
+    expect(offered).toContain(ItemId.BaggedGoldChips);
+
+    reportsStore.release(token);
+  });
+
+  it('names a product that landed after the label table was written ([[111]])', () => {
+    // THE REGRESSION THIS FILE EXISTS TO CATCH NEXT TIME. `itemLabel` was a hand-keyed table
+    // of item numbers; it went stale once at the soda line and again at the flavour tier, and
+    // a chili contract the player had deliberately set up billed itself as "Item 76". The
+    // label is derived from the sim's own slug now, so this passes for any id the sim knows —
+    // including ones added after today.
+    const token = {};
+    reportsStore.claim(token, 617);
+    publish(token, viewWith({ tick: DAWN_TICK_IN_DAY - 60 }));
+
+    const at = viewWith({ tick: DAWN_TICK_IN_DAY + 3 });
+    at.stats.salesByItem = [
+      {
+        item: ItemId.BaggedChiliChips,
+        count: 4,
+        grossCents: 9_800,
+        dayCount: 4,
+        dayGrossCents: 9_800,
+      },
+    ];
+    publish(token, at);
+
+    expect(reportsStore.getSnapshot().dawn.card?.bestSeller?.label).toBe('Bagged chili chips');
 
     reportsStore.release(token);
   });

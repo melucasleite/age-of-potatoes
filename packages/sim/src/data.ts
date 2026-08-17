@@ -117,11 +117,19 @@ export const HARVESTS_PER_FERTILITY_STEP = 5;
 export const FERTILITY_PER_FERTILIZER = 1;
 
 /**
- * Plan §5 caps the recipe graph at ~50 items. We are at **35 items plus 5 liquids = 40 nodes**:
+ * Plan §5 caps the recipe graph at ~50 items. We are at **44 items plus 5 liquids = 49 nodes**:
  * the original 26 (the soda line spent 6 item slots and 4 liquid slots), the crop roster's 8
- * (gold potato trio, two tree fruits, fertilizer, scythe, crate), and item 039's drone part —
+ * (gold potato trio, two tree fruits, fertilizer, scythe, crate), item 039's drone part —
  * which [[090]] left with no producer and no consumer, but which still occupies its node because
- * a returning player's stock has to have a price to sell at.
+ * a returning player's stock has to have a price to sell at — and item 111's flavour tier of 9.
+ *
+ * **THAT LEAVES ONE NODE, AND THE CAP IS NOW A REAL CONSTRAINT RATHER THAN A HEADROOM NOTE.**
+ * Item 111 spent its nine deliberately and was shaped by this number: a premium BASE costs five
+ * nodes and a SEASONING costs two, so the budget bought one base (the gold potato) and two
+ * seasonings (chili, corn) instead of the two bases the item first proposed. The next feature
+ * that wants a product tier does not have room for one — it either buys a raise from the owner
+ * or spends the last node. See the flavour-tier block in `ItemId` for the whole argument.
+ *
  * Boxed machines are not graph nodes — nothing eats one, nothing makes one, no belt carries
  * one. Numeric values are permanent — they are in every save and on every belt.
  */
@@ -301,6 +309,50 @@ export const ItemId = {
   BoxedMaintenanceStation: 67,
   BoxedDroneBay: 68,
   BoxedPartsBench: 69,
+
+  // --- the flavour tier (item 111) -----------------------------------------------------
+  //
+  // Nine nodes that end the roster's museum problem: before this block, `Corn`, `ChiliPepper`
+  // and `GoldPotato` appeared nowhere in `src/` outside their own rows. Nothing ate them. Corn
+  // took 210 s to grow and sold for twenty cents more than a potato that took 90 s AND fed a
+  // line that multiplied it; the gold potato was the sharpest joke of the three — **a potato
+  // the potato line refused**, because the Washer's recipe named `RussetPotato` specifically.
+  //
+  // WHY THE GOLD POTATO IS A BASE AND THE OTHER TWO ARE SEASONINGS — the ruling, in one place.
+  // A seasoning is something you add to a finished chip; a base is what the chip is made of.
+  // Chili and corn can flavour a chip. A gold potato cannot flavour anything: it is a potato,
+  // and the only honest thing to do with it is fry it. Forcing all three through one door
+  // would mean lying about at least one of them — sprinkling a potato on a crisp, or frying a
+  // pepper into a base nobody would eat.
+  //
+  // AND THE ~50-NODE CAP DECIDED THE SHAPE, not taste. Plan §5 caps the recipe graph and the
+  // header comment above counts it. An alternate BASE costs FIVE nodes, because identity has
+  // to survive every rung from the Washer to the Bagger; a SEASONING costs two, because it
+  // joins at the Seasoner and only the last two rungs differ. Two base chains would have cost
+  // ten and put the graph at 52. One base plus two seasonings costs nine and lands at 49. The
+  // budget permits exactly one premium base, and the gold potato is the only crop that has to
+  // be one.
+  //
+  // The gold rungs are the plain rungs shifted up by one constant (`GOLD_POTATO_PREMIUM_CENTS`)
+  // — every machine adds exactly the value it adds to a russet, and the premium rides through
+  // untouched. See `FLAVOUR_PREMIUM_NUMERATOR` for where that constant and the two seasoned
+  // prices come from, and for the margin arithmetic in full.
+  WashedGoldPotato: 70,
+  GoldPotatoSlices: 71,
+  GoldChips: 72,
+  SeasonedGoldChips: 73,
+  BaggedGoldChips: 74,
+
+  /** Plain chips seasoned with a pepper instead of salt. One pepper per chip — see the recipe. */
+  ChiliChips: 75,
+  BaggedChiliChips: 76,
+  /**
+   * Corn as a FLAVOUR rather than a base, which is the one place this design bends toward the
+   * node budget — and it bends honestly: sweetcorn is an ordinary crisp flavour, sold in every
+   * corner shop. A corn-chip BASE would have been the other five nodes the graph does not have.
+   */
+  SweetcornChips: 77,
+  BaggedSweetcornChips: 78,
 } as const;
 
 export type ItemId = (typeof ItemId)[keyof typeof ItemId];
@@ -591,6 +643,82 @@ export const DRONE_PART_PRICE_CENTS = 400;
  */
 export const BAGGED_CHIPS_PRICE_CENTS = 2000;
 
+/**
+ * The rest of plan §4's chip ladder, hoisted (item 111).
+ *
+ * Seasoned and bagged were already up here because other prices were computed from them. These
+ * four join them for the same reason and no other: **the gold line is the plain line plus one
+ * constant**, and writing `900` beside `WASHED_POTATO_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS`
+ * would be the same number typed twice, which is the drift the two constants above exist to
+ * prevent. The ladder is now hoisted in full rather than two-thirds of the way.
+ */
+export const RUSSET_POTATO_PRICE_CENTS = 200;
+export const WASHED_POTATO_PRICE_CENTS = 300;
+export const POTATO_SLICES_PRICE_CENTS = 450;
+export const PLAIN_CHIPS_PRICE_CENTS = 900;
+
+/** The three crops item 111 gave a job to, hoisted so the premiums below are computed, not typed. */
+export const GOLD_POTATO_PRICE_CENTS = 600;
+export const CHILI_PEPPER_PRICE_CENTS = 300;
+export const CORN_PRICE_CENTS = 220;
+
+/**
+ * **WHAT A FLAVOUR IS WORTH, AND THE ONLY NUMBER IN ITEM 111 THAT WAS CHOSEN RATHER THAN
+ * DERIVED.** Everything else in the tier is arithmetic on this and on the ladder above.
+ *
+ * The rule: a flavoured or premium product is worth its plain counterpart **plus 150% of the
+ * extra input that went into it**. Priced off the INPUT cost, which is what item 111 demanded,
+ * and 150% is not a vibe — it is the next rung of a ladder this file already climbs. The
+ * six-pack pays **110%** for bundling a product with itself (throughput). The Snack Combo pays
+ * **125%** for bundling two districts (breadth). A flavour asks for strictly more than either:
+ * a second crop, on a second tile, with its own growth clock and its own belt into the line.
+ * So it pays more than both, and 150 is the next step in 110 → 125 → 150.
+ *
+ * **WHY THIS CANNOT ACCELERATE AN ECONOMY ALREADY RUNNING ~5× TOO FAST** (item 046 inherits the
+ * sweep; this tier must not make its job worse):
+ *
+ * - A russet becomes a bag: 200 → 2000, a **10× multiplier** across five operations.
+ * - A pepper becomes flavour: 300 → 450 of added bag value, a **1.5× multiplier**. It rides the
+ *   two rungs it joins at and is multiplied by nothing, because it enters at the Seasoner
+ *   rather than at the head of the line.
+ * - The gold potato costs $4.00 more than a russet and returns $6.00 more per bag: **+$2.00 of
+ *   margin on a plain bag's $18.00**, or +11%, for a crop that takes 180 s against a russet's
+ *   90 s. Per *tile*-second the gold line is therefore WORSE than the plain one; per *machine*
+ *   operation it is 30% better ($5.20 vs $4.00 an op). That is the trade on purpose — gold is
+ *   what you plant when your line outruns your field, and a straight upgrade would have been
+ *   both a balance bug and a boring decision.
+ *
+ * No number below beats the plain line on the axis the plain line wins on. If item 046's sweep
+ * finds the economy still hot, this tier is not why.
+ */
+export const FLAVOUR_PREMIUM_NUMERATOR = 150;
+export const FLAVOUR_PREMIUM_DENOMINATOR = 100;
+
+/** 150% of what the extra ingredient cost, floored to the cent. */
+export function flavourPremiumCents(extraInputCents: number): number {
+  return divFloor(extraInputCents * FLAVOUR_PREMIUM_NUMERATOR, FLAVOUR_PREMIUM_DENOMINATOR);
+}
+
+/**
+ * **$6.00, and it is added to every rung of the gold line identically.**
+ *
+ * `flavourPremiumCents(600 − 200)` — 150% of what a gold potato costs over the russet it
+ * replaces. A flat shift rather than a per-rung markup is the whole design: it means each
+ * machine adds *exactly* the value it adds to a russet (+100 washed, +150 sliced, +450 fried,
+ * +500 seasoned, +600 bagged), and the premium the player paid for at the seed shop rides
+ * through the line untouched. A proportional markup would have quietly multiplied the premium
+ * five times over and handed item 046 a second runaway.
+ */
+export const GOLD_POTATO_PREMIUM_CENTS = flavourPremiumCents(
+  GOLD_POTATO_PRICE_CENTS - RUSSET_POTATO_PRICE_CENTS,
+);
+
+/** $4.50 — 150% of one pepper. One pepper seasons one chip; see the Seasoner's recipes. */
+export const CHILI_PREMIUM_CENTS = flavourPremiumCents(CHILI_PEPPER_PRICE_CENTS);
+
+/** $3.30 — 150% of one corn. */
+export const SWEETCORN_PREMIUM_CENTS = flavourPremiumCents(CORN_PRICE_CENTS);
+
 /** Plan §4: "syrup + carbonated water + bottle → soda (~$16)". This is the ~$16. */
 export const SODA_PRICE_CENTS = 1600;
 
@@ -662,7 +790,7 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   {
     id: ItemId.RussetPotato,
     slug: 'russet-potato',
-    listPriceCents: 200,
+    listPriceCents: RUSSET_POTATO_PRICE_CENTS,
     purchasable: false,
     sellable: true,
   },
@@ -676,21 +804,21 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   {
     id: ItemId.WashedPotato,
     slug: 'washed-potato',
-    listPriceCents: 300,
+    listPriceCents: WASHED_POTATO_PRICE_CENTS,
     purchasable: false,
     sellable: true,
   },
   {
     id: ItemId.PotatoSlices,
     slug: 'potato-slices',
-    listPriceCents: 450,
+    listPriceCents: POTATO_SLICES_PRICE_CENTS,
     purchasable: false,
     sellable: true,
   },
   {
     id: ItemId.PlainChips,
     slug: 'plain-chips',
-    listPriceCents: 900,
+    listPriceCents: PLAIN_CHIPS_PRICE_CENTS,
     purchasable: false,
     sellable: true,
   },
@@ -708,6 +836,84 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
       SEASONED_CHIPS_PRICE_CENTS * RUSTIC_STYLE_NUMERATOR,
       RUSTIC_STYLE_DENOMINATOR,
     ),
+    purchasable: false,
+    sellable: true,
+  },
+
+  // --- item 111's flavour tier ----------------------------------------------------------
+  //
+  // NOT ONE LITERAL IN THE WHOLE BLOCK. Every price is `plain rung + premium`, so the tier
+  // cannot drift away from the ladder it is priced against: reprice seasoned chips and the
+  // chili bag follows on the same line. See `FLAVOUR_PREMIUM_NUMERATOR` for where the premiums
+  // come from and why they do not accelerate the economy.
+
+  // The gold line — the plain line shifted up by a flat $6.00 at every rung. 600 → 900 →
+  // 1050 → 1500 → 2000 → 2600, which adds +100/+150/+450/+500/+600 exactly as the russet
+  // line does. The machines do not know the potato was expensive; only the ledger does.
+  {
+    id: ItemId.WashedGoldPotato,
+    slug: 'washed-gold-potato',
+    listPriceCents: WASHED_POTATO_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.GoldPotatoSlices,
+    slug: 'gold-potato-slices',
+    listPriceCents: POTATO_SLICES_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.GoldChips,
+    slug: 'gold-chips',
+    listPriceCents: PLAIN_CHIPS_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.SeasonedGoldChips,
+    slug: 'seasoned-gold-chips',
+    listPriceCents: SEASONED_CHIPS_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.BaggedGoldChips,
+    slug: 'bagged-gold-chips',
+    listPriceCents: BAGGED_CHIPS_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+
+  // The two seasonings. They join at the Seasoner, so only the last two rungs differ from
+  // plain: 1400 + 450 = 1850 seasoned and 2000 + 450 = 2450 bagged for chili, and the same
+  // arithmetic with corn's smaller premium.
+  {
+    id: ItemId.ChiliChips,
+    slug: 'chili-chips',
+    listPriceCents: SEASONED_CHIPS_PRICE_CENTS + CHILI_PREMIUM_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.BaggedChiliChips,
+    slug: 'bagged-chili-chips',
+    listPriceCents: BAGGED_CHIPS_PRICE_CENTS + CHILI_PREMIUM_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.SweetcornChips,
+    slug: 'sweetcorn-chips',
+    listPriceCents: SEASONED_CHIPS_PRICE_CENTS + SWEETCORN_PREMIUM_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
+  {
+    id: ItemId.BaggedSweetcornChips,
+    slug: 'bagged-sweetcorn-chips',
+    listPriceCents: BAGGED_CHIPS_PRICE_CENTS + SWEETCORN_PREMIUM_CENTS,
     purchasable: false,
     sellable: true,
   },
@@ -747,7 +953,13 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     purchasable: true,
     sellable: false,
   },
-  { id: ItemId.Corn, slug: 'corn', listPriceCents: 220, purchasable: false, sellable: true },
+  {
+    id: ItemId.Corn,
+    slug: 'corn',
+    listPriceCents: CORN_PRICE_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
   {
     id: ItemId.DayOldCorn,
     slug: 'day-old-corn',
@@ -765,7 +977,7 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   {
     id: ItemId.ChiliPepper,
     slug: 'chili-pepper',
-    listPriceCents: 300,
+    listPriceCents: CHILI_PEPPER_PRICE_CENTS,
     purchasable: false,
     sellable: true,
   },
@@ -880,7 +1092,7 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     // §5's "premium". Three times a Russet at the till, and three times the water in the ground.
     id: ItemId.GoldPotato,
     slug: 'gold-potato',
-    listPriceCents: 600,
+    listPriceCents: GOLD_POTATO_PRICE_CENTS,
     purchasable: false,
     sellable: true,
   },
@@ -1255,6 +1467,52 @@ export const FRESHNESS_BUCKET_TICKS = 15 * TICKS_PER_SECOND;
  */
 export const CRATE_FRESHNESS_TICKS = 54_000;
 export const CRATE_PACK_CAPACITY = 20;
+
+/**
+ * **HOW FAST THE CLOCK RUNS INSIDE A CONTAINER**, in ticks of freshness spent per tick of world.
+ * The top rung of §4's ladder — *"potato ~15 min loose / 45 crated / frozen in a Root Cellar"* —
+ * written as data instead of as prose (item 110).
+ *
+ * **1 IS THE DEFAULT AND THE DEFAULT IS THE POINT.** An unlisted container ages its contents at
+ * exactly the speed the player's own arms do, so a storage machine added in a year's time by
+ * somebody who never read this file is a box, not a fridge. The failure direction of forgetting
+ * to answer is "no free preservation", which is the only safe one: the whole of item 110 is the
+ * story of a container that preserved by accident and turned rot into something a player opts
+ * out of.
+ *
+ * **THE ROOT CELLAR IS 0 AND IT IS THE ONLY 0 IN THE GAME.** §4 names it — *"frozen in a Root
+ * Cellar"* — and `MACHINE_SPECS` prices it accordingly: $250, four tiles, an Agronomy node
+ * underneath, against the hand cart's $80. That freeze was never the bug. The bug was that
+ * EVERY box froze the clock and then handed back a brand-new window on top, so the cellar's
+ * $250 bought a player nothing they did not already have in a barrow.
+ *
+ * **THE HAND CART IS 1 BECAUSE ITS OWN SPEC SAYS SO**, and that sentence predates this item:
+ * *"It preserves as well as a crate does not — 15 minutes, exactly what the goods had loose —
+ * because a cart is a barrow with a tarp over it, and a hand cart that also refrigerated would
+ * make the $250 Root Cellar the second-best fridge in the game."* This table is that comment
+ * finally being true.
+ *
+ * Integer ticks per tick, so the only rates expressible are "runs" and "stopped". That is
+ * deliberate: the middle rung of the ladder is the CRATE, and a crate is an item a player packs
+ * (`CRATE_FRESHNESS_TICKS`), not a building they stand next to. A container that slowed the clock
+ * by half would be a third preservation mechanic nobody asked for.
+ */
+export const STORAGE_AGING_BY_KIND: readonly {
+  readonly kind: MachineKind;
+  readonly ticksPerTick: number;
+}[] = [
+  { kind: MachineKind.RootCellar, ticksPerTick: 0 },
+  { kind: MachineKind.HandCart, ticksPerTick: 1 },
+];
+
+/** Ticks of freshness a container spends per world tick. 0 stops the clock; 1 is loose speed. */
+export function storageAgingPerTick(kind: MachineKind): number {
+  for (let i = 0; i < STORAGE_AGING_BY_KIND.length; i++) {
+    const row = STORAGE_AGING_BY_KIND[i]!;
+    if (row.kind === kind) return row.ticksPerTick;
+  }
+  return 1;
+}
 
 /**
  * The most distinct stacks one inventory slot will hold. **A HARD CAP, AND THE REASON IS THE
@@ -1685,6 +1943,31 @@ export interface RecipeInput {
   readonly count: number;
 }
 
+/**
+ * One thing a machine knows how to make: what an operation eats, and what it hands back.
+ *
+ * **A MACHINE MAY KNOW SEVERAL, AND NOTHING CHOOSES BETWEEN THEM BUT THE BELTS** (item 111).
+ * The Seasoner does not grow a dropdown, a mode, or a saved setting — it runs the first recipe
+ * its hoppers can satisfy, so what comes out is decided by what the player routed in. That is
+ * the same ruling the belt junction is built on: *"a player who wants it to behave differently
+ * moves a belt, which is the thing they can already see."* A mode switch would have been a
+ * second place the line's shape is written down, and the two would disagree.
+ *
+ * THE CHOICE IS MADE WHEN THE OPERATION FINISHES, not when it starts, and that is what keeps
+ * this out of the save file. `advanceConverter` consumes and produces in the same tick — the
+ * recipe is read off the hoppers at the instant the work completes — so there is no
+ * half-finished operation carrying a decision that would have to be serialized, hashed and
+ * migrated. The only new state in the whole feature is `Machine.outputItem`, and that is a
+ * fact about the buffer rather than about the operation.
+ *
+ * `output` is nullable for exactly the reason `MachineSpec.outputItem` is: a machine whose
+ * product is a liquid hands it out through an outlet port instead.
+ */
+export interface MachineRecipe {
+  readonly consumes: readonly RecipeInput[];
+  readonly output: ItemId | null;
+}
+
 /** Which way a typed port moves liquid. */
 export const PortFlow = {
   /** Draws from its network into the machine's own buffer. */
@@ -1748,7 +2031,15 @@ export interface MachineSpec {
    * A LIST RATHER THAN THE SINGLE `inputItem` IT REPLACED, and every machine in the game went
    * through it — there is one recipe executor, not a general one beside a legacy one. The chip
    * line's rows are one-line recipes; the Snack Combo's is two lines; the six-pack's is one
-   * line with a count of six. `machine.inputCounts` is sized from this and indexed by it.
+   * line with a count of six.
+   *
+   * **THIS IS THE MACHINE'S PLAIN RECIPE, NOT ITS HOPPER LIST**, and since item 111 those are
+   * two different things: five machines know several recipes, so a Seasoner eats one chip here
+   * and can *hold* peppers, corn and gold chips besides. `machine.inputCounts` is sized from
+   * and indexed by `machineHoppers()`, never by this. Walk this list when you mean "what one
+   * ordinary operation costs" — pricing, value-added, the Dawn Report's idle flag — and walk
+   * the hoppers when you mean "what is inside the machine". The header above `machineHoppers`
+   * has the story of what happens when the two are confused.
    */
   readonly inputs: readonly RecipeInput[];
   /**
@@ -3227,6 +3518,200 @@ export function machineSpec(kind: MachineKind): MachineSpec | null {
   return null;
 }
 
+// --- what a machine knows how to make (item 111) -------------------------------------
+//
+// **A SIDE TABLE RATHER THAN A FIELD ON EVERY SPEC, AND THAT IS A DELIBERATE TRADE.** Five
+// machines in a roster of forty know more than one recipe; a `recipes` field on `MachineSpec`
+// would have put an empty list on the other thirty-five and asked every future machine to
+// answer a question it does not have. `BOXED_MACHINE_ROWS` and `RETIRED_MACHINE_KINDS` are
+// already keyed-by-kind side tables for the same reason, so this is the file's own idiom.
+//
+// The cost is that a machine's recipes are no longer all in one place, and it is paid down by
+// `machineRecipes()` below being the ONLY way anything reads them — `tick.ts` never touches
+// this array — and by `test/sim.test.ts` pinning that every line here names an item that
+// machine actually has a hopper for.
+//
+// ORDER IS THE PRIORITY, AND IT IS THE ONLY TIE-BREAK IN THE FEATURE. The first recipe whose
+// hoppers are full enough runs, so **the flavoured lines are declared before the plain one** —
+// a Seasoner holding chips and peppers makes chili chips, and falls back to plain the moment
+// the peppers run out rather than stopping. A line never stalls for want of a seasoning; it
+// just quietly goes back to salt, which is a supply problem the player can see in the hopper.
+//
+// FLAVOURS DO NOT COMBINE, and that is why the chili and corn lines name `PlainChips`
+// specifically rather than "any chip". Letting a seasoning meet the premium base would have
+// turned nine items into a matrix — spicy gold, sweetcorn gold, and a bag for each — and the
+// recipe graph has ONE node left (see the `ItemId` header). One flavour per bag.
+
+export interface MachineRecipeRow {
+  readonly kind: MachineKind;
+  readonly recipes: readonly MachineRecipe[];
+}
+
+export const MACHINE_RECIPES: readonly MachineRecipeRow[] = [
+  {
+    kind: MachineKind.Washer,
+    recipes: [
+      { consumes: [{ item: ItemId.GoldPotato, count: 1 }], output: ItemId.WashedGoldPotato },
+      { consumes: [{ item: ItemId.RussetPotato, count: 1 }], output: ItemId.WashedPotato },
+    ],
+  },
+  {
+    kind: MachineKind.Slicer,
+    recipes: [
+      {
+        consumes: [{ item: ItemId.WashedGoldPotato, count: 1 }],
+        output: ItemId.GoldPotatoSlices,
+      },
+      { consumes: [{ item: ItemId.WashedPotato, count: 1 }], output: ItemId.PotatoSlices },
+    ],
+  },
+  {
+    kind: MachineKind.Fryer,
+    recipes: [
+      { consumes: [{ item: ItemId.GoldPotatoSlices, count: 1 }], output: ItemId.GoldChips },
+      { consumes: [{ item: ItemId.PotatoSlices, count: 1 }], output: ItemId.PlainChips },
+    ],
+  },
+  {
+    // The machine item 111 was written to make interesting. It had one input, one output and no
+    // decision in it; it now has the only ingredient choice on the lot.
+    //
+    // ONE PEPPER PER CHIP, and it is a limit of the model rather than a claim about cooking: an
+    // operation makes exactly one unit, and there is no fractional consumption anywhere in this
+    // sim, so a pepper cannot season four chips without inventing a second kind of recipe. The
+    // premium is priced against that full pepper — see `CHILI_PREMIUM_CENTS`.
+    kind: MachineKind.Seasoner,
+    recipes: [
+      {
+        consumes: [
+          { item: ItemId.PlainChips, count: 1 },
+          { item: ItemId.ChiliPepper, count: 1 },
+        ],
+        output: ItemId.ChiliChips,
+      },
+      {
+        consumes: [
+          { item: ItemId.PlainChips, count: 1 },
+          { item: ItemId.Corn, count: 1 },
+        ],
+        output: ItemId.SweetcornChips,
+      },
+      { consumes: [{ item: ItemId.GoldChips, count: 1 }], output: ItemId.SeasonedGoldChips },
+      // Last, and unchanged since v0.1. Plain chips keep working exactly as they always have:
+      // a Seasoner fed nothing but chips reaches this line every time.
+      { consumes: [{ item: ItemId.PlainChips, count: 1 }], output: ItemId.SeasonedChips },
+    ],
+  },
+  {
+    kind: MachineKind.Bagger,
+    recipes: [
+      { consumes: [{ item: ItemId.ChiliChips, count: 1 }], output: ItemId.BaggedChiliChips },
+      {
+        consumes: [{ item: ItemId.SweetcornChips, count: 1 }],
+        output: ItemId.BaggedSweetcornChips,
+      },
+      {
+        consumes: [{ item: ItemId.SeasonedGoldChips, count: 1 }],
+        output: ItemId.BaggedGoldChips,
+      },
+      { consumes: [{ item: ItemId.SeasonedChips, count: 1 }], output: ItemId.BaggedChips },
+    ],
+  },
+];
+
+/**
+ * Every recipe a machine knows, in priority order. **The one reader of `MACHINE_RECIPES`.**
+ *
+ * A machine with no row gets the single recipe its spec has always implied — every solid line
+ * of `inputs`, producing `outputItem` — so the thirty-five machines item 111 did not touch run
+ * through exactly the same executor on exactly the same data as before. There is one recipe
+ * path in this sim, not a flavoured one beside a legacy one.
+ */
+export function machineRecipes(spec: MachineSpec): readonly MachineRecipe[] {
+  for (let i = 0; i < MACHINE_RECIPES.length; i++) {
+    const row = MACHINE_RECIPES[i]!;
+    if (row.kind === spec.kind) return row.recipes;
+  }
+  return [{ consumes: spec.inputs, output: spec.outputItem }];
+}
+
+// --- hoppers, which are NOT the recipe (item 111) --------------------------------------
+//
+// **`spec.inputs` IS ONE OPERATION'S INGREDIENTS. THE HOPPERS ARE EVERY INGREDIENT THE MACHINE
+// CAN HOLD.** Those were the same list for the whole life of this file, and the first draft of
+// item 111 merged them — it widened `spec.inputs` to the union and moved on. That was wrong,
+// and the way it announced itself is worth keeping: the Dawn Report prices an idle machine at
+// `outputItem` less every line of `spec.inputs`, so a Fryer that had grown a second hopper
+// started costing 450 + 1050 to make a 900 chip, went value-negative, and silently stopped
+// flagging idle machines at all. One widened field, one wrong number, on a surface nobody
+// would have thought to re-read.
+//
+// So `inputs` keeps its meaning — what a plain operation eats — and every reader that means
+// "the recipe" stays right without being touched. The hoppers are derived here instead.
+//
+// **PRIMARY FIRST, THEN RECIPE ORDER, AND THAT ORDERING IS A SAVE-COMPATIBILITY RULE RATHER
+// THAN A STYLE.** `machine.inputCounts` is parallel to this list and is stored that way in
+// every save on disk, so hopper 0 has to keep being what it has always been. Starting from
+// `spec.inputs` and appending only unseen items guarantees existing indices never move and new
+// hoppers only ever land on the end — which is exactly the case `readInputCounts` was already
+// written to absorb ("a spec that gained a line").
+//
+// Built once at module load rather than per call: `hopperIndexFor` runs inside the belt loop
+// and the converter tick, and a function that allocated an array there would be a garbage
+// generator in the hottest code in the sim.
+
+interface HopperRow {
+  readonly kind: MachineKind;
+  readonly hoppers: readonly RecipeInput[];
+}
+
+const MACHINE_HOPPERS: readonly HopperRow[] = MACHINE_SPECS.map((spec) => {
+  const hoppers: RecipeInput[] = spec.inputs.slice();
+  const recipes = machineRecipes(spec);
+  for (let r = 0; r < recipes.length; r++) {
+    const consumes = recipes[r]!.consumes;
+    for (let i = 0; i < consumes.length; i++) {
+      const line = consumes[i]!;
+      let seen = false;
+      for (let h = 0; h < hoppers.length; h++) {
+        if (hoppers[h]!.item === line.item) {
+          seen = true;
+          break;
+        }
+      }
+      if (!seen) hoppers.push(line);
+    }
+  }
+  return { kind: spec.kind, hoppers };
+});
+
+/**
+ * Every ingredient this machine can hold, in the order `machine.inputCounts` stores them.
+ *
+ * The list to walk when the question is about STORAGE — sizing the buffers, matching a belt's
+ * item to a slot, refunding a torn-down machine, invoicing what is sitting inside one. When the
+ * question is about an OPERATION, the answer is a recipe from `machineRecipes()`, not this.
+ */
+export function machineHoppers(spec: MachineSpec): readonly RecipeInput[] {
+  for (let i = 0; i < MACHINE_HOPPERS.length; i++) {
+    const row = MACHINE_HOPPERS[i]!;
+    if (row.kind === spec.kind) return row.hoppers;
+  }
+  return spec.inputs;
+}
+
+/**
+ * Which hopper holds an item for this machine, or -1. `machine.inputCounts` is parallel to
+ * `machineHoppers()`, so a recipe naming an item has to be resolved to an index to be executed.
+ */
+export function hopperIndexFor(spec: MachineSpec, item: ItemId): number {
+  const hoppers = machineHoppers(spec);
+  for (let i = 0; i < hoppers.length; i++) {
+    if (hoppers[i]!.item === item) return i;
+  }
+  return -1;
+}
+
 // --- per-machine upgrades ---------------------------------------------------------
 //
 // Plan §3: three dials × three levels, bought at the machine. THE TECH TREE HAS NO STAT
@@ -3873,6 +4358,15 @@ function balanceDigest(): string {
       h,
       `${spec.kind}:${spec.slug}:${spec.role}:${spec.tilesWide}x${spec.tilesHigh}:${spec.priceCents}:${spec.workPerOperation}:${spec.workRatePerTick}:${spec.inputCapacity}:${spec.outputCapacity}:${spec.tankCapacityMl}:${spec.wearPerOperation}:${recipeDigest(spec.inputs)}:${spec.outputItem}:${spec.overcookOutputItem}:${spec.requiresTech}:${spec.liquid}:${portsDigest(spec.ports)}:${spec.pumpRateMlPerMinute}:${spec.intakeMlPerTick}:${spec.coverageRadiusTiles}:${spec.moistureSensing}:${spec.fieldPlaceable}`,
     );
+    // **THE ALTERNATE RECIPES ARE BALANCE DATA TOO** (item 111). `spec.inputs` above is only
+    // the plain one, so without this line the entire flavour tier — every premium recipe and
+    // every price it implies — could be rewritten without the digest noticing. Folded in after
+    // the spec's own line so a machine with no alternates digests exactly as it did before.
+    const recipes = machineRecipes(spec);
+    for (let r = 0; r < recipes.length; r++) {
+      const recipe = recipes[r]!;
+      h = fnv1aString(h, `${spec.kind}/r${r}:${recipeDigest(recipe.consumes)}:${recipe.output}`);
+    }
   }
   for (let i = 0; i < LIQUID_SPECS.length; i++) {
     const spec = LIQUID_SPECS[i]!;
@@ -3980,6 +4474,14 @@ function balanceDigest(): string {
     h,
     `${FRESHNESS_BUCKET_TICKS}:${FRESHNESS_MAX_STACKS}:${CRATE_FRESHNESS_TICKS}:${CRATE_PACK_CAPACITY}:${COMPOST_PER_SPOILED_ITEM}:${COMPOST_PER_FERTILIZER}:${HARVESTS_PER_FERTILITY_STEP}:${FERTILITY_PER_FERTILIZER}:${FERTILITY_MIN}/${FERTILITY_MAX}`,
   );
+  // How fast the clock runs inside a container (item 110). Load-bearing for the same reason the
+  // windows above are: a saved world holds boxes whose remaining freshness was counted down at
+  // these rates, so a build that unfroze the Root Cellar would describe a saved cellar's contents
+  // as something they are not.
+  for (let i = 0; i < STORAGE_AGING_BY_KIND.length; i++) {
+    const row = STORAGE_AGING_BY_KIND[i]!;
+    h = fnv1aString(h, `store:${row.kind}>${row.ticksPerTick}`);
+  }
   // The assisted tier and the bots. Every one of these is a rate or a capacity a saved world is
   // mid-way through spending: a hitched cart's next step, a bot's next harvest, a swing's width.
   h = fnv1aString(

@@ -84,7 +84,13 @@ describe('replay stability', () => {
         first,
       );
     }
-  });
+    // AN EXPLICIT BUDGET, like the launches test below, and for the same reason: this replays
+    // every fixture in the set TWICE, so its cost is the size of the set and it was riding on
+    // Vitest's 5-second default with no margin left. Item 111's `flavour-line` tipped it over
+    // — the test failed on a stopwatch rather than on a hash, which is the least informative
+    // way a determinism gate can go red. Thirty seconds is a hang-catcher, not a performance
+    // bar; if this ever starts timing out again, something is genuinely stuck.
+  }, 30_000);
 
   it('gives the same hashes in two separate process launches', () => {
     // Two fresh bare-Node processes, no Vitest and no bundler in either. Same-process

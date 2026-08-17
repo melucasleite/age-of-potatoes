@@ -1,0 +1,24 @@
+{
+  "id": "item_gold_potato_slices",
+  "provider": "local",
+  "model": "local:local/item_gold_potato_slices.png",
+  "seed": null,
+  "prompt": "One 16x16 stack of gold potato slices — the Slicer's output on the premium base line ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. THREE fat discs against item_potato_slices' four thin ones, and that shape difference is load-bearing rather than decorative: the plain slices came back from the model already drawn in chip_gold, so saturation alone would have left the premium rung and the ordinary rung very nearly the same picture. A gold potato is the big tuber, so its slices are the big slices.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0,
+  "generatedAt": "2026-08-17T05:47:51.961Z"
+}

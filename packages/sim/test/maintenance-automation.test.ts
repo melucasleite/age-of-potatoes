@@ -396,8 +396,11 @@ describe('the parts line, retired (item 090)', () => {
 
     // §5's ~50-item recipe-graph cap, counted the way `data.ts` counts it: real items plus
     // liquids, boxed machines excluded (nothing eats one, nothing makes one).
+    // 35 until item 111 spent nine of the remaining ten on the flavour tier. The cap below is
+    // now one node from binding, which is the point of pinning the exact number as well as the
+    // ceiling: the next product tier has to notice it is the last one.
     const graphItems = ITEM_SPECS.filter((spec) => !isBoxedMachineItem(spec.id)).length;
-    expect(graphItems).toBe(35);
+    expect(graphItems).toBe(44);
     expect(graphItems + LIQUID_SPECS.length).toBeLessThanOrEqual(50);
   });
 });
@@ -670,6 +673,11 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
 
     // The inline golden. Regenerate deliberately or not at all — a move here is a real
     // behaviour change in the maintenance loop and must be enumerated like any golden.
+    // 27f06a83 -> 9b28460d in wave 14 (item 110): the digest gained `machine.cargoFreshTicks`
+    // (save format 18), the clock a container's cargo is running on. Checked rather than
+    // assumed: with that one line held out of the digest this watch reproduces 27f06a83
+    // exactly, so nothing it does changed — no storage machine is built in it and nothing
+    // perishable is ever put in a box. Every story assertion above is untouched.
     // b26e8c41 -> 27f06a83 in wave 13 (item 090): THE BAY STARTS EMPTY AND STAYS EMPTY. The
     // fixture used to stock it with ten drone parts and spend them one per fix, so the hash
     // carried a machine's cargo pair and a lifetime spend accumulator that no longer move —
@@ -685,6 +693,11 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
     // `stats.cheatsUsed`. Every story assertion above is untouched.
     // cba8a24b -> fbdf6072 with format 13 (item 066): the digest gained the field tiles'
     // coordinates and the soil-memory ledger. Every story assertion above held unchanged.
-    expect(hashState(state)).toBe('27f06a83');
+    // 9b28460d -> 7906cb45 (save format 19, item 111): the digest gained `machine.outputItem`.
+    // This world's Grinder makes one thing and its basket says so, so the value written is the
+    // one the spec always implied — with the `d.num` held out of the digest the watch
+    // reproduces 9b28460d exactly. Every story assertion above is untouched: the wrench came
+    // due, the drone answered, and the factory ended the watch healthy.
+    expect(hashState(state)).toBe('7906cb45');
   });
 });

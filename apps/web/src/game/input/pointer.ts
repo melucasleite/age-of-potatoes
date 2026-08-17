@@ -452,7 +452,7 @@ export class PointerInput {
     //
     // TEARDOWN IS THE ONE THAT RETURNS SEVERAL, because it is several removals rather than one
     // decision; the argument is written out in full at the top of `teardown.ts`.
-    const commands = dragCommands(view, drag, this.system.armedCrop);
+    const commands = dragCommands(view, drag, this.system.armedCrop, this.system.pickedLiquid);
     for (let i = 0; i < commands.length; i++) this.host.queue.push(commands[i]!);
   };
 
@@ -694,7 +694,9 @@ export class PointerInput {
     if (view === null) return null;
 
     const drag = this.drag;
-    if (drag !== null) return dragBand(view, drag, this.system.armedCrop);
+    if (drag !== null) {
+      return dragBand(view, drag, this.system.armedCrop, this.system.pickedLiquid);
+    }
 
     const hover = this.hover;
     if (hover === null) return null;
@@ -1522,7 +1524,12 @@ function standErrand(view: WorldView, direct: Command, item: number, count: numb
  * of `teardown.ts`. Every other branch here returns exactly one command or none, and the
  * plural signature is what keeps that visible rather than hiding it behind a helper.
  */
-export function dragCommands(view: WorldView, drag: Drag, crop: CropId): Command[] {
+export function dragCommands(
+  view: WorldView,
+  drag: Drag,
+  crop: CropId,
+  picked: LiquidId = LiquidId.None,
+): Command[] {
   const run = runFor(drag);
 
   if (run.kind === 'rect') {
@@ -1555,18 +1562,22 @@ export function dragCommands(view: WorldView, drag: Drag, crop: CropId): Command
   // `path` verbatim.
   if (drag.tool === ToolMode.PlacePipe) {
     const tiles = runTiles(run);
-    const liquid = pipeRunLiquid(view, tiles);
+    const carried = pipeRunLiquid(view, tiles, picked);
     // NOTHING AGREES ON A LIQUID, SO THERE IS NOTHING TO SAY — and this is not the input layer
     // deciding legality (§12), it is the input layer being unable to FORM a command. Every
     // other doomed drag in this file is still sent because it is a well-formed sentence the sim
     // gets to refuse; `LiquidId.None` is not a liquid, `pipePathRefusal` calls it `BadPath`, and
     // a `PlacePipe` carrying it would be a malformed payload rather than a rejected one. Same
     // rule, same silence, as an erase drag anchored on unzoned soil.
-    if (liquid === LiquidId.None) return [];
+    //
+    // SINCE [[109]] THE SILENT RUN LANDS HERE TOO (`source: 'untyped'`), and for the same
+    // reason rather than a new one: a run nothing has typed and nobody has picked a liquid for
+    // has no liquid to put in the payload. The band spent the whole drag saying so.
+    if (carried.liquid === LiquidId.None) return [];
     return [
       {
         type: 'PlacePipe',
-        liquid,
+        liquid: carried.liquid,
         path: tiles.map((tile) => ({ x: tile.tileX, y: tile.tileY })),
       },
     ];
@@ -1609,6 +1620,42 @@ export function dragCommands(view: WorldView, drag: Drag, crop: CropId): Command
 //  WHEN NOTHING SURVIVES the run is genuinely illegal — the same runs `pipePathRefusal` would
 //  turn down — and the band says so instead of quoting a price.
 // ────────────────────────────────────────────────────────────────────────────────────
+//
+// ────────────────────────────────────────────────────────────────────────────────────
+//  AND WHEN THE RUN TOUCHES NOTHING AT ALL, THE INTERSECTION IS NOT AN ANSWER ([[109]]).
+//
+//  Every liquid survives a run laid across bare ground, because nothing was there to rule any
+//  of them out — and this function used to read that silence as WATER ("the only liquid with a
+//  source in the world rather than inside a machine"). The argument is a good one about water
+//  and a bad one about the player: it converts "nobody has said yet" into a decision, spends
+//  the money, and lays a water main down the middle of where the soda line was going to go.
+//  The soda machine then refuses to stand beside it, correctly (`PortMismatch`), and nothing
+//  on screen connects the two facts. **Both golden fixtures build in exactly this order** —
+//  `water-works.json` lays its 17-tile main six thousand ticks before its pump, and
+//  `soda-line.json` lays all seven of its runs before a single plumbed machine exists — so
+//  pipe-first is not an unusual way to play, it is the way the design's own recordings play.
+//
+//  SO THE SILENCE IS ANSWERED BY THE PLAYER INSTEAD, WITH `L`, and only ever there. This is
+//  the note's third route — ask when and only when the inference is genuinely ambiguous — and
+//  it is the only one of the three that leaves the goldens' build order playable. The other
+//  two were weighed and written down in the vault log: REFUSING outright is cheap and honest
+//  but makes pipe-first illegal, which is the order the fixtures use; DEFERRING (a pipe laid
+//  "undecided" that takes its liquid from the first machine to connect) needs `Liquid.None`
+//  pipes and untyped networks in the sim — hashed state, a save format, a migration — and it
+//  only moves the same disagreement later, to a pipe already paid for and in the ground.
+//
+//  `L` IS `C`'s TWIN, deliberately and to the letter: cursor state that cycles, emits nothing,
+//  is never traced or hashed, and shows its answer in the band. A player who has met the crop
+//  key has met this one. It starts on NOTHING PICKED, which is the half that fixes the bug —
+//  an untouched run with no pick lays nothing and the band says why, so the water main is
+//  never a thing that merely happened.
+//
+//  THE WORLD STILL OUTRANKS THE PICK, always. The pick is consulted only among liquids that
+//  survived the intersection, so it can never argue with a machine or an existing run; it
+//  breaks a tie the world left open and answers a silence, and it does nothing else. A picked
+//  liquid is also LABELLED as picked on the band, so an expressed choice never reads like a
+//  discovered fact.
+// ────────────────────────────────────────────────────────────────────────────────────
 
 const PIPE_NEIGHBOUR_DX: readonly number[] = [0, 1, 0, -1];
 const PIPE_NEIGHBOUR_DY: readonly number[] = [-1, 0, 1, 0];
@@ -1634,14 +1681,48 @@ function machineLiquids(kind: number): LiquidId[] {
 }
 
 /**
- * What this run carries, or `LiquidId.None` when no liquid could legally fill it.
+ * Where a run's liquid came from — the fact [[109]] added, and the reason this function stopped
+ * returning a bare integer.
+ *
+ * `LiquidId.None` reaches the band for two OPPOSITE reasons and they need opposite sentences:
+ * everything was ruled out (the run is genuinely illegal) or nothing was ever ruled in (the run
+ * is not a decision yet). One integer cannot tell those apart, and the band that has to explain
+ * itself is the whole point of the item.
+ *
+ * - `world` — the machines and pipes beside the run settled it. Item 101's inference, unchanged.
+ * - `picked` — the world left a choice open and `L` answered it. Labelled as such on the band.
+ * - `untyped` — nothing beside the run said anything and nothing was picked. Lays nothing.
+ * - `mismatch` — the intersection came out empty; no liquid could legally fill this path.
+ */
+export type PipeLiquidSource = 'world' | 'picked' | 'untyped' | 'mismatch';
+
+export interface PipeRunLiquid {
+  /** What the run carries, or `LiquidId.None` when it cannot be worked out at all. */
+  readonly liquid: LiquidId;
+  readonly source: PipeLiquidSource;
+}
+
+/**
+ * What this run carries, where the answer came from, and `LiquidId.None` when there isn't one.
+ *
+ * `picked` is the player's standing answer to the ambiguous case (`L`, see the header) and is
+ * `LiquidId.None` when they have not given one — which is the shipped default and the state a
+ * fresh world starts in.
  *
  * Exported for the tests, which drive it against hand-built worlds and against the two golden
- * fixtures' geometry. Pure: a projection and a list of tiles in, an integer out.
+ * fixtures' geometry. Pure: a projection, a list of tiles and one integer in, a record out.
  */
-export function pipeRunLiquid(view: WorldView, tiles: readonly TilePoint[]): LiquidId {
+export function pipeRunLiquid(
+  view: WorldView,
+  tiles: readonly TilePoint[],
+  picked: LiquidId = LiquidId.None,
+): PipeRunLiquid {
   // The sim's own order, so the last-resort pick below is stable rather than incidental.
   let candidates: LiquidId[] = LIQUID_SPECS.map((spec) => spec.id);
+  // DID ANYTHING AT ALL HAVE AN OPINION? Not "how many survived" — a run beside nothing ends
+  // with every liquid still standing, which looks identical to a wide-open choice and is not
+  // one. This flag is the difference between an ambiguity and a silence ([[109]]).
+  let typed = false;
 
   for (let i = 0; i < tiles.length && candidates.length > 0; i++) {
     const tile = tiles[i]!;
@@ -1652,32 +1733,62 @@ export function pipeRunLiquid(view: WorldView, tiles: readonly TilePoint[]): Liq
       // A pipe already there decides outright: two liquids never meet, so joining it is the
       // only thing this run can be. (`BuildRefusal.LiquidMismatch`.)
       const pipe = pipeAtView(view, nx, ny);
-      if (pipe !== null) candidates = candidates.filter((id) => id === pipe.liquid);
+      if (pipe !== null) {
+        typed = true;
+        candidates = candidates.filter((id) => id === pipe.liquid);
+      }
 
       // A plumbed machine narrows to what its ports declare. An UNPLUMBED one narrows nothing
       // and must not — a water main is allowed to run past a Fryer, which is the sim's rule in
-      // as many words: "Machines with no ports at all are invisible to this rule."
+      // as many words: "Machines with no ports at all are invisible to this rule." It does not
+      // set `typed` either, for exactly the same reason: a Fryer has no opinion about liquids.
       const machine = tileAtView(view, nx, ny).machine;
       if (machine === null) continue;
       const accepts = machineLiquids(machine.kind);
-      if (accepts.length > 0) candidates = candidates.filter((id) => accepts.includes(id));
+      if (accepts.length > 0) {
+        typed = true;
+        candidates = candidates.filter((id) => accepts.includes(id));
+      }
     }
   }
 
-  if (candidates.length === 0) return LiquidId.None;
-  if (candidates.length === 1) return candidates[0]!;
+  if (candidates.length === 0) return { liquid: LiquidId.None, source: 'mismatch' };
+
+  // NOTHING SAID ANYTHING. The player's standing pick is the only thing that can speak here,
+  // and if they have not made one this is not a run yet — the band explains, and `dragCommands`
+  // forms no command. This is the line item 109 exists for; it used to say water.
+  if (!typed) {
+    return picked !== LiquidId.None && candidates.includes(picked)
+      ? { liquid: picked, source: 'picked' }
+      : { liquid: LiquidId.None, source: 'untyped' };
+  }
+
+  if (candidates.length === 1) return { liquid: candidates[0]!, source: 'world' };
+
+  // THE PICK BREAKS A TIE THE WORLD LEFT OPEN, and only among liquids that survived it — so it
+  // is checked here, after the intersection and before the direction heuristic. A player who
+  // has said "cane juice" and drags off a Kettle (which sends syrup out and takes juice in)
+  // means the juice line, and a guess about which end they dragged from should not outrank a
+  // sentence they typed. It cannot reach a run the world already decided: one survivor returned
+  // above, and a pick outside the survivors is not consulted at all.
+  if (picked !== LiquidId.None && candidates.includes(picked)) {
+    return { liquid: picked, source: 'picked' };
+  }
 
   // The tie-break, in the drag's own direction: out of what you started at, then into what you
   // finished at. See the header — this is the half of the answer the player expressed.
   const sending = portLiquidBeside(view, tiles[0]!, PortFlow.Outlet, candidates);
-  if (sending !== LiquidId.None) return sending;
+  if (sending !== LiquidId.None) return { liquid: sending, source: 'world' };
   const drawing = portLiquidBeside(view, tiles[tiles.length - 1]!, PortFlow.Intake, candidates);
-  if (drawing !== LiquidId.None) return drawing;
+  if (drawing !== LiquidId.None) return { liquid: drawing, source: 'world' };
 
-  // A run touching nothing at all is a water main. Water is the only liquid with a source in
-  // the world rather than inside a machine, so it is the only one a run in open ground can be.
-  if (candidates.includes(LiquidId.Water)) return LiquidId.Water;
-  return candidates[0]!;
+  // Several liquids survived a run that DOES touch plumbing, the drag's direction did not
+  // separate them, and the player has not picked. Water first, because it is the only liquid
+  // with a source in the world rather than inside a machine — and this is a different animal
+  // from the silence above: every candidate here is one the machine beside the run genuinely
+  // accepts, so the pipe connects to something real and the band names it in words.
+  if (candidates.includes(LiquidId.Water)) return { liquid: LiquidId.Water, source: 'world' };
+  return { liquid: candidates[0]!, source: 'world' };
 }
 
 /** A liquid a machine beside this tile moves in the given direction, and that is still legal. */
@@ -1902,8 +2013,8 @@ function handCommand(view: WorldView, machine: MachineView): Command | null {
   /*
     **THE BOX** ([[105]]). A `MachineRole.Storage` machine kept its contents in
     `cargoItem`/`cargoCount` while `outputCount` stayed 0, so the unload branch below never
-    fired; and `machineInputItem` has no entry for a thing with no recipe, so the load branch
-    never fired either. A click on a $250 Root Cellar therefore produced **no command at all** —
+    fired; and a box has no recipe and therefore no hopper, so the load branch never fired
+    either. A click on a $250 Root Cellar therefore produced **no command at all** —
     not a refusal, not a tell, nothing — and the same was true of the $80 Hand Cart.
 
     GATED ON THE ROLE, NEVER ON THE KIND, which is the whole shape of the fix: the cellar and the
@@ -1932,9 +2043,9 @@ function handCommand(view: WorldView, machine: MachineView): Command | null {
   }
 
   // The seed hopper ([[038]]): `applyRefillHopper` is the sim's "one door seeds enter by" for
-  // hands, and until item 038 no click ever knocked on it — the planter dock fell through
-  // `machineInputItem`'s chip-line switch to null, so hand-loading seeds was simply
-  // impossible, which is how the owner found it. The sim re-validates everything (wrong seed,
+  // hands, and until item 038 no click ever knocked on it — the planter dock fell through the
+  // chip-line switch that used to stand where `hopperToFill` now does, so hand-loading seeds
+  // was simply impossible, which is how the owner found it. The sim re-validates it (wrong seed,
   // full hopper, nothing in the bag), so this side only knocks. Before the `outputCount`
   // branch on purpose: the dock produces nothing, but a future one that did should still
   // prefer taking in what it exists to consume.
@@ -1953,11 +2064,58 @@ function handCommand(view: WorldView, machine: MachineView): Command | null {
   // Every converter takes its own input item, so the hand verb reads the recipe rather
   // than naming a machine: the Washer wants potatoes and the Seasoner wants plain chips,
   // and neither needed a new branch here when the line replaced the monolith.
-  const wanted = machineInputItem(machine.kind);
-  if (wanted === null) return null;
-  const have = countOf(view, wanted);
-  if (have <= 0) return null;
-  return { type: 'LoadMachine', machineId: machine.id, count: have };
+  const load = hopperToFill(view, machine);
+  if (load === null) return null;
+  return { type: 'LoadMachine', machineId: machine.id, count: load.count };
+}
+
+/**
+ * The first hopper this machine has room in that the player is actually carrying for — or
+ * null, meaning a click here has nothing to say.
+ *
+ * **THE COMMENT ABOVE WAS TRUE AND THE CODE UNDER IT WAS NOT** (item 111). "The hand verb
+ * reads the recipe rather than naming a machine" described a `switch` over six machine kinds
+ * that named six machines, and it had been quietly wrong for a while in two directions:
+ *
+ *   · **A pepper could be belted into a Seasoner but never carried into one.** The switch
+ *     answered `PlainChips` for a Seasoner, the player holding only chilis had none, and the
+ *     click did nothing at all — the flavour tier reachable by conveyor and not by hand.
+ *   · **The entire soda line was already unloadable BY HAND** and had been since it landed.
+ *     The switch listed the chip line and returned null for everything else, so a Grinder
+ *     with kola nuts in your arms, a Six-Packer with bottles, a Composter with a rotten
+ *     stack — every one of them ignored the click. This is the second time this exact hazard
+ *     has been recorded on this function: [[038]]'s note above says the planter dock "fell
+ *     through `machineInputItem`'s chip-line switch to null, so hand-loading seeds was
+ *     simply impossible, which is how the owner found it." That fix added a branch for the
+ *     dock. This one deletes the switch.
+ *
+ * SO IT ASKS THE MACHINE, and `mv.recipe` is every hopper it has (`machineHoppers`), in the
+ * order `applyLoadMachine` walks them. A hand verb that offers exactly what the sim's door
+ * accepts cannot go stale when a machine grows an ingredient, which is the whole reason the
+ * chip-line switch had to go rather than gain three more cases.
+ *
+ * **IT STILL NAMES NO ITEM, AND THAT IS DELIBERATE** ([[105]]): the field means "whatever
+ * fits", boxes require it because they have no recipe, and a recipe machine does not. It
+ * matters more now than it did — a click may become a walk, and the sim re-decides which
+ * hopper on ARRIVAL against a machine that has been running the whole time we were walking.
+ * The count is a click-time snapshot for the same reason it always was, clamped by `Math.min`
+ * at the far end.
+ *
+ * A FULL HOPPER IS SKIPPED rather than offered, matching `applyLoadMachine`'s own `space`
+ * test. It is what makes a Seasoner with a packed chip hopper accept the peppers in your
+ * other hand instead of refusing the click outright.
+ */
+function hopperToFill(
+  view: WorldView,
+  machine: MachineView,
+): { item: ItemId; count: number } | null {
+  for (let i = 0; i < machine.recipe.length; i++) {
+    const line = machine.recipe[i]!;
+    if (line.item === 0 || line.count >= machine.inputCapacity) continue;
+    const have = countOf(view, line.item as ItemId);
+    if (have > 0) return { item: line.item as ItemId, count: have };
+  }
+  return null;
 }
 
 /**
@@ -2016,24 +2174,6 @@ function bestStorable(view: WorldView): { item: ItemId; count: number } | null {
     }
   }
   return best;
-}
-
-function machineInputItem(kind: number): ItemId | null {
-  switch (kind) {
-    case MachineKind.ChipKitchen:
-    case MachineKind.Washer:
-      return ItemId.RussetPotato;
-    case MachineKind.Slicer:
-      return ItemId.WashedPotato;
-    case MachineKind.Fryer:
-      return ItemId.PotatoSlices;
-    case MachineKind.Seasoner:
-      return ItemId.PlainChips;
-    case MachineKind.Bagger:
-      return ItemId.SeasonedChips;
-    default:
-      return null;
-  }
 }
 
 /**
@@ -2104,12 +2244,19 @@ export function canAfford(view: WorldView, costCents: number): boolean {
 
 // --- the band ----------------------------------------------------------------------------
 
-function dragBand(view: WorldView, drag: Drag, crop: CropId): BandState {
+/**
+ * The band a live drag shows this frame.
+ *
+ * Exported for the tests since [[109]], on `ghostBand`'s precedent and for its reason: the
+ * sentences a refused pipe run prints ARE the fix, and reaching them through `band()` would
+ * mean standing up a canvas, a camera and a host to read a string.
+ */
+export function dragBand(view: WorldView, drag: Drag, crop: CropId, picked: LiquidId): BandState {
   const run = runFor(drag);
   const bounds = runBounds(run);
 
   if (run.kind === 'line') {
-    if (drag.tool === ToolMode.PlacePipe) return pipeBand(view, run, bounds);
+    if (drag.tool === ToolMode.PlacePipe) return pipeBand(view, run, bounds, picked);
     const tier = toolBeltTier(drag.tool);
     const perTile = tier === null ? 0 : (beltSpec(tier)?.priceCentsPerTile ?? 0);
     const tiles = runTiles(run);
@@ -2192,16 +2339,20 @@ function dragBand(view: WorldView, drag: Drag, crop: CropId): BandState {
  * along should not leave the player with a stub"). Colouring per tile would advertise a mostly
  * green L that builds nothing.
  */
-function pipeBand(view: WorldView, run: LineRun, bounds: Bounds): BandState {
+function pipeBand(view: WorldView, run: LineRun, bounds: Bounds, picked: LiquidId): BandState {
   const tiles = runTiles(run);
   const length = runLength(run);
   const cost = PIPE_PRICE_CENTS_PER_TILE * length;
-  const liquid = pipeRunLiquid(view, tiles);
+  const carried = pipeRunLiquid(view, tiles, picked);
   const clear = pipeTilesClear(view, tiles);
-  const ok = liquid !== LiquidId.None && clear && view.moneyCents >= cost;
+  const ok = carried.liquid !== LiquidId.None && clear && view.moneyCents >= cost;
   const tone: BandTone = ok ? 'pipe' : 'blocked';
   const bent = run.turnLengthTiles > 0;
   const heading = bent ? `${arrow(run.dir)}${arrow(run.turnDir)}` : arrow(run.dir);
+  // "(picked)" IS NOT DECORATION — it is the difference between a fact the world told the
+  // player and an answer the player gave, and a tag that says "cane juice" for both is a tag
+  // that teaches the wrong lesson about which one they can change ([[109]]).
+  const name = liquidName(carried.liquid) + (carried.source === 'picked' ? ' (picked)' : '');
 
   return {
     ...bounds,
@@ -2211,12 +2362,21 @@ function pipeBand(view: WorldView, run: LineRun, bounds: Bounds): BandState {
     // run, and quoting "$34.00" under a red band would be the tag answering a question nobody
     // asked. The sentence names the rule the sim is about to enforce — one liquid per network,
     // typed ports — rather than the tone.
+    //
+    // AND THE TWO REFUSALS ARE DIFFERENT SENTENCES ([[109]]). "Nothing would share a liquid" is
+    // a verdict about the world: these machines disagree and no pipe can join them, so there is
+    // nothing to do but drag somewhere else. "Nothing SAYS what this carries" is a question,
+    // and it is the only tag in this file that names its own way out — the tile count is
+    // dropped from it deliberately, because a run that is not a decision yet has no size worth
+    // quoting and the sentence needs the room.
     label:
-      liquid === LiquidId.None
-        ? `${length} tiles · nothing here would share a liquid`
-        : bent
-          ? `${length} tiles · ${formatCents(cost)} · ${liquidName(liquid)} ${heading} · R flips the corner`
-          : `${length} tile${length === 1 ? '' : 's'} · ${formatCents(cost)} · ${liquidName(liquid)} ${heading}`,
+      carried.source === 'untyped'
+        ? 'nothing here says what this carries — press L, or start at a machine'
+        : carried.source === 'mismatch'
+          ? `${length} tiles · nothing here would share a liquid`
+          : bent
+            ? `${length} tiles · ${formatCents(cost)} · ${name} ${heading} · R flips the corner`
+            : `${length} tile${length === 1 ? '' : 's'} · ${formatCents(cost)} · ${name} ${heading}`,
     // No chevron, for the belt's reason exactly: a pipe has no facing. Flow direction is the
     // network's ledger, decided by where the pump is, and a shape that means "R turns this"
     // must never appear on something R does not turn.
@@ -2500,7 +2660,17 @@ export function ghostBand(
   const kind = toolMachineKind(tool);
   const fieldPlaceable = kind !== null && (machineSpec(kind)?.fieldPlaceable ?? false);
   const farmReason = farmRefusal(view, bounds, fieldPlaceable);
-  const free = farmReason === '' && footprintClear(view, bounds) && view.moneyCents >= cost;
+  // The liquid layer's own three refusals, in words, BEFORE the click ([[109]]).
+  const liquidReason = liquidRefusal(view, bounds, kind);
+  const free =
+    farmReason === '' &&
+    liquidReason === '' &&
+    footprintClear(view, bounds) &&
+    view.moneyCents >= cost;
+  // Two red reasons cannot both fit on one tag, and farmland outranks plumbing for the same
+  // reason it outranks the coverage boast below: "not on farmland" is about the ground the
+  // player is pointing at, and the pipe two tiles away is the subtler complaint.
+  const refusal = farmReason !== '' ? farmReason : liquidReason;
   const isGrabber = toolGrabberTier(tool) !== null;
   const tone: BandTone = free ? 'zone' : 'blocked';
 
@@ -2547,8 +2717,8 @@ export function ghostBand(
       // A farm refusal outranks the coverage boast: the one fact a red band owes the player
       // is WHY ([[067]]), and "waters 5×5" is not an answer to "why not here".
       label:
-        farmReason !== ''
-          ? `${TOOL_INFO[tool].label} · ${farmReason}`
+        refusal !== ''
+          ? `${TOOL_INFO[tool].label} · ${refusal}`
           : `${TOOL_INFO[tool].label} · ${toolCoverageVerb(tool)} ${span}×${span}`,
       dir: Direction.None,
     };
@@ -2558,8 +2728,8 @@ export function ghostBand(
     ...bounds,
     tone,
     label:
-      farmReason !== ''
-        ? `${TOOL_INFO[tool].label} · ${farmReason}`
+      refusal !== ''
+        ? `${TOOL_INFO[tool].label} · ${refusal}`
         : isGrabber
           ? `${TOOL_INFO[tool].label} ${arrow(placeDir)} · R`
           : TOOL_INFO[tool].label,
@@ -2648,6 +2818,96 @@ function farmRefusal(view: WorldView, bounds: Bounds, fieldPlaceable: boolean): 
     }
   }
   return '';
+}
+
+/**
+ * Why the LIQUID LAYER refuses this footprint, phrased for the tag — or `''` when it does not
+ * ([[109]]).
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  THE OTHER HALF OF THE BUG, AND THE HALF NOBODY COULD SEE.
+ *
+ *  `liquidPlacementRefusal` is the sim's rule for a machine landing beside plumbing, and it had
+ *  NO MIRROR IN THIS APP AT ALL: every one of its three refusals reached the player as a click
+ *  that did nothing. Drop a Carbonator beside a water main you did not mean to lay and the
+ *  ghost stayed green, the click went out, the reducer said `PortMismatch`, and the machine
+ *  simply did not appear — no red, no sentence, nothing to connect "the pipe" to "the refusal".
+ *  That is the second half of the sentence item 109 is about: the run picked wrong in silence,
+ *  and then the machine refused in silence.
+ *
+ *  A HINT, NEVER A GATE (§12), exactly like `farmRefusal` above. The sim re-checks all three
+ *  and remains the authority; this only explains the red before the money is spent.
+ *
+ *  IT MIRRORS THE SIM FUNCTION IN THE SIM'S OWN ORDER — bank, then one-pump-per-network, then
+ *  the port rule — so that when two of them are true at once the tag names the one the reducer
+ *  would have named. Every input is view-readable: `reservoirs` for the bank,
+ *  `PipeView.network` and `MachineView.network` for the pump count, and the spec's ports for
+ *  the liquid, which is the same table `machineLiquids` reads for the run.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ */
+function liquidRefusal(view: WorldView, bounds: Bounds, kind: MachineKind | null): string {
+  if (kind === null) return '';
+  const spec = machineSpec(kind);
+  if (spec === null) return '';
+
+  if (spec.role === MachineRole.Pump) {
+    // The bank rule, off the ANCHOR TILE and not the footprint, because that is the tile the
+    // sim asks about (`reservoirAdjacentToTile(state, command.tileX, command.tileY)`). A
+    // mirror that checked the whole footprint would go green on a placement the reducer throws
+    // away the moment a pump grows past 1×1.
+    const onBank =
+      reservoirAtTile(view, bounds.x, bounds.y) ||
+      reservoirAtTile(view, bounds.x, bounds.y - 1) ||
+      reservoirAtTile(view, bounds.x + 1, bounds.y) ||
+      reservoirAtTile(view, bounds.x, bounds.y + 1) ||
+      reservoirAtTile(view, bounds.x - 1, bounds.y);
+    if (!onBank) return 'it has to stand on the reservoir bank';
+
+    const touched = adjacentNetworks(view, bounds);
+    for (let i = 0; i < view.machines.length; i++) {
+      const machine = view.machines[i]!;
+      if (machineSpec(machine.kind as MachineKind)?.role !== MachineRole.Pump) continue;
+      if (machine.network !== 0 && touched.includes(machine.network)) {
+        return 'that line already has a pump';
+      }
+    }
+  }
+
+  // THE PORT RULE, FROM THE MACHINE'S SIDE — the refusal item 109 was reported through. A
+  // machine with no plumbing at all is invisible to it, which is why this reads the same
+  // `machineLiquids` the run's inference does rather than a second copy of the rule.
+  const accepts = machineLiquids(kind);
+  if (accepts.length === 0) return '';
+  for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
+    for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
+      for (let n = 0; n < 4; n++) {
+        const pipe = pipeAtView(view, x + PIPE_NEIGHBOUR_DX[n]!, y + PIPE_NEIGHBOUR_DY[n]!);
+        if (pipe === null) continue;
+        // `PipeView.liquid` crosses the seam as a bare number (§12), the same way
+        // `GrabberView.dir` does for `arrow` — branded here, at the one place that reads it.
+        const carried = pipe.liquid as LiquidId;
+        if (accepts.includes(carried)) continue;
+        // NAMES THE PIPE, because the pipe is the thing that has to move — or be picked up —
+        // and "no port" alone would send the player looking at the machine.
+        return `no port for the ${liquidName(carried)} pipe beside it`;
+      }
+    }
+  }
+  return '';
+}
+
+/** Every pipe network orthogonally touching this footprint. The pump's one-per-line check. */
+function adjacentNetworks(view: WorldView, bounds: Bounds): number[] {
+  const networks: number[] = [];
+  for (let y = bounds.y; y < bounds.y + bounds.h; y++) {
+    for (let x = bounds.x; x < bounds.x + bounds.w; x++) {
+      for (let n = 0; n < 4; n++) {
+        const pipe = pipeAtView(view, x + PIPE_NEIGHBOUR_DX[n]!, y + PIPE_NEIGHBOUR_DY[n]!);
+        if (pipe !== null && !networks.includes(pipe.network)) networks.push(pipe.network);
+      }
+    }
+  }
+  return networks;
 }
 
 /** Takes a plain number: `GrabberView.dir` crosses the view boundary unbranded (§12). */

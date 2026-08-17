@@ -1,0 +1,24 @@
+{
+  "id": "item_gold_chips",
+  "provider": "local",
+  "model": "local:local/item_gold_chips.png",
+  "seed": null,
+  "prompt": "One 16x16 heap of unseasoned gold crisps — the Fryer's output on the premium base line ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. Drawn as a base of one wide crisp with three smaller ones of DIFFERENT sizes standing in it: the first cut used three equal ellipses in a triangle and rendered as three eggs, because equal shapes at equal spacing read as a pattern and a pile is the opposite of a pattern. Palest of the six chip heaps, and the only one wearing no flavour mark — it is the rung before the Seasoner.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0,
+  "generatedAt": "2026-08-17T05:47:51.961Z"
+}

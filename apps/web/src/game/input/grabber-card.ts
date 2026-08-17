@@ -36,6 +36,8 @@ import {
   grabberSpec,
   itemSpec,
   machineKindForBoxedItem,
+  machineRecipes,
+  machineSpec,
 } from '@snack/sim';
 import type { Direction, GrabberTier, GrabberView, ItemId, WorldView } from '@snack/sim';
 
@@ -159,6 +161,13 @@ function sourceItems(
     push(items, machine.seedShelfItem);
   } else {
     push(items, machine.outputItem);
+    // EVERY FLAVOUR THIS MACHINE CAN MAKE, not only the one in the basket right now (item
+    // 111). `machine.outputItem` is the truthful basket item and falls back to the spec's
+    // ordinary product when the basket is empty — so a Bagger between batches offered plain
+    // bags and nothing else, and an arm could only be tuned to chili bags by catching the
+    // machine mid-basket and clicking fast. A filter is a standing instruction about a
+    // machine that has not run yet; it has to name things that have not come out yet.
+    machineOutputs(machine.kind, items);
     // What a Fryer hands over first is its BURNT chips, and `grabberSource` filters on what is
     // actually next out of the buffer rather than on what the machine makes on a good day. So
     // the spoiled twin is a real thing to filter FOR (an arm that only carries seconds to the
@@ -183,6 +192,7 @@ export function lotItems(view: WorldView | null): number[] {
   for (let i = 0; i < view.machines.length; i++) {
     const m = view.machines[i]!;
     push(items, m.outputItem);
+    machineOutputs(m.kind, items);
     push(items, m.overcookedItem);
     push(items, m.cargoItem);
     push(items, m.seedShelfItem);
@@ -219,6 +229,25 @@ export function mergeCandidates(
   for (let i = 0; i < fresh.length; i++) push(out, fresh[i]!);
   push(out, filter);
   return sorted(out);
+}
+
+/**
+ * Everything a machine of this kind can produce, appended in recipe order.
+ *
+ * Read from `machineRecipes` rather than from `spec.outputItem`, which is the one thing that
+ * machine makes on an ordinary day — the distinction item 111 introduced and the reason a
+ * four-flavour Bagger only ever advertised one bag. A machine with no flavours adds the
+ * single output it already had, and `push` dedupes it against the basket item, so this is a
+ * no-op for the thirty-five machines that make one thing.
+ */
+function machineOutputs(kind: number, items: number[]): void {
+  const spec = machineSpec(kind as MachineKind);
+  if (spec === null) return;
+  const recipes = machineRecipes(spec);
+  for (let i = 0; i < recipes.length; i++) {
+    const output = recipes[i]!.output;
+    if (output !== null) push(items, output);
+  }
 }
 
 /** Real items only, once each. 0 is "nothing here", never a thing to filter for. */

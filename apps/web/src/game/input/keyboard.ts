@@ -156,6 +156,13 @@ export class KeyboardInput {
       case 'KeyC':
         this.system.cycleCrop();
         return;
+      // L picks the liquid for a pipe run the world cannot type on its own ([[109]]) — the
+      // crop key's twin in every respect that matters: cursor state, emits nothing, and its
+      // answer shows up in the band while the button is down. It starts on "work it out",
+      // which is why laying pipe across bare ground now lays nothing and says so.
+      case 'KeyL':
+        this.system.cycleLiquid();
+        return;
       case 'Equal':
       case 'NumpadAdd':
         event.preventDefault();

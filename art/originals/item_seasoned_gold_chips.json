@@ -1,0 +1,24 @@
+{
+  "id": "item_seasoned_gold_chips",
+  "provider": "local",
+  "model": "local:local/item_seasoned_gold_chips.png",
+  "seed": null,
+  "prompt": "One 16x16 heap of seasoned gold crisps — the Seasoner's output on the premium base line ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. The gold heap plus twelve red seasoning specks and the CROWN mark, which is the same 5x5 glyph item_bagged_gold_chips wears: a player learns crown-means-gold once and then reads it on the belt, in the hopper and in the bag. Twelve specks rather than a polite handful because the plain line already draws this same step as pale-gold-to-red-orange, and a seasoned rung that only whispered would be the one rung of the flavour line nobody could see had happened.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0,
+  "generatedAt": "2026-08-17T05:47:51.961Z"
+}

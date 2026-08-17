@@ -587,10 +587,15 @@ export class HudStore {
     const current = this.dock;
     if (
       current.machineId === next.machineId &&
+      current.takesZone === next.takesZone &&
       current.boundZone === next.boundZone &&
       current.boundName === next.boundName &&
       current.botPhase === next.botPhase &&
       current.botConditionPermille === next.botConditionPermille &&
+      // The bay's one live number, and it settles: a machine crosses the wrench threshold a
+      // handful of times an hour, so this rebuilds when the drone's queue actually changes
+      // length and never on the ticks in between.
+      current.serviceDue === next.serviceDue &&
       current.zones.length === next.zones.length
     ) {
       let same = true;
@@ -615,10 +620,12 @@ export class HudStore {
       kind: next.kind,
       label: next.label,
       planter: next.planter,
+      takesZone: next.takesZone,
       boundZone: next.boundZone,
       boundName: next.boundName,
       botPhase: next.botPhase,
       botConditionPermille: next.botConditionPermille,
+      serviceDue: next.serviceDue,
       zones: Object.freeze(next.zones.map((zone) => Object.freeze({ ...zone }))),
     });
     return true;

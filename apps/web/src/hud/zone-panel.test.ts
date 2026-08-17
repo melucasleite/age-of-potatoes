@@ -50,6 +50,7 @@ import {
   zoneFocusSnapshot,
 } from './zone-focus';
 import { closeLocalPanel, panelSnapshot } from './panel-state';
+import { zoneNameShown, zoneNameToCommit } from './zone-name';
 
 /**
  * Push one command through a real tick, the way the host does.
@@ -260,5 +261,75 @@ describe('which zone the panel is describing', () => {
     expect(panelSnapshot()).toBe('zones');
     expect(zoneFocusSnapshot()).toBe(5);
     closeLocalPanel();
+  });
+});
+
+/**
+ * THE NAME BOX, AND WHAT IS AND IS NOT PINNED HERE ([[108]]).
+ *
+ * The bug had two halves. This file can hold one of them completely and the other not at all,
+ * and pretending otherwise would be worse than saying so:
+ *
+ *   · PINNED — what a draft MEANS. Every exit gesture routes to one `commit`, and `commit` is
+ *     `zoneNameToCommit` plus a dispatch. So "what is sent when the player leaves the field"
+ *     is one pure question with one answer, and it is exhaustively covered below, including
+ *     the empty-name ruling and the readout invariant that makes two names for one zone
+ *     unrepresentable.
+ *   · NOT PINNED — that the four gestures actually reach it. That is `focusout` vs `blur`,
+ *     capture-phase listeners and unmount ordering, and it needs a DOM. There is no jsdom and
+ *     no testing-library in this repo, and installing one mid-run — while other lanes are
+ *     running the suite — is a bigger change than the bug. The wiring was verified in Chrome
+ *     with real mouse events instead; the findings are in the work item's agent log.
+ */
+describe('what a typed zone name means', () => {
+  it('sends the trimmed, clipped name when it is genuinely new', () => {
+    expect(zoneNameToCommit('North Field', 'Zone 1')).toBe('North Field');
+    expect(zoneNameToCommit('  North Field  ', 'Zone 1')).toBe('North Field');
+    expect(zoneNameToCommit('x'.repeat(80), 'Zone 1')).toBe('x'.repeat(ZONE_NAME_MAX_LENGTH));
+  });
+
+  // THE RULING: an empty or whitespace name KEEPS THE OLD ONE. `applyRenameZone` refuses a
+  // zero-length name anyway, so a generated default here would be the panel and the reducer
+  // disagreeing about what a blank box means — and there is no such thing as a nameless zone.
+  it('keeps the old name when the box is empty or nothing but whitespace', () => {
+    expect(zoneNameToCommit('', 'North Field')).toBeNull();
+    expect(zoneNameToCommit('   ', 'North Field')).toBeNull();
+    expect(zoneNameToCommit('\t \n', 'North Field')).toBeNull();
+  });
+
+  it('sends nothing when the name has not actually changed', () => {
+    expect(zoneNameToCommit('North Field', 'North Field')).toBeNull();
+    // Trimmed first, so re-committing a name the player only added a space to is still a no-op
+    // rather than a command the sim refuses and a trace entry nobody asked for.
+    expect(zoneNameToCommit('  North Field ', 'North Field')).toBeNull();
+  });
+
+  it('sends nothing when there is no draft at all', () => {
+    // Every exit calls commit and several fire for one gesture — pointer down on the ESC
+    // button, then the unmount that follows it. A null draft is what makes that idempotent.
+    expect(zoneNameToCommit(null, 'North Field')).toBeNull();
+  });
+
+  // The second bug wearing the first one's coat: the shipped box kept a discarded draft on
+  // screen, so the panel showed `South Field` in the box and `North Field` on the row for one
+  // rectangle. A commit always returns the draft to null, and a null draft renders the world's
+  // own string — the same one `ZoneButton` prints — so the disagreement has no representation.
+  it('shows the world`s own name whenever nobody is typing', () => {
+    expect(zoneNameShown(null, 'North Field')).toBe('North Field');
+    expect(zoneNameShown('South Fiel', 'North Field')).toBe('South Fiel');
+    // And it tracks a rename that came from somewhere else, which `defaultValue` could not:
+    // an uncontrolled field is seeded once at mount and never hears about the world again.
+    expect(zoneNameShown(null, 'Renamed Elsewhere')).toBe('Renamed Elsewhere');
+  });
+
+  it('agrees with the reducer about every name it is willing to send', () => {
+    // The pair, end to end: what the policy hands over is what the sim keeps. A policy that
+    // sent a name `applyRenameZone` refuses would be a commit path that looks identical, from
+    // the player's chair, to the bug this item was filed about.
+    const { state, zoneId } = worldWithZone();
+    const name = zoneNameToCommit('  South Field  ', 'Zone 1');
+    expect(name).not.toBeNull();
+    send(state, { type: 'RenameZone', zoneId, name: name as string });
+    expect(lotOf(state).zones[0]?.name).toBe('South Field');
   });
 });

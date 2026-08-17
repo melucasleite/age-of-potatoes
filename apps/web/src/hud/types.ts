@@ -536,20 +536,28 @@ export interface DockSlice {
   readonly machineId: number;
   readonly kind: number;
   readonly label: string;
-  /** 1 for the planter, which is the dock with a seed hopper. */
+  /** 1 for the planter, which is the ZONE dock with a seed hopper. Never 1 for a Drone Bay. */
   readonly planter: number;
   /**
-   * The zone id this dock works, 0 for none, or **-1 when the projection does not publish it**.
+   * 1 when this dock is one a zone can be given to — the two farm docks, never the Drone Bay.
    *
-   * See `dockZoneOf` in `derive-dock.ts` for the handoff. The three states are genuinely three:
-   * a dock with orders, a dock without them, and a build that cannot tell.
+   * `dockTakesZone` in `derive-dock.ts` carries the argument. The card branches on this and not
+   * on `kind`, so a fourth dock kind states its own answer once rather than being guessed at by
+   * every reader ([[107]]).
    */
+  readonly takesZone: number;
+  /** The zone id this dock works, or 0 for none. Meaningless, and undrawn, when `takesZone` is 0. */
   readonly boundZone: number;
-  /** The bound zone's name, when it is both known and still exists. */
+  /** The bound zone's name, when it is bound and the zone still exists. */
   readonly boundName: string;
   /** `BotPhase` of this dock's bot, or -1 when it has none. */
   readonly botPhase: number;
   readonly botConditionPermille: number;
+  /**
+   * How many machines on the lot want a wrench — the repair drone's actual queue, counted only
+   * for the Drone Bay. It is what that card says instead of naming a zone.
+   */
+  readonly serviceDue: number;
   readonly zones: readonly DockZoneOption[];
 }
 
@@ -642,12 +650,14 @@ export const ZERO_DOCK: DockSlice = Object.freeze({
   kind: 0,
   label: '',
   planter: 0,
-  // Not standing at a dock, so there is nothing to be unsure about — but the zero value has to
-  // be a state the card renders as "no subject", and `machineId === 0` is the one that says so.
-  boundZone: -1,
+  takesZone: 0,
+  // Not standing at a dock, so none of the rest of this is a claim about anything: `machineId
+  // === 0` is the field that says "no subject" and the card returns null before reading one more.
+  boundZone: 0,
   boundName: '',
   botPhase: -1,
   botConditionPermille: 0,
+  serviceDue: 0,
   zones: Object.freeze([]),
 });
 

@@ -456,7 +456,13 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
   },
   [ToolMode.PlaceSeasoner]: {
     label: 'Seasoner',
-    hint: 'click 2x2 of clear ground',
+    // THE ONLY MACHINE ON THE LOT WITH A DECISION IN IT (item 111), and the row is where a
+    // player finds that out — nothing else on this menu is bought for what you can choose to
+    // put in it. Its neighbours on the chip line still say "click 2x2 of clear ground",
+    // correctly: they have nothing to tell you, and a hint that repeats the obvious for every
+    // row is a hint nobody reads on the row that matters. Same shape as the Grinder's
+    // "kola nuts in, kola powder out" — both ends of the recipe, in the player's words.
+    hint: 'salt by default — add a chili or corn to flavour the batch',
     costCents: machinePrice(MachineKind.Seasoner),
     gesture: 'click',
   },
@@ -592,7 +598,12 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     // The same sentence the belts wear, because it is the same gesture — a player who has run
     // one belt already knows this tool. What it adds is the liquid, which the run works out
     // from what it touches and the band says out loud the whole time the button is down.
-    hint: 'drag a run — it turns a corner; R flips it',
+    //
+    // AND `L` IS NAMED HERE BECAUSE THIS IS THE ONLY PLACE IT CAN BE SEEN BEFORE THE DRAG
+    // ([[109]]). The pipe has no footprint, so it draws no hover ghost and no tag; without this
+    // line the key exists only in the sentence a refused run prints, which is a fine way to
+    // meet it and a poor way to be reminded of it.
+    hint: 'drag a run — R flips the corner, L sets the liquid',
     costCents: PIPE_PRICE_CENTS_PER_TILE,
     gesture: 'line',
   },

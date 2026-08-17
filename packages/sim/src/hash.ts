@@ -205,6 +205,9 @@ export function hashStateUint32(state: WorldState): number {
     d.num(machine.inputCounts.length);
     for (let j = 0; j < machine.inputCounts.length; j++) d.num(machine.inputCounts[j]!);
     d.num(machine.outputCount);
+    // And WHAT is in that buffer (item 111). A count with no name stopped being enough the day
+    // a Seasoner could make four different things out of the same hopper.
+    d.num(machine.outputItem);
     d.num(machine.tankMl);
     d.num(machine.condition);
     d.num(machine.opCount);
@@ -226,6 +229,10 @@ export function hashStateUint32(state: WorldState): number {
     // skipped when it is zero is a field whose absence and whose zero encode the same bytes.
     d.num(machine.cargoItem);
     d.num(machine.cargoCount);
+    // How much clock the cargo has left (item 110). A container that preserves time is world
+    // state as much as the goods themselves are: two cellars holding ten potatoes each, one of
+    // them loaded an hour later, are two different worlds.
+    d.num(machine.cargoFreshTicks);
     d.num(machine.runTicksRemaining);
     // The harvester dock's seed shelf (item 088). Zero on everything else, and counted anyway,
     // for the reason directly above.
@@ -620,10 +627,12 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].cooldown`, machine.cooldown);
     check(`machines[${i}].blockedTicks`, machine.blockedTicks);
     check(`machines[${i}].overcookedCount`, machine.overcookedCount);
+    check(`machines[${i}].outputItem`, machine.outputItem);
     check(`machines[${i}].investedCents`, machine.investedCents);
     check(`machines[${i}].flowMlPerMinute`, machine.flowMlPerMinute);
     check(`machines[${i}].scanCursor`, machine.scanCursor);
     check(`machines[${i}].cargoCount`, machine.cargoCount);
+    check(`machines[${i}].cargoFreshTicks`, machine.cargoFreshTicks);
     check(`machines[${i}].seedShelfCount`, machine.seedShelfCount);
     check(`machines[${i}].runTicksRemaining`, machine.runTicksRemaining);
     check(`machines[${i}].untouchedTicks`, machine.untouchedTicks);

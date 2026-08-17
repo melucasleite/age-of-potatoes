@@ -3,7 +3,7 @@
   "description": "Hand-farms the field through two full cycles, buys the deed to parcel 1 for $200, and builds a 2x2 Chip Kitchen and a 1x1 Sprinkler on ground that did not exist to build on before. Guards BuyDeed, the ownership gate every placement verb shares, and land on the net-worth books.",
   "seed": 480480,
   "ticks": 13131,
-  "expectedHash": "41e24bb8",
+  "expectedHash": "5d32dc8e",
   "commands": [
     {
       "tick": 0,

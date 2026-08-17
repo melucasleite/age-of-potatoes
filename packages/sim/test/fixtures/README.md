@@ -449,3 +449,149 @@ the two extra refill errands 086 cost the player are handed back.
 **The barrel got substantially stronger, and that is the ruling rather than a side effect** — one
 haul now waters a full patch ten times over instead of covering it once. Logged for item 046's
 balance pile, not tuned here.
+
+## 2026-08-17 (wave 14, item 110): a trip through storage stops resetting the clock — all nineteen moved, none of them behaved differently
+
+Save format 17 → 18. Every machine gained `cargoFreshTicks` — how much of its cargo's freshness
+window is left — and it is in the digest, so every world in the repository hashes differently from
+the one before.
+
+**Why the field exists.** Storage stamped freshness on the way OUT, from the tick the goods came
+back into the player's arms. That reasoning was written down and it was sound — nothing inside a
+machine ages, so goods returning to your hands are loose again — and it became an exploit the
+moment item 105 made the round trip cheap. Item 105's adversarial verifier, verbatim: _"a round
+trip through an eighty dollar hand cart resets the freshness clock, so I kept ten potatoes alive
+for three and a half times their natural lifespan by clicking twice. Rot is now opt-in."_ A box
+may now preserve time and may never mint it.
+
+| Fixture          | Old        | New        |
+| ---------------- | ---------- | ---------- |
+| `empty-world`    | `3966bd25` | `65339692` |
+| `canary-1000`    | `f34ea50f` | `976351e8` |
+| `rng-streams`    | `c8a8029e` | `b6085531` |
+| `all-verbs`      | `1b07a880` | `c124642e` |
+| `factory-line`   | `55f97d5d` | `dbfbde7b` |
+| `withering`      | `30c1bbfd` | `8c516da0` |
+| `water-works`    | `e747d0a7` | `dbd7bee5` |
+| `walk-errands`   | `d31b5b26` | `83c11a5d` |
+| `idle-wear`      | `4c9bb89c` | `7c17d10e` |
+| `maintenance`    | `7cb209cf` | `163fbaab` |
+| `soda-line`      | `7ff2ebce` | `14793806` |
+| `rotate-and-box` | `f38c63c8` | `d3fc3f83` |
+| `land-deeds`     | `41e24bb8` | `57768763` |
+| `depot-run`      | `a44e80a1` | `396894ba` |
+| `the-farm`       | `f09b7451` | `50a98798` |
+| `worn-to-zero`   | `2e533b7b` | `38b2bb69` |
+| `junction-loop`  | `dca65c17` | `0fd17fa5` |
+| `the-till`       | `03f8a035` | `0211fb6c` |
+| `mid-field`      | `4eeea937` | `8a3805af` |
+
+**Cause, for all nineteen: the digest, and nothing else — and this was PROVED rather than
+argued.** Before regenerating anything, the single line `d.num(machine.cargoFreshTicks)` was
+commented out of `hash.ts` and the whole suite re-run: **all nineteen fixtures replayed to their
+old pinned hashes on the first try**, along with both inline goldens. A behaviour change anywhere
+in a recorded session would have shown up there and did not. Not one fixture in this set ever puts
+a perishable into a container: `the-farm` is the only one that owns storage at all — it places a
+hand cart at tick 36,377 and a Root Cellar at 36,488 — and it never issues a `LoadMachine` at
+either of them, so both stand empty with a cargo clock of 0 for the whole session. Its `PackCrate`
+at tick 41,946 is the _item_ half of the freshness ladder and goes nowhere near a box.
+
+Two inline goldens outside this directory moved for the same reason and carry the same note in
+their own comments, each checked the same way: `sim.test.ts`'s scripted canary (`f34ea50f` →
+`976351e8`, agreeing with `canary-1000` as it must) and `maintenance-automation.test.ts`'s drone
+story (`27f06a83` → `9b28460d`).
+
+### The save fixtures
+
+`format-18.json` is new, recorded by `scripts/record-format-18.ts`: **the first save in which a
+box is running a clock.** One armful of potatoes, aged a third of the way through its window and
+then split between a Root Cellar and a hand cart, five active minutes later. The cellar's twelve
+sit frozen at 11,997 ticks; the cart's twelve are down to 5,995 and still falling. Format 17 could
+not express that in either direction — every box froze its contents and then handed back a fresh
+fifteen minutes, so two containers holding one product could never disagree about how long it had.
+
+Every older format fixture's migrated hash moved with the digest and its `steps` array gained the
+17 → 18 step; **the files themselves were not touched**, which is the rule that makes them worth
+keeping. The step itself gives every machine a `cargoFreshTicks` of 0, which reads as "no clock"
+rather than "out of time" — deliberately the generous direction, because stamping a full window
+onto every stocked container would start the cart clock at load time for a player who is not here,
+and they would come back to compost.
+
+## Format 19 — a machine's output basket has a name on it (item 111)
+
+**Why the field exists.** `Machine.outputCount` was a bare number whose identity came from
+`spec.outputItem`. That was true for the whole life of this file and stopped being true the
+moment item 111's flavour tier gave a Seasoner four recipes and a Washer two: a count with no
+name cannot say whether a basket holds plain chips or chili chips, and a grabber reaching into
+one has to know. `Machine.outputItem` is the name, and it carries a rule with it — **a buffer
+holds one product at a time**, the same rule a Root Cellar and a hand cart already obey.
+
+| Fixture          | Old        | New        |
+| ---------------- | ---------- | ---------- |
+| `empty-world`    | `65339692` | `b73dca61` |
+| `canary-1000`    | `976351e8` | `db18e797` |
+| `rng-streams`    | `b6085531` | `fddd9f86` |
+| `all-verbs`      | `c124642e` | `2511b506` |
+| `factory-line`   | `dbfbde7b` | `2315542f` |
+| `withering`      | `8c516da0` | `ba731cd5` |
+| `water-works`    | `dbd7bee5` | `cadba63d` |
+| `walk-errands`   | `83c11a5d` | `592f22b2` |
+| `idle-wear`      | `7c17d10e` | `edcecd52` |
+| `maintenance`    | `163fbaab` | `ae690446` |
+| `soda-line`      | `14793806` | `b17ccb9a` |
+| `rotate-and-box` | `d3fc3f83` | `d1c78fc0` |
+| `land-deeds`     | `57768763` | `5d32dc8e` |
+| `depot-run`      | `396894ba` | `4d705b8f` |
+| `the-farm`       | `50a98798` | `278f5fa9` |
+| `worn-to-zero`   | `38b2bb69` | `2ab17eb8` |
+| `junction-loop`  | `0fd17fa5` | `d3fd49b5` |
+| `the-till`       | `0211fb6c` | `9908cad1` |
+| `mid-field`      | `8a3805af` | `fc4aa9fe` |
+
+**Cause, for all nineteen: the digest, and nothing else — proved the same way format 18 proved
+it.** Before regenerating anything, the single line `d.num(machine.outputItem)` was commented
+out of `hash.ts` and the goldens re-run: **all nineteen replayed to their old pinned hashes on
+the first try**, along with both inline goldens. The only test that failed under that control
+was `maintenance-automation.test.ts`'s recipe-graph node count — a deliberate data change (35
+items → 44), not a behaviour change, and not a hash at all. No recorded session behaves
+differently: every machine in every fixture makes exactly one thing, so the value written is
+the one its spec always implied.
+
+Two inline goldens outside this directory moved for the same reason and carry the same note in
+their own comments: `sim.test.ts`'s scripted canary (`976351e8` → `db18e797`, agreeing with
+`canary-1000` as it must) and `maintenance-automation.test.ts`'s drone story (`9b28460d` →
+`7906cb45`).
+
+### `flavour-line`, the twentieth fixture
+
+New, recorded by `scripts/record-flavour-line.ts`, and recorded on the new build — so it has no
+old hash and did not move. **One chip line runs three different products without a setting being
+changed on any machine.** Russets alone make plain bagged chips; peppers loaded into the
+Seasoner's second hopper turn the same line into chili chips; gold potatoes loaded into the
+Washer's second hopper run a premium base down all five machines to a gold bag. All three sell
+at the bin at three different prices. The recorder asserts every beat before it writes, so the
+fixture cannot be a zombie.
+
+It is deliberately SHORT — two field rows per crop, 9,070 ticks. Almost all of a session like
+this is the farmer walking to the pond and back, which pins nothing, and every fixture is
+replayed twice by the stability check. The first cut ran 14,881 ticks and pushed that check past
+Vitest's 5-second default; the fixture was shrunk _and_ the check was given an explicit 30-second
+budget, matching the two-process test beside it. A determinism gate that goes red on a stopwatch
+tells you nothing.
+
+### The save fixtures
+
+`format-19.json` is new, recorded by `scripts/record-format-19.ts`: **two Seasoners standing
+side by side holding two different products**, one chili and one plain, plus a Bagger holding
+gold bags. Format 18 could not describe that world — both Seasoner baskets would have read as
+"whatever a Seasoner makes". The chili one is left with peppers still in its hopper and goes on
+making chili chips, because that is what is already in the basket.
+
+Every older format fixture's migrated hash moved with the digest and its `steps` array gained the
+18 → 19 step; **the files themselves were not touched**. The step gives every machine an
+`outputItem` of 0, which `heldOutputItem()` reads as "ask the spec" rather than "empty" — so a
+grandfathered world behaves exactly as it did, the same item comes off the same machine at the
+same price, and a basket of plain chips still has to be drained before that Seasoner will start a
+chili batch. **No frozen table of item ids was carried into `migrations.ts` to achieve that**,
+deliberately: the fallback reads today's spec, which is the same answer the old code gave, and
+forty pinned literals would have been forty chances to disagree with it.

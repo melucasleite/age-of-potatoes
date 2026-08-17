@@ -1,0 +1,24 @@
+{
+  "id": "item_chili_chips",
+  "provider": "local",
+  "model": "local:local/item_chili_chips.png",
+  "seed": null,
+  "prompt": "One 16x16 heap of chili crisps ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. The hottest heap in the set: a red_bright pile under red_deep specks, wearing the PEPPER mark that item_bagged_chili_chips also wears. The pepper's single leaf_mid stem pixel is the only green in the chili line and is what stops the mark reading as a flame.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0,
+  "generatedAt": "2026-08-17T05:47:51.961Z"
+}

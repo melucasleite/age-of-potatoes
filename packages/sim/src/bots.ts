@@ -655,6 +655,15 @@ function plantUnderBot(state: WorldState, bot: Bot, dock: Machine): void {
  * anonymous goods can never leave. Cargo carries its own identity, so what the bot put down
  * is what the grabber picks up.
  *
+ * **THE SHELF CARRIES NO CLOCK, AND ITEM 110 LOOKED AT THAT AND LEFT IT** — stated here because
+ * the absence is a decision. A bot has no freshness on its back (`carryItem`/`carryCount` are a
+ * pair of numbers), so there is nothing to hand the shelf, and the shelf keeps item 035's
+ * structural freeze: produce waits there indefinitely and is stamped a full window when a hand
+ * takes it. That is NOT the laundering item 110 closed, because a player cannot put anything
+ * INTO a dock — `applyLoadMachine` refuses it, a dock being neither storage nor a recipe — so
+ * there is no round trip to make. What it is, honestly, is a shelf that preserves for free, and
+ * pricing that is a question about automation's balance rather than about an exploit.
+ *
  * A FULL DOCK IS A STALL, NOT A LOSS — and so is a MISMATCHED one. The shelf holds one product
  * at a time, like every cargo pair in the game, and a bot arriving with chili while the shelf
  * still holds potatoes stands there holding its armful (the house "look downstream" stall)

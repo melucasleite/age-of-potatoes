@@ -65,15 +65,9 @@
 //   nothing else (`zones.ts`), which is correct and stays correct. The dial is wired and the
 //   copy says plainly what it decides; auto-replant is what gives it meaning.
 
-import { useCallback, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
-import {
-  CropId,
-  ZONE_NAME_MAX_LENGTH,
-  ZONE_PRIORITY_MAX,
-  ZONE_PRIORITY_MIN,
-  clipZoneName,
-} from '@snack/sim';
+import { CropId, ZONE_NAME_MAX_LENGTH, ZONE_PRIORITY_MAX, ZONE_PRIORITY_MIN } from '@snack/sim';
 
 import { zoneSwatch } from './derive-dock';
 import { ItemIcon } from './ItemIcon';
@@ -88,6 +82,7 @@ import {
   zoneFocusServerSnapshot,
   zoneFocusSnapshot,
 } from './zone-focus';
+import { zoneNameShown, zoneNameToCommit } from './zone-name';
 import type { ZoneCropOption, ZoneRow } from './types';
 
 export function ZonePanel({ onClose }: { onClose: () => void }) {
@@ -217,9 +212,27 @@ function ZoneDetail({
     [pending, zone.id],
   );
 
+  /**
+   * The rename's own door, and **THE MISSING `pending.hold` IS THE POINT** ([[108]]).
+   *
+   * The hold greys every control in this pane for up to 700 ms so a button cannot be pressed
+   * twice before the world answers. A rename does not need that — a commit sets its draft to
+   * `null` and a null draft sends nothing, so double-sending is not reachable — and taking the
+   * hold here would be actively wrong in two ways at once. It disabled the focused field, which
+   * is the entire bug. And it would fire in the middle of somebody else's click: the pointer
+   * goes down on the hopper toggle, this commits, the hold greys the toggle, and React's own
+   * disabled-element check swallows the click the player was making. The name would be saved by
+   * eating the gesture that saved it.
+   */
+  const rename = useCallback((zoneId: number, name: string) => {
+    hudStore.dispatch({ type: 'RenameZone', zoneId, name });
+  }, []);
+
   return (
     <div className={s.zoneDetail}>
-      <NameField zone={zone} disabled={waiting} onSend={send} />
+      {/* Keyed on the zone so that switching rectangles unmounts the field — which is how the
+          old zone's draft gets committed instead of following the player to the new one. */}
+      <NameField key={zone.id} zone={zone} onRename={rename} />
 
       <div className={s.zoneSection}>
         <div className={s.zoneSectionHead}>Crop</div>
@@ -258,6 +271,43 @@ function ZoneDetail({
 /**
  * RENAME — the cosmetic one, and the one with the sharpest trap in it.
  *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  ⚠️ **WHY THE OBVIOUS VERSION OF THIS FIELD LOSES WHAT YOU TYPE** ([[108]]), because it is
+ *  not a mistake anybody makes twice and it is invisible from every direction.
+ *
+ *  The shipped field was `disabled={waiting}` and every control in this panel calls
+ *  `pending.hold(...)` on click. So typing a name and clicking the hopper toggle DISABLED THE
+ *  FIELD WHILE IT STILL HAD FOCUS. Chrome's response to that is to drop focus to `<body>` and
+ *  fire the non-bubbling `blur` — while React's `onBlur` is a delegated listener on `focusout`,
+ *  which never runs. Item 102's verifier caught it with an instrumented log:
+ *
+ *      focus +2ms     disabled=false
+ *      blur  +2780ms  disabled=true      <- commit never fires
+ *      MUT            disabled=false +4118ms   (usePending's 700ms release valve)
+ *
+ *  And the second half is worse than the first: `keepFocus` calls `preventDefault()` on every
+ *  other control's mousedown, precisely so focus does NOT move — so on a build where the field
+ *  is never disabled, clicking another control fires no blur AT ALL. Neither does clicking the
+ *  world: `pointer.ts` preventDefaults its `pointerdown`. Enter was the only gesture that
+ *  committed anything, and closing the panel — the likeliest exit of all — was guaranteed to
+ *  lose the name and then go on displaying it.
+ *
+ *  THE FIX IS THREE THINGS, and none of them is a timer:
+ *
+ *    1. THE FIELD IS NEVER DISABLED. `waiting` is a guard against double-dispatching a click;
+ *       a text field cannot be double-clicked into two commands, because a commit returns the
+ *       draft to `null` and a null draft sends nothing. So the field does not take the hold and
+ *       does not answer to it — see `onRename` in `ZoneDetail` for the other half of that.
+ *    2. EVERY EXIT ROUTES TO ONE `commit`. Enter, a real blur, the pointer going down anywhere
+ *       else, and unmount — which is what closing the panel with Z or ESC, or picking a
+ *       different zone, actually is.
+ *    3. THE POINTER LISTENER IS `pointerdown` IN THE CAPTURE PHASE, ON `window`. That is the
+ *       one thing in this document that fires no matter what: capture runs before the target
+ *       sees the event, so neither `keepFocus`'s `preventDefault` nor the canvas's can hide it,
+ *       and unlike `mousedown` it is not a compatibility event that a prevented pointerdown
+ *       suppresses. It is armed only while there is a draft to lose.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *
  * ⚠️ **THE KEYDOWN GUARD IS LOAD-BEARING, NOT TIDINESS.** This is the SECOND text field in the
  * HUD. `HudRoot`'s panel hook says so in as many words — "the one text field in the HUD is the
  * cheat console, and it stops keydown propagation before any window listener sees it" — and
@@ -267,67 +317,115 @@ function ZoneDetail({
  * would open the research tree on the T, the bag on the I, and fold the sidebar on nothing at
  * all. The cheat input's handler is copied deliberately, character for character in shape.
  *
- * COMMITTED ON ENTER AND ON BLUR, never per keystroke: one command per rename, so the trace
- * carries "the player named it North Field" rather than thirteen prefixes of it. ESCAPE
- * ABANDONS by restoring the world's name — and `stopPropagation` means that Escape never
- * reaches the input layer's cascade, so putting a tool down is not a side effect of giving up
- * on a name.
+ * COMMITTED ON EXIT, never per keystroke: one command per rename, so the trace carries "the
+ * player named it North Field" rather than thirteen prefixes of it. ESCAPE ABANDONS by dropping
+ * the draft — and `stopPropagation` means that Escape never reaches the input layer's cascade,
+ * so putting a tool down is not a side effect of giving up on a name.
  *
- * UNCONTROLLED, with `defaultValue` and a key. A controlled input fed from a slice that
- * republishes several times a second fights the caret; keying it on the zone id is what makes
- * the field reset when the player selects a different rectangle.
+ * CONTROLLED NOW, AND THAT IS THE READOUT FIX. `defaultValue` is a copy of the name taken once
+ * at mount, which is a second source by construction: it cannot notice the world renaming a
+ * zone, and it kept a discarded draft on screen forever. The value is `zoneNameShown`, which is
+ * `zone.name` itself whenever nobody is typing — the same string the list row prints. The caret
+ * fight that made the original author reach for `defaultValue` does not apply, because a draft
+ * is local state and a publish never overwrites one.
  */
 function NameField({
   zone,
-  disabled,
-  onSend,
+  onRename,
 }: {
   zone: ZoneRow;
-  disabled: boolean;
-  onSend: (command: Parameters<typeof hudStore.dispatch>[0]) => void;
+  onRename: (zoneId: number, name: string) => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState<string | null>(null);
+
+  // Everything `commit` reads, refreshed every render. The commit is called from places that
+  // outlive the render that created them — a `window` listener and an unmount cleanup — so
+  // capturing `zone.name` in a closure would mean committing against a stale world, and giving
+  // `commit` a dependency array would mean re-registering the listener on every keystroke.
+  const latest = useRef({ draft, name: zone.name, id: zone.id, onRename });
+  latest.current = { draft, name: zone.name, id: zone.id, onRename };
+
+  /**
+   * Drop the draft, in the ref AND in React state, in that order.
+   *
+   * ⚠️ **THE REF WRITE IS NOT REDUNDANT WITH THE `setDraft`, AND THE BROWSER PASS PROVED IT.**
+   * `setDraft(null)` is a scheduled render, not an assignment — nothing has changed by the time
+   * the current event finishes. Every exit here is followed synchronously by another one:
+   * Enter commits and then calls `blur()`, which fires `onBlur` → `commit` again; Escape drops
+   * the draft and then calls `blur()`, likewise. With only the state update, the second call
+   * still saw the typed string and acted on it — so ESCAPE SAVED THE NAME IT WAS ABANDONING,
+   * and Enter sent the rename twice (the second refused by `applyRenameZone`, but in the queue).
+   * The ref is what `commit` reads, so the ref is what has to be cleared to mean "handled".
+   */
+  const drop = useCallback(() => {
+    latest.current = { ...latest.current, draft: null };
+    setDraft(null);
+  }, []);
 
   const commit = useCallback(() => {
-    const input = ref.current;
-    if (input === null) return;
-    // `clipZoneName` is the sim's own clipper, imported rather than reimplemented, so the field
-    // and the reducer agree about the 24th character. An empty or unchanged name is refused by
-    // `applyRenameZone` anyway; not sending it keeps a no-op out of the trace.
-    const name = clipZoneName(input.value.trim());
-    if (name === '' || name === zone.name) {
-      input.value = zone.name;
-      return;
-    }
-    onSend({ type: 'RenameZone', zoneId: zone.id, name });
-  }, [onSend, zone.id, zone.name]);
+    const held = latest.current;
+    // Nothing typed since the last commit. Every exit calls this and several of them fire in
+    // sequence for one gesture — pointer down on the ESC button, then unmount — so being a
+    // no-op on a null draft is what makes them idempotent rather than a double send.
+    if (held.draft === null) return;
+    drop();
+    const name = zoneNameToCommit(held.draft, held.name);
+    if (name !== null) onRename(held.id, name);
+  }, [drop]);
+
+  // EXIT: the pointer goes down anywhere that is not this box. See the note above for why this
+  // is the listener and why it is in the capture phase. Armed only while a draft exists, so the
+  // ordinary cost of having this panel open is one closure and no listener.
+  useEffect(() => {
+    if (draft === null) return undefined;
+    const onDown = (event: PointerEvent): void => {
+      if (event.target === ref.current) return;
+      commit();
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true);
+    };
+  }, [draft, commit]);
+
+  // EXIT: the field goes away. Closing the panel with Z or ESC unmounts it with no blur and no
+  // pointer event anywhere near it, and so does selecting another zone — `ZoneDetail` keys this
+  // component on the zone id precisely so that switching rectangles commits the old one rather
+  // than carrying a draft across to a stranger.
+  useEffect(() => commit, [commit]);
 
   return (
     <div className={s.zoneNameRow}>
       <input
-        key={zone.id}
         ref={ref}
         className={s.zoneNameInput}
         type="text"
-        defaultValue={zone.name}
+        value={zoneNameShown(draft, zone.name)}
         maxLength={ZONE_NAME_MAX_LENGTH}
         spellCheck={false}
         autoComplete="off"
-        disabled={disabled}
         aria-label="Zone name"
+        onChange={(event) => {
+          setDraft(event.target.value);
+        }}
         onKeyDown={(event) => {
           event.stopPropagation();
           if (event.key === 'Enter') {
             commit();
             event.currentTarget.blur();
           } else if (event.key === 'Escape') {
-            event.currentTarget.value = zone.name;
+            // ABANDON. `drop` rather than `setDraft(null)` because the `blur()` below runs
+            // before any re-render and would otherwise commit the name Escape just gave up on.
+            drop();
             event.currentTarget.blur();
           }
         }}
         onKeyUp={(event) => {
           event.stopPropagation();
         }}
+        // The blur that DOES fire — Tab, or a click on something that does not keep focus. It is
+        // no longer the only hope, but it is still the cheapest and the most correct one.
         onBlur={commit}
       />
       <span className={s.zoneTiles}>

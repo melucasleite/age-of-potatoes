@@ -1,0 +1,24 @@
+{
+  "id": "item_bagged_sweetcorn_chips",
+  "provider": "local",
+  "model": "local:local/item_bagged_sweetcorn_chips.png",
+  "seed": null,
+  "prompt": "One 16x16 sealed bag of sweetcorn chips ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. The only green bag in the game, and leaf_LIGHT-bodied rather than leaf_mid for a measured reason: at leaf_mid it sat 22 lumas from the chili bag's red_mid and the two differed on FIFTEEN of 256 pixels once colour was thrown away — red and green, the oldest mistake there is, caught by the generator's own assertion on the first run. One rung up the ramp puts 59 lumas between them.",
+  "promptStyle": null,
+  "native": {
+    "width": 16,
+    "height": 16
+  },
+  "requested": {
+    "width": 16,
+    "height": 16
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "items",
+  "costUsd": 0,
+  "generatedAt": "2026-08-17T05:47:51.962Z"
+}

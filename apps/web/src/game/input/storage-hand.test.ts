@@ -23,6 +23,7 @@ import {
   createWorld,
   createWorldView,
   itemCount,
+  machineHoppers,
   machineSpec,
   step,
   view,
@@ -50,6 +51,13 @@ function standingOn(tileX: number, tileY: number): WorldView {
   return v;
 }
 
+/**
+ * `recipe` and `inputCapacity` are derived rather than omitted, exactly as `projectRecipe`
+ * would publish them for an empty machine (item 111): the hand's load branch reads the
+ * machine's hoppers now instead of a table of machine kinds, so a literal without them is a
+ * `MachineView` the sim could never emit. A box has no hoppers and gets `[]`, which is the
+ * whole point of the two Washer cases at the foot of this file — they are the control.
+ */
 function withMachine(
   v: WorldView,
   tileX: number,
@@ -58,6 +66,7 @@ function withMachine(
   cargoItem = 0,
   cargoCount = 0,
 ): WorldView {
+  const spec = machineSpec(kind as MachineKind);
   v.machines.push({
     id: 1,
     kind,
@@ -68,6 +77,15 @@ function withMachine(
     cargoItem,
     cargoCount,
     outputCount: 0,
+    inputCapacity: spec === null ? 0 : spec.inputCapacity,
+    recipe:
+      spec === null
+        ? []
+        : machineHoppers(spec).map((line) => ({
+            item: line.item,
+            perOperation: line.count,
+            count: 0,
+          })),
   } as WorldView['machines'][number]);
   return v;
 }

@@ -385,6 +385,105 @@
       "atlasGroup": "items"
     },
     {
+      "id": "item_washed_gold_potato",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 washed gold potato — the Washer's output on the premium base line ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. Deliberately the RUSSET line's own shape in a different ramp: item 111 prices the gold line as the plain line shifted by one flat $6.00 at every rung, and a player can only read that off the pictures if the rungs share a silhouette and differ in hue. Ask a diffusion model for a premium potato and you get a different potato, which is the one thing this tier must not say. The blue wet patch is borrowed exactly from item_washed_potato rather than reinvented: it is this family's existing signal for \"this has been through the Washer\", and it is the whole difference between this and the raw gold potato the player just harvested.",
+      "anchor": "center",
+      "atlasGroup": "items",
+      "trim": false,
+      "source": "local/item_washed_gold_potato.png"
+    },
+    {
+      "id": "item_gold_potato_slices",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 stack of gold potato slices — the Slicer's output on the premium base line ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. THREE fat discs against item_potato_slices' four thin ones, and that shape difference is load-bearing rather than decorative: the plain slices came back from the model already drawn in chip_gold, so saturation alone would have left the premium rung and the ordinary rung very nearly the same picture. A gold potato is the big tuber, so its slices are the big slices.",
+      "anchor": "center",
+      "atlasGroup": "items",
+      "trim": false,
+      "source": "local/item_gold_potato_slices.png"
+    },
+    {
+      "id": "item_gold_chips",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 heap of unseasoned gold crisps — the Fryer's output on the premium base line ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. Drawn as a base of one wide crisp with three smaller ones of DIFFERENT sizes standing in it: the first cut used three equal ellipses in a triangle and rendered as three eggs, because equal shapes at equal spacing read as a pattern and a pile is the opposite of a pattern. Palest of the six chip heaps, and the only one wearing no flavour mark — it is the rung before the Seasoner.",
+      "anchor": "center",
+      "atlasGroup": "items",
+      "trim": false,
+      "source": "local/item_gold_chips.png"
+    },
+    {
+      "id": "item_seasoned_gold_chips",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 heap of seasoned gold crisps — the Seasoner's output on the premium base line ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. The gold heap plus twelve red seasoning specks and the CROWN mark, which is the same 5x5 glyph item_bagged_gold_chips wears: a player learns crown-means-gold once and then reads it on the belt, in the hopper and in the bag. Twelve specks rather than a polite handful because the plain line already draws this same step as pale-gold-to-red-orange, and a seasoned rung that only whispered would be the one rung of the flavour line nobody could see had happened.",
+      "anchor": "center",
+      "atlasGroup": "items",
+      "trim": false,
+      "source": "local/item_seasoned_gold_chips.png"
+    },
+    {
+      "id": "item_bagged_gold_chips",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 sealed bag of gold chips — the premium line's finished good ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. The family's plain bag turns out to be FOUR colours and 104 opaque pixels, the whole red ramp and nothing else, which is why a flavoured bag is a recolour job rather than a drawing job. Amber-bodied with a dark red crown. Hand-authored because four bags now sit in one inventory grid and §42 is not satisfied by four hues — premium amber and chili red are near-identical under deuteranopia — so each bag carries a SHAPE, and the generator asserts the greyscale separation over every pair rather than trusting it.",
+      "anchor": "center",
+      "atlasGroup": "items",
+      "trim": false,
+      "source": "local/item_bagged_gold_chips.png"
+    },
+    {
+      "id": "item_chili_chips",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 heap of chili crisps ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. The hottest heap in the set: a red_bright pile under red_deep specks, wearing the PEPPER mark that item_bagged_chili_chips also wears. The pepper's single leaf_mid stem pixel is the only green in the chili line and is what stops the mark reading as a flame.",
+      "anchor": "center",
+      "atlasGroup": "items",
+      "trim": false,
+      "source": "local/item_chili_chips.png"
+    },
+    {
+      "id": "item_bagged_chili_chips",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 sealed bag of chili chips ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. Sits one rung DOWN the red ramp from the plain bag — red_mid-bodied where plain is red_bright-bodied — because two red bags in one grid must differ in VALUE, not in hue, or they are the same bag to a colourblind player. Carries the pepper mark in chip_gold.",
+      "anchor": "center",
+      "atlasGroup": "items",
+      "trim": false,
+      "source": "local/item_bagged_chili_chips.png"
+    },
+    {
+      "id": "item_sweetcorn_chips",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 heap of sweetcorn crisps ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. An amber heap under dark specks, wearing the COB mark that item_bagged_sweetcorn_chips also wears — a leaning ear with two husk leaves at its foot.",
+      "anchor": "center",
+      "atlasGroup": "items",
+      "trim": false,
+      "source": "local/item_sweetcorn_chips.png"
+    },
+    {
+      "id": "item_bagged_sweetcorn_chips",
+      "provider": "local",
+      "width": 16,
+      "height": 16,
+      "prompt": "One 16x16 sealed bag of sweetcorn chips ([[111]]) — authored from the master palette by art/tools/make-flavour-items.mjs. The only green bag in the game, and leaf_LIGHT-bodied rather than leaf_mid for a measured reason: at leaf_mid it sat 22 lumas from the chili bag's red_mid and the two differed on FIFTEEN of 256 pixels once colour was thrown away — red and green, the oldest mistake there is, caught by the generator's own assertion on the first run. One rung up the ramp puts 59 lumas between them.",
+      "anchor": "center",
+      "atlasGroup": "items",
+      "trim": false,
+      "source": "local/item_bagged_sweetcorn_chips.png"
+    },
+    {
       "id": "crop_cane_strip",
       "provider": "retro-diffusion",
       "width": 64,

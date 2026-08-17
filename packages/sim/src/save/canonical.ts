@@ -39,6 +39,7 @@ import {
   PARCELS_WIDE,
   SoilType,
   isParcelIndex,
+  machineHoppers,
   machineSpec,
 } from '../data';
 import type { RngState } from '../rng';
@@ -180,6 +181,12 @@ export interface SaveMachine {
   cargoCount: number;
   /** The `ItemId` on a delivery cart, or 0. One product per run. */
   cargoItem: number;
+  /**
+   * Freshness the cargo has left, in loose-equivalent ticks; 0 when it has none to lose (item
+   * 110). Format 18 gave every machine a 0 here, which reads as "no clock" and is deliberately
+   * the generous direction — an existing cellar's contents are not aged retroactively.
+   */
+  cargoFreshTicks: number;
   condition: number;
   cooldown: number;
   efficiencyLevel: number;
@@ -196,6 +203,12 @@ export interface SaveMachine {
   network: number;
   opCount: number;
   outputCount: number;
+  /**
+   * What the output buffer is holding, or 0 when it is empty (item 111). Format 19 wrote it for
+   * the first time; the 18 → 19 migration reads a non-empty buffer's identity back off the
+   * machine's spec, which is exactly where it lived before this field existed.
+   */
+  outputItem: number;
   overcookedCount: number;
   ports: SaveMachinePort[];
   progress: number;
@@ -542,6 +555,7 @@ export function toPayload(state: WorldState): SavePayload {
       boundZone: machine.boundZone,
       capacityLevel: machine.capacityLevel,
       cargoCount: machine.cargoCount,
+      cargoFreshTicks: machine.cargoFreshTicks,
       cargoItem: machine.cargoItem,
       condition: machine.condition,
       cooldown: machine.cooldown,
@@ -557,6 +571,7 @@ export function toPayload(state: WorldState): SavePayload {
       network: machine.network,
       opCount: machine.opCount,
       outputCount: machine.outputCount,
+      outputItem: machine.outputItem,
       overcookedCount: machine.overcookedCount,
       ports: machine.ports.map((port) => ({
         flowMlPerMinute: port.flowMlPerMinute,
@@ -948,7 +963,7 @@ function readInputCounts(
   kind: MachineKind,
 ): number[] {
   const spec = machineSpec(kind);
-  const slots = spec === null ? 0 : spec.inputs.length;
+  const slots = spec === null ? 0 : machineHoppers(spec).length;
   const raw = list(source, 'inputCounts', path);
   const counts: number[] = [];
   for (let i = 0; i < slots; i++) {
@@ -1248,10 +1263,12 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       progress: int(machine, 'progress', path),
       cargoItem: idInt(machine, 'cargoItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
       cargoCount: int(machine, 'cargoCount', path),
+      cargoFreshTicks: int(machine, 'cargoFreshTicks', path),
       runTicksRemaining: int(machine, 'runTicksRemaining', path),
       inputCounts: readInputCounts(machine, path, kind),
       ports: readPorts(machine, path, kind),
       outputCount: int(machine, 'outputCount', path),
+      outputItem: idInt(machine, 'outputItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
       tankMl: int(machine, 'tankMl', path),
       condition: int(machine, 'condition', path),
       opCount: int(machine, 'opCount', path),

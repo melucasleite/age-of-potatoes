@@ -1,4 +1,12 @@
-// WorldView → the dock card: which Grow Zone the Agri-Bot dock you are standing at is working.
+// WorldView → the dock card: what the bot dock you are standing at has been told, or — for the
+// one dock that is told nothing — what its robot is doing anyway.
+//
+// TWO SUBJECTS, ONE CARD, AND THE SPLIT IS THE POINT ([[107]]). A Harvester Dock and a Planter
+// Dock are configured by pointing them at a rectangle; a Drone Bay is not configured at all. Both
+// are `isBotDockKind`, both are machines you walk up to, and for three items this file used that
+// one predicate to decide who got a ZONE PICKER — so the bay asked for an instruction its robot
+// would never read. `dockTakesZone` below is the narrower question, and it is the one the picker
+// is actually asking.
 //
 // WHY THIS EXISTS AT ALL. `SetDockZone` has been in the sim since the bots landed and **no
 // surface in the game issued it** ([[038]]'s last gap), so a player could buy a $600 harvester
@@ -25,8 +33,14 @@
 // rather than a list of crop ids kept here ([[038]]'s instruction 4), and the reach test is the
 // bench's own exported mirror rather than a second copy of the geometry.
 
-import { cropSpec, distanceSquaredSubtiles, isBotDockKind, machineSpec } from '@snack/sim';
-import type { CropId, MachineKind, MachineView, WorldView } from '@snack/sim';
+import {
+  MachineKind,
+  cropSpec,
+  distanceSquaredSubtiles,
+  isBotDockKind,
+  machineSpec,
+} from '@snack/sim';
+import type { CropId, MachineView, WorldView } from '@snack/sim';
 
 // Relative rather than the `@/` alias, for the reason `derive-inventory.ts` states at length:
 // that path is a tsconfig resolution vitest cannot follow, and this module has a test.
@@ -36,37 +50,31 @@ import { machineLabel } from './tech-copy';
 import type { DockZoneOption } from './types';
 
 /**
- * What `dockZoneOf` returns when the projection does not carry a dock's orders.
+ * DOES THIS DOCK TAKE A ZONE — which is not the same question as "is this a dock" ([[107]]).
  *
- * **-1 IS NOT A ZONE AND IS NOT "UNBOUND" — IT IS "THE VIEW DID NOT SAY".** Zero already means
- * something specific and load-bearing in the sim (`Machine.boundZone === 0` is a dock with no
- * orders, whose bot parks), so a third state was needed rather than folding the unknown into it:
- * a card that printed "no zone" over a working dock would be contradicting a robot the player can
- * see walking across the field.
+ * **THE CONFLATION, AND WHY IT SHOWED UP AS A BUG THE OWNER COULD SEE.** `isBotDockKind` is true
+ * for all three dock kinds and is right to be: it means *a bot sleeps here*, which is what
+ * placement wants (`applyPlaceMachine` spawns the bot off it), what the bots' own geometry wants,
+ * and what item 088's seed-shelf gate wants. This card gated its ZONE PICKER on that predicate —
+ * and a picker is an answer to a different question. A Drone Bay has no zone and cannot have one:
+ * `advanceRepairDrone` chooses its next errand by scanning every machine on the lot for a wrench
+ * (`nextServiceTarget`) and never once reads `boundZone`. So the bay drew a rectangle-picker and
+ * a "No zone. Its bot has nothing to do" line over a drone that was working perfectly, which
+ * reads exactly like a machine idling until it is told something.
+ *
+ * The two farm docks are the whole of the yes: a zone IS a harvester's and a planter's entire
+ * instruction set (`bots.ts` returns early on `dock.boundZone === 0` for both).
+ *
+ * ⚠️ **HANDOFF — THE SIM HAS THE SAME CONFLATION AND IT IS NOT THIS LANE.** `applySetDockZone`
+ * (`tick.ts` ~1372) gates on `isBotDockKind` too, so it will happily accept a `SetDockZone`
+ * aimed at a Drone Bay and write a `boundZone` that nothing will ever read — a legal command
+ * that changes the hash and means nothing. Nothing dispatches it once this card stops offering
+ * one, so it is a latent trap rather than a live bug, but the honest fix is for this predicate
+ * to live beside `isBotDockKind` in `data.ts` and for the reducer to ask it. `packages/sim` is
+ * another agent's lane this run, so the predicate lives here and the sim's half is reported.
  */
-export const ZONE_UNKNOWN = -1;
-
-/**
- * The dock's bound zone, when the projection publishes it.
- *
- * ⚠️ **HANDOFF, AND IT IS THE ONE THING THIS FEATURE IS STILL SHORT.** `Machine.boundZone` is
- * real world state — it is in `state.ts`, in the hash, in the canonical save payload, and in the
- * format-11 migration — but `MachineView` does not carry it and `projectMachines` never reads it.
- * `GrabberView.filter` publishes exactly this kind of fact for exactly this kind of panel, so the
- * omission looks like an oversight rather than a decision. This lane is `apps/web/src/hud/**` and
- * `packages/sim/src/view.ts` belongs to another agent this run, so it is reported rather than
- * reached for — the same call the render lane made about `BotView` not being exported.
- *
- * The read is written so the field can land with **no edit here**: an unpublished field reports
- * `ZONE_UNKNOWN` and the card shows a picker with no claim about the present, and the moment
- * `boundZone: number` appears on `MachineView` the card starts naming the zone and saying "no
- * orders" when there are none. The cast goes through `unknown` deliberately — a typed optional
- * property would become a `number` the day the field lands, and `x === undefined` on a `number`
- * is a compile error, so the honest-looking version is the one that breaks the build later.
- */
-export function dockZoneOf(machine: MachineView): number {
-  const published = (machine as unknown as { readonly boundZone?: unknown }).boundZone;
-  return typeof published === 'number' ? published : ZONE_UNKNOWN;
+export function dockTakesZone(kind: MachineKind): boolean {
+  return kind === MachineKind.HarvesterDock || kind === MachineKind.PlanterDock;
 }
 
 /**
@@ -109,10 +117,12 @@ export interface DockFields {
   kind: number;
   label: string;
   planter: number;
+  takesZone: number;
   boundZone: number;
   boundName: string;
   botPhase: number;
   botConditionPermille: number;
+  serviceDue: number;
   zones: DockZoneOption[];
 }
 
@@ -122,10 +132,12 @@ export function createDockFields(): DockFields {
     kind: 0,
     label: '',
     planter: 0,
-    boundZone: ZONE_UNKNOWN,
+    takesZone: 0,
+    boundZone: 0,
     boundName: '',
     botPhase: -1,
     botConditionPermille: 0,
+    serviceDue: 0,
     zones: [],
   };
 }
@@ -135,20 +147,29 @@ function clear(out: DockFields): DockFields {
   out.kind = 0;
   out.label = '';
   out.planter = 0;
-  out.boundZone = ZONE_UNKNOWN;
+  out.takesZone = 0;
+  out.boundZone = 0;
   out.boundName = '';
   out.botPhase = -1;
   out.botConditionPermille = 0;
+  out.serviceDue = 0;
   out.zones = [];
   return out;
 }
 
 /**
- * The dock the player is standing at, and every zone it could be pointed at.
+ * The dock the player is standing at, and — for the two that take one — every zone it could be
+ * pointed at.
  *
  * Nearest-within-reach, which is `deriveBench`'s rule and uses `deriveBench`'s exported helpers —
  * one mirror of the sim's reach geometry in this package is a mirror that can be checked, and two
  * are two that can disagree.
+ *
+ * **THE SUBJECT IS STILL ALL THREE DOCKS; THE ZONE LIST IS NOT** ([[107]]). The bay is a machine
+ * the player walks up to and it should say something when they do, so it keeps the card and the
+ * reach rule. What it does not keep is the picker, and the list is left empty rather than filled
+ * and hidden: an empty list is what the store already compares cheaply, and a bay that carried
+ * eight zone options it would never offer would be one refactor away from offering them again.
  */
 export function deriveDock(view: WorldView, out: DockFields): DockFields {
   let best: MachineView | null = null;
@@ -172,11 +193,18 @@ export function deriveDock(view: WorldView, out: DockFields): DockFields {
   if (best === null) return clear(out);
 
   const spec = machineSpec(best.kind as MachineKind);
-  const boundZone = dockZoneOf(best);
+  const takesZone = dockTakesZone(best.kind as MachineKind);
+  // Read straight off the projection since [[107]]: `MachineView.boundZone` is published by
+  // `projectMachines` and 0 is the sim's own "no orders". The defensive `dockZoneOf` read that
+  // stood here was written against a build where the field had not landed yet, and it had been
+  // out of date for three items. A bay's value is not read at all — a legacy save can carry a
+  // non-zero one, because the reducer used to accept the command this card used to offer, and
+  // it means exactly as much now as it meant then, which is nothing.
+  const boundZone = best.boundZone;
 
   const zones: DockZoneOption[] = [];
   let boundName = '';
-  for (const zone of view.zones) {
+  for (const zone of takesZone ? view.zones : []) {
     const crop = cropSpec(zone.crop as CropId);
     zones.push({
       id: zone.id,
@@ -208,12 +236,34 @@ export function deriveDock(view: WorldView, out: DockFields): DockFields {
     break;
   }
 
+  // WHAT THE BAY'S CARD IS ABOUT INSTEAD OF ZONES: how much of the lot is waiting for a wrench.
+  //
+  // `MachineView.wrenchDue` is the sim's OWN answer — `view.ts` sets it from the same clause
+  // `machineWantsService` uses, jam included — so this is a count of the projection rather than a
+  // second opinion about when a machine is due. It is the drone's actual queue: `nextServiceTarget`
+  // scans exactly these machines. Counted only for the bay, because a harvester dock's card has no
+  // room for it and no use for it.
+  let serviceDue = 0;
+  if (!takesZone) {
+    for (const machine of view.machines) {
+      if (machine.wrenchDue === 1) serviceDue += 1;
+    }
+  }
+
   out.machineId = best.id;
   out.kind = best.kind;
   out.label = machineLabel(best.kind);
-  // Which dock this is, asked of the sim's own spec rather than of the kind: the planter is the
-  // one with a seed hopper, and `inputCapacity` is where that fact already lives.
-  out.planter = spec !== null && spec.inputCapacity > 0 ? 1 : 0;
+  // Which of the two ZONE docks this is, asked of the sim's own spec rather than of the kind: the
+  // planter is the one with a seed hopper, and `inputCapacity` is where that fact already lives.
+  //
+  // ⚠️ THE `takesZone` GUARD IS NOT BELT AND BRACES ([[107]]). The Drone Bay's `inputCapacity` is
+  // 12 — frozen balance data from the parts hopper item 090 retired, deliberately left in the
+  // table so a boxed bay still prices — so the spec question alone answers "yes, a hopper" about
+  // a machine with no door. Asking it only of the docks the flag is about is what keeps a stale
+  // number from quietly becoming a claim.
+  out.planter = takesZone && spec !== null && spec.inputCapacity > 0 ? 1 : 0;
+  out.takesZone = takesZone ? 1 : 0;
+  out.serviceDue = serviceDue;
   out.boundZone = boundZone;
   out.boundName = boundName;
   out.botPhase = botPhase;
