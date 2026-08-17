@@ -26,6 +26,7 @@ import { firstRunSigns, hotbarDigit } from './first-run';
 import { publishGrabberPanel, resetGrabberPanel } from './grabber-panel';
 import { KeyboardInput } from './keyboard';
 import { publishLod, viewLod, zoomInIndex, zoomOutIndex } from './lod';
+import { publishPauseMenu, registerPauseMenuHooks } from './pause-panel';
 import { PointerInput } from './pointer';
 import { DEFAULT_CROP, ToolMode } from './tools';
 
@@ -174,6 +175,21 @@ export class InputSystem {
   private cheatPending: { code: string; before: number; issuedViewTick: number } | null = null;
   private unregisterDebugHooks: (() => void) | null = null;
 
+  // --- the pause menu's state, owned here since [[126]] --------------------------------------
+  //
+  // The same split the two panels above use: the SURFACE is the HUD's (`hud/PauseMenu.tsx`,
+  // off `pause-panel.ts`'s snapshot), the KEY and the MODALITY are this layer's. It is the
+  // one panel that is modal over everything — see `keyboard.ts`'s pause guard — and the one
+  // whose open flag anything outside this layer reads, because `GameHost.frame` asks it
+  // whether to call `step()` at all.
+  //
+  // A BOOLEAN IN THE INPUT LAYER, NEVER A FIELD IN `WorldState` (§12). The sim replays twenty
+  // golden fixtures to pinned hashes; a pause flag in the world would put a menu into every
+  // one of those hashes. Pausing is the host declining to advance the clock, which is the
+  // only way to stop a deterministic sim without telling it a lie it would then record.
+  private pauseVisible = false;
+  private unregisterPauseHooks: (() => void) | null = null;
+
   constructor(private readonly host: InputHost) {
     this.chrome = new InputChrome(host.overlayRoot, host.camera);
     this.pointer = new PointerInput(host, this);
@@ -195,6 +211,11 @@ export class InputSystem {
       submitCode: (code) => this.submitCheatCode(code),
       close: () => this.closeDebugPanel(),
     });
+    // The pause menu's one door ([[126]]): Resume and the ESC button both come through here,
+    // so the menu can only ever be shut by the same code path the Escape cascade uses.
+    this.unregisterPauseHooks = registerPauseMenuHooks({
+      close: () => this.closePauseMenu(),
+    });
     this.publishDebug();
     // The camera ships at `DEFAULT_ZOOM_INDEX`; publish it so the renderer's LOD flag is
     // right on frame one rather than on the first scroll wheel notch. Same for the armed
@@ -206,6 +227,11 @@ export class InputSystem {
   detach(): void {
     this.closeBuildMenu();
     this.closeDebugPanel();
+    // A pause menu left open across a host swap would dim a world that is not there — and,
+    // worse, would still be showing when the next one boots, over a lot the player never
+    // paused. The exit path relies on this: Save & Exit tears the host down while the menu
+    // is up, and this is what puts it away.
+    this.closePauseMenu();
     // The grabber card names an arm by id, and ids are per-world ([[099]]). A card left open
     // across a host swap would point at whatever arm the NEXT lot happened to number the same.
     resetGrabberPanel();
@@ -213,6 +239,8 @@ export class InputSystem {
     this.unregisterMenuHooks = null;
     this.unregisterDebugHooks?.();
     this.unregisterDebugHooks = null;
+    this.unregisterPauseHooks?.();
+    this.unregisterPauseHooks = null;
     this.cheatPending = null;
     this.pointer.detach();
     this.keyboard.detach();
@@ -450,6 +478,44 @@ export class InputSystem {
       this.cheatRejected,
       this.lastRejectedCode,
     );
+  }
+
+  // --- the pause menu ([[126]]) --------------------------------------------------------------
+
+  /**
+   * Is the world stopped. `GameHost.frame` reads this once a frame and skips `step()`.
+   *
+   * THE ONLY THING OUTSIDE THIS LAYER THAT READS A PANEL'S OPEN FLAG, and it is worth being
+   * explicit about why that is allowed: the host is not rendering the menu or deciding
+   * anything about it, it is being told whether to advance its own clock. Pause has to live
+   * where the clock is, and the clock is `GameHost`.
+   */
+  get paused(): boolean {
+    return this.pauseVisible;
+  }
+
+  /**
+   * The bottom rung of the Escape cascade: nothing open, the hand empty, so stop the world.
+   *
+   * THE CHARACTER STOPS WALKING, ONCE, HONESTLY — the build menu's own courtesy
+   * (`toggleBuildMenu`) for the same reason and by the same call. It emits one
+   * `SetMoveDirection None`, which sits in the queue until the first tick after resume and
+   * is exactly what the player asked for: they pressed Escape while walking, so they are not
+   * walking any more. Without it, resume would hand the sim a stale held direction and the
+   * farmer would set off across the lot on his own.
+   */
+  openPauseMenu(): void {
+    if (this.pauseVisible) return;
+    this.keyboard.stopWalking();
+    this.pauseVisible = true;
+    publishPauseMenu(true);
+  }
+
+  /** Resume, by any route: Escape, the ESC button, the Resume button, or a host teardown. */
+  closePauseMenu(): void {
+    if (!this.pauseVisible) return;
+    this.pauseVisible = false;
+    publishPauseMenu(false);
   }
 
   // --- cursor state ------------------------------------------------------------------------

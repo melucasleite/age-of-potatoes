@@ -264,17 +264,21 @@ describe('every machine the sim ships ([[100]])', () => {
  * trade [[100]] is making; the frames are an art-lane errand and this list is the reminder.
  */
 const KNOWN_FRAMELESS: readonly ToolMode[] = [
-  ToolMode.PlaceDroneBay,
-  ToolMode.PlaceSixPacker,
-  ToolMode.PlaceComboPacker,
-  // [[101]]'s three. Seven of its ten machines — pump, tank, juicer, kettle, syrup mixer,
-  // carbonator, bottler — have finished 32×32 frames that have been sitting in the atlas
-  // unreachable, and `pipe_straight` is there too. These are the only gaps, and the two piped
-  // heads are the ones that sting: they sit in the Field group directly under a barrel
-  // Sprinkler that draws beautifully.
-  ToolMode.PlacePipedSprinkler,
-  ToolMode.PlaceIrrigationHub,
+  // [[101]] left three here, and the two that stung are GONE — the art lane drew
+  // `machine_piped_sprinkler` (32×32) and `machine_irrigation_hub` (64×64, sized to its 2×2
+  // footprint) on the owner's 2026-08-17 reskin ask, so the Field group no longer seats two
+  // grey boxes beside a barrel Sprinkler that draws beautifully. This is the list shortening
+  // exactly the way the fixture story above says it should.
+  //
+  // The Recirculator is what remains of that three: still no `machine_recirculator` in
+  // `art/manifest.json`.
   ToolMode.PlaceRecirculator,
+  // [[130]]. The Artesian Well shipped with the sim change that needed it rather than waiting
+  // for a sprite, which is the trade [[100]] already made three rows above: a lettered chip on a
+  // machine that ends a water shortage beats a beautiful machine nobody can build. The world
+  // draws it via `registerMachinePlaceholders` like every other frameless kind. `machine_artesian_well`
+  // is an art-lane errand and this line is the reminder.
+  ToolMode.PlaceArtesianWell,
 ];
 
 describe('the build menu icons ([[071]])', () => {

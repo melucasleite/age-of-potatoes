@@ -334,14 +334,50 @@ export class PointerInput {
     this.hover = tile;
     this.host.setHover(tile);
 
-    // Right button: cancel a drag, a paint hold, or a working queue, otherwise maintenance.
+    /*
+      Right button: cancel a drag, a paint hold, or a working queue — OTHERWISE TEAR DOWN
+      WHAT IS UNDER THE CURSOR ([[129]]).
+
+      THE CANCEL RUNG STAYS FIRST, AND THAT ORDER IS THE WHOLE SAFETY ARGUMENT. It is the same
+      reasoning as the Escape cascade in `escape.ts`: a half-drawn belt run is the thing the
+      player wants back before anything else, and a teardown that ate the cancel press would
+      DESTROY work in the exact moment the player asked to undo it. Cancel is not merely
+      higher priority than teardown; it is the one rung that must never be reachable past.
+
+      THE VERB THIS REPLACED WAS MAINTENANCE, and it did not lose its home — it moved to the
+      machine's own card, first row, with its price on the button (`derive-service.ts`). The
+      owner's ruling, verbatim: *"Make it teardown, maintenance by bots or clicking the machine
+      has a maintenance at the top with a dollar cost."* Bots were already the automated route
+      ([[034]], [[039]], [[090]]); the card is the manual one. Nothing about repair is a
+      keybinding any more, deliberately.
+
+      ONE PICKING RULE, NOT TWO — `teardownCommands` IS THE ARMED TOOL'S OWN CLICK PATH, called
+      with the same 1×1 rect a left-click on the armed tool builds. Not a parallel
+      implementation that agrees today: the identical function, so "what is under the cursor"
+      has exactly one answer on a belt/pipe crossing ([[120]]) and the two gestures cannot
+      drift into deleting different objects. It carries `loneMachineTile`'s walk-to errand with
+      it, which is how `reachAdjusted` behaviour survives the swap — a right-click on a Fryer
+      across the lot still walks there, exactly as the maintenance press used to.
+
+      SAFE ON A NAKED BUTTON BECAUSE NOTHING IS DESTROYED ([[054]]): a machine goes into the bag
+      as a box carrying its dials and its wear, and a belt, arm or pipe is refunded in full. A
+      misclick costs a walk and a re-place, never a rebuild — which is why this needs no confirm
+      and gets none. The one thing with no box is the sell bin, and `teardownTargetAt` already
+      ships NO COMMAND for it rather than a refusal.
+    */
     if (event.button === 2) {
       if (this.drag !== null || this.hold !== null || this.queueWorking || this.panReserved) {
         this.cancelDrag();
         return;
       }
-      const command = maintenanceCommand(view, tile);
-      if (command !== null) this.host.queue.push(reachAdjusted(view, tile, command));
+      const commands = teardownCommands(view, {
+        kind: 'rect',
+        x: tile.tileX,
+        y: tile.tileY,
+        w: 1,
+        h: 1,
+      });
+      for (let i = 0; i < commands.length; i++) this.host.queue.push(commands[i]!);
       return;
     }
 
@@ -2052,14 +2088,14 @@ export function machineTell(view: WorldView | null, tile: HoverTile | null): str
   return null;
 }
 
-/** Right click: maintenance, on whatever machine is under the cursor. */
-export function maintenanceCommand(view: WorldView, tile: HoverTile): Command | null {
-  const query = tileAtView(view, tile.tileX, tile.tileY);
-  const machine = query.machine;
-  if (machine === null) return null;
-  if (isJammed(machine)) return { type: 'WhackJam', machineId: machine.id };
-  return { type: 'RepairMachine', machineId: machine.id };
-}
+/*
+  `maintenanceCommand` STOOD HERE AND IS GONE ([[129]]). It was the right button's second rung
+  — jammed → `WhackJam`, otherwise `RepairMachine` — and the right button now tears down. The
+  rule itself did not die: it is `serviceCommand` in `hud/derive-service.ts`, unchanged to the
+  branch, driving the first row of the machine's own card where the price can be read off the
+  button. Deleted rather than left exported, because a repair verb the pointer no longer has any
+  business with is exactly the kind of second door that drifts out of step with the first.
+*/
 
 /**
  * The Hand verb for a machine. One command, chosen from what the machine most obviously

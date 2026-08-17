@@ -364,7 +364,25 @@ export type StyleName =
   | 'welcomeStatLabel'
   | 'welcomeStatValue'
   | 'welcomeStatWarn'
-  | 'welcomeNote';
+  | 'welcomeNote'
+  // --- the pause menu ([[126]]) ---
+  // The sixth panel, and the only MODAL one: it brings a scrim, which the stylesheet's own
+  // `.winPanel` header goes out of its way to say the other five never do. Everything else
+  // in it is the house frame (`PanelWindow`) plus a stack of verbs and a farmer picker.
+  | 'pauseScrim'
+  | 'pauseWin'
+  | 'pauseBody'
+  | 'pauseActions'
+  | 'pauseButton'
+  | 'pauseButtonPrimary'
+  | 'pauseButtonNote'
+  | 'pauseSection'
+  | 'pauseSectionHead'
+  | 'pauseAvatars'
+  | 'pauseAvatar'
+  | 'pauseAvatarOn'
+  | 'pauseAvatarArt'
+  | 'pauseAvatarBlank';
 
 export const s = raw as Readonly<Record<StyleName, string>>;
 

@@ -1,0 +1,24 @@
+{
+  "id": "machine_piped_sprinkler",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1988939216,
+  "prompt": "a bold simple icon of a piped sprinkler head seen from directly above, one thick square dark grey metal base plate, one bright blue dome in the centre, one very thick dark blue pipe running from the base plate straight off the bottom edge of the frame, four short fat blue water jets pointing outward at the diagonals, flat top-down view, very large solid areas of flat colour, thick heavy shapes, no thin lines, no small details, no droplets, no speckles, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 32,
+    "height": 32
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-17T20:38:55.073Z"
+}

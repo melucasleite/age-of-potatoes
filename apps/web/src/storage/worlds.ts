@@ -224,6 +224,35 @@ export function peekMoneyCents(payload: unknown): number | null {
   return typeof money === 'number' && Number.isInteger(money) ? money : null;
 }
 
+/**
+ * Change which farmer walks the ACTIVE lot ([[126]]) — the pause menu's avatar picker, as a
+ * pure registry-to-registry function.
+ *
+ * IT IS PURE FOR RULE 3'S REASON, stated in this file's header: the pure part is separated
+ * from the database part on purpose, because there is no IndexedDB in this workspace's test
+ * environment and anything welded to `getDb` is a decision no test can reach. `planLegacyAdoption`
+ * above is the precedent. What is worth pinning here is small but genuinely silent when wrong:
+ * a patch that dropped a sibling field would undress the farmer, and a validation hole would
+ * write a half-integer avatar id that `avatarWalkFrame` then refuses forever.
+ *
+ * THE SAME FIELD THE FRONT DOOR SETS, PATCHED THE SAME WAY. `createWorldRecord` puts the avatar
+ * on the record at new-game time; this puts a different one there mid-game, through `withWorld`
+ * like every other patch in this file. The avatar is cosmetic envelope metadata and lives on the
+ * registry record, never in `WorldState` (see `WorldRecord.avatar` in `db.ts`), so a change here
+ * touches no save payload at all.
+ *
+ * Returns the registry to write, the SAME registry when the pick is already the live one (so the
+ * caller can skip a pointless write), or null when there is nobody to dress — a fresh page with
+ * no active world, or an id that is not a whole non-negative number.
+ */
+export function planAvatarChange(registry: WorldRegistry, avatar: number): WorldRegistry | null {
+  if (!Number.isInteger(avatar) || avatar < 0) return null;
+  const world = findWorld(registry, registry.activeId);
+  if (world === null || world.deletedAt !== null) return null;
+  if (world.avatar === avatar) return registry;
+  return withWorld(registry, world.id, { avatar });
+}
+
 export interface LegacyDisk {
   /** The bare `current` envelope, if a pre-registry database left one. */
   current: SaveEnvelope | undefined;
@@ -579,6 +608,27 @@ export async function touchWorld(id: string, summary: WorldSummary): Promise<voi
   } catch (error) {
     logWarn('Could not update the world card after saving.', error);
   }
+}
+
+/**
+ * The database half of `planAvatarChange` — the pause menu's picker, committed ([[126]]).
+ *
+ * IT DOES NOT DRAW ANYTHING. The live swap is `publishAvatar` on the renderer's seam, and the
+ * caller does both in that order: picture first, then disk. That ordering is what makes a slow
+ * or failed write cost the player nothing — the farmer has already changed on screen, and the
+ * worst case is a preference that does not survive a reload.
+ *
+ * Returns whether a live active world took it. False for a fresh page with no world, which is
+ * not an error: it is the front door, where the new-game picker does this job instead.
+ */
+export async function setActiveWorldAvatar(avatar: number): Promise<boolean> {
+  const registry = await readRegistry();
+  const next = planAvatarChange(registry, avatar);
+  if (next === null) return false;
+  // Identity means "already wearing it" — see `planAvatarChange`. Re-picking the farmer you
+  // are already dressed as must not cost a registry write on every click.
+  if (next !== registry) await writeRegistry(next);
+  return true;
 }
 
 export async function renameWorld(id: string, name: string): Promise<void> {

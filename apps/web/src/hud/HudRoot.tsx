@@ -53,6 +53,9 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
 import { onPanelRequest } from '@/game/input/panels';
+// The modal's open flag, for the two key effects at the bottom of this file. `PauseMenu`
+// itself subscribes; these want a plain boolean inside a keydown handler ([[126]]).
+import { pauseMenuOpen } from '@/game/input/pause-panel';
 
 import { BuildMenuPanel } from './BuildMenu';
 import { toggleBuildPanel } from './build-row';
@@ -83,9 +86,11 @@ import {
   togglePanel,
 } from './panel-state';
 import type { PanelName } from './panel-state';
+import { PauseMenu } from './PauseMenu';
 import { cx, s } from './styles';
 import { Pouch } from './Pouch';
 import { SaveNotices } from './SaveNotices';
+import { ServiceCard } from './ServiceCard';
 import { ShopPanel, ShopToggle } from './Shop';
 import { StatusRibbon } from './StatusRibbon';
 import { TechPanel, TechToggle } from './TechTree';
@@ -122,7 +127,29 @@ export default function HudRoot() {
   return (
     <>
       <SaveNotices />
-      <div className={s.root}>
+      {/*
+        NO NATIVE CONTEXT MENU OVER THE HUD EITHER ([[129]]).
+
+        `pointer.ts` has suppressed `contextmenu` on the CANVAS since right-click had a verb at
+        all — and only on the canvas, which was survivable while that verb was maintenance and
+        nobody reached for it. Right-click is teardown now, so it is a gesture players make
+        constantly and aim at things near the edges; overshoot onto the dock by four pixels and
+        the browser's own menu opens over the lot. Measured before it was fixed: a `contextmenu`
+        event on the canvas came back `defaultPrevented`, one on the sidebar did not.
+
+        NOT ON `document`, and NOT OVER TEXT FIELDS. The one text input in the HUD is item 075's
+        cheat console, and a right-click there should still offer Paste — swallowing it would
+        trade one papercut for another in the single place a player types rather than clicks.
+      */}
+      <div
+        className={s.root}
+        onContextMenu={(event) => {
+          const target = event.target as HTMLElement | null;
+          const tag = target?.tagName;
+          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          event.preventDefault();
+        }}
+      >
         {/*
         THE DOCK. Width from `layout.ts`'s `sidebarWidth()` — inline so the number has exactly
         one home and `GameCanvas` computes its own edge from the same function, never from
@@ -272,6 +299,27 @@ export default function HudRoot() {
             </div>
           )}
         </div>
+
+        {/*
+        THE PAUSE MENU ([[126]]) — the sixth panel, and the one that breaks this file's rules
+        on purpose, which is why it is HERE rather than in the stage above.
+
+        Item 069's rule is that nothing covers the lot, amended by 089/093 for the five
+        floating panels, which live in `.stage` and therefore never cover the DOCK either.
+        This one covers both, and is a child of `.root` to do it. The argument is that the
+        two halves of the screen stop being different while the world is stopped: the dock
+        exists to be read and acted on WHILE PLAYING, and a scrim over the stage alone would
+        have left every panel row live under a dimmed lot — clicking one would have opened a
+        panel into `.floatWin`, beneath the scrim, invisible, waiting for the player on
+        resume. See `.pauseScrim` for the rest of that argument.
+
+        IT IS NOT PART OF THE `panel-state.ts` SINGLE-OPEN INVARIANT, and does not need to
+        be: its truth lives in the input layer beside the build menu's, and the Escape
+        cascade can only open it with every one of the five already shut (`escape.ts`).
+
+        It renders null unless the world is stopped, so the common case is one boolean read.
+      */}
+        <PauseMenu />
       </div>
     </>
   );
@@ -335,6 +383,21 @@ function MachineCards({
       // and a 416 typed into the stylesheet is the second constant item 069 warned about.
       style={floating ? { width: sidebarBodyWidth() } : undefined}
     >
+      {/*
+        MAINTENANCE FIRST, AND "FIRST" IS THE REQUIREMENT ([[129]]). The owner's ruling puts a
+        priced maintenance action at the TOP of the machine's card, so the card that carries it
+        is the top line of this list rather than a row tucked inside one of the three below.
+
+        IT IS ALSO THE ONLY PLACE IT COULD HAVE GONE. The bench takes machines with a work cycle
+        and the dock card takes Agri-Bot docks; the two machines that WEAR OUT with neither card
+        between them are the Sprinkler and — with some irony — the Maintenance Station. A
+        maintenance row hosted inside either sibling would have missed exactly the machines whose
+        repair the player now has no other route to, right after the route they had was taken
+        away from them.
+
+        This is the fourth card, and it cost the one line the comment above promised.
+      */}
+      <ServiceCard />
       <UpgradeBench onOpenResearch={onOpenResearch} />
       <DockCard />
       <GrabberCard />
@@ -395,6 +458,10 @@ function useSidebar(): boolean {
     const onKey = (event: KeyboardEvent): void => {
       if (event.repeat) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      // Nothing but Escape while the world is stopped ([[126]]). The input layer has its own
+      // pause guard, but these are the HUD'S OWN window listeners and it cannot speak for
+      // them — without this line, `[` would fold the dock out from under a modal scrim.
+      if (pauseMenuOpen()) return;
       if (event.code === SIDEBAR_TOGGLE_CODE) toggleSidebar();
     };
     window.addEventListener('keydown', onKey);
@@ -525,6 +592,10 @@ function usePanels(): {
       // Auto-repeat is not a state edge — holding the key must not strobe the panel.
       if (event.repeat) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      // The modal's half of the guard ([[126]]): T, G, I and Z are inert while the world is
+      // stopped, or a player could open the bag BEHIND a scrim that dims it and take clicks
+      // in front of it. The input layer's pause guard covers its own keys and not these.
+      if (pauseMenuOpen()) return;
       if (event.code === 'KeyT') togglePanel('research');
       else if (event.code === 'KeyG') togglePanel('shop');
       else if (event.code === 'KeyI') togglePanel('bag');

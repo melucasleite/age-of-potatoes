@@ -561,12 +561,45 @@ export interface DockSlice {
   readonly zones: readonly DockZoneOption[];
 }
 
+/**
+ * The maintenance card ([[129]]) — repair's manual home, now that the right button tears down.
+ *
+ * WHY IT IS ITS OWN SLICE RATHER THAN FIELDS ON `BenchSlice`: the bench takes machines with a
+ * work cycle and the dock card takes Agri-Bot docks, and the two machines that wear out with NO
+ * card between them are the Sprinkler and — with some irony — the Maintenance Station. A
+ * maintenance row hosted inside either card would have missed exactly the machines whose
+ * maintenance the player has no other route to. Its subject is picked by `deriveService`, on the
+ * sim's own two facts about wear; see `derive-service.ts` for that argument in full.
+ */
+export interface ServiceSlice {
+  readonly version: number;
+  /** 0 when the player is not standing at a machine maintenance means anything for. */
+  readonly machineId: number;
+  readonly label: string;
+  readonly conditionPermille: number;
+  /** 1 while jammed — the free button becomes a whack, exactly as right-click's rung did. */
+  readonly jammed: number;
+  /** The sim's own "this one wants a wrench": under threshold, or a docked bot that does. */
+  readonly wrenchDue: number;
+  /** Agri-Bots asleep here below full condition. Repairing the shed repairs them ([[090]]). */
+  readonly botsWanting: number;
+  /** Where a kit gets spent: the footprint tile nearest the player, so reach cannot fail. */
+  readonly kitTileX: number;
+  readonly kitTileY: number;
+  /** One kit at the stand's list price. THE NUMBER ON THE BUTTON, by the owner's ruling. */
+  readonly kitPriceCents: number;
+  readonly kitsHeld: number;
+  /** 1 when the free hand pulse would actually do something — a mirror of the reducer. */
+  readonly handUseful: number;
+}
+
 export interface HudSnapshot {
   readonly economy: EconomySlice;
   readonly pouch: PouchSlice;
   readonly tools: ToolSlice;
   readonly clipboard: ClipboardSlice;
   readonly tech: TechSlice;
+  readonly service: ServiceSlice;
   readonly bench: BenchSlice;
   readonly dock: DockSlice;
   readonly lot: LotSlice;
@@ -629,6 +662,21 @@ export const ZERO_TECH: TechSlice = Object.freeze({
   ownedCount: 0,
   era: 1,
   frontierId: null,
+});
+
+export const ZERO_SERVICE: ServiceSlice = Object.freeze({
+  version: 0,
+  machineId: 0,
+  label: '',
+  conditionPermille: 0,
+  jammed: 0,
+  wrenchDue: 0,
+  botsWanting: 0,
+  kitTileX: 0,
+  kitTileY: 0,
+  kitPriceCents: 0,
+  kitsHeld: 0,
+  handUseful: 0,
 });
 
 export const ZERO_BENCH: BenchSlice = Object.freeze({
@@ -711,6 +759,7 @@ export const ZERO_SNAPSHOT: HudSnapshot = Object.freeze({
   tools: ZERO_TOOLS,
   clipboard: ZERO_CLIPBOARD,
   tech: ZERO_TECH,
+  service: ZERO_SERVICE,
   bench: ZERO_BENCH,
   dock: ZERO_DOCK,
   lot: ZERO_LOT,

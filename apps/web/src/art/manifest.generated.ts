@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.c40cbf71.png';
-export const ATLAS_JSON_URL = '/art/atlas.c40cbf71.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.2bb5dba5.png';
+export const ATLAS_JSON_URL = '/art/atlas.2bb5dba5.json';
 
 export const ATLAS_SIZE = { width: 1024, height: 1024 } as const;
 
@@ -790,7 +790,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_composter: {
+  machine_combo_packer: {
     x: 292,
     y: 271,
     width: 64,
@@ -798,15 +798,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_delivery_cart: {
-    x: 520,
-    y: 336,
-    width: 32,
-    height: 32,
-    anchor: 'bottom-center',
-    group: 'machines',
-  },
-  machine_fryer: {
+  machine_composter: {
     x: 357,
     y: 271,
     width: 64,
@@ -814,7 +806,15 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_grinder: {
+  machine_delivery_cart: {
+    x: 780,
+    y: 336,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_drone_bay: {
     x: 422,
     y: 271,
     width: 64,
@@ -822,15 +822,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_hand_cart: {
-    x: 553,
-    y: 336,
-    width: 32,
-    height: 32,
-    anchor: 'bottom-center',
-    group: 'machines',
-  },
-  machine_harvester_dock: {
+  machine_fryer: {
     x: 487,
     y: 271,
     width: 64,
@@ -838,7 +830,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_juicer: {
+  machine_grinder: {
     x: 552,
     y: 271,
     width: 64,
@@ -846,7 +838,15 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_kettle: {
+  machine_hand_cart: {
+    x: 813,
+    y: 336,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_harvester_dock: {
     x: 617,
     y: 271,
     width: 64,
@@ -854,7 +854,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_kola_tree: {
+  machine_irrigation_hub: {
     x: 682,
     y: 271,
     width: 64,
@@ -862,7 +862,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_lemon_tree: {
+  machine_juicer: {
     x: 747,
     y: 271,
     width: 64,
@@ -870,7 +870,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_maintenance_station: {
+  machine_kettle: {
     x: 812,
     y: 271,
     width: 64,
@@ -878,7 +878,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_orange_tree: {
+  machine_kola_tree: {
     x: 877,
     y: 271,
     width: 64,
@@ -886,7 +886,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_planter_dock: {
+  machine_lemon_tree: {
     x: 942,
     y: 271,
     width: 64,
@@ -894,7 +894,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_pump: {
+  machine_maintenance_station: {
     x: 0,
     y: 336,
     width: 64,
@@ -902,7 +902,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_root_cellar: {
+  machine_orange_tree: {
     x: 65,
     y: 336,
     width: 64,
@@ -910,7 +910,15 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_seasoner: {
+  machine_piped_sprinkler: {
+    x: 846,
+    y: 336,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_planter_dock: {
     x: 130,
     y: 336,
     width: 64,
@@ -918,7 +926,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_slicer: {
+  machine_pump: {
     x: 195,
     y: 336,
     width: 64,
@@ -926,15 +934,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_sprinkler: {
-    x: 586,
-    y: 336,
-    width: 32,
-    height: 32,
-    anchor: 'bottom-center',
-    group: 'machines',
-  },
-  machine_syrup_mixer: {
+  machine_root_cellar: {
     x: 260,
     y: 336,
     width: 64,
@@ -942,7 +942,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_tank: {
+  machine_seasoner: {
     x: 325,
     y: 336,
     width: 64,
@@ -950,7 +950,7 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_truck_depot: {
+  machine_six_packer: {
     x: 390,
     y: 336,
     width: 64,
@@ -958,8 +958,48 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
-  machine_washer: {
+  machine_slicer: {
     x: 455,
+    y: 336,
+    width: 64,
+    height: 64,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_sprinkler: {
+    x: 879,
+    y: 336,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_syrup_mixer: {
+    x: 520,
+    y: 336,
+    width: 64,
+    height: 64,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_tank: {
+    x: 585,
+    y: 336,
+    width: 64,
+    height: 64,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_truck_depot: {
+    x: 650,
+    y: 336,
+    width: 64,
+    height: 64,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
+  machine_washer: {
+    x: 715,
     y: 336,
     width: 64,
     height: 64,

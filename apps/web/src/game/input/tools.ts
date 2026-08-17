@@ -256,6 +256,17 @@ export const ToolMode = {
   ApplyFertilizer: 51,
 
   /**
+   * **THE ARTESIAN WELL** ([[130]]) — the one row in the palette that buys more water rather
+   * than a better way to spend it.
+   *
+   * A plain `PlaceMachine` on a 1×1, no new gesture, no `pointer.ts` branch: it is here because
+   * a `ToolMode` is the difference between a machine that exists and a machine a player can
+   * build, and the audit behind [[100]]–[[105]] found fifteen machines that had everything else
+   * and not this. Wired in the same pass as the spec, not the next one.
+   */
+  PlaceArtesianWell: 52,
+
+  /**
    * **RETIRED** (item 090). The Parts Bench left the build catalogue when repair drones started
    * fixing machines for free, so this tool has no `BUILD_ROWS` entry, no `PLACE_TOOLS`
    * membership and no `toolMachineKind` mapping — nothing offers it and the sim would refuse
@@ -637,6 +648,15 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     costCents: machinePrice(MachineKind.Pump),
     gesture: 'click',
   },
+  [ToolMode.PlaceArtesianWell]: {
+    label: 'Artesian Well',
+    // THE HINT CARRIES THE NUMBER, because the number is the entire feature and there is nowhere
+    // else in the game a player would meet it. "More water" is a promise; "+20 u/min" is an
+    // arithmetic they can check against the pond they are standing next to.
+    hint: 'on the bank — +20 u/min to that pond, three per pond',
+    costCents: machinePrice(MachineKind.ArtesianWell),
+    gesture: 'click',
+  },
   [ToolMode.PlaceTank]: {
     label: 'Tank',
     hint: 'clear 2x2 — a buffer on the line, so a stall is not a drought',
@@ -735,7 +755,11 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
 
   [ToolMode.Deconstruct]: {
     label: 'Teardown',
-    hint: 'click or drag: machines box up, belts and pipes refund',
+    // THE HINT NAMES THE MOUSE BUTTON ([[129]]) because the verb is no longer only a tool: the
+    // right button does exactly this, with nothing armed, on the same object this tool would
+    // take. A gesture nobody is told about is a gesture nobody has, and this one now has the
+    // shortcut the tool does not.
+    hint: 'click or drag — or right-click with any tool: machines box up, belts and pipes refund',
     costCents: 0,
     // A RECT, LIKE ZONE PAINTING — and a click still works, because a click is a drag whose
     // anchor and cursor are the same tile and therefore a 1×1 rectangle. That is what lets
@@ -812,6 +836,8 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       return MachineKind.Pump;
     case ToolMode.PlaceTank:
       return MachineKind.Tank;
+    case ToolMode.PlaceArtesianWell:
+      return MachineKind.ArtesianWell;
     case ToolMode.PlacePipedSprinkler:
       return MachineKind.PipedSprinkler;
     case ToolMode.PlaceIrrigationHub:
@@ -885,6 +911,7 @@ const PLACEMENT_TOOLS: readonly ToolMode[] = [
   ToolMode.PlaceDeliveryCart,
   ToolMode.PlaceTruckDepot,
   ToolMode.PlacePump,
+  ToolMode.PlaceArtesianWell,
   ToolMode.PlaceTank,
   ToolMode.PlacePipedSprinkler,
   ToolMode.PlaceIrrigationHub,

@@ -42,6 +42,7 @@ import {
   PortFlow,
   type LiquidId,
   LiquidId as Liquids,
+  WELL_MAX_PER_RESERVOIR,
   WORLD_TILES_WIDE,
   liquidSpec,
   machineSpec,
@@ -64,7 +65,14 @@ import {
   effectiveTankCapacityMl,
 } from './upgrades';
 import { TICKS_PER_MINUTE, divFloor } from './units';
-import { WaterDraw, pumpSupplyMlPerMinute, reservoirAdjacentToTile, takeWater } from './water';
+import {
+  WaterDraw,
+  pumpSupplyMlPerMinute,
+  reservoirAdjacentToTile,
+  reservoirRechargeMlPerMinute,
+  takeWater,
+  wellsOnReservoir,
+} from './water';
 
 /** One tile of a drag-routed pipe run. A run is one command; see `commands.ts`. */
 export interface TilePoint {
@@ -125,6 +133,16 @@ export const BuildRefusal = {
    * sentence the renderer prints for this code is an offer rather than a wall.
    */
   Unowned: 11,
+  /**
+   * This reservoir already has `WELL_MAX_PER_RESERVOIR` Artesian Wells on its bank (item 130).
+   *
+   * THE SAME SHAPE AS `TwoPumpsOneNetwork`, AND FOR THE SAME REASON: a cap that is checked while
+   * the ghost is still under the cursor is a rule the player learns by being told; a cap
+   * enforced afterwards is a purchase they have to undo. What is on the far side of this refusal
+   * is not a wall — it is the Irrigation Hub, which needs 28× less water than the dumb heads
+   * that got them here. See `WELL_MAX_PER_RESERVOIR` for why the ladder needs a ceiling at all.
+   */
+  WellLimit: 12,
 } as const;
 
 export type BuildRefusal = (typeof BuildRefusal)[keyof typeof BuildRefusal];
@@ -304,6 +322,16 @@ export function liquidPlacementRefusal(
 ): BuildRefusal {
   const spec = machineSpec(kind as never);
   if (spec === null) return BuildRefusal.None;
+
+  // THE ARTESIAN WELL STANDS ON THE BANK TOO, AND IS COUNTED THERE (item 130). It is not a
+  // pump — no network, no liquid, no ledger — so it shares only the adjacency rule, and it adds
+  // one of its own: a reservoir takes `WELL_MAX_PER_RESERVOIR` and no more.
+  if (spec.role === MachineRole.Well) {
+    const reservoir = reservoirAdjacentToTile(state, tileX, tileY);
+    if (reservoir === null) return BuildRefusal.NoWaterSource;
+    if (wellsOnReservoir(state, reservoir) >= WELL_MAX_PER_RESERVOIR) return BuildRefusal.WellLimit;
+    return BuildRefusal.None;
+  }
 
   if (spec.role === MachineRole.Pump) {
     // A pump stands on the bank. Wells buy placement freedom and are a later purchase.
@@ -707,7 +735,13 @@ function advanceNetwork(state: WorldState, network: PipeNetwork): void {
   } else {
     const spec = machineSpec(pump.kind)!;
     source = reservoirAdjacentToTile(state, pump.tileX, pump.tileY);
-    const ratePerMinute = pumpSupplyMlPerMinute(source, effectivePumpRateMlPerMinute(spec, pump));
+    // The `Sip` band is the pond's OWN recharge (item 130): a pump at a drained-but-bored pond
+    // sips at what the wells make, not at §4's bare constant.
+    const ratePerMinute = pumpSupplyMlPerMinute(
+      source,
+      effectivePumpRateMlPerMinute(spec, pump),
+      source === null ? 0 : reservoirRechargeMlPerMinute(state, source),
+    );
     network.supplyAccum += ratePerMinute;
     capacityMl = divFloor(network.supplyAccum, TICKS_PER_MINUTE);
     network.supplyAccum -= capacityMl * TICKS_PER_MINUTE;

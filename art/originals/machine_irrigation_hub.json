@@ -1,0 +1,24 @@
+{
+  "id": "machine_irrigation_hub",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1779916487,
+  "prompt": "a bold simple icon of a large square irrigation control hub seen from directly above, one thick dark grey metal box filling the frame, one big bright blue dome in the centre with a round dark instrument lens on top ringed in pale steel, four fat blue pipe stubs on the four sides of the box, flat top-down view, very large solid areas of flat colour, thick heavy shapes, no thin lines, no wires, no antenna, no cables, no small details, no droplets, no speckles, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 64,
+    "height": 64
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-17T20:42:24.791Z"
+}

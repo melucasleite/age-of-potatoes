@@ -352,7 +352,34 @@ export class GameHost implements InputHost {
 
     const deltaMs = Math.min(now - this.lastFrameMs, MAX_FRAME_DELTA_MS);
     this.lastFrameMs = now;
-    this.accumulatorMs += deltaMs;
+
+    // ── THE PAUSE ([[126]]), AND IT IS ENTIRELY THIS ────────────────────────────────────
+    //
+    // Pausing is the host declining to advance the clock. There is no flag in `WorldState`,
+    // no `paused` field in the projection and no branch inside `step()` — the sim replays
+    // twenty golden fixtures to pinned hashes, and a UI flag in the world would make every
+    // one of those goldens a statement about menus. What is paused is THIS LOOP.
+    //
+    // WHAT PAUSING DOES TO THE WALL-CLOCK CATCH-UP, written down because the item asks for a
+    // decision rather than an accident: the accumulator is ZEROED on every paused frame, so
+    // the debt owed to the sim while the menu is open is never carried. The player who goes
+    // to lunch with the menu up comes back to the tick they left on, and the first frame
+    // after resume owes one frame's delta and nothing more. Merely skipping the `while`
+    // would have been enough on paper — `deltaMs` is already clamped to 250 ms and
+    // `MAX_CATCHUP` bounds any frame to five ticks — but "enough on paper" is how an hour of
+    // lunch becomes a visible lurch, and the zero says what is meant.
+    //
+    // EVERYTHING ELSE IN THIS FRAME STILL RUNS. The world is still projected, still rendered
+    // and still presented, because the menu is a translucent scrim over a live canvas and a
+    // frozen-but-drawn lot is the picture the player expects behind it. `alpha` comes out at
+    // exactly 0, so the interpolated sprites sit on their last whole tick rather than
+    // shivering between two. The audio bed keeps its groove: §14's rule is that audio FOLLOWS
+    // the sim and never drives it, and a sim that is not moving publishes no new events, so
+    // every sim-derived voice falls silent on its own without a second control over the
+    // engine. The HUD's throttled publish is counted in TICKS, so it correctly says nothing.
+    const paused = this.input.paused;
+    if (paused) this.accumulatorMs = 0;
+    else this.accumulatorMs += deltaMs;
 
     const simStart = performance.now();
     let ticks = 0;

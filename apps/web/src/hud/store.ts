@@ -50,6 +50,8 @@ import { createInventoryFields, deriveInventory } from './derive-inventory';
 import type { InventoryFields } from './derive-inventory';
 import { RiskWatch, createLotFields, deriveLot } from './derive-lot';
 import type { LotFields } from './derive-lot';
+import { createServiceFields, deriveService } from './derive-service';
+import type { ServiceFields } from './derive-service';
 import { createShopFields, deriveShop } from './derive-shop';
 import type { ShopFields } from './derive-shop';
 import { createBenchFields, createTechFields, deriveBench, deriveTech } from './derive-tech';
@@ -70,6 +72,7 @@ import type {
   LotSlice,
   PouchItem,
   PouchSlice,
+  ServiceSlice,
   ShopRow,
   ShopSlice,
   SliceName,
@@ -88,6 +91,7 @@ import {
   ZERO_INVENTORY,
   ZERO_LOT,
   ZERO_POUCH,
+  ZERO_SERVICE,
   ZERO_SHOP,
   ZERO_SNAPSHOT,
   ZERO_TECH,
@@ -111,6 +115,7 @@ export class HudStore {
   private tools: ToolSlice = ZERO_TOOLS;
   private clipboard: ClipboardSlice = ZERO_CLIPBOARD;
   private tech: TechSlice = ZERO_TECH;
+  private service: ServiceSlice = ZERO_SERVICE;
   private bench: BenchSlice = ZERO_BENCH;
   private dock: DockSlice = ZERO_DOCK;
   private lot: LotSlice = ZERO_LOT;
@@ -125,6 +130,7 @@ export class HudStore {
   private readonly meter = new RateMeter();
   private readonly counts: MachineCounts = createMachineCounts();
   private readonly techScratch: TechFields = createTechFields();
+  private readonly serviceScratch: ServiceFields = createServiceFields();
   private readonly benchScratch: BenchFields = createBenchFields();
   private readonly dockScratch: DockFields = createDockFields();
   private readonly lotScratch: LotFields = createLotFields();
@@ -167,6 +173,7 @@ export class HudStore {
     tools: () => this.snapshot.tools,
     clipboard: () => this.snapshot.clipboard,
     tech: () => this.snapshot.tech,
+    service: () => this.snapshot.service,
     bench: () => this.snapshot.bench,
     dock: () => this.snapshot.dock,
     lot: () => this.snapshot.lot,
@@ -185,6 +192,7 @@ export class HudStore {
     tools: () => ZERO_SNAPSHOT.tools,
     clipboard: () => ZERO_SNAPSHOT.clipboard,
     tech: () => ZERO_SNAPSHOT.tech,
+    service: () => ZERO_SNAPSHOT.service,
     bench: () => ZERO_SNAPSHOT.bench,
     dock: () => ZERO_SNAPSHOT.dock,
     lot: () => ZERO_SNAPSHOT.lot,
@@ -239,6 +247,7 @@ export class HudStore {
     this.tools = ZERO_TOOLS;
     this.clipboard = ZERO_CLIPBOARD;
     this.tech = ZERO_TECH;
+    this.service = ZERO_SERVICE;
     this.bench = ZERO_BENCH;
     this.dock = ZERO_DOCK;
     this.lot = ZERO_LOT;
@@ -276,6 +285,7 @@ export class HudStore {
 
     if (this.setTools(view.moneyCents, tool)) changed = true;
     if (this.setTech(deriveTech(view, this.techScratch))) changed = true;
+    if (this.setService(deriveService(view, this.serviceScratch))) changed = true;
     if (this.setBench(deriveBench(view, this.benchScratch))) changed = true;
     if (this.setDock(deriveDock(view, this.dockScratch))) changed = true;
     if (this.setLot(deriveLot(view, this.riskWatch, this.lotScratch))) changed = true;
@@ -368,6 +378,7 @@ export class HudStore {
       tools: this.tools,
       clipboard: this.clipboard,
       tech: this.tech,
+      service: this.service,
       bench: this.bench,
       dock: this.dock,
       lot: this.lot,
@@ -517,6 +528,56 @@ export class HudStore {
       ownedCount: next.ownedCount,
       era: next.era,
       frontierId: next.frontierId,
+    });
+    return true;
+  }
+
+  /**
+   * The maintenance slice ([[129]]): which machine the player could put a wrench to, and what
+   * the two ways of doing it cost.
+   *
+   * COMPARED ON THE FIELDS THE CARD ACTUALLY DRAWS, like every writer here. Condition is whole
+   * permille — the bar's own resolution — so a machine wearing down under load republishes about
+   * once a second rather than 6.7 times.
+   *
+   * `kitTileX/Y` ARE COMPARED even though they draw nothing, and that is the cheap half of a
+   * trade worth naming: they change only when the player crosses the midline of a multi-tile
+   * footprint they are already standing at, which is a handful of times a minute at worst — and
+   * a stale one is a $8.00 button that quotes a tile the sim will refuse as out of reach. A
+   * side channel to keep them fresh without publishing would be more machinery than the whole
+   * card, for a re-render nobody can perceive.
+   */
+  private setService(next: ServiceFields): boolean {
+    const current = this.service;
+    if (
+      current.machineId === next.machineId &&
+      current.label === next.label &&
+      current.conditionPermille === next.conditionPermille &&
+      current.jammed === next.jammed &&
+      current.wrenchDue === next.wrenchDue &&
+      current.botsWanting === next.botsWanting &&
+      current.kitTileX === next.kitTileX &&
+      current.kitTileY === next.kitTileY &&
+      current.kitPriceCents === next.kitPriceCents &&
+      current.kitsHeld === next.kitsHeld &&
+      current.handUseful === next.handUseful
+    ) {
+      return false;
+    }
+
+    this.service = Object.freeze({
+      version: current.version + 1,
+      machineId: next.machineId,
+      label: next.label,
+      conditionPermille: next.conditionPermille,
+      jammed: next.jammed,
+      wrenchDue: next.wrenchDue,
+      botsWanting: next.botsWanting,
+      kitTileX: next.kitTileX,
+      kitTileY: next.kitTileY,
+      kitPriceCents: next.kitPriceCents,
+      kitsHeld: next.kitsHeld,
+      handUseful: next.handUseful,
     });
     return true;
   }

@@ -268,6 +268,7 @@ import {
   reservoirAt,
   rechargeReservoir,
   reservoirAdjacentToTile,
+  reservoirRechargeMlPerMinute,
   reservoirWithinReach,
   takeWater,
   waterAtSubtile,
@@ -3019,7 +3020,9 @@ function intentCommand(state: WorldState, intent: PlayerIntent): Command | null 
  */
 function advanceWater(state: WorldState): void {
   for (let i = 0; i < state.reservoirs.length; i++) {
-    rechargeReservoir(state.reservoirs[i]!);
+    const reservoir = state.reservoirs[i]!;
+    // Each pond at ITS OWN rate since item 130 — §4's ~20 u/min plus its Artesian Wells.
+    rechargeReservoir(reservoir, reservoirRechargeMlPerMinute(state, reservoir));
   }
   advancePipes(state);
 }
@@ -3268,6 +3271,7 @@ function advanceSprinkler(
   for (let offset = 0; offset < patch; offset++) {
     // Out of water mid-patch, which only a METERED head can be: stop. A charged head paid for
     // the whole sweep up front and runs the loop to its end.
+    //
     if (!charged && machine.tankMl < SPRINKLER_POUR_ML) break;
 
     const dx = (offset % span) - radius;
@@ -3302,6 +3306,28 @@ function advanceSprinkler(
     // item 097's new unit intact: a sweep that found every tile already wet is not an
     // activation, so it is not billed as one. Deducted after the sweep rather than at the
     // gate above for exactly that reason.
+    //
+    // **AND IT IS STILL A FLAT CHARGE, WHICH ITEM 130 CHANGED ITS MIND ABOUT** — recorded here
+    // because the next reader will have the same idea and should not have to re-derive the
+    // answer. Item 130's diagnosis called the edge case a bug: a head whose patch overhangs the
+    // field waters fewer tiles than it pays for (measured: four heads covering the 8×8 field wet
+    // 19.25 each and are billed 24, and a head with one farm tile in reach is billed 24×), and
+    // billing `watered × SPRINKLER_POUR_ML` would have cut demand ~1.25× for free.
+    //
+    // IT IS NOT A BUG. It is two pinned rulings, and both have reasons better than the saving:
+    //   - *"A charge is an activation, not a tile count"* (item 097, from the owner's 2026-08-16
+    //     ruling). The charge is the unit the PLAYER handles — `SPRINKLER_CHARGES_MAX`, the
+    //     barrel they carry, and `MachineView.tankCharges`, which is `divFloor(tankMl,
+    //     SPRINKLER_CHARGE_ML)` and would drift into fractions under per-tile billing.
+    //   - *"Siting it badly is the player's decision to make and to see, not something the
+    //     barrel quietly discounts"* — a pro-rata refund at the field edge deletes the reason to
+    //     site a head well, which is one of the few placement decisions watering has.
+    //
+    // Both are pinned by tests in `water.test.ts` that named their rationale, and 1.25× is not
+    // worth overturning an owner ruling on an implementer's say-so. **The census below therefore
+    // closes around this rule rather than around a convenient one** — which is the stronger
+    // result, because it needed no behaviour bent to fit it. If the 24× edge case is to change,
+    // it is the owner's call and it wants its own item.
     if (charged) machine.tankMl -= chargeMl;
     machine.opCount += 1;
     machine.wateredCount += watered;

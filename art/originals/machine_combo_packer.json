@@ -1,0 +1,24 @@
+{
+  "id": "machine_combo_packer",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1145126993,
+  "prompt": "a bold simple pixel art machine, a snack combo bundling machine, one squat dark grey metal box base across the bottom of the frame, one wide open topped pale gold cardboard carton standing on top of the base holding exactly two objects side by side, on the left one fat puffy pale cream chip bag shaped like a rounded pillow lying on its side, on the right one single tall dark red soda bottle standing upright, only two objects in the whole carton and the two are obviously different shapes and different colours from one another, low three-quarter view, very large solid areas of flat colour, thick heavy chunky shapes, a wide low lopsided silhouette, one soft rounded lump beside one tall narrow upright, no thin lines, no small details, no wires, no bolts, no rows of bottles, no repeated identical objects, no grid, no six bottles, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 64,
+    "height": 64
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-17T21:06:54.687Z"
+}

@@ -3420,6 +3420,212 @@
   font-size: 11px;
 }
 
+/* --- the pause menu ([[126]]) ----------------------------------------------------- */
+
+/*
+ * THE ONE MODAL PANEL, AND THE ONE SCRIM.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *  `.winPanel`'s header says "NO SCRIM, STILL ([[069]])" and means it: the other five
+ *  panels never darken the lot, because the world stays fully visible and fully clickable
+ *  around them and closing is the ESC key or the button. THIS ONE IS THE EXCEPTION AND IS
+ *  SUPPOSED TO BE. The others are things you consult while playing; the pause menu is the
+ *  statement that you have stopped, and the scrim is the only honest way to say so — a
+ *  world that is not moving, drawn behind glass, reads as paused at a glance. A pause menu
+ *  that looked exactly like the bag would leave "is the game running?" a question the
+ *  player has to answer by staring at a belt.
+ * ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * IT COVERS THE DOCK TOO, AND THAT IS THE SECOND WAY IT DIFFERS FROM THE FIVE. It is a
+ * child of `.root` rather than of `.stage`, so it spans the sidebar as well as the lot —
+ * the only element in the HUD that does. The five panels must never cover the dock, because
+ * they are things you consult WHILE PLAYING and the money, the rows and the field card have
+ * to stay readable beside them. Nothing is readable-and-actionable during a pause, so the
+ * distinction stops applying and the honest picture is everything behind glass.
+ *
+ * IT IS ALSO WHAT MAKES "MODAL" TRUE RATHER THAN DECORATIVE. `.root` and `.stage` are both
+ * `pointer-events: none` so a click meant for a tile always reaches the canvas; this element
+ * opts back in across the whole HUD. A scrim over the stage ALONE would have left the
+ * sidebar live under a dimmed lot, and clicking a panel row would then have opened that
+ * panel INTO `.floatWin` — underneath the scrim, invisible, and waiting for the player on
+ * resume. Covering the canvas matters for the same class of reason: the sim is not
+ * advancing, so a placement made now would sit in the queue and apply on resume, at a tile
+ * chosen while looking at a frozen picture.
+ *
+ * CLICKING THE SCRIM DOES NOT CLOSE IT. Escape and the two buttons are the doors, and a
+ * backdrop that resumed the game on a stray click is precisely the accident a pause menu
+ * exists to prevent.
+ *
+ * ABOVE `.floatWin`'s z-index of 5 by a clear margin, and above the sidebar with it.
+ */
+.pauseScrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 6, 5, 0.62);
+  pointer-events: auto;
+  z-index: 30;
+}
+
+/*
+ * The window itself, centred on the WHOLE screen rather than on the canvas region.
+ *
+ * `.floatWin` deliberately centres over the lot only — it lives in `.stage`, and "the middle
+ * of the screen" in the owner's words meant the middle of the part the game owns, because a
+ * panel that drifted over the dock would cover the money it was quoting prices against. The
+ * pause menu has nothing to stay clear of: it has already covered the dock. So it takes the
+ * true centre, which is also where every other game in the genre puts this exact window.
+ *
+ * The width and the height cap are `.floatWin`'s numbers on purpose — this is still one of
+ * the family, and a pause window noticeably wider than the bag would read as a different
+ * program. It is shorter in practice because it has less to say.
+ */
+.pauseWin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 460px;
+  max-width: calc(100% - 32px);
+  max-height: min(620px, calc(100% - 64px));
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * The three verbs, stacked full width: Resume, Save & Exit, and the picker between them.
+ * A column rather than a row because these are decisions rather than a toolbar, and the
+ * one the player wants nine times out of ten is at the top under their cursor.
+ */
+.pauseBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 20px 16px;
+}
+
+.pauseActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pauseButton {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #efe2c6;
+  background: #2f251b;
+  box-shadow:
+    inset 0 0 0 1px #14100e,
+    inset 0 0 0 2px #46392f;
+}
+
+.pauseButton:hover,
+.pauseButton:focus-visible {
+  background: #3d3024;
+  color: #ffd98a;
+}
+
+/* Resume is the default answer, so it is the loud one. */
+.pauseButtonPrimary {
+  background: #3a4a2a;
+}
+
+.pauseButtonPrimary:hover,
+.pauseButtonPrimary:focus-visible {
+  background: #485c34;
+}
+
+/* The quiet half of a button: the key that does the same thing, or what it will cost you. */
+.pauseButtonNote {
+  flex: 0 0 auto;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: #9a8873;
+}
+
+/* --- the pause menu's farmer picker ------------------------------------------------ */
+
+/*
+ * THE FRONT DOOR'S PICKER, REBUILT AT HUD SCALE RATHER THAN SHARED. `FrontDoor.module.css`
+ * has `.picker` and it is not this: that one is a full-page welcome screen on a dark field
+ * with a 48px portrait and room to breathe, and this is a row inside a 460px window. The
+ * two share the thing that actually matters — `avatarPortrait` and `paintIcon`, so the face
+ * on the button is pixel for pixel the farmer who walks the lot — and differ only in the box
+ * they are drawn in. Sharing the CSS would have meant one stylesheet describing two screens.
+ */
+.pauseSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pauseSectionHead {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #9a8873;
+}
+
+.pauseAvatars {
+  display: flex;
+  gap: 8px;
+}
+
+.pauseAvatar {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0;
+  border: 0;
+  cursor: pointer;
+  background: #241c15;
+  box-shadow: inset 0 0 0 1px #14100e;
+}
+
+.pauseAvatar:hover,
+.pauseAvatar:focus-visible {
+  background: #33281d;
+}
+
+/* The one currently walking the lot. Amber, the HUD's "this is the live one" colour. */
+.pauseAvatarOn {
+  background: #3a2e1e;
+  box-shadow:
+    inset 0 0 0 1px #14100e,
+    inset 0 0 0 2px #f2a93b;
+}
+
+/*
+ * The portrait itself, and `image-rendering` is not decoration: `paintIcon` scales the atlas
+ * page up by a whole number and slides it, and a browser that smooths the result undoes the
+ * whole arrangement. Same declaration the front door's portrait carries, for the same reason.
+ */
+.pauseAvatarArt {
+  display: block;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+
+/* The numbered chip an atlas without the avatar sheets degrades to — never magenta ([[037]]). */
+.pauseAvatarBlank {
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: #9a8873;
+}
+
 /* --- small screens -------------------------------------------------------------- */
 
 /*

@@ -1,0 +1,24 @@
+{
+  "id": "machine_six_packer",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 795483407,
+  "prompt": "a bold simple pixel art machine, a six pack packing machine, one squat dark grey metal box base across the bottom of the frame, one open topped cardboard carrier standing on top of the base holding six identical dark red soda bottles arranged in a neat regular grid three across and two deep, all six bottles exactly the same size and the same shape and the same dark red colour, every bottle standing perfectly upright in line with the others, one flat gold band wrapped around the carrier, low three-quarter view, very large solid areas of flat colour, thick heavy chunky shapes, a tall regular repeating grid of identical upright bottles, no thin lines, no small details, no wires, no bolts, no gantry, no overhead beam, no filling heads, no chip bags, no snack bags, no pillow shapes, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 64,
+    "height": 64
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-17T21:06:38.406Z"
+}

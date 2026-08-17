@@ -165,6 +165,16 @@ export const TechId = {
   Recirculator: 'hydraulics-recirculator',
   /** The Irrigation Hub — moisture-sensing heads that water only dry tiles (plan §4). */
   IrrigationHub: 'hydraulics-irrigation-hub',
+  /**
+   * The Artesian Well: the supply side of the ladder, and the only node that makes more water.
+   *
+   * **IT SITS ON `Pumps` AND NOTHING ELSE, WHICH IS THE POINT** (item 130). Every other rung of
+   * this branch spends water better; this one makes more of it, and a player only ever discovers
+   * they need it by running a pump dry. Hanging it off `PipedSprinklers` or the Hub would have
+   * gated the cure behind the disease's later symptoms — the shortage is measurable from the
+   * first pump, so the answer is reachable from the first pump.
+   */
+  ArtesianWell: 'hydraulics-artesian-well',
 
   /** Era gate 1 → 2 (plan §3). Money plus a visible milestone. */
   WorkshopCharter: 'charter-workshop',
@@ -400,6 +410,17 @@ export const TECH_NODES: readonly TechNode[] = [
     branch: TechBranch.Hydraulics,
     priceCents: 180_000,
     requires: [TechId.PipedSprinklers],
+    milestone: MilestoneKind.None,
+    milestoneAmount: 0,
+  },
+  {
+    // Cheaper than the Recirculator and half the Hub: a player who cannot water their field
+    // cannot earn their way to an expensive answer, so the answer to a shortage is priced
+    // where a shortage leaves you (item 130).
+    id: TechId.ArtesianWell,
+    branch: TechBranch.Hydraulics,
+    priceCents: 60_000,
+    requires: [TechId.Pumps],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },

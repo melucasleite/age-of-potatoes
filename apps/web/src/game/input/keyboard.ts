@@ -32,6 +32,7 @@ import { Direction } from '@snack/sim';
 
 import { publishArmedTool } from './armed-tool';
 import type { InputHost } from './context';
+import { escapeRung } from './escape';
 import { grabberPanelClose, grabberPanelSnapshot } from './grabber-panel';
 import { digitToSlotIndex, hotbar, itemPlaceTool } from './hotbar';
 import type { InputSystem } from './system';
@@ -107,6 +108,17 @@ export class KeyboardInput {
     // held direction can never get stuck walking behind a focused field.
     if (editableTarget(event.target)) return;
 
+    // THE PAUSE GUARD ([[126]]). The pause menu is the one MODAL panel in the game — the
+    // build menu is modal over the digits and the arrows, this one is modal over everything
+    // — so while it is up, Escape is the only key that means anything. Without this, WASD
+    // held over the scrim would queue a `SetMoveDirection` that the first tick after resume
+    // faithfully obeys, and the player would come back from the menu already walking.
+    //
+    // KEYUP IS DELIBERATELY NOT GUARDED, exactly as the focus guard above is not: a key
+    // released while the menu is up still releases, so nothing can get stuck held across
+    // a pause. Escape falls through to the cascade below, where `paused` is rung one.
+    if (this.system.paused && event.code !== 'Escape') return;
+
     // Space is the camera's modifier. Held, it turns any left-drag into a pan gesture that
     // paints nothing — see the header of `pointer.ts` for why that seat is kept warm.
     if (event.code === 'Space') {
@@ -174,24 +186,57 @@ export class KeyboardInput {
         this.system.stepZoom(-1);
         return;
       case 'Escape':
-        // Five meanings now, in the order the player most likely wants them: close the menu,
-        // close the debug panel, abandon the drag (a working queue counts, [[074]]), close
-        // the grabber card ([[099]]), put the tool down. Each step is one press. Esc INSIDE
-        // the cheat input never lands here — the focus guard returns first, and the HUD's
-        // input closes through `debugPanelClose` itself.
+        // SEVEN MEANINGS NOW, and the ladder itself moved to `escape.ts` ([[126]]) — read
+        // that file's header for the order and the argument for it, which is where the
+        // reasoning that used to live in this comment now lives in full. In short: close the
+        // pause menu, close the build menu, close the debug panel, abandon the drag (a
+        // working queue counts, [[074]]), close the grabber card ([[099]]), put the tool
+        // down, and — with nothing open and the hand already empty — pause the game.
         //
-        // THE CARD SITS BELOW THE DRAG AND ABOVE THE DISARM because it is the least urgent
-        // thing that is nonetheless OPEN: a half-drawn belt run is the one the player wants
-        // back first, and disarming a tool you are still holding is what Esc means once
-        // nothing is open at all. It is a real rung rather than a no-op for the common case —
-        // the card outlives the click that opened it, so unlike a hover it needs dismissing.
-        if (this.system.menuOpen) this.system.closeBuildMenu();
-        else if (this.system.debugPanelOpen) this.system.closeDebugPanel();
-        else if (this.system.dragging) this.system.cancelDrag();
-        else if (grabberPanelSnapshot().open) grabberPanelClose();
-        else {
-          this.host.setTool(ToolMode.Hand);
-          publishArmedTool(ToolMode.Hand);
+        // THE CASCADE IS A PURE FUNCTION AND THIS SWITCH IS THE HAND THAT OBEYS IT. That
+        // split is the whole point: "one press advances exactly one rung, never two" is a
+        // property of the ladder, this workspace's tests have no DOM, and a decision buried
+        // in a `keydown` handler is a decision nothing can pin. `escapeRung` names one rung
+        // and does nothing; every branch below does one thing and returns.
+        //
+        // Esc INSIDE the cheat input never lands here — the focus guard returns first, and
+        // the HUD's input closes through `debugPanelClose` itself. Esc while PAUSED does
+        // land here, and only Esc does: see the pause guard at the top of this handler.
+        switch (
+          escapeRung({
+            paused: this.system.paused,
+            menuOpen: this.system.menuOpen,
+            debugPanelOpen: this.system.debugPanelOpen,
+            dragging: this.system.dragging,
+            grabberCardOpen: grabberPanelSnapshot().open,
+            // THE DISARM IS CONDITIONAL NOW, and it has to be: it used to run unconditionally
+            // because it was the floor of the ladder, and a floor nothing falls through would
+            // have left the pause menu unreachable forever.
+            toolArmed: this.host.getTool() !== ToolMode.Hand,
+          })
+        ) {
+          case 'close-pause':
+            this.system.closePauseMenu();
+            return;
+          case 'close-build-menu':
+            this.system.closeBuildMenu();
+            return;
+          case 'close-debug-panel':
+            this.system.closeDebugPanel();
+            return;
+          case 'cancel-drag':
+            this.system.cancelDrag();
+            return;
+          case 'close-grabber-card':
+            grabberPanelClose();
+            return;
+          case 'disarm':
+            this.host.setTool(ToolMode.Hand);
+            publishArmedTool(ToolMode.Hand);
+            return;
+          case 'open-pause':
+            this.system.openPauseMenu();
+            return;
         }
         return;
       // Backquote grew into the debug panel ([[075]]): the perf overlay still toggles with

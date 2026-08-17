@@ -40,8 +40,10 @@ import {
   milestoneKeyFor,
   newestWorld,
   nextWorldName,
+  planAvatarChange,
   planLegacyAdoption,
   previousKeyFor,
+  setActiveWorldAvatar,
   withWorld,
 } from './worlds';
 
@@ -337,5 +339,70 @@ describe('the avatar on the record ([[079]])', () => {
       { now: NOW, id: 'w1' },
     );
     expect(plan.adopted?.avatar).toBeUndefined();
+  });
+});
+
+describe('changing the avatar mid-game ([[126]])', () => {
+  // The pause menu's picker, pinned on the PURE half for rule 3's reason — there is no
+  // IndexedDB here, so `writeRegistry` cannot round-trip and anything welded to `getDb` is a
+  // decision no test can reach. `planAvatarChange` was split out precisely so this could exist,
+  // exactly as `planLegacyAdoption` was.
+  //
+  // What fails QUIETLY if this is wrong: the farmer changes on screen (`publishAvatar` is
+  // synchronous and cannot fail) and then quietly changes back on the next reload — which the
+  // player experiences as the game forgetting them rather than as an error.
+
+  it('moves the avatar on the ACTIVE world and touches nothing else', () => {
+    const registry = registryOf(world({ id: 'a', avatar: 2 }), world({ id: 'b', avatar: 5 }));
+    const next = planAvatarChange(registry, 4);
+
+    expect(findWorld(next!, 'a')?.avatar).toBe(4);
+    // The other lot keeps its own farmer. `activeId` is 'a' — see `registryOf`.
+    expect(findWorld(next!, 'b')?.avatar).toBe(5);
+    // The name, the seed and the card come through the patch untouched.
+    expect(findWorld(next!, 'a')?.name).toBe('Lot #1');
+    expect(findWorld(next!, 'a')?.seed).toBe(1);
+  });
+
+  it('survives the autosave that lands right after it', () => {
+    // The realistic sequence, and the one that would silently undo the change: pick a farmer,
+    // keep playing, and let `touchWorld` rewrite the card on the next save. Both patches go
+    // through `withWorld`, so the fields must ride over each other in either order.
+    const picked = planAvatarChange(registryOf(world({ id: 'a', avatar: 1 })), 4)!;
+    const saved = withWorld(picked, 'a', {
+      summary: { tick: 400, moneyCents: 1_234, formatVersion: 9 },
+      lastPlayedAt: NOW + 5,
+    });
+
+    expect(findWorld(saved, 'a')?.avatar).toBe(4);
+    expect(findWorld(saved, 'a')?.summary.tick).toBe(400);
+  });
+
+  it('hands back the SAME registry when the pick is already the live one', () => {
+    // Identity is the contract `setActiveWorldAvatar` reads to skip a write, so a player
+    // clicking their own farmer five times costs five comparisons and no writes at all.
+    const registry = registryOf(world({ id: 'a', avatar: 3 }));
+    expect(planAvatarChange(registry, 3)).toBe(registry);
+  });
+
+  it('refuses a nonsense id rather than writing it', () => {
+    const registry = registryOf(world({ id: 'a', avatar: 3 }));
+    expect(planAvatarChange(registry, -1)).toBeNull();
+    expect(planAvatarChange(registry, 2.5)).toBeNull();
+    expect(planAvatarChange(registry, Number.NaN)).toBeNull();
+  });
+
+  it('says no when there is no world to dress', async () => {
+    // Empty registry: the front door, where the new-game picker does this job instead. And a
+    // TOMBSTONED active world, which is the narrow one — deleting the lot you are standing on
+    // moves `activeId`, but a registry caught mid-move must not have its dead world dressed.
+    expect(planAvatarChange(emptyRegistry(), 3)).toBeNull();
+    expect(planAvatarChange(registryOf(world({ id: 'a', deletedAt: NOW })), 3)).toBeNull();
+
+    // And the committed half agrees, which is the one thing worth reaching the async door for:
+    // with no IndexedDB there is no registry, so there is nobody to dress and it says so
+    // rather than throwing on the way past `getDb`.
+    invalidateRegistry();
+    expect(await setActiveWorldAvatar(3)).toBe(false);
   });
 });

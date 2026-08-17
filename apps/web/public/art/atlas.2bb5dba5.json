@@ -2112,7 +2112,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_composter": {
+    "machine_combo_packer": {
       "frame": {
         "x": 292,
         "y": 271,
@@ -2134,29 +2134,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_delivery_cart": {
-      "frame": {
-        "x": 520,
-        "y": 336,
-        "w": 32,
-        "h": 32
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 32,
-        "h": 32
-      },
-      "sourceSize": {
-        "w": 32,
-        "h": 32
-      },
-      "anchorMode": "bottom-center",
-      "group": "machines"
-    },
-    "machine_fryer": {
+    "machine_composter": {
       "frame": {
         "x": 357,
         "y": 271,
@@ -2178,7 +2156,29 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_grinder": {
+    "machine_delivery_cart": {
+      "frame": {
+        "x": 780,
+        "y": 336,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_drone_bay": {
       "frame": {
         "x": 422,
         "y": 271,
@@ -2200,29 +2200,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_hand_cart": {
-      "frame": {
-        "x": 553,
-        "y": 336,
-        "w": 32,
-        "h": 32
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 32,
-        "h": 32
-      },
-      "sourceSize": {
-        "w": 32,
-        "h": 32
-      },
-      "anchorMode": "bottom-center",
-      "group": "machines"
-    },
-    "machine_harvester_dock": {
+    "machine_fryer": {
       "frame": {
         "x": 487,
         "y": 271,
@@ -2244,7 +2222,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_juicer": {
+    "machine_grinder": {
       "frame": {
         "x": 552,
         "y": 271,
@@ -2266,7 +2244,29 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_kettle": {
+    "machine_hand_cart": {
+      "frame": {
+        "x": 813,
+        "y": 336,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_harvester_dock": {
       "frame": {
         "x": 617,
         "y": 271,
@@ -2288,7 +2288,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_kola_tree": {
+    "machine_irrigation_hub": {
       "frame": {
         "x": 682,
         "y": 271,
@@ -2310,7 +2310,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_lemon_tree": {
+    "machine_juicer": {
       "frame": {
         "x": 747,
         "y": 271,
@@ -2332,7 +2332,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_maintenance_station": {
+    "machine_kettle": {
       "frame": {
         "x": 812,
         "y": 271,
@@ -2354,7 +2354,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_orange_tree": {
+    "machine_kola_tree": {
       "frame": {
         "x": 877,
         "y": 271,
@@ -2376,7 +2376,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_planter_dock": {
+    "machine_lemon_tree": {
       "frame": {
         "x": 942,
         "y": 271,
@@ -2398,7 +2398,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_pump": {
+    "machine_maintenance_station": {
       "frame": {
         "x": 0,
         "y": 336,
@@ -2420,7 +2420,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_root_cellar": {
+    "machine_orange_tree": {
       "frame": {
         "x": 65,
         "y": 336,
@@ -2442,7 +2442,29 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_seasoner": {
+    "machine_piped_sprinkler": {
+      "frame": {
+        "x": 846,
+        "y": 336,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_planter_dock": {
       "frame": {
         "x": 130,
         "y": 336,
@@ -2464,7 +2486,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_slicer": {
+    "machine_pump": {
       "frame": {
         "x": 195,
         "y": 336,
@@ -2486,29 +2508,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_sprinkler": {
-      "frame": {
-        "x": 586,
-        "y": 336,
-        "w": 32,
-        "h": 32
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 32,
-        "h": 32
-      },
-      "sourceSize": {
-        "w": 32,
-        "h": 32
-      },
-      "anchorMode": "bottom-center",
-      "group": "machines"
-    },
-    "machine_syrup_mixer": {
+    "machine_root_cellar": {
       "frame": {
         "x": 260,
         "y": 336,
@@ -2530,7 +2530,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_tank": {
+    "machine_seasoner": {
       "frame": {
         "x": 325,
         "y": 336,
@@ -2552,7 +2552,7 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_truck_depot": {
+    "machine_six_packer": {
       "frame": {
         "x": 390,
         "y": 336,
@@ -2574,9 +2574,119 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_washer": {
+    "machine_slicer": {
       "frame": {
         "x": 455,
+        "y": 336,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_sprinkler": {
+      "frame": {
+        "x": 879,
+        "y": 336,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_syrup_mixer": {
+      "frame": {
+        "x": 520,
+        "y": 336,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_tank": {
+      "frame": {
+        "x": 585,
+        "y": 336,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_truck_depot": {
+      "frame": {
+        "x": 650,
+        "y": 336,
+        "w": 64,
+        "h": 64
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "machine_washer": {
+      "frame": {
+        "x": 715,
         "y": 336,
         "w": 64,
         "h": 64
@@ -3567,7 +3677,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.c40cbf71.png",
+    "image": "atlas.2bb5dba5.png",
     "format": "RGBA8888",
     "size": {
       "w": 1024,
@@ -3629,7 +3739,7 @@
         "y": 271,
         "width": 1006,
         "height": 129,
-        "count": 26
+        "count": 31
       },
       {
         "group": "overlay",

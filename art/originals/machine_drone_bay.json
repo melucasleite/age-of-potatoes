@@ -1,0 +1,24 @@
+{
+  "id": "machine_drone_bay",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 1273610446,
+  "prompt": "a bold simple pixel art drone landing bay, one big flat pale grey square concrete landing pad lying flat on the ground and filling the whole lower two thirds of the frame, one bold solid dark grey ring painted flat in the centre of the pad, one solid polished brass gold shelter box standing along the back edge of the pad, the shelter is a closed solid block of warm gold metal with one small dark square doorway in its front and one flat dark stripe painted across its front above the doorway, the landing pad completely empty with nothing standing on it, low three-quarter view, very large solid areas of flat colour, thick heavy chunky shapes, one big pale flat pad in front of one solid gold box, expensive and richly built, no thin lines, no small details, no antenna, no mast, no pole, no wires, no cables, no posts, no legs, no open sided carport, no large black hole, no ladder, no windows, no drone, no aircraft, no propellers, no red, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 64,
+    "height": 64
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-17T21:09:58.213Z"
+}

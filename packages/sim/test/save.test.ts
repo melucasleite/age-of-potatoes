@@ -1201,7 +1201,22 @@ describe('the permanent fixture set', () => {
     const state = restoreWorld(fixture14).state;
 
     expect(state.stats.cheatsUsed).toBe(1);
-    expect(state.unlocked.length).toBe(TECH_NODES.length);
+    // **32, NOT `TECH_NODES.length`, AND THE DIFFERENCE IS THE FEATURE** ([[130]]). This fixture
+    // was cheated to "everything unlocked" when the tree had 32 nodes; the Artesian Well made it
+    // 33. A save does NOT retroactively acquire a node that did not exist when it was written —
+    // a returning player with a fully-researched lot meets the new node unresearched and buys
+    // it, which is the whole point of shipping one. Pinning today's count here would have
+    // asserted the opposite and quietly granted every future node to every old save.
+    expect(state.unlocked.length).toBe(32);
+    expect(state.unlocked.length).toBeLessThanOrEqual(TECH_NODES.length);
+    // Everything it does claim is still a real node — an unlock list naming a deleted slug is a
+    // different bug and this is where it would show.
+    for (const id of state.unlocked) {
+      expect(
+        TECH_NODES.some((node) => node.id === id),
+        `the save claims a node that does not exist: ${id}`,
+      ).toBe(true);
+    }
     // The Pump the cheat paid for is standing on the bank, and the second parcel is owned.
     expect(state.machines.some((m) => m.kind === MachineKind.Pump)).toBe(true);
     expect(state.ownedParcels).toEqual([0, 1]);

@@ -1126,6 +1126,9 @@ const MACHINE_KINDS: readonly number[] = [
   // names one loads into a machine whose spec is still there — inert, unbuildable, and boxable.
   // Refusing it instead would turn a curiosity into a save that will not open.
   MachineKind.PartsBench,
+  /** The Artesian Well ([[130]]). No format bump: a new kind widens the guard, it does not
+   *  change the shape of a machine record. */
+  MachineKind.ArtesianWell,
 ];
 /** `None` is not a legal liquid for a pipe: a pipe that carries nothing is not a pipe. */
 const LIQUIDS: readonly number[] = [

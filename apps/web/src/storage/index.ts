@@ -53,11 +53,13 @@ export {
   newestWorld,
   nextWorldName,
   olderKeyFor,
+  planAvatarChange,
   planLegacyAdoption,
   previousKeyFor,
   readRegistry,
   renameWorld,
   restoreDeletedWorld,
+  setActiveWorldAvatar,
   sweepTombstones,
   withWorld,
 } from './worlds';

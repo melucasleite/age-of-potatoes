@@ -353,6 +353,9 @@ export const ItemId = {
    */
   SweetcornChips: 77,
   BaggedSweetcornChips: 78,
+
+  /** A boxed Artesian Well — see `MachineKind.ArtesianWell`. */
+  BoxedArtesianWell: 79,
 } as const;
 
 export type ItemId = (typeof ItemId)[keyof typeof ItemId];
@@ -496,6 +499,37 @@ export const MachineKind = {
    * `RETIRED_MACHINE_KINDS` for why the id and the spec both stay spent forever.
    */
   PartsBench: 35,
+
+  /**
+   * **THE ARTESIAN WELL: THE ONE THING IN THE GAME THAT MAKES A POND BIGGER** (item 130).
+   *
+   * Sunk on the bank, it taps the aquifer under a reservoir and raises what that reservoir
+   * MAKES — `WELL_RECHARGE_UNITS_PER_MINUTE` on top of §4's ~20 u/min, up to
+   * `WELL_MAX_PER_RESERVOIR` of them. It is not a pump, it is not on a network, it carries no
+   * liquid and it has no ports; `advanceMachines` has no case for it at all, exactly as it has
+   * none for the Pump or the Tank, because its whole job is a number in `rechargeReservoir`.
+   *
+   * **IT IS HERE BECAUSE THE POND IS TOO SMALL FOR THE FIELD, MEASURED.** Item 130's owner ask
+   * was *"a way to boost the water pumps"*, and the pump turned out to be innocent — it already
+   * outruns the pond 15×. The binding number is the one nothing could touch: a tile drains from
+   * `MOISTURE_MAX` to `MOISTURE_DRY_THRESHOLD` in 1,800 ticks, so holding all 64 field tiles
+   * above dry costs **64,000 ml/min even for a waterer that wastes nothing** — against a pond
+   * that makes 40,000. The Irrigation Hub measures 64,650 ml/min sustained, within 1% of that
+   * theoretical floor, and it is STILL 1.6× over what the pond produces. No demand-side
+   * improvement can close a gap that exists at zero waste. Only supply can.
+   *
+   * **WHY NOT A PUMP TIER, WHICH IS WHAT WAS ASKED FOR.** A Mk2 at twice the rate drains the
+   * pond's buffer in half the time and then delivers the identical 40,000 ml/min, because that
+   * is all there is. It would have felt better for thirteen minutes and been strictly worse
+   * after. A pump is a straw; this is the glass.
+   *
+   * **WHY IT DOES NOT RESCUE FOUR DUMB HEADS, ON PURPOSE.** Saturated, they demand 1,728,000
+   * ml/min — 27× the field's actual need, which is the sloppiness tax working as designed. Three
+   * wells take a pond to 160,000 ml/min: two Hubs' worth, and nowhere near enough to make
+   * spraying soaked ground sustainable. The ladder survives the fix, which is the whole reason
+   * for the cap.
+   */
+  ArtesianWell: 36,
 } as const;
 
 export type MachineKind = (typeof MachineKind)[keyof typeof MachineKind];
@@ -1159,6 +1193,7 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.BoxedMaintenanceStation, slug: 'boxed-maintenance-station', ...BOXED },
   { id: ItemId.BoxedDroneBay, slug: 'boxed-drone-bay', ...BOXED },
   { id: ItemId.BoxedPartsBench, slug: 'boxed-parts-bench', ...BOXED },
+  { id: ItemId.BoxedArtesianWell, slug: 'boxed-artesian-well', ...BOXED },
 ];
 
 /**
@@ -1209,6 +1244,7 @@ export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly
     { kind: MachineKind.MaintenanceStation, item: ItemId.BoxedMaintenanceStation },
     { kind: MachineKind.DroneBay, item: ItemId.BoxedDroneBay },
     { kind: MachineKind.PartsBench, item: ItemId.BoxedPartsBench },
+    { kind: MachineKind.ArtesianWell, item: ItemId.BoxedArtesianWell },
   ];
 
 /**
@@ -1746,6 +1782,39 @@ export const RESERVOIR_RECHARGE_ML_PER_MINUTE =
 export const RESERVOIR_LOW_PERMILLE = 250;
 
 /**
+ * What one Artesian Well adds to the recharge of the reservoir it stands beside, in §4 units.
+ *
+ * **ONE WELL DOUBLES A POND, AND THE NUMBER IS DERIVED RATHER THAN TASTED** (item 130). The
+ * measurement that sets it is the field's *irreducible* need: a tile drains
+ * `MOISTURE_MAX - MOISTURE_DRY_THRESHOLD` = 1,800 ticks' worth between full and dry, so keeping
+ * all `FIELD_TILE_COUNT` tiles above dry costs 64 × `SPRINKLER_POUR_ML` every 1,800 ticks —
+ * **64,000 ml/min for a waterer that wastes not one drop**. The pond makes 40,000. That is a
+ * 1.6× structural deficit on the field the game hands out on day one, and it is why "just build
+ * an Irrigation Hub" is not an answer: the Hub measures 64,650 ml/min sustained, one percent off
+ * the theoretical floor, and still outruns the pond.
+ *
+ * 20 u/min takes a bored pond to 80,000 ml/min, which covers that 64,000 with ~1.25× headroom.
+ * Not two wells' worth of headroom and not a tenth of one: the first well is the difference
+ * between a field that dies and a field that lives, which is the only number a player can feel.
+ */
+export const WELL_RECHARGE_UNITS_PER_MINUTE = 20;
+export const WELL_RECHARGE_ML_PER_MINUTE = WELL_RECHARGE_UNITS_PER_MINUTE * RESERVOIR_UNIT_ML;
+
+/**
+ * How many wells one reservoir will take. **THE CAP IS WHAT KEEPS THE LADDER STANDING.**
+ *
+ * Three wells put a pond at 160,000 ml/min — two Irrigation Hubs' worth, a real endgame ceiling,
+ * and still 11× short of the 1,728,000 ml/min four saturated dumb heads demand. So a player can
+ * always buy their way out of a *shortage* and can never buy their way out of *sloppiness*: the
+ * promotion from dumb heads to moisture-sensing ones survives the fix intact, which is the
+ * entire reason this is a small integer and not `Infinity`.
+ *
+ * Enforced at placement (`liquidPlacementRefusal` → `BuildRefusal.WellLimit`), refused before it
+ * exists rather than warned about afterwards — the same shape as one-pump-per-network.
+ */
+export const WELL_MAX_PER_RESERVOIR = 3;
+
+/**
  * The starting pond, in world tiles: the lot's south-east corner, clear of the field.
  *
  * THE CORNER IS CHOSEN, NOT DEFAULTED. The player spawns just south of the field, so the
@@ -1908,6 +1977,19 @@ export const MachineRole = {
    * what lets an automated factory hold the Corporate Charter's milestone while being serviced.
    */
   MaintenanceStation: 13,
+
+  /**
+   * The Artesian Well: it raises the RECHARGE of the reservoir it stands on the bank of.
+   *
+   * **NO TICK CASE, AND THAT IS THE DESIGN.** `advanceMachines` dispatches on role and has no
+   * branch for this one, exactly as it has none for `Pump` or `Tank` — a machine whose whole job
+   * is a number read somewhere else has nothing to do on its own. The number is read in
+   * `reservoirRechargeMlPerMinute`, which counts the wells adjacent to a reservoir once per tick.
+   *
+   * NOT `Inert`. The sell bin is inert because it does nothing; this does something, and giving
+   * it the bin's role would have made `isNetworkConsumer`-shaped questions answer by accident.
+   */
+  Well: 14,
 } as const;
 
 export type MachineRole = (typeof MachineRole)[keyof typeof MachineRole];
@@ -2583,6 +2665,41 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     liquid: LiquidId.Water,
     ports: [],
     pumpRateMlPerMinute: PUMP_RATE_ML_PER_MINUTE,
+    intakeMlPerTick: 0,
+    coverageRadiusTiles: 0,
+    moistureSensing: false,
+    fieldPlaceable: false,
+  },
+  {
+    // THE ONLY THING IN THE GAME THAT MAKES A POND BIGGER (item 130). Everything else on this
+    // list moves water that already exists; this changes how much there is. See
+    // `MachineKind.ArtesianWell` for the measurement that justifies it and
+    // `WELL_RECHARGE_UNITS_PER_MINUTE` for where the number comes from.
+    //
+    // A 1×1 on the bank, priced under the pump it feeds: the answer to a shortage should never
+    // cost more than the thing that revealed it. `liquid: None` and no ports, so it is invisible
+    // to `pipePathRefusal`, to `attachMachines`, and to the ledger — a well is not on a network
+    // and does not want to be. It is refused off a bank by `NoWaterSource`, the pump's own rule,
+    // and refused past three by `WellLimit`.
+    kind: MachineKind.ArtesianWell,
+    slug: 'artesian-well',
+    role: MachineRole.Well,
+    tilesWide: 1,
+    tilesHigh: 1,
+    priceCents: 60_000,
+    workPerOperation: 0,
+    workRatePerTick: 0,
+    inputCapacity: 0,
+    outputCapacity: 0,
+    tankCapacityMl: 0,
+    wearPerOperation: 0,
+    inputs: [],
+    outputItem: null,
+    overcookOutputItem: null,
+    requiresTech: TechId.ArtesianWell,
+    liquid: LiquidId.None,
+    ports: [],
+    pumpRateMlPerMinute: 0,
     intakeMlPerTick: 0,
     coverageRadiusTiles: 0,
     moistureSensing: false,

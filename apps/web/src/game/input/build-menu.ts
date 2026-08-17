@@ -97,6 +97,7 @@ const TECH_LABELS: Readonly<Record<string, string>> = {
   'hydraulics-piped-sprinklers': 'Piped Sprinklers',
   'hydraulics-recirculator': 'Recirculator',
   'hydraulics-irrigation-hub': 'Irrigation Hub',
+  'hydraulics-artesian-well': 'Artesian Well',
   'hydraulics-soda-press': 'Press & Kettle',
   'hydraulics-soda-mixing': 'Mixing & Bottling',
 };
@@ -216,6 +217,11 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   // fed by a washer rather than chip-line kit that happens to be plumbed.
   pipeEntry(),
   machineEntry('Plumbing', ToolMode.PlacePump),
+  // DIRECTLY UNDER THE PUMP, WHICH IS WHERE THE QUESTION GETS ASKED ([[130]]). A player reads
+  // this group when their water has run out, and the pump is the thing they are staring at when
+  // it does — the owner's report was "how do I boost the pump?", twice. The answer to that
+  // question should be the next row down, not three groups away behind a node they have not met.
+  machineEntry('Plumbing', ToolMode.PlaceArtesianWell),
   machineEntry('Plumbing', ToolMode.PlaceTank),
   machineEntry('Plumbing', ToolMode.PlaceRecirculator),
 

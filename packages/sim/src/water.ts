@@ -24,7 +24,14 @@
 // architecture for free — there is no `Date` in this package and the tsconfig would not
 // compile one.
 
-import { RESERVOIR_LOW_PERMILLE, RESERVOIR_RECHARGE_ML_PER_MINUTE } from './data';
+import {
+  MachineRole,
+  RESERVOIR_LOW_PERMILLE,
+  RESERVOIR_RECHARGE_ML_PER_MINUTE,
+  WELL_MAX_PER_RESERVOIR,
+  WELL_RECHARGE_ML_PER_MINUTE,
+  machineSpec,
+} from './data';
 import type { Reservoir, WorldState } from './state';
 import { recordWaterDrawn } from './stats';
 import { SUBTILE, TICKS_PER_MINUTE, clampInt, divFloor, permille } from './units';
@@ -77,14 +84,64 @@ export function takeWater(
 }
 
 /**
- * One tick of recharge on one reservoir.
+ * How many Artesian Wells are sunk on this reservoir's bank, capped at the legal maximum.
+ *
+ * **THE SAME ADJACENCY RULE THE PUMP USES, DELIBERATELY.** A well claims the reservoir that
+ * `reservoirAdjacentToTile` gives it — own tile first, then the four orthogonal neighbours,
+ * lowest id breaking ties — so a well wedged between two ponds feeds exactly one of them and
+ * always the same one. Two rules for "standing on the bank" is how a preview ends up disagreeing
+ * with a reducer, which is the mistake `pipePathRefusal`'s header is written to prevent.
+ *
+ * CLAMPED HERE AS WELL AS AT PLACEMENT. `liquidPlacementRefusal` refuses the fourth well before
+ * it exists, but a hand-edited save can present any number, and the ledger's honesty must not
+ * depend on the build rules having been obeyed. Recomputed per call rather than cached: a full
+ * recompute that is right beats an incremental update that is wrong once, which is the same
+ * ruling `rebuildNetworks` is built on. When a profiler complains, cache it — not before.
+ */
+export function wellsOnReservoir(state: WorldState, reservoir: Reservoir): number {
+  let count = 0;
+  for (let i = 0; i < state.machines.length; i++) {
+    const machine = state.machines[i]!;
+    const spec = machineSpec(machine.kind);
+    if (spec === null || spec.role !== MachineRole.Well) continue;
+    const claimed = reservoirAdjacentToTile(state, machine.tileX, machine.tileY);
+    if (claimed !== null && claimed.id === reservoir.id) count += 1;
+  }
+  return count > WELL_MAX_PER_RESERVOIR ? WELL_MAX_PER_RESERVOIR : count;
+}
+
+/**
+ * What this reservoir MAKES, per minute: §4's ~20 u/min plus whatever has been sunk into it.
+ *
+ * **ONE DEFINITION, READ IN BOTH PLACES THAT MATTER** — `rechargeReservoir`, which is how the
+ * pond refills, and `pumpSupplyMlPerMinute`'s `Sip` band, which is what a pump gets at an empty
+ * pond. Those two have to be the same number or the anti-softlock guarantee stops being one: a
+ * bored pond that refilled faster but still *sipped* at the base rate would hand the well's
+ * water to nobody at exactly the moment the player needs it, since a heavily-drawn pond lives at
+ * zero. That is the whole failure mode item 130 was filed against, and it would have been
+ * reintroduced by a one-line change in the wrong place.
+ */
+export function reservoirRechargeMlPerMinute(state: WorldState, reservoir: Reservoir): number {
+  return (
+    RESERVOIR_RECHARGE_ML_PER_MINUTE +
+    wellsOnReservoir(state, reservoir) * WELL_RECHARGE_ML_PER_MINUTE
+  );
+}
+
+/**
+ * One tick of recharge on one reservoir, at `rechargeMlPerMinute`.
  *
  * 40,000 ml a minute is 33⅓ ml a tick, so this accrues per-minute units and spends whole
  * millilitres — the same integer accumulator `PlayerState.moveAccum` uses, for the same
  * reason. `Math.round` on a rate would be a float in disguise and would make the pond
  * permanently 1% wrong in one direction or the other.
+ *
+ * THE RATE IS AN ARGUMENT RATHER THAN A CONSTANT since item 130, because a pond's recharge is no
+ * longer a property of the world — it is a property of THAT pond, and it changes when somebody
+ * sinks a well. Passed in rather than looked up so this function stays a pure integer
+ * accumulator with nothing to say about machines.
  */
-export function rechargeReservoir(reservoir: Reservoir): void {
+export function rechargeReservoir(reservoir: Reservoir, rechargeMlPerMinute: number): void {
   if (reservoir.levelMl >= reservoir.capacityMl) {
     // A full pond banks nothing. Otherwise a long idle spell would fill the accumulator and
     // the first draw would be answered instantly out of stored nothing.
@@ -92,7 +149,7 @@ export function rechargeReservoir(reservoir: Reservoir): void {
     return;
   }
 
-  reservoir.rechargeAccum += RESERVOIR_RECHARGE_ML_PER_MINUTE;
+  reservoir.rechargeAccum += rechargeMlPerMinute;
   const whole = divFloor(reservoir.rechargeAccum, TICKS_PER_MINUTE);
   if (whole <= 0) return;
 
@@ -131,15 +188,20 @@ export function reservoirThrottle(reservoir: Reservoir | null): ReservoirThrottl
  * recharge rate**. That last clause is the one that guarantees recovery — a pump at an empty
  * pond is slow, not dead, and it can never take more than the pond makes, so the level can
  * only go up from there the moment demand eases.
+ *
+ * `rechargeMlPerMinute` IS THAT POND'S RATE, not the world constant — see
+ * `reservoirRechargeMlPerMinute`. A drained pond is where a heavily-drawn factory lives, so the
+ * `Sip` band is the band an Artesian Well has to reach or it may as well not exist.
  */
 export function pumpSupplyMlPerMinute(
   reservoir: Reservoir | null,
   baseRateMlPerMinute: number,
+  rechargeMlPerMinute: number,
 ): number {
   if (baseRateMlPerMinute <= 0) return 0;
   switch (reservoirThrottle(reservoir)) {
     case ReservoirThrottle.Sip:
-      return reservoir === null ? 0 : RESERVOIR_RECHARGE_ML_PER_MINUTE;
+      return reservoir === null ? 0 : rechargeMlPerMinute;
     case ReservoirThrottle.Half:
       return divFloor(baseRateMlPerMinute, 2);
     default:

@@ -11,11 +11,27 @@
 // The lamp switch itself stays in `index.ts`: its other branches want `bestSellable`, which
 // imports `index.ts` back. Only the two branches that were lying are here.
 
-import { MachineKind, MachineRole, PortFlow, machineSpec } from '@snack/sim';
-import type { ContractView, DepotView, MachineView } from '@snack/sim';
+import {
+  LampState,
+  MachineKind,
+  MachineRole,
+  PortFlow,
+  RESERVOIR_LOW_PERMILLE,
+  ReservoirThrottle,
+  TICKS_PER_SECOND,
+  machineSpec,
+} from '@snack/sim';
+import type { ContractView, DepotView, MachineView, ReservoirView } from '@snack/sim';
 
 import { containerFreshnessNote } from '../../hud/freshness';
+import { formatEta } from '../../hud/format';
 import { itemName } from '../../hud/item-copy';
+// `formatWater` and `formatPermille` live in `reports/format.ts` and are IMPORTED rather than
+// reimplemented here, which is the whole lesson of `format/money.ts`'s header: five copies of
+// cents-to-string accumulated until they disagreed on screen, in a shipping build, about the
+// price of a belt. A pond that reads "14.5%" in the ribbon and "15%" on a receipt would be the
+// same defect in a unit nobody would think to check.
+import { formatPermille, formatWater } from '../../reports/format';
 import { liquidName } from './liquids';
 
 /**
@@ -203,4 +219,256 @@ export function depotStatus(
   if (note === null) return `${name} — ${routes}, ${floor}`;
   const clock = depot.contractIds.length > 1 ? `soonest ${note}` : note;
   return `${name} — ${routes}, ${floor} (${clock})`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────
+//  THE WATER SENTENCES (item 130)
+//
+//  The owner asked twice, four days apart, how to boost his pumps — the second time after
+//  being told the question was filed. He could feel the shortage and could not see a single
+//  number about it, because THE INSTRUMENTS WERE NEVER PLUGGED IN: `MachineView.ticksToEmpty`
+//  and `ReservoirView.throttle` are both computed in `view.ts` and, before this file, read
+//  NOWHERE in `apps/web/src`. `data.ts:2591` says the Tank is "the only object in the game
+//  that shows a net rate and a time-to-empty… it turns 'am I short of water' from a feeling
+//  into arithmetic the player can do at a glance". It did not, because nothing rendered it.
+//
+//  **AND THE ONE SENTENCE THAT DID SHIP WAS A WILD GOOSE CHASE.** Every blue `UtilityMissing`
+//  lamp in the game printed "barrel dry — click to refill". That is true of exactly one
+//  machine, the hand-filled Barrel Sprinkler. `lampFor` hands the same blue lamp to a dry
+//  piped head, a dry Irrigation Hub, an empty Tank and a pump at a dry pond — four machines
+//  with no barrel, that no click will refill. A player whose field has gone dry hovers a dead
+//  head, is told to click it, clicks it, nothing happens, and reasonably concludes the PUMP is
+//  the thing that is wrong. That is item 113's lesson — a name the machine cannot support
+//  turns a red lamp into a wild goose chase — repeated on the blue one.
+//
+//  So these functions answer the four questions in the order a shortage actually raises them:
+//  am I in the halved band, what is my net rate, how long have I got, and how full is the
+//  pond. The band comes FIRST wherever it is true, because a pump silently running at half
+//  its posted rate is indistinguishable from a broken pump, and it is the one fact the player
+//  cannot get any other way — the shoreline recedes, but nothing says what the shoreline MEANS.
+//
+//  Every number below is read straight off the projection. Nothing here recomputes a rate, a
+//  threshold or a countdown: §12 says the renderer computes no network state of its own, and
+//  a second opinion about when a pump halves is exactly the sort of arithmetic that would end
+//  up disagreeing with the sim in the band where being right matters most.
+// ─────────────────────────────────────────────────────────────────────────────────────────
+
+/** A rate in ml/min, in the units the Shift Report already quotes water in. */
+function rate(mlPerMinute: number): string {
+  return `${formatWater(Math.abs(mlPerMinute))}/min`;
+}
+
+/**
+ * The pond a machine draws from, or `null` when the answer is not certain.
+ *
+ * TWO RULES, AND THE SECOND ONE IS THE HONEST ONE. A pump is placed against a bank —
+ * `guardPlacement` refuses one anywhere else — so its source is the reservoir its footprint
+ * touches, and rect adjacency finds it exactly. Nothing else in the game is adjacent to
+ * anything: a Tank or a piped head is fed through the ledger from wherever the pump is, and
+ * the view carries no edge from one to the other.
+ *
+ * So for those, the pond is named ONLY when there is exactly one in the world — which is the
+ * case today (`state.ts` builds one and no command makes another) and is the only case where
+ * "the pond" is an unambiguous phrase. On a two-pond lot these sentences go quiet about the
+ * source rather than guess, which is the difference between a readout and a rumour.
+ */
+function pondFor(reservoirs: readonly ReservoirView[], m: MachineView): ReservoirView | null {
+  const spec = machineSpec(m.kind as MachineKind);
+  if (spec !== null && spec.role === MachineRole.Pump) {
+    for (const r of reservoirs) {
+      const touches =
+        m.tileX <= r.tileX + r.tilesWide &&
+        r.tileX <= m.tileX + m.tilesWide &&
+        m.tileY <= r.tileY + r.tilesHigh &&
+        r.tileY <= m.tileY + m.tilesHigh;
+      if (touches) return r;
+    }
+    return null;
+  }
+  return reservoirs.length === 1 ? reservoirs[0]! : null;
+}
+
+/**
+ * The reservoir under a tile, or `null` for dry land. Rect containment against the projected
+ * ponds, which is the only way to ask: open water is the one terrain `tileAtView` does not
+ * carry, and the list is one entry long today.
+ *
+ * `pointer.ts`'s `reservoirAtTile` is the BOOLEAN FORM of this same question — it decides
+ * whether a click means "dip the can". It is deliberately NOT merged into this one, and not
+ * for want of noticing: making it delegate would point the input layer at the render layer,
+ * which is backwards from every other edge in the app (`index.ts` imports `pointer.ts`, never
+ * the reverse) and would put a cycle one careless import away.
+ *
+ * So the two rect tests stay separate and are PINNED TOGETHER BY A TEST instead — see
+ * "agrees with pointer.ts about where the water is" in `machine-tell.test.ts`. Two copies that
+ * agree today and get edited apart later is the shape of every bug `format/money.ts`'s header
+ * is about, and a test is the cheap half of that lesson.
+ */
+export function pondAtTile(
+  reservoirs: readonly ReservoirView[],
+  tileX: number,
+  tileY: number,
+): ReservoirView | null {
+  for (const r of reservoirs) {
+    if (
+      tileX >= r.tileX &&
+      tileX < r.tileX + r.tilesWide &&
+      tileY >= r.tileY &&
+      tileY < r.tileY + r.tilesHigh
+    ) {
+      return r;
+    }
+  }
+  return null;
+}
+
+/**
+ * **HOW FULL THE POND IS, AND WHAT THAT DOES TO THE PUMPS** — the sentence for a hovered
+ * water tile, and the reason the 25% line means anything at all.
+ *
+ * The threshold is quoted from `RESERVOIR_LOW_PERMILLE` rather than typed as "25%", so the
+ * copy cannot outlive the constant. The band itself is `ReservoirThrottle`, decided in the
+ * sim by the same function the pumps are throttled by — this file never compares a level to a
+ * threshold of its own.
+ */
+export function pondStatus(r: ReservoirView): string {
+  const full = formatPermille(r.levelPermille);
+  switch (r.throttle) {
+    case ReservoirThrottle.Sip:
+      return 'pond empty — pumps get only what it refills, so it always recovers';
+    case ReservoirThrottle.Half:
+      return `pond low — ${full} full, under ${formatPermille(RESERVOIR_LOW_PERMILLE)}, so pumps run at HALF RATE`;
+    default:
+      return `pond — ${full} full`;
+  }
+}
+
+/**
+ * **THE PUMP'S REAL RATE, AND WHY IT IS NOT THE POSTED ONE.**
+ *
+ * `flowMlPerMinute` on a pump is what it ACTUALLY DREW last tick (`pipes.ts:738`), not its
+ * rating — so the halved band shows up in the number without this file halving anything. The
+ * band is named anyway, because a player reading "300 L/min" has no way to know that is half
+ * of something, and "my pump is slower than it says" with no explanation is precisely the
+ * report this item was filed under.
+ */
+function pumpStatus(name: string, m: MachineView, pond: ReservoirView | null): string {
+  if (pond === null) return `${name} — ${rate(m.flowMlPerMinute)}`;
+  const level = formatPermille(pond.levelPermille);
+  switch (pond.throttle) {
+    case ReservoirThrottle.Sip:
+      return `${name} — pond empty, ${rate(m.flowMlPerMinute)} is all it refills`;
+    case ReservoirThrottle.Half:
+      return `${name} at HALF RATE — ${rate(m.flowMlPerMinute)}, pond down to ${level}`;
+    default:
+      // A pump on a healthy pond that is nonetheless drawing nothing has no demand behind it,
+      // which is a real and findable state — an unconnected pump, or a network whose heads are
+      // all full — and reads as a bug if the sentence just prints "0 L/min" and stops.
+      if (m.flowMlPerMinute <= 0) return `${name} idle — nothing on its pipes is asking for water`;
+      return `${name} — ${rate(m.flowMlPerMinute)}, pond at ${level}`;
+  }
+}
+
+/**
+ * **THE NET RATE AND THE TIME TO EMPTY** — the two numbers `data.ts:2591` says the Tank exists
+ * to show, finally on screen.
+ *
+ * `ticksToEmpty` is `-1` for "not emptying", which is a different fact from "zero seconds" and
+ * is why the falling branch is gated on the sentinel rather than on the sign of the rate. A
+ * tank at break-even has no time-to-empty and this sentence does not invent one.
+ *
+ * The tank is the machine that turns a shortage into a DEADLINE, so when it is draining the
+ * clock is the thing the sentence ends on.
+ */
+function tankStatus(name: string, m: MachineView, pond: ReservoirView | null): string {
+  const level = formatPermille(m.tankPermille);
+
+  // AN EMPTY TANK IS A VERDICT, NOT A LEVEL. Its net rate here is near zero by construction —
+  // whatever arrives is spent the same tick — so printing the rate would say "0 L/min" at a
+  // player whose whole line has stopped. The useful number is the POND's, because an empty
+  // buffer over a halved pond and an empty buffer over a full one are two different errands.
+  //
+  // "EMPTY" IS ASKED OF THE SIM'S OWN BLUE LAMP, not measured here. `MachineView` publishes
+  // `tankPermille` and no raw millilitre count, and `permille()` floors — so a tank holding a
+  // genuine trickle reads 0.0% and a threshold of my own would call it empty a moment before
+  // the sim does. `lampFor` already decides this (`machine.tankMl <= 0` → `UtilityMissing`);
+  // one predicate read twice beats two predicates that disagree at the boundary.
+  if (m.lamp === LampState.UtilityMissing) {
+    if (pond !== null && pond.throttle === ReservoirThrottle.Half) {
+      return `${name} EMPTY — pond down to ${formatPermille(pond.levelPermille)}, so the pump is at half rate`;
+    }
+    if (pond !== null && pond.throttle === ReservoirThrottle.Sip) {
+      return `${name} EMPTY — the pond is empty too, and refills slowly`;
+    }
+    return `${name} EMPTY — the line is spending water faster than the pump brings it`;
+  }
+
+  if (m.flowMlPerMinute > 0) return `${name} ${level} — filling, ${rate(m.flowMlPerMinute)} spare`;
+  if (m.flowMlPerMinute === 0) return `${name} ${level} — holding steady`;
+  // `ticksToEmpty` is `-1` for "not emptying", which is a different fact from "no time left",
+  // so the clock is gated on the sentinel rather than on the sign of the rate. Nothing here
+  // divides by zero and nothing here invents a deadline for a tank at break-even.
+  const clock = m.ticksToEmpty < 0 ? '' : `, empty ${formatEta(m.ticksToEmpty / TICKS_PER_SECOND)}`;
+  return `${name} ${level} — losing ${rate(m.flowMlPerMinute)}${clock}`;
+}
+
+/**
+ * **A HEAD THAT IS DRY OR SHORT, AND WHICH WALL IT HIT** — the sentence that replaces "barrel
+ * dry — click to refill" on the two machines that have no barrel.
+ *
+ * The three endings are three different errands and that is the entire point of splitting them:
+ * a pond in the halved band is a POND problem (stop drawing so hard, or wait), an empty pond is
+ * a worse version of the same, and a head going short while the pond is FULL is an
+ * OVERSUBSCRIPTION problem — too many heads on one pump — which is the one case where the
+ * answer is a change to the build rather than patience. Collapsing them into "not getting
+ * enough water" is what the game said before, and it sent the owner to the pump three times.
+ */
+function headStatus(name: string, dry: boolean, pond: ReservoirView | null): string {
+  const trouble = dry ? 'DRY' : 'short of water';
+  if (pond === null) return `${name} ${trouble} — the network is not feeding it`;
+  switch (pond.throttle) {
+    case ReservoirThrottle.Sip:
+      return `${name} ${trouble} — the pond is empty`;
+    case ReservoirThrottle.Half:
+      return `${name} ${trouble} — pond down to ${formatPermille(pond.levelPermille)}, pump at half rate`;
+    default:
+      return `${name} ${trouble} — one pump is not enough for this many heads`;
+  }
+}
+
+/**
+ * **THE WATER LAYER'S OWN SENTENCE, OR `null` FOR A MACHINE THIS DOES NOT SPEAK FOR.**
+ *
+ * Answered ABOVE the lamp switch, for the reason the vehicles and the boxes are: the lamp has
+ * nothing useful to say about any of these three. A pump and a tank have no work cycle, so a
+ * healthy one falls to `LampState.Running` and the words "pump running" — true, and silent
+ * about the halved band, which is the one thing worth saying. A dry one lands on
+ * `LampState.UtilityMissing` and the barrel line, which is worse than silent.
+ *
+ * A HEALTHY HEAD IS LEFT ALONE. It returns `null` and keeps "sprinkler running", because a
+ * working sprinkler has no shortage to explain and a rate on it would be noise on the one
+ * machine a player builds forty of.
+ */
+export function waterStatus(
+  name: string,
+  m: MachineView,
+  reservoirs: readonly ReservoirView[],
+): string | null {
+  const spec = machineSpec(m.kind as MachineKind);
+  if (spec === null) return null;
+
+  if (spec.role === MachineRole.Pump) return pumpStatus(name, m, pondFor(reservoirs, m));
+  if (spec.role === MachineRole.Tank) return tankStatus(name, m, pondFor(reservoirs, m));
+
+  if (spec.role === MachineRole.PipedSprinkler) {
+    // "Dry" is whatever this machine cannot afford to start, and the two on this role differ —
+    // so the flag is taken from the SIM's own blue lamp rather than recomputed from `tankMl`
+    // against a floor this file would have to know. `lampFor` already forks on
+    // `spec.moistureSensing` to pick that floor; asking it is one predicate instead of two.
+    const dry = m.lamp === LampState.UtilityMissing;
+    if (!dry && m.throttled !== 1) return null;
+    return headStatus(name, dry, pondFor(reservoirs, m));
+  }
+
+  return null;
 }

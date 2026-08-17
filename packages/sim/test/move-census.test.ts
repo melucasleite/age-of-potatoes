@@ -638,6 +638,9 @@ describe('the goods ledger', () => {
       // The liquid layer holds millilitres, and there is no item id for a millilitre — stated in
       // `applyDeconstructMachine`'s own header, where a tank's contents go on the ground.
       'pump: has no door a hand can put that good through',
+      // The Artesian Well ([[130]]) holds nothing at all — not even millilitres. It is a hole in
+      // the ground with a price, and the only thing it changes is a rate in `rechargeReservoir`.
+      'artesian-well: has no door a hand can put that good through',
       'tank: has no door a hand can put that good through',
       'piped-sprinkler: has no door a hand can put that good through',
       'irrigation-hub: has no door a hand can put that good through',

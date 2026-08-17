@@ -163,6 +163,9 @@ export {
   RESERVOIR_LOW_PERMILLE,
   RESERVOIR_RECHARGE_ML_PER_MINUTE,
   RESERVOIR_UNIT_ML,
+  WELL_MAX_PER_RESERVOIR,
+  WELL_RECHARGE_ML_PER_MINUTE,
+  WELL_RECHARGE_UNITS_PER_MINUTE,
   RUSTIC_STYLE_DENOMINATOR,
   RUSTIC_STYLE_NUMERATOR,
   SCRAP_PAYOUT_DENOMINATOR,
@@ -271,9 +274,11 @@ export {
   reservoirById,
   reservoirCoversTile,
   reservoirLevelPermille,
+  reservoirRechargeMlPerMinute,
   reservoirThrottle,
   takeWater,
   waterAtSubtile,
+  wellsOnReservoir,
 } from './water';
 export {
   BuildRefusal,

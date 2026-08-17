@@ -67,7 +67,12 @@ import {
   isDepot,
 } from './commerce';
 import { networkFlowPermille, tankTicksToEmpty } from './pipes';
-import { reservoirLevelPermille, reservoirThrottle } from './water';
+import {
+  reservoirLevelPermille,
+  reservoirRechargeMlPerMinute,
+  reservoirThrottle,
+  wellsOnReservoir,
+} from './water';
 import {
   type CropTile,
   type Grabber,
@@ -455,6 +460,22 @@ export interface ReservoirView {
   levelPermille: number;
   /** `ReservoirThrottle`: 0 full, 1 halved below 25%, 2 sipping at the recharge rate. */
   throttle: number;
+  /**
+   * What this pond MAKES, in millilitres per minute — §4's base plus its Artesian Wells.
+   *
+   * **NO LONGER A CONSTANT THE HUD COULD HAVE LOOKED UP** (item 130), which is exactly why it is
+   * published here: before the well, "how much does a pond make" had one answer for every world
+   * and a renderer could have imported it; now it is a fact about THIS pond and changes when
+   * somebody sinks a well. A HUD that read `RESERVOIR_RECHARGE_ML_PER_MINUTE` would quietly
+   * under-report every bored pond in the game.
+   *
+   * It is also half of the sentence the player has been missing. Item 130's owner asked twice how
+   * to boost a pump because nothing in the game ever told him what his pond produced against what
+   * his field wanted; `stats.waterDrawnMl` is the other half.
+   */
+  rechargeMlPerMinute: number;
+  /** How many Artesian Wells are sunk on this bank, 0..`WELL_MAX_PER_RESERVOIR`. */
+  wells: number;
 }
 
 /**
@@ -1486,6 +1507,8 @@ function projectReservoirs(state: WorldState, out: WorldView): void {
         capacityMl: 0,
         levelPermille: 0,
         throttle: 0,
+        rechargeMlPerMinute: 0,
+        wells: 0,
       };
       out.reservoirs.push(rv);
     }
@@ -1499,6 +1522,8 @@ function projectReservoirs(state: WorldState, out: WorldView): void {
     rv.capacityMl = reservoir.capacityMl;
     rv.levelPermille = reservoirLevelPermille(reservoir);
     rv.throttle = reservoirThrottle(reservoir);
+    rv.wells = wellsOnReservoir(state, reservoir);
+    rv.rechargeMlPerMinute = reservoirRechargeMlPerMinute(state, reservoir);
   }
 
   out.reservoirs.length = count;

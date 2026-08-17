@@ -46,8 +46,11 @@ import {
   blockedStatus,
   depotStatus,
   dockShelfStatus,
+  pondAtTile,
+  pondStatus,
   starvedStatus,
   storageStatus,
+  waterStatus,
 } from './machine-tell';
 import { pipeAtTile } from './pipes';
 import { classifyShore } from './shore';
@@ -1228,6 +1231,14 @@ export function statusFor(view: WorldView, ui: RenderUiState): string {
       : `${carrying} pipe`;
   }
 
+  // THE POND ITSELF, WHICH HAS NEVER HAD A SENTENCE (item 130). Hovering the one water source
+  // in the game said "bare ground" — a description of the tile the player is most likely to be
+  // asking about when the field has gone dry, and false twice over. Below the pipe branch on
+  // purpose: pipes run overhead since item 120, so a main crossing the pond is a thing the
+  // player built and pointed at, and it outranks the terrain under it.
+  const pond = pondAtTile(view.reservoirs, ui.hover.tileX, ui.hover.tileY);
+  if (pond !== null) return pondStatus(pond);
+
   if (!query.isField)
     return toolMachineKind(tool) === null ? 'bare ground' : 'ground: clear to build';
   // No longer a refusal. Reach still decides which command the click becomes, but out of
@@ -1387,6 +1398,15 @@ function machineStatus(view: WorldView, m: MachineView): string {
   const box = storageStatus(name, m);
   if (box !== null) return box;
 
+  // WHICH WALL THE WATER HIT (item 130). Above the lamp switch for the vehicles' and the boxes'
+  // reason, and then some: for a pump and a tank the lamp is not merely unhelpful, it is wrong.
+  // Both answer `LampState.Running` while healthy — "pump running", silent about the halved
+  // band, which is the single fact the player cannot get any other way — and
+  // `LampState.UtilityMissing` when dry, which is the branch below that says "barrel dry —
+  // click to refill" at four machines that have no barrel and no click.
+  const water = waterStatus(name, m, view.reservoirs);
+  if (water !== null) return water;
+
   switch (m.lamp) {
     case LampState.Jammed:
       return `${name} jammed — right-click to whack it`;
@@ -1410,6 +1430,14 @@ function machineStatus(view: WorldView, m: MachineView): string {
       // to ask which. Item 090 made drone service free: the bay has no shelf, shows no blue
       // lamp, and this sentence is back to being about water, which is the only utility in
       // the game a machine can actually run out of.
+      //
+      // **AND IT REACHES EXACTLY ONE MACHINE NOW** (item 130). The paragraph above was right
+      // that the blue lamp means water and wrong that it means a BARREL: `lampFor` hands the
+      // same lamp to a dry piped head, a dry Irrigation Hub, an empty Tank and a pump at a dry
+      // pond, none of which has a barrel and none of which a click will refill. All four are
+      // answered by `waterStatus` above this switch, so what falls through here is the
+      // hand-filled Barrel Sprinkler — the machine the sentence was written for, and the only
+      // one where "click to refill" is an errand rather than a wild goose chase.
       return 'barrel dry — click to refill';
     case LampState.Running:
       return m.kind === MachineKind.Sprinkler ? 'sprinkler running' : `${name} running`;
