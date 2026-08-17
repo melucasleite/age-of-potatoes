@@ -78,7 +78,10 @@ const ROUGH_PERMILLE = permille(CONDITION_EFFECT_THRESHOLD, CONDITION_MAX);
 // this file does column arithmetic any more.
 
 /** Sprite box sizes. Bigger in the pane, because that is the one you are actually looking at. */
-const SLOT_ICON = 48;
+// 64 rather than 48 since the resolution bump: item art is 32 source pixels now, and 48 is not
+// a whole multiple of it — a 32px frame in a 48px box either letterboxes or scales by 1.5 and
+// goes soft, which is the one thing `image-rendering: pixelated` cannot save. 64 is 2x exactly.
+const SLOT_ICON = 64;
 const DETAIL_ICON = 64;
 
 // --- the sidebar row (the opener) --------------------------------------------------------
