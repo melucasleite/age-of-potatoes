@@ -228,6 +228,38 @@ export interface MachineView {
    */
   wantsItem: number;
   /**
+   * **HOW MANY MORE OF `wantsItem` WOULD END THE SHORTAGE**, and **how many are already in the
+   * hopper** — the other two thirds of the answer `wantsItem` only started (item 116).
+   *
+   * `missingInputItem` flags a line when `count < line.count`, which is exactly right as a
+   * PREDICATE and was being read as a SENTENCE. Every machine in the game asked for one of each
+   * thing until the Bundles tech shipped a Six-Packer that eats six sodas an operation, and from
+   * that day a packer holding five of them reported *"six packer wants Soda"* — with the soda
+   * visible in its own hopper. Item 113 closed the case where the machine held a DIFFERENT
+   * input; this is the identical lie one dimension over, and the roster has exactly two machines
+   * that can tell it (`multi-count-recipes.test.ts` proves the census, and fails the day a third
+   * lands).
+   *
+   * **BOTH NUMBERS, BECAUSE ONE CANNOT PHRASE IT.** `wantsCount` alone is 1 both for a Washer
+   * with an empty hopper and for a Six-Packer one soda short, and those want different English:
+   * *"wants Russet Potato"* against *"needs 1 more Soda"*. The word "more" is a claim about what
+   * is already there, so the surface saying it needs the number behind it. `wantsHeld` is that
+   * number, and it is the exact figure whose absence let the sentence lie for two releases.
+   *
+   * **DERIVED FROM THE HOPPER TABLE, NOT FROM A SECOND COPY OF THE RECIPE RULES.** `machineHoppers`
+   * is index-parallel to `machine.inputCounts` and carries each line's per-operation count — the
+   * same pair `projectRecipe` publishes below — so the shortfall is a subtraction over data this
+   * projection already has, and *which* item is short stays `missingInputItem`'s single answer.
+   * Re-running its fewest-missing/last-recipe tie-break here to recover a count would have been a
+   * second implementation of the one rule that matters, drifting quietly the first time either
+   * was touched.
+   *
+   * `wantsCount` is at least 1 whenever `wantsItem` is set, and both are 0 whenever it is 0 — so
+   * a surface may test the item alone and never divide by nothing.
+   */
+  wantsCount: number;
+  wantsHeld: number;
+  /**
    * How many of `outputCount` have overcooked, and what they turned into (0 for machines
    * whose output cannot spoil).
    *
@@ -842,6 +874,21 @@ export interface ContractView {
   destination: string;
   /** Stock counted toward the next run. */
   stocked: number;
+  /**
+   * Ticks of freshness the FLOOR has left, or 0 for a shelf-stable route and an empty one
+   * (item 115).
+   *
+   * **PUBLISHED BECAUSE ITEM 114 IS THE STANDING LESSON**: item 110 taught containers to spend a
+   * window and turn their contents to Compost, told no surface about it, and the honest summary of
+   * that release was *"the game destroys your food correctly and silently"*. A depot floor now
+   * spends a clock too, and "40 potatoes" says the same words the whole way down to zero unless
+   * somebody can read this.
+   *
+   * The lorry's clock is deliberately NOT published beside it: `inTransitFreshTicks` is frozen for
+   * the length of a run, so a countdown drawn from it would sit still and read as broken. What a
+   * panel wants about a truck is `ticksRemaining`, which is already here.
+   */
+  stockedFreshTicks: number;
   runsCompleted: number;
   grossCents: number;
   /** `ContractPhase`: 0 waiting on stock, 1 loading, 2 out on the road. */
@@ -1149,6 +1196,8 @@ function projectMachines(state: WorldState, out: WorldView): void {
         inputItem: 0,
         outputItem: 0,
         wantsItem: 0,
+        wantsCount: 0,
+        wantsHeld: 0,
         overcookedCount: 0,
         overcookedItem: 0,
         speedLevel: 0,
@@ -1226,6 +1275,11 @@ function projectMachines(state: WorldState, out: WorldView): void {
     // to know when to believe this. Computed after `mv.lamp`, off the same projection pass.
     mv.wantsItem =
       spec === null || mv.lamp !== LampState.Starved ? 0 : missingInputItem(spec, machine);
+    // The shortfall behind the name (item 116), off the SAME gate — three fields that are all
+    // zero together or all set together, so no surface can print a count for a machine that is
+    // running.
+    mv.wantsHeld = mv.wantsItem === 0 ? 0 : heldOf(spec!, machine, mv.wantsItem);
+    mv.wantsCount = mv.wantsItem === 0 ? 0 : shortfallOf(spec!, machine, mv.wantsItem);
     mv.overcookedCount = machine.overcookedCount;
     mv.overcookedItem =
       spec === null || spec.overcookOutputItem === null ? 0 : spec.overcookOutputItem;
@@ -1313,6 +1367,47 @@ function bleedCentsWithinWindow(machine: Machine, tick: number): number {
     if (event.tick > tick - BLEED_WINDOW_TICKS) cents += event.cents;
   }
   return cents;
+}
+
+/**
+ * How many of a named ingredient are sitting in this machine's hopper for it (item 116).
+ *
+ * `machineHoppers` is index-parallel to `machine.inputCounts` — data.ts calls that a
+ * save-compatibility rule rather than a convenience — so the hopper's position IS the count's
+ * position, and `projectRecipe` below pairs them exactly this way three functions later.
+ */
+function heldOf(spec: MachineSpec, machine: Machine, item: number): number {
+  const hoppers = machineHoppers(spec);
+  for (let i = 0; i < hoppers.length; i++) {
+    if (hoppers[i]!.item !== item) continue;
+    return machine.inputCounts[i] ?? 0;
+  }
+  return 0;
+}
+
+/**
+ * How many MORE of a named ingredient would clear the shortage — at least 1, never 0.
+ *
+ * **THE FLOOR OF 1 IS NOT DEFENSIVE, IT IS THE CONTRACT.** `wantsItem` is only ever set for an
+ * ingredient the machine is genuinely short of, so `line.count - held` is already positive on
+ * every path that reaches here; the clamp exists so that a machine with no hopper for what it
+ * named — impossible today, because every recipe item gets a hopper by construction — degrades
+ * into "needs one" rather than into "needs zero more", which is the one sentence a starved lamp
+ * must never be able to say.
+ *
+ * A SECOND WALK RATHER THAN ONE PASS RETURNING A PAIR, because a pair is an object, `view()`
+ * runs every frame over every machine, and this file's whole allocation posture (see
+ * `projectRecipe`) is that per-machine-per-frame garbage is not worth four fewer array reads on
+ * a list that is at most four long.
+ */
+function shortfallOf(spec: MachineSpec, machine: Machine, item: number): number {
+  const hoppers = machineHoppers(spec);
+  for (let i = 0; i < hoppers.length; i++) {
+    const line = hoppers[i]!;
+    if (line.item !== item) continue;
+    return Math.max(1, line.count - (machine.inputCounts[i] ?? 0));
+  }
+  return 1;
 }
 
 /**
@@ -2233,6 +2328,7 @@ function projectCommerce(state: WorldState, out: WorldView): void {
     cv.destination = contract.destination;
     cv.stocked = contract.stocked;
     cv.runsCompleted = contract.runsCompleted;
+    cv.stockedFreshTicks = contract.stockedFreshTicks;
     cv.grossCents = contract.grossCents;
     cv.phase = contract.phase;
     cv.ticksRemaining = contract.ticksRemaining;
@@ -2276,6 +2372,7 @@ function blankContract(): ContractView {
     quantityPerRun: 0,
     destination: '',
     stocked: 0,
+    stockedFreshTicks: 0,
     runsCompleted: 0,
     grossCents: 0,
     phase: 0,

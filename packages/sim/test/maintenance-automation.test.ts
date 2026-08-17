@@ -619,7 +619,9 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
       quantityPerRun: 10,
       destination: 'Diagnostics Row',
       stocked: 0,
+      stockedFreshTicks: 0,
       inTransit: 0,
+      inTransitFreshTicks: 0,
       phase: ContractPhase.Waiting,
       ticksRemaining: 0,
       runsCompleted: 0,
@@ -707,6 +709,15 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
     // anything on this line was going to turn to compost mid-watch, here is where it would. With
     // the four `d.num` families held out of the digest, the watch reproduces 7906cb45 exactly —
     // so nothing spoiled, nothing composted, and every story assertion above is untouched.
-    expect(hashState(state)).toBe('ab8ef078');
+    // ab8ef078 -> 68f7accb (save format 21, item 115): the digest gained the last two places a
+    // good can sit and grow old — a standing route's floor and lorry (`Contract.stockedFreshTicks`,
+    // `Contract.inTransitFreshTicks`) and an Agri-Bot's arms (`Bot.carryFreshTicks`). This watch
+    // has a depot on a Kola Powder route and no harvester at all, so all three write the same
+    // zeroes every tick: Kola Powder is shelf-stable, and this world's only robot is a REPAIR
+    // drone, which carries nothing. With the three `d.num` calls held out of the digest the watch
+    // reproduces ab8ef078 exactly — meaning every other hashed field is byte-identical, so item
+    // 115 changed no behaviour here even though it changed behaviour elsewhere. The wrench came
+    // due, the drone answered, and the factory ended the watch healthy.
+    expect(hashState(state)).toBe('68f7accb');
   });
 });

@@ -241,7 +241,7 @@ describe('the truck depot', () => {
     ]);
     const contract = state.contracts[0]!;
     // Five bags arrive off a belt, through the one door a grabber uses.
-    for (let i = 0; i < 5; i++) expect(depotAccept(state, depot, ItemId.BaggedChips)).toBe(true);
+    for (let i = 0; i < 5; i++) expect(depotAccept(state, depot, ItemId.BaggedChips, 0)).toBe(true);
     expect(depotStockedCount(state, depot.id)).toBe(5);
 
     const before = state.moneyCents;
@@ -266,7 +266,7 @@ describe('the truck depot', () => {
         destination: 'Halvorsen & Sons',
       },
     ]);
-    for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.BaggedChips);
+    for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.BaggedChips, 0);
 
     const stocked = computeNetWorthCents(state);
     // Across the commit, the loading beat, the whole road, and the payout: never once below.
@@ -294,11 +294,11 @@ describe('the truck depot', () => {
     expect(contract.phase).toBe(ContractPhase.Waiting);
     expect(state.ceremonies).not.toContain(CeremonyId.FirstTruck);
 
-    depotAccept(state, depot, ItemId.BaggedChips);
+    depotAccept(state, depot, ItemId.BaggedChips, 0);
     stepMany(state, 1);
     expect(contract.phase).toBe(ContractPhase.Waiting);
 
-    depotAccept(state, depot, ItemId.BaggedChips);
+    depotAccept(state, depot, ItemId.BaggedChips, 0);
     stepMany(state, 1);
     expect(contract.phase).toBe(ContractPhase.Loading);
     expect(contract.inTransit).toBe(2);
@@ -314,8 +314,8 @@ describe('the truck depot', () => {
     const ceremonies = state.ceremonies.length;
     stepMany(state, depotRunTicks(depot) + 1);
     expect(contract.runsCompleted).toBe(1);
-    depotAccept(state, depot, ItemId.BaggedChips);
-    depotAccept(state, depot, ItemId.BaggedChips);
+    depotAccept(state, depot, ItemId.BaggedChips, 0);
+    depotAccept(state, depot, ItemId.BaggedChips, 0);
     stepMany(state, DEPOT_LOAD_TICKS + depotRunTicks(depot) + 4);
     expect(contract.runsCompleted).toBe(2);
     expect(state.ceremonies).toHaveLength(ceremonies);
@@ -323,7 +323,7 @@ describe('the truck depot', () => {
 
   it('refuses goods it has no route for, so a mis-aimed arm never picks them up', () => {
     const { state, depot } = worldWithDepot(9203);
-    expect(depotAccept(state, depot, ItemId.BaggedChips)).toBe(false);
+    expect(depotAccept(state, depot, ItemId.BaggedChips, 0)).toBe(false);
     run(state, [
       {
         type: 'CreateContract',
@@ -333,8 +333,8 @@ describe('the truck depot', () => {
         destination: 'Comfort Foods Depot',
       },
     ]);
-    expect(depotAccept(state, depot, ItemId.RussetPotato)).toBe(false);
-    expect(depotAccept(state, depot, ItemId.BaggedChips)).toBe(true);
+    expect(depotAccept(state, depot, ItemId.RussetPotato, 0)).toBe(false);
+    expect(depotAccept(state, depot, ItemId.BaggedChips, 0)).toBe(true);
   });
 
   it('fills to its floor and then refuses, which is what backs a belt up', () => {
@@ -351,7 +351,7 @@ describe('the truck depot', () => {
     ]);
     let accepted = 0;
     for (let i = 0; i < DEPOT_STOCK_CAPACITY + 25; i++) {
-      if (depotAccept(state, depot, ItemId.BaggedChips)) accepted += 1;
+      if (depotAccept(state, depot, ItemId.BaggedChips, 0)) accepted += 1;
     }
     expect(accepted).toBe(DEPOT_STOCK_CAPACITY);
   });
@@ -408,8 +408,23 @@ describe('a standing contract', () => {
       },
     ]);
     const contract = state.contracts[0]!;
+    // `stockedFreshTicks` and `inTransitFreshTicks` join the bookkeeping list (item 115) rather
+    // than the configurable one, and the distinction is exactly what this test is about: the
+    // ruling is that a route cannot express VALUE, and a clock is not a price. Nothing sets these
+    // — they are written by the door goods arrive through and spent by the tick, like `stocked`
+    // and `inTransit` beside them, and no panel can choose one.
     const configurable = Object.keys(contract).filter(
-      (key) => !['id', 'depotId', 'stocked', 'inTransit', 'phase', 'ticksRemaining'].includes(key),
+      (key) =>
+        ![
+          'id',
+          'depotId',
+          'stocked',
+          'stockedFreshTicks',
+          'inTransit',
+          'inTransitFreshTicks',
+          'phase',
+          'ticksRemaining',
+        ].includes(key),
     );
     expect(configurable.sort()).toEqual([
       'destination',
@@ -508,7 +523,7 @@ describe('a standing contract', () => {
       },
     ]);
     const contract = state.contracts[0]!;
-    for (let i = 0; i < 7; i++) depotAccept(state, depot, ItemId.BaggedChips);
+    for (let i = 0; i < 7; i++) depotAccept(state, depot, ItemId.BaggedChips, 0);
     stepMany(state, 1);
     expect(contract.inTransit).toBe(4);
     expect(contract.stocked).toBe(3);
@@ -535,7 +550,7 @@ describe('a standing contract', () => {
         destination: 'Ridgeline Grocers',
       },
     ]);
-    for (let i = 0; i < 6; i++) depotAccept(state, depot, ItemId.BaggedChips);
+    for (let i = 0; i < 6; i++) depotAccept(state, depot, ItemId.BaggedChips, 0);
     standOn(state, depot.tileX, depot.tileY);
 
     run(state, [{ type: 'DeconstructMachine', machineId: depot.id }]);
@@ -587,7 +602,7 @@ describe('the commerce projection', () => {
         destination: 'Ridgeline Grocers',
       },
     ]);
-    depotAccept(state, depot, ItemId.BaggedChips);
+    depotAccept(state, depot, ItemId.BaggedChips, 0);
 
     const projected = view(state, createWorldView());
     expect(projected.commerce.carts).toHaveLength(1);

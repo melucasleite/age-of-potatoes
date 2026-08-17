@@ -1969,7 +1969,9 @@ function applyCreateContract(state: WorldState, command: CreateContractCommand):
     quantityPerRun: command.quantityPerRun,
     destination: clipDestination(command.destination),
     stocked: 0,
+    stockedFreshTicks: 0,
     inTransit: 0,
+    inTransitFreshTicks: 0,
     phase: ContractPhase.Waiting,
     ticksRemaining: 0,
     runsCompleted: 0,
@@ -3707,6 +3709,62 @@ function advanceStorageSpoilage(state: WorldState): void {
   }
 
   advanceBeltSpoilage(state);
+  advanceContractSpoilage(state);
+  advanceBotSpoilage(state);
+}
+
+/**
+ * One tick off every depot floor with produce waiting on it (item 115).
+ *
+ * **THE SIXTH FRIDGE, AND THE ONE WITH A RECEIPT.** A standing route is a warehouse: goods arrive
+ * off a belt, wait for `quantityPerRun` to be reached, and a route that never reaches it waits
+ * forever. Item 110 swept containers, item 112 swept hoppers, baskets and belts, and a depot floor
+ * was none of those — so an arm feeding a route with a run size it could not fill was an unbounded
+ * refrigerator that ran itself.
+ *
+ * **CLAMPS AT 1, EXACTLY AS A HOPPER LINE DOES.** A contract's product is `contract.item`, fixed
+ * when the route was signed, so there is nowhere to write that the floor turned. The goods sit
+ * there out of time; the sweep that turns them is the ordinary inventory one, a tick after the
+ * player cancels and takes them back. See `Contract.stockedFreshTicks`.
+ *
+ * **THE LORRY IS NOT SWEPT**, which is the Delivery Cart's already-taken rule — a run is bounded
+ * and a road is not a shed. `Contract.inTransitFreshTicks` argues it in full.
+ */
+function advanceContractSpoilage(state: WorldState): void {
+  for (let i = 0; i < state.contracts.length; i++) {
+    const contract = state.contracts[i]!;
+    if (contract.stockedFreshTicks <= 1 || contract.stocked <= 0) continue;
+    contract.stockedFreshTicks -= 1;
+  }
+}
+
+/**
+ * One tick off every armful a bot is carrying, and Compost for whatever runs out (item 115).
+ *
+ * **THE SEVENTH AND LAST FRIDGE.** Item 112 decided deliberately that a bot's pocket keeps no
+ * clock, on the reasoning that goods can only enter it by being harvested — true, and beside the
+ * point, because goods do not have to arrive old to get old. A bot that cannot deliver stands at
+ * its dock holding its armful indefinitely, and that is not a player laundering anything: it is an
+ * ordinary jam. `Bot.carryFreshTicks` carries the whole argument, including the fact that this
+ * makes a backed-up dock cost produce, which is a difficulty change and is flagged as one.
+ *
+ * **IT TURNS IN PLACE, LIKE A BELT ITEM AND UNLIKE A HOPPER**, because `carryItem` is a real id
+ * with somewhere to record that it turned. The count is untouched (`COMPOST_PER_SPOILED_ITEM` is
+ * 1), so nothing vanishes and the robot walks a load of compost to the shed — which is the
+ * diagnostic, visible from ten tiles up, saying both what was lost and where the jam is.
+ *
+ * The seed pocket is not swept and never will be: seeds are shelf-stable.
+ */
+function advanceBotSpoilage(state: WorldState): void {
+  for (let i = 0; i < state.bots.length; i++) {
+    const bot = state.bots[i]!;
+    if (bot.carryFreshTicks <= 0 || bot.carryCount <= 0) continue;
+    bot.carryFreshTicks -= 1;
+    if (bot.carryFreshTicks > 0) continue;
+    bot.carryItem = ItemId.Compost;
+    bot.carryCount = bot.carryCount * COMPOST_PER_SPOILED_ITEM;
+    bot.carryFreshTicks = 0;
+  }
 }
 
 /** One tick off every stocked hopper line. Clamps at 1 — see `advanceStorageSpoilage`. */

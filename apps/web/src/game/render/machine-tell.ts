@@ -12,7 +12,7 @@
 // imports `index.ts` back. Only the two branches that were lying are here.
 
 import { MachineKind, MachineRole, PortFlow, machineSpec } from '@snack/sim';
-import type { MachineView } from '@snack/sim';
+import type { ContractView, DepotView, MachineView } from '@snack/sim';
 
 import { containerFreshnessNote } from '../../hud/freshness';
 import { itemName } from '../../hud/item-copy';
@@ -46,7 +46,7 @@ export function blockedStatus(name: string, m: MachineView): string {
 }
 
 /**
- * The AMBER lamp's sentence: what this machine is genuinely short of.
+ * The AMBER lamp's sentence: what this machine is genuinely short of, **and how short**.
  *
  * `wantsItem` is the sim's own answer and it is 0 when the shortage is not an item — see the
  * field on `MachineView`. This used to print `inputItem`, hopper zero's label, which was the
@@ -54,12 +54,35 @@ export function blockedStatus(name: string, m: MachineView): string {
  * which for a piped head with no hoppers at all has always been the literal words "Unknown
  * item".
  *
+ * **THREE SENTENCES, BECAUSE "WANTS SODA" IS A LIE ABOUT A HOPPER WITH SODA IN IT** (item 116).
+ * `missingInputItem` is a predicate — `count < line.count` — and a predicate read aloud drops the
+ * quantity that made it true. A Six-Packer eats six sodas an operation, so a packer holding five
+ * of them was starved, correctly, and said *"six packer wants Soda"* at a player who could see
+ * five sodas in the hopper. Same for a Composter three Compost into a batch of four.
+ *
+ *   · nothing in the hopper, one per operation → **"washer wants Russet Potato"**. Untouched, and
+ *     it is the sentence thirty-odd machines get: there is no quantity to drop, so there is
+ *     nothing to be wrong about.
+ *   · nothing in the hopper, several per operation → **"six packer needs 6 Soda"**. True and
+ *     newly useful — "wants Soda" sent a player back with one soda and no explanation.
+ *   · something in the hopper → **"six packer needs 1 more Soda"**. The reported bug, and the
+ *     only branch where the word "more" is earned.
+ *
+ * The word "more" is a claim about what is already in the hopper, which is why this reads
+ * `wantsHeld` rather than inferring from `wantsCount`: a shortfall of 1 is both an empty Washer
+ * and a Six-Packer one soda short, and telling an empty machine it needs "1 more" would be a new,
+ * smaller version of the same lie.
+ *
  * The thirsty branch lets a throttled PORT name its own liquid. The two machines with no
  * `ports` list — the piped head and the Recirculator — are water by spec and by construction,
  * so the fallback names water rather than saying "liquid" and sending the player to look it up.
  */
 export function starvedStatus(name: string, m: MachineView): string {
-  if (m.wantsItem !== 0) return `${name} wants ${itemName(m.wantsItem)}`;
+  if (m.wantsItem !== 0) {
+    const item = itemName(m.wantsItem);
+    if (m.wantsHeld > 0) return `${name} needs ${m.wantsCount} more ${item}`;
+    return m.wantsCount > 1 ? `${name} needs ${m.wantsCount} ${item}` : `${name} wants ${item}`;
+  }
   const throttled = m.ports.find((port) => port.throttled === 1);
   const liquid = (throttled === undefined ? null : liquidName(throttled.liquid)) ?? 'water';
   return `${name} — not getting enough ${liquid}`;
@@ -127,4 +150,57 @@ export function dockShelfStatus(name: string, m: MachineView): string | null {
   if (shelved) return `${name} — ${produce} on the shelf`;
   if (seeded) return `${name} — ${seeds} on the seed shelf`;
   return null;
+}
+
+/**
+ * **THE DEPOT FLOOR, AND HOW LONG IT HAS** — moved here from `index.ts` by item 116 so the clock
+ * item 115 published can be both worn and tested.
+ *
+ * Item 115 taught a standing route's floor to spend a freshness window — the sixth fridge, an
+ * unbounded warehouse that a route with a run size it could never reach would refrigerate
+ * forever — and published `ContractView.stockedFreshTicks` for a HUD that did not yet exist.
+ * This is that HUD. Without it the depot line said *"40/60 on the floor"* in identical words from
+ * the first potato to the last tick of its window, which is item 110's silent-destruction lesson
+ * a third time.
+ *
+ * **THE FLOOR IS PER-ROUTE AND THE SENTENCE IS PER-DEPOT, SO THE CLOCK IS THE SOONEST AND SAYS
+ * SO.** A depot with three routes has three piles and three windows; "40/60 on the floor (4:12
+ * left)" would be a true number attached to a noun covering three piles it is false of two of.
+ * The word "soonest" appears exactly when there is more than one route to be soonest among —
+ * with a single route the clock IS the floor's, and hedging it would be its own small lie.
+ *
+ * **0 IS "NO CLOCK" AND 1 IS "OUT OF TIME", ONE APART AND OPPOSITE.** `advanceContractSpoilage`
+ * clamps at 1 rather than composting, because a route's product is fixed at signing and there is
+ * nowhere to write that the floor turned — so a spent floor sits at 1 and still ships at list.
+ * Zero means a shelf-stable route, an empty floor, or a grandfathered save. `containerFreshnessNote`
+ * reads -1 as its "nothing to say" sentinel, so 0 is mapped to it here rather than being passed
+ * through as a countdown that has already finished.
+ *
+ * The spent floor therefore reads "(0:00 left)" and stays there. That is the honest rendering of
+ * a clamp, not a stuck timer: those goods ARE out of time and the game ships them anyway, which
+ * is the asymmetry item 115 flagged to item 046 rather than priced. If 046 decides a spent floor
+ * should compost, this sentence needs no edit — it will simply stop being reachable.
+ */
+export function depotStatus(
+  name: string,
+  depot: DepotView,
+  contracts: readonly ContractView[],
+): string {
+  if (depot.contractIds.length === 0) return `${name} — click to sign a contract`;
+  const routes = depot.contractIds.length === 1 ? '1 route' : `${depot.contractIds.length} routes`;
+  const floor = `${depot.stocked}/${depot.capacity} on the floor`;
+
+  let soonest = -1;
+  for (const contract of contracts) {
+    if (contract.depotId !== depot.id) continue;
+    // A route with nothing on its floor has no clock to be soonest, whatever number it is
+    // carrying — `stockedFreshTicks` is only zeroed when the last of a pile rolls away.
+    if (contract.stocked <= 0 || contract.stockedFreshTicks <= 0) continue;
+    if (soonest < 0 || contract.stockedFreshTicks < soonest) soonest = contract.stockedFreshTicks;
+  }
+
+  const note = containerFreshnessNote(soonest, false);
+  if (note === null) return `${name} — ${routes}, ${floor}`;
+  const clock = depot.contractIds.length > 1 ? `soonest ${note}` : note;
+  return `${name} — ${routes}, ${floor} (${clock})`;
 }

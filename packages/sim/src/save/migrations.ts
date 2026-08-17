@@ -50,7 +50,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 20;
+export const CURRENT_FORMAT_VERSION = 21;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -1426,6 +1426,48 @@ const migrateFormat19To20: SaveMigration = (payload) => {
 };
 
 /**
+ * Format 20 → 21: **the last two containers that could hold food learn to hold its clock too**
+ * (item 115) — a depot's floor and its lorry, and the arms of an Agri-Bot.
+ *
+ * Item 112 closed five doors and its own verifier found two more. A standing route's `stocked` was
+ * a bare count, so an arm feeding a depot with a run size it could not fill was an unbounded
+ * refrigerator that needed no player at all; and a bot that harvested and then could not deliver
+ * held its armful with the clock never started. Three fields, three zeroes.
+ *
+ * **ZERO MEANS "NO OPINION", WHICH IS THE SAME GRANDFATHERING FORMAT 18 AND FORMAT 20 CHOSE**, and
+ * the reason is theirs verbatim: stamping a window during a migration would hand a returning player
+ * an armful of compost for the crime of having saved. So a depot floor loaded before this build
+ * starts its clock the first time anything else arrives on it (`mergedFreshness` takes the
+ * arrivals' outright when the pile has no remainder), and a bot mid-round starts its at the next
+ * pull. Both heal in the pessimistic direction and neither destroys anything on load.
+ *
+ * **WHAT THAT COSTS IS ONE FLOOR-LOAD OF GRANDFATHERED FREEDOM**, and item 110's verifier measured
+ * exactly this hole on containers: a clockless pile handed every take a brand-new window, so an old
+ * save was a perpetual-motion machine one armful at a time. A depot cannot do that — `refundContract`
+ * empties the floor in one go rather than a unit at a time, so there is one refund, not a stream of
+ * them — which is why the same zero that was a real leak on a cellar is a single bounded gift here.
+ *
+ * Nothing is removed and no player loses a unit. `payload.version` is NOT rewritten, for the reason
+ * format 14 → 15 spells out.
+ */
+const migrateFormat20To21: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-20 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+
+  const contracts = rows(p, 'contracts').map((contract) => ({
+    ...contract,
+    stockedFreshTicks: 0,
+    inTransitFreshTicks: 0,
+  }));
+
+  const bots = rows(p, 'bots').map((bot) => ({ ...bot, carryFreshTicks: 0 }));
+
+  return { ...p, contracts, bots };
+};
+
+/**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
  * chain to the current version.
@@ -1450,6 +1492,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   17: migrateFormat17To18,
   18: migrateFormat18To19,
   19: migrateFormat19To20,
+  20: migrateFormat20To21,
 };
 
 export interface MigrationOutcome {

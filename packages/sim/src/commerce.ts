@@ -49,8 +49,10 @@ import {
   type Machine,
   CeremonyId,
   type WorldState,
-  addItem,
+  addItemFresh,
   markCeremony,
+  mergedFreshness,
+  spoilTickFromRemaining,
 } from './state';
 import { recordSale } from './stats';
 
@@ -156,10 +158,29 @@ export function depotRouteFor(state: WorldState, depotId: number, item: ItemId):
  * would make a mis-aimed grabber quietly eat a product the depot can never ship, and the player
  * would have no way to see it happen. One route per product per depot (`applyCreateContract`
  * enforces it), so there is never a question of *which* route an item goes to.
+ *
+ * **`freshTicks` IS THE CLOCK THE ARRIVAL BRINGS WITH IT** (item 115), and 0 means "no opinion"
+ * rather than "no clock" — the same word every other door in the game speaks, from `putStorage` to
+ * `putHopper` to `beltInsert`. This parameter did not exist until item 115, and its absence WAS the
+ * sixth fridge: an arm carrying a potato with two minutes left handed the floor a potato, and the
+ * floor wrote down a count. Merged at the SOONER against whatever is already stocked, because a
+ * floor topped up with one fresh crate every quarter hour would otherwise keep the pile underneath
+ * alive forever — `mergedFreshness`' entire reason for existing.
  */
-export function depotAccept(state: WorldState, depot: Machine, item: ItemId): boolean {
+export function depotAccept(
+  state: WorldState,
+  depot: Machine,
+  item: ItemId,
+  freshTicks: number,
+): boolean {
   const contract = depotCanAcceptRoute(state, depot, item);
   if (contract === null) return false;
+  contract.stockedFreshTicks = mergedFreshness(
+    contract.stocked,
+    contract.stockedFreshTicks,
+    item,
+    freshTicks,
+  );
   contract.stocked += 1;
   return true;
 }
@@ -352,6 +373,14 @@ function advanceContract(state: WorldState, contract: Contract): void {
     if (contract.stocked < contract.quantityPerRun) return;
     contract.stocked -= contract.quantityPerRun;
     contract.inTransit = contract.quantityPerRun;
+    // **THE CLOCK GOES ON THE LORRY WITH THE CRATES** (item 115). The floor keeps its own number
+    // for whatever is left behind — one pile, one clock, so a partial commit does not have to
+    // divide anything — and an emptied floor drops to 0, because "empty" has to be ONE state and
+    // not two. `advanceCart` clears a cart's clock beside its cargo pair for the same reason: a
+    // container with a remainder and nothing in it hashes differently from an identical one that
+    // reached empty by another route.
+    contract.inTransitFreshTicks = contract.stockedFreshTicks;
+    if (contract.stocked <= 0) contract.stockedFreshTicks = 0;
     contract.phase = ContractPhase.Loading;
     contract.ticksRemaining = DEPOT_LOAD_TICKS;
     return;
@@ -372,6 +401,8 @@ function advanceContract(state: WorldState, contract: Contract): void {
 
   const count = contract.inTransit;
   contract.inTransit = 0;
+  // Sold, so its clock goes with it — `advanceCart`'s line, on the other vehicle.
+  contract.inTransitFreshTicks = 0;
   contract.phase = ContractPhase.Waiting;
   contract.ticksRemaining = 0;
   if (count <= 0) return;
@@ -447,10 +478,32 @@ export function depotHasContractRoom(state: WorldState, depotId: number): boolea
  * waiting, which is the only shape with no strategy in it.
  */
 export function refundContract(state: WorldState, contract: Contract): void {
-  if (contract.stocked > 0) addItem(state, contract.item, contract.stocked);
-  if (contract.inTransit > 0) addItem(state, contract.item, contract.inTransit);
+  // **AND THE CLOCK COMES BACK WITH THEM** (item 115). These two lines called `addItem`, which
+  // stamps a window from NOW — so tearing up a route was the $80 hand cart of item 110 wearing a
+  // lorry, and the belt-fed version of the loop needed no clicking at all. `addItemFresh` with
+  // `spoilTickFromRemaining` is the same pair `applyDeconstructMachine` hands a boxed cellar's
+  // load back through; a remainder of 0 still means "no opinion" and stamps a fresh window, which
+  // is correct for a shelf-stable good and for a route grandfathered by format 21.
+  if (contract.stocked > 0) {
+    addItemFresh(
+      state,
+      contract.item,
+      contract.stocked,
+      spoilTickFromRemaining(state, contract.stockedFreshTicks),
+    );
+  }
+  if (contract.inTransit > 0) {
+    addItemFresh(
+      state,
+      contract.item,
+      contract.inTransit,
+      spoilTickFromRemaining(state, contract.inTransitFreshTicks),
+    );
+  }
   contract.stocked = 0;
+  contract.stockedFreshTicks = 0;
   contract.inTransit = 0;
+  contract.inTransitFreshTicks = 0;
 }
 
 /** Remove a route from the world. Callers refund first; this only unlinks it. */

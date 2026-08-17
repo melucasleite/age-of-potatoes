@@ -42,7 +42,13 @@ import { LAMP_PX, lampAlpha, lampTint } from './lamps';
 import { liquidName, liquidTint, portHintTint } from './liquids';
 import { fillPulseAlpha } from './machine-motion';
 import type { MotionSample } from './machine-motion';
-import { blockedStatus, dockShelfStatus, starvedStatus, storageStatus } from './machine-tell';
+import {
+  blockedStatus,
+  depotStatus,
+  dockShelfStatus,
+  starvedStatus,
+  storageStatus,
+} from './machine-tell';
 import { pipeAtTile } from './pipes';
 import { classifyShore } from './shore';
 import { walkStep } from './strips';
@@ -1287,10 +1293,10 @@ function vehicleStatus(view: WorldView, m: MachineView): string | null {
   if (m.kind === MachineKind.TruckDepot) {
     const depot = view.commerce.depots.find((d) => d.id === m.id);
     if (depot === undefined) return null;
-    if (depot.contractIds.length === 0) return 'truck depot — click to sign a contract';
-    const routes =
-      depot.contractIds.length === 1 ? '1 route' : `${depot.contractIds.length} routes`;
-    return `truck depot — ${routes}, ${depot.stocked}/${depot.capacity} on the floor`;
+    // In `machine-tell.ts` since item 116, for the reason the lamp's two branches and the dock's
+    // shelves are: this file cannot be imported by a test, and the floor line now carries a
+    // freshness clock — a number that can be wrong in a way "40/60" never could.
+    return depotStatus('truck depot', depot, view.commerce.contracts);
   }
 
   return null;

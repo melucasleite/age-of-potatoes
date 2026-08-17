@@ -604,7 +604,15 @@ function harvestUnderBot(state: WorldState, bot: Bot): boolean {
   if (bot.carryItem === 0 || bot.carryItem !== result.item) {
     bot.carryItem = result.item;
     bot.carryCount = 0;
+    bot.carryFreshTicks = 0;
   }
+  // **THE CLOCK STARTS AT THE PULL** (item 115), merged at the sooner against whatever is already
+  // in the bot's arms — the same rule every other container in the game follows, and the reason it
+  // is needed here is that a bot working its way down a row picks up its last tile several minutes
+  // after its first. A crop leaving the ground is worth a full window, so 0 is the right "arriving"
+  // opinion and `mergedFreshness` turns it into one. Day-Old produce is its OWN item id with its
+  // own shorter window, so a wilted row is already priced by `takeHarvest` before this line runs.
+  bot.carryFreshTicks = mergedFreshness(bot.carryCount, bot.carryFreshTicks, result.item, 0);
   bot.carryCount += result.count;
 
   // One seed, one one-shot tile — the hand's rule, in the hand's words. Regrowers keep the
@@ -686,26 +694,32 @@ function unloadIntoDock(bot: Bot, dock: Machine): void {
     const room = effectiveOutputCapacity(spec, dock) - dock.cargoCount;
     if (room > 0) {
       const moved = bot.carryCount < room ? bot.carryCount : room;
-      // **THE SHELF'S CLOCK STARTS ON ARRIVAL** (item 112), merged at the sooner against whatever
-      // is already on it — otherwise a bot topping the shelf up every round would keep the bottom
-      // of the pile alive forever, which is `mergedFreshness`' whole reason for existing.
+      // **THE SHELF'S CLOCK CONTINUES THE BOT'S** (item 112 for the merge, item 115 for the
+      // number), at the sooner of the two — otherwise a bot topping the shelf up every round would
+      // keep the bottom of the pile alive forever, which is `mergedFreshness`' whole reason for
+      // existing.
       //
-      // A BOT'S POCKET DELIBERATELY KEEPS NO CLOCK OF ITS OWN, and this is where that decision
-      // shows. Its carry is a one-way transit buffer: goods only ever enter it by being harvested
-      // from a tile, which is the moment a full window is correct, and nothing in the game can put
-      // an old good into a bot. So the arrival is fresh to within the length of one walk home,
-      // and a seventh clock would buy that walk and nothing else. (`bot.carryItem` becoming
-      // Day-Old is the crop's own doing before the harvest, not a clock this file runs.)
+      // **THIS ARGUMENT PASSED A LITERAL 0 UNTIL ITEM 115**, on item 112's reasoning that a bot's
+      // carry is a one-way transit buffer whose contents are always fresh, so *"a seventh clock
+      // would buy that walk and nothing else"*. The walk was never the case that mattered: a bot
+      // that CANNOT deliver holds its armful for as long as the jam lasts, and 0 restarted the
+      // window every time it finally did. See `Bot.carryFreshTicks`, which owns the whole
+      // argument — including that this makes a jammed dock cost produce.
       dock.cargoFreshTicks = mergedFreshness(
         dock.cargoCount,
         dock.cargoFreshTicks,
         bot.carryItem,
-        0,
+        bot.carryFreshTicks,
       );
       dock.cargoItem = bot.carryItem;
       dock.cargoCount += moved;
       bot.carryCount -= moved;
-      if (bot.carryCount <= 0) bot.carryItem = 0;
+      // Empty arms are ONE state, not two — a remainder left lying on an empty bot would hash
+      // differently from an identical bot that reached empty by another route.
+      if (bot.carryCount <= 0) {
+        bot.carryItem = 0;
+        bot.carryFreshTicks = 0;
+      }
     }
   }
 

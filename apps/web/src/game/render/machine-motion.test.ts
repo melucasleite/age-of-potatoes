@@ -52,6 +52,8 @@ function machine(overrides: Partial<MachineView> = {}): MachineView {
     inputItem: 0,
     outputItem: 0,
     wantsItem: 0,
+    wantsCount: 0,
+    wantsHeld: 0,
     overcookedCount: 0,
     overcookedItem: 0,
     speedLevel: 0,

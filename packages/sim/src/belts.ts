@@ -718,8 +718,14 @@ function grabberDeliver(
   // teaching this file what a contract is. It refuses when no route on that depot names the
   // item, or when the floor is full; after item 085 an arm reads that refusal before it grabs,
   // so a mis-aimed belt now leaves its goods on the belt instead of in a frozen claw.
+  //
+  // **THE ARM HANDS OVER THE CLOCK IT IS CARRYING** (item 115), the same line the Storage branch
+  // below gained in item 112 and for the same reason: this call used to pass nothing at all, and
+  // `cart → arm → belt → arm → depot → CancelContract` minted a full window with no clicking.
   if (machineSpecFor.role === MachineRole.TruckDepot) {
-    return commit ? depotAccept(state, machine, item) : depotCanAccept(state, machine, item);
+    return commit
+      ? depotAccept(state, machine, item, grabber.heldFreshTicks)
+      : depotCanAccept(state, machine, item);
   }
   // THE SELL BIN SELLS ON ARRIVAL (item 087). Gated by KIND rather than by `MachineRole.Inert`,
   // on item 083's precedent: "inert" means "has no work cycle", which is a statement about the

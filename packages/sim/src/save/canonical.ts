@@ -336,11 +336,15 @@ export interface SaveContract {
   grossCents: number;
   id: number;
   inTransit: number;
+  /** The lorry's clock (item 115). Frozen for the length of a run; 0 when nothing is rolling. */
+  inTransitFreshTicks: number;
   item: number;
   phase: number;
   quantityPerRun: number;
   runsCompleted: number;
   stocked: number;
+  /** The floor's clock (item 115), a REMAINDER rather than a deadline — `ticksRemaining`'s rule. */
+  stockedFreshTicks: number;
   ticksRemaining: number;
 }
 
@@ -355,6 +359,8 @@ export interface SaveContract {
  */
 export interface SaveBot {
   carryCount: number;
+  /** The armful's clock (item 115). 0 on empty arms and on anything shelf-stable. */
+  carryFreshTicks: number;
   carryItem: number;
   condition: number;
   dockId: number;
@@ -712,11 +718,13 @@ export function toPayload(state: WorldState): SavePayload {
       grossCents: contract.grossCents,
       id: contract.id,
       inTransit: contract.inTransit,
+      inTransitFreshTicks: contract.inTransitFreshTicks,
       item: contract.item,
       phase: contract.phase,
       quantityPerRun: contract.quantityPerRun,
       runsCompleted: contract.runsCompleted,
       stocked: contract.stocked,
+      stockedFreshTicks: contract.stockedFreshTicks,
       ticksRemaining: contract.ticksRemaining,
     });
   }
@@ -726,6 +734,7 @@ export function toPayload(state: WorldState): SavePayload {
     const bot = state.bots[i]!;
     bots.push({
       carryCount: bot.carryCount,
+      carryFreshTicks: bot.carryFreshTicks,
       carryItem: bot.carryItem,
       condition: bot.condition,
       dockId: bot.dockId,
@@ -1366,6 +1375,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       seedCount: int(bot, 'seedCount', path),
       carryItem: idInt(bot, 'carryItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
       carryCount: int(bot, 'carryCount', path),
+      carryFreshTicks: int(bot, 'carryFreshTicks', path),
       condition: int(bot, 'condition', path),
       opCount: int(bot, 'opCount', path),
     });
@@ -1438,7 +1448,9 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       // one stored string that is not hashed — see `hash.ts`.
       destination: clipDestination(str(contract, 'destination', path)),
       stocked: int(contract, 'stocked', path),
+      stockedFreshTicks: int(contract, 'stockedFreshTicks', path),
       inTransit: int(contract, 'inTransit', path),
+      inTransitFreshTicks: int(contract, 'inTransitFreshTicks', path),
       phase: idInt(contract, 'phase', path, CONTRACT_PHASES) as ContractPhase,
       ticksRemaining: int(contract, 'ticksRemaining', path),
       runsCompleted: int(contract, 'runsCompleted', path),

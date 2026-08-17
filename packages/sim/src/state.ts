@@ -989,6 +989,37 @@ export interface Bot {
   carryItem: ItemId | 0;
   carryCount: number;
   /**
+   * **THE CLOCK IN THE ROBOT'S ARMS**, in ticks left, or 0 when they are empty or holding
+   * something shelf-stable (item 115). The seventh and last of the containers item 110 started on.
+   *
+   * **ITEM 112 LOOKED STRAIGHT AT THIS AND DECIDED AGAINST IT**, in writing, and the reasoning is
+   * worth keeping because every clause of it is true: *"goods only ever enter it by being harvested
+   * from a tile, which is the moment a full window is correct, and nothing in the game can put an
+   * old good into a bot. So the arrival is fresh to within the length of one walk home, and a
+   * seventh clock would buy that walk and nothing else."*
+   *
+   * What it missed is that goods do not have to ENTER a bot old to BE old in one. A bot that
+   * harvests and then cannot deliver — a full produce shelf, a shelf holding another crop, a pond
+   * between it and home — stands there holding its armful for as long as the jam lasts, and under
+   * the old rule the clock had not started. That is not a player laundering anything. It is a
+   * fridge that appears whenever a dock backs up, which is an ordinary factory state and one the
+   * game's own docs describe as the house "look downstream" stall.
+   *
+   * **A BOT'S ARMFUL TURNS IN PLACE, LIKE A BELT ITEM AND UNLIKE A HOPPER LINE** — `carryItem` is a
+   * real item id, so there is somewhere to write that it turned, and the count is preserved
+   * (`COMPOST_PER_SPOILED_ITEM` is 1). The player then sees a robot carrying compost to a shed,
+   * which is the diagnostic: it says both that the goods were lost and where the jam is.
+   *
+   * **THIS MAKES A JAMMED DOCK COST PRODUCE, WHICH IS A REAL DIFFICULTY CHANGE** and is flagged as
+   * one — see item 115's log and item 046's balance pile. It is not smuggled in as a bug fix: the
+   * BUG is that the freeze existed, and the CONSEQUENCE is that automation now needs its
+   * downstream kept clear. Whether that consequence is priced right is somebody else's call.
+   *
+   * The SEED POCKET below keeps no clock and never will: seeds are shelf-stable, so a clock on
+   * them would count down to a number that means nothing.
+   */
+  carryFreshTicks: number;
+  /**
    * THE SEED POCKET (item 088), and it is a POCKET rather than a second pair of arms.
    *
    * A hand harvest of a one-shot crop returns a seed — plan §4's anti-softlock floor, the rule
@@ -1232,6 +1263,31 @@ export interface Contract {
   /** Goods accumulated toward the next run. Counted at list by `computeNetWorthCents`. */
   stocked: number;
   /**
+   * **THE CLOCK THE FLOOR IS SPENDING**, in ticks left, or 0 when `stocked` is empty or
+   * shelf-stable (item 115). A REMAINDER, NOT A DEADLINE, for `Machine.cargoFreshTicks`' reason.
+   *
+   * **THE DEPOT FLOOR WAS THE SIXTH FRIDGE.** Item 110 closed a container's cargo, item 112 closed
+   * the hopper, the basket, the belt, the claw and the dock shelf — and a standing route was still
+   * a warehouse with no clock in it. Its verifier measured all four ways in: goods put on the floor
+   * with 1,200 ticks left came back from a `CancelContract` with 17,999 of an 18,000-tick window
+   * after 72,000 ticks of world time, and the belt-fed version of that loop needed no clicking at
+   * all. Merged at the SOONER on arrival (`mergedFreshness`), spent by `advanceContractSpoilage`,
+   * and handed back by `refundContract` as a remainder rather than a fresh stamp.
+   *
+   * **IT CLAMPS AT 1 RATHER THAN TURNING, EXACTLY AS A HOPPER LINE DOES** — and for exactly the
+   * hopper's reason, which is a representation fact rather than a mercy. A route's product is
+   * `contract.item`, chosen once and never renegotiated, so there is nowhere to write "this is
+   * Compost now" without inventing a second item field on a contract. So the goods sit on the floor
+   * out of time, and the sweep that turns them is the ordinary inventory one, a tick after the
+   * player cancels the route and takes them back. Nothing vanishes and nothing teleports.
+   *
+   * A ROUTE WHOSE FLOOR HAS RUN OUT OF CLOCK STILL SHIPS, AT LIST. That is not new and it is not
+   * this item's to change — every route in the game has always shipped whatever was on its floor —
+   * but it is now a *visible* asymmetry rather than an invisible one, and pricing spoiled cargo is
+   * a balance question. Flagged to item 046 rather than decided here.
+   */
+  stockedFreshTicks: number;
+  /**
    * Goods on the truck right now, or 0.
    *
    * **THIS FIELD IS WHY LOADING A TRUCK DOES NOT DIP NET WORTH** (plan §6). Stock leaves
@@ -1240,6 +1296,26 @@ export interface Contract {
    * something actually happened.
    */
   inTransit: number;
+  /**
+   * The clock the LORRY's load is holding, in ticks left, or 0 when it is empty or shelf-stable.
+   *
+   * **A SECOND FIELD RATHER THAN ONE SHARED WITH THE FLOOR, AND THE REASON IS THE OVERLAP**: a
+   * truck can be rolling while the floor fills up behind it, so a route holds two piles at once and
+   * one number cannot describe both. Sharing it fails in both directions — fresh arrivals on the
+   * floor would launder the load already on the road, and a floor topped up with something older
+   * would age a load that had already left.
+   *
+   * **THE LOAD DOES NOT AGE WHILE THE TRUCK IS AWAY**, which is the Delivery Cart's rule, already
+   * taken: `advanceStorageSpoilage` names the cart in writing as the one container it skips,
+   * because *"a Delivery Cart's load is on the road"*. Two things make that safe here where it
+   * would not be on the floor. A run is BOUNDED — `DEPOT_RUN_BASE_TICKS` plus distance, a thousand
+   * ticks or so against a window of seven to eighteen thousand — whereas a Waiting floor is
+   * unbounded and is where the fridge actually was. And the exploit the verifier measured was the
+   * MINT, not the freeze: 1,200 ticks in, cancelled 301 ticks later, 17,998 back. This field kills
+   * the mint. Whether vehicles in transit should age at all is the same open question the cart
+   * already carries, and it belongs to item 046 with the cart's.
+   */
+  inTransitFreshTicks: number;
   phase: ContractPhase;
   /** Ticks left in the current phase. Zero while `Waiting`, which has no clock. */
   ticksRemaining: number;
@@ -1822,6 +1898,7 @@ export function spawnBot(state: WorldState, kind: BotKind, dock: Machine): Bot {
     workTicks: 0,
     carryItem: 0,
     carryCount: 0,
+    carryFreshTicks: 0,
     seedItem: 0,
     seedCount: 0,
     condition: CONDITION_MAX,

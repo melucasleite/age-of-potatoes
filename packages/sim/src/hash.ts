@@ -333,7 +333,13 @@ export function hashStateUint32(state: WorldState): number {
     d.num(contract.item);
     d.num(contract.quantityPerRun);
     d.num(contract.stocked);
+    // The two clocks a route keeps (item 115): the floor's, which is spent every tick, and the
+    // lorry's, which is frozen for the length of a run. Two worlds whose depots hold the same
+    // count of the same product with different time left on it are genuinely different worlds —
+    // one of them cancels back into produce and the other into compost.
+    d.num(contract.stockedFreshTicks);
     d.num(contract.inTransit);
+    d.num(contract.inTransitFreshTicks);
     d.num(contract.phase);
     d.num(contract.ticksRemaining);
     d.num(contract.runsCompleted);
@@ -363,6 +369,9 @@ export function hashStateUint32(state: WorldState): number {
     d.num(bot.workTicks);
     d.num(bot.carryItem);
     d.num(bot.carryCount);
+    // The armful's clock (item 115). A bot two minutes from dropping compost on a shelf is not
+    // the same world as one that just filled its arms, however identical the count.
+    d.num(bot.carryFreshTicks);
     // The seed pocket (item 088). A bot that pocketed a seed genuinely differs from one that
     // did not, and a replay that dropped it would diverge only when the seed reached a shelf.
     d.num(bot.seedItem);
