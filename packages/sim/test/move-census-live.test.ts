@@ -630,6 +630,53 @@ const CHECKS: readonly MoveCheck[] = [
     },
   },
   {
+    // **ITEM 131'S TRANSFER, TRIGGER ONE OF TWO.** `landEmpties` is one write and therefore one
+    // census row, and a row driven by one of its two callers is the collapse `MOVE_VERDICTS`'
+    // header warns about — so the cart and the truck get a scenario each.
+    //
+    // A SOURCE, and the ledger says exactly why: the six sodas leave through `payForDelivery` and
+    // become money, which the ledger does not count, while six empties arrive in the cart's
+    // basket, which it does. The total may rise and may never fall — and it may never fall is the
+    // half worth asserting, because the same tick clears `cargoItem`, `cargoCount` and
+    // `cargoFreshTicks`, and a return leg that mislaid its arithmetic would show up here as a
+    // sale that ate its own returns. The exact counts are pinned in `recycling.test.ts`.
+    name: 'a delivery cart comes home from a soda run with the empties',
+    covers: ['commerce:landEmpties:outputCount', 'commerce:advanceCart:cargoCount'],
+    verdict: MoveVerdict.Source,
+    build() {
+      const state = createWorld(12_021);
+      addItem(state, ItemId.Soda, 6);
+      const cart = spawnMachine(state, MachineKind.DeliveryCart, 6, 6)!;
+      standOn(state, 6, 6);
+      run(state, { type: 'LoadCart', cartId: cart.id, item: ItemId.Soda, count: 6 });
+      run(state, { type: 'DispatchCart', cartId: cart.id });
+      return { state, act: () => stepUntil(state, 3_000, () => cart.outputCount > 0) };
+    },
+  },
+  {
+    // **THE SAME TRANSFER, THE OTHER TRIGGER.** Six-packs rather than sodas, so the scenario also
+    // drives the one row of `EMPTIES_PER_DELIVERY` whose count is not 1: four six-packs come home
+    // as twenty-four empties, and a return leg that forgot to multiply would still be a Source.
+    // `recycling.test.ts` is where that number is pinned; this is where the books are.
+    name: 'a truck comes home from a six-pack route with the empties',
+    covers: ['commerce:landEmpties:outputCount'],
+    verdict: MoveVerdict.Source,
+    build() {
+      const state = createWorld(12_022);
+      const depot = spawnMachine(state, MachineKind.TruckDepot, 6, 6)!;
+      standOn(state, 6, 6);
+      run(state, {
+        type: 'CreateContract',
+        depotId: depot.id,
+        item: ItemId.SixPack,
+        quantityPerRun: 4,
+        destination: 'Ridgeline Grocers',
+      });
+      for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.SixPack, 0);
+      return { state, act: () => stepUntil(state, 5_000, () => depot.outputCount > 0) };
+    },
+  },
+  {
     name: 'a route runs, and the lorry takes the floor away with it',
     covers: ['commerce:advanceContract:stocked', 'commerce:advanceContract:inTransit'],
     build() {

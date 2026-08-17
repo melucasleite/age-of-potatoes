@@ -1,0 +1,625 @@
+{
+  "name": "bottle-return",
+  "description": "Item 131's loop, and the only fixture in the set whose ends meet: four bottles are bought at the stand, filled with soda by a five-network liquid build (Juicer → Kettle → Syrup Mixer → Bottler, with a Grinder and a pond-fed Carbonator), driven off the lot on a delivery cart, and come home as four used bottles in the cart’s own basket. A Washer turns them back into the same ItemId.Bottle they started as, and they go back into the Bottler. Pins the return leg, the vehicle basket both vehicles now have, the Washer’s third recipe, and the two take-gates that used to refuse a machine whose spec makes nothing. Recorded by `scripts/record-bottle-return.ts`, which asserts every beat of the circle before writing.",
+  "seed": 131131,
+  "ticks": 8735,
+  "expectedHash": "0ba17b8e",
+  "commands": [
+    {
+      "tick": 0,
+      "command": {
+        "type": "Cheat",
+        "code": "klapaucius"
+      }
+    },
+    {
+      "tick": 1,
+      "command": {
+        "type": "PlacePipe",
+        "liquid": 2,
+        "path": [
+          {
+            "x": 2,
+            "y": 0
+          },
+          {
+            "x": 2,
+            "y": 1
+          }
+        ]
+      }
+    },
+    {
+      "tick": 2,
+      "command": {
+        "type": "PlacePipe",
+        "liquid": 3,
+        "path": [
+          {
+            "x": 5,
+            "y": 0
+          },
+          {
+            "x": 5,
+            "y": 1
+          }
+        ]
+      }
+    },
+    {
+      "tick": 3,
+      "command": {
+        "type": "PlacePipe",
+        "liquid": 6,
+        "path": [
+          {
+            "x": 8,
+            "y": 0
+          },
+          {
+            "x": 8,
+            "y": 1
+          }
+        ]
+      }
+    },
+    {
+      "tick": 4,
+      "command": {
+        "type": "PlacePipe",
+        "liquid": 4,
+        "path": [
+          {
+            "x": 12,
+            "y": 0
+          },
+          {
+            "x": 12,
+            "y": 1
+          }
+        ]
+      }
+    },
+    {
+      "tick": 5,
+      "command": {
+        "type": "PlacePipe",
+        "liquid": 1,
+        "path": [
+          {
+            "x": 13,
+            "y": 12
+          },
+          {
+            "x": 13,
+            "y": 11
+          },
+          {
+            "x": 13,
+            "y": 10
+          },
+          {
+            "x": 13,
+            "y": 9
+          },
+          {
+            "x": 13,
+            "y": 8
+          },
+          {
+            "x": 13,
+            "y": 7
+          },
+          {
+            "x": 13,
+            "y": 6
+          },
+          {
+            "x": 13,
+            "y": 5
+          },
+          {
+            "x": 13,
+            "y": 4
+          },
+          {
+            "x": 13,
+            "y": 3
+          },
+          {
+            "x": 12,
+            "y": 3
+          },
+          {
+            "x": 11,
+            "y": 3
+          },
+          {
+            "x": 10,
+            "y": 3
+          },
+          {
+            "x": 9,
+            "y": 3
+          },
+          {
+            "x": 8,
+            "y": 3
+          },
+          {
+            "x": 7,
+            "y": 3
+          },
+          {
+            "x": 6,
+            "y": 3
+          }
+        ]
+      }
+    },
+    {
+      "tick": 6,
+      "command": {
+        "type": "PlacePipe",
+        "liquid": 1,
+        "path": [
+          {
+            "x": 13,
+            "y": 2
+          }
+        ]
+      }
+    },
+    {
+      "tick": 7,
+      "command": {
+        "type": "PlacePipe",
+        "liquid": 1,
+        "path": [
+          {
+            "x": 6,
+            "y": 2
+          }
+        ]
+      }
+    },
+    {
+      "tick": 8,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 14,
+        "tileX": 0,
+        "tileY": 0
+      }
+    },
+    {
+      "tick": 9,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 15,
+        "tileX": 3,
+        "tileY": 0
+      }
+    },
+    {
+      "tick": 10,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 17,
+        "tileX": 6,
+        "tileY": 0
+      }
+    },
+    {
+      "tick": 11,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 19,
+        "tileX": 9,
+        "tileY": 0
+      }
+    },
+    {
+      "tick": 12,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 18,
+        "tileX": 13,
+        "tileY": 0
+      }
+    },
+    {
+      "tick": 13,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 16,
+        "tileX": 0,
+        "tileY": 2
+      }
+    },
+    {
+      "tick": 14,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 4,
+        "tileX": 2,
+        "tileY": 2
+      }
+    },
+    {
+      "tick": 15,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 9,
+        "tileX": 12,
+        "tileY": 12
+      }
+    },
+    {
+      "tick": 16,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 11,
+        "tileX": 2,
+        "tileY": 12,
+        "item": 10,
+        "count": 4
+      }
+    },
+    {
+      "tick": 40,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 11,
+        "tileX": 2,
+        "tileY": 12,
+        "item": 21,
+        "count": 6
+      }
+    },
+    {
+      "tick": 41,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 11,
+        "tileX": 2,
+        "tileY": 12,
+        "item": 23,
+        "count": 4
+      }
+    },
+    {
+      "tick": 42,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 2,
+        "count": 0
+      }
+    },
+    {
+      "tick": 77,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 78,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 5,
+        "item": 2,
+        "count": 0
+      }
+    },
+    {
+      "tick": 79,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 80,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 6,
+        "item": 2,
+        "count": 0
+      }
+    },
+    {
+      "tick": 81,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 82,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 2,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 2,
+        "count": 0
+      }
+    },
+    {
+      "tick": 84,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 2649,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3327,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 4,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 3328,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4458,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 5,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 4459,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5805,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 5806,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 7007,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 1,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 7334,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 3,
+        "tileX": 4,
+        "tileY": 7,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 7335,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 4,
+        "tileX": 0,
+        "tileY": 0,
+        "item": 11,
+        "count": 11
+      }
+    },
+    {
+      "tick": 7360,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 4,
+        "tileX": 0,
+        "tileY": 2,
+        "item": 21,
+        "count": 6
+      }
+    },
+    {
+      "tick": 7540,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 5,
+        "tileX": 0,
+        "tileY": 2,
+        "item": 0,
+        "count": 6
+      }
+    },
+    {
+      "tick": 7541,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 4,
+        "tileX": 6,
+        "tileY": 0,
+        "item": 22,
+        "count": 6
+      }
+    },
+    {
+      "tick": 7562,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 4,
+        "tileX": 9,
+        "tileY": 0,
+        "item": 23,
+        "count": 4
+      }
+    },
+    {
+      "tick": 7713,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 5,
+        "tileX": 9,
+        "tileY": 0,
+        "item": 0,
+        "count": 4
+      }
+    },
+    {
+      "tick": 7714,
+      "command": {
+        "type": "PlaceMachine",
+        "kind": 22,
+        "tileX": 2,
+        "tileY": 5
+      }
+    },
+    {
+      "tick": 7715,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 17,
+        "tileX": 2,
+        "tileY": 6,
+        "item": 0,
+        "count": 0
+      }
+    },
+    {
+      "tick": 7752,
+      "command": {
+        "type": "LoadCart",
+        "cartId": 10,
+        "item": 24,
+        "count": 4
+      }
+    },
+    {
+      "tick": 7753,
+      "command": {
+        "type": "DispatchCart",
+        "cartId": 10
+      }
+    },
+    {
+      "tick": 8373,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 5,
+        "tileX": 2,
+        "tileY": 5,
+        "item": 0,
+        "count": 4
+      }
+    },
+    {
+      "tick": 8374,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 4,
+        "tileX": 2,
+        "tileY": 2,
+        "item": 80,
+        "count": 4
+      }
+    },
+    {
+      "tick": 8500,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 5,
+        "tileX": 2,
+        "tileY": 2,
+        "item": 0,
+        "count": 4
+      }
+    },
+    {
+      "tick": 8501,
+      "command": {
+        "type": "WalkAndAct",
+        "action": 4,
+        "tileX": 9,
+        "tileY": 0,
+        "item": 23,
+        "count": 4
+      }
+    }
+  ]
+}

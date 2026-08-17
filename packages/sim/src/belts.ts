@@ -545,8 +545,14 @@ function grabberSource(
     return took.item;
   }
 
-  if (spec.outputItem === null) return 0;
-
+  // **`spec.outputItem === null` USED TO BAIL HERE, AND IT WAS THE WRONG SENTENCE** (item 131).
+  // It reads "this machine makes nothing" and was doing the job of "this machine's basket has no
+  // name" — true of the same set of machines right up until a delivery vehicle came home with
+  // empties in its basket. `nextOutputItem` below is the sentence that was meant: it returns null
+  // for every machine the old check excluded, because an unlabelled basket on a spec that makes
+  // nothing has no identity to offer, and a NAME for the one case the old check excluded wrongly.
+  // The line is not merely redundant with the next two — it is the next two, spelled correctly.
+  //
   // The filter judges what is actually next out of the buffer, not what the machine makes
   // on a good day: a Fryer hands over its burnt chips first, and an arm filtered to plain
   // chips must leave those alone rather than quietly relabelling them.

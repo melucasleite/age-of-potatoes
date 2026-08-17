@@ -396,11 +396,18 @@ describe('the parts line, retired (item 090)', () => {
 
     // §5's ~50-item recipe-graph cap, counted the way `data.ts` counts it: real items plus
     // liquids, boxed machines excluded (nothing eats one, nothing makes one).
-    // 35 until item 111 spent nine of the remaining ten on the flavour tier. The cap below is
-    // now one node from binding, which is the point of pinning the exact number as well as the
-    // ceiling: the next product tier has to notice it is the last one.
+    // 35 until item 111 spent nine of the remaining ten on the flavour tier, and 44 until item
+    // 131 spent **THE LAST ONE** on `ItemId.UsedBottle`. The two assertions below now meet:
+    // 45 + 5 is 50, the ceiling is 50, and the cap has stopped being a headroom note. The next
+    // feature that wants a node buys a raise from the owner — which is precisely why the exact
+    // number is pinned beside the ceiling rather than only the ceiling.
+    //
+    // Item 131 got that node for one item instead of two by putting the recipe on the WASHER
+    // rather than building a Recycling Centre (owner's ruling, 2026-08-17). The alternative
+    // would have read 46 + 5 here and been over.
     const graphItems = ITEM_SPECS.filter((spec) => !isBoxedMachineItem(spec.id)).length;
-    expect(graphItems).toBe(44);
+    expect(graphItems).toBe(45);
+    expect(graphItems + LIQUID_SPECS.length).toBe(50);
     expect(graphItems + LIQUID_SPECS.length).toBeLessThanOrEqual(50);
   });
 });

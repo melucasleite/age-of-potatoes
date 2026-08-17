@@ -233,6 +233,7 @@ import {
   machineOutputFreshness,
   mergedFreshness,
   putHopper,
+  nextOutputItem,
   remainingFreshness,
   takeHopper,
   runnableRecipe,
@@ -1649,7 +1650,13 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
     return true;
   }
 
-  if (spec.outputItem === null) return false;
+  // **THE HAND'S HALF OF ITEM 131'S GATE.** This read `spec.outputItem === null`, which says
+  // "this machine makes nothing" and was standing in for "there is nothing named in this basket"
+  // — the same wrong sentence `grabberSource` had, and the reason the two are corrected together
+  // is that they must agree about what a basket holds or a player can take by hand what an arm
+  // refuses. `nextOutputItem` is null for every machine the old check turned away, and names the
+  // empties a delivery vehicle came home with, which the old check turned away wrongly.
+  if (nextOutputItem(machine, spec) === null) return false;
 
   // Unbounded arms since item 068: the ask is capped by what the buffer holds, nothing else.
   const moved = Math.min(command.count, machine.outputCount);

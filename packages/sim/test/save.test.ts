@@ -395,6 +395,23 @@ describe('reading a damaged save', () => {
 });
 
 describe('the permanent fixture set', () => {
+  // HASH LEDGER, item 131 (2026-08-17): **FOUR OF THESE DIGESTS MOVED AND THE REST DID NOT, AND
+  // WHICH FOUR IS THE MEASUREMENT.** The Washer gained a third recipe — used bottle → clean
+  // bottle — and therefore a third HOPPER, and `hashState` writes `inputCounts.length` before it
+  // writes the counts. So exactly the worlds that hold a Washer hash longer than they did
+  // yesterday, and no others: format-2, format-5, format-7 and format-20 moved; format-1 (no
+  // factory at all), and every fixture in between whose Washer was boxed or never built, did not.
+  // A change that had moved format-1 as well would have been a change to something other than a
+  // Washer's hoppers, and this comment would be a lie the next reader could catch.
+  //
+  // NOTHING IS LOST, and it is checked rather than argued: `machineHoppers` appends unseen
+  // ingredients in recipe order, and the bottle line is declared SECOND in `MACHINE_RECIPES` so
+  // the new hopper lands on the END. Measured on these four fixtures — format-7's Washer goes
+  // `[11] → [11, 0, 0]`, format-20's `[0, 0] → [0, 0, 0]` — every saved count still at its
+  // original index, a zero appended, no migration step required because `readHopperArray` sizes
+  // the array from today's spec and has absorbed exactly this case since it was written.
+  // `test/recycling.test.ts` holds format-7 to that, permanently, rather than leaving it here.
+  //
   // HASH LEDGER, wave 11 (2026-08-15): every pinned digest below moved once, for one shared
   // cause — format 14 (item 075) added `stats.cheatsUsed` to `hashState`'s digest, and the
   // 13 -> 14 migration writes the honest zero into every migrated world. The worlds
@@ -519,7 +536,7 @@ describe('the permanent fixture set', () => {
     ]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('68bcb9a5');
+    expect(hashState(restored.state)).toBe('12f81b17');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -676,7 +693,7 @@ describe('the permanent fixture set', () => {
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(41_837);
     expect(restored.state.worldSeed).toBe(50505);
-    expect(hashState(restored.state)).toBe('39c40ea6');
+    expect(hashState(restored.state)).toBe('ffd0d23c');
   });
 
   it('brings the browning basket and the maintenance tallies back as they were', () => {
@@ -779,7 +796,7 @@ describe('the permanent fixture set', () => {
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(48_792);
     expect(restored.state.worldSeed).toBe(24_680);
-    expect(hashState(restored.state)).toBe('e22ae386');
+    expect(hashState(restored.state)).toBe('f83e58d8');
   });
 
   it('brings both boxed machines back with their own dials, condition, and invoice', () => {
@@ -1544,7 +1561,7 @@ describe('the permanent fixture set', () => {
     // has none of: it holds no contracts and no Agri-Bots, so the digest walks two empty lists and
     // reads nothing new. A world that gained a format and kept its hash is a migration that added
     // a field rather than an opinion.
-    expect(hashState(restored.state)).toBe('78e103fe');
+    expect(hashState(restored.state)).toBe('fdfdde10');
   });
 
   it('brings back four clocks, each part-spent, on four different kinds of thing', () => {

@@ -39,6 +39,7 @@ import {
   MachineRole,
   ROAD_EDGE_TILE_X,
   RUN_TICKS_PER_TILE_FROM_ROAD,
+  emptiesForDelivery,
   isSellable,
   listPriceCents,
   machineSpec,
@@ -50,11 +51,14 @@ import {
   CeremonyId,
   type WorldState,
   addItemFresh,
+  heldOutputItem,
+  machineById,
   markCeremony,
   mergedFreshness,
   spoilTickFromRemaining,
 } from './state';
 import { recordSale } from './stats';
+import { effectiveOutputCapacity } from './upgrades';
 
 // --- distance -----------------------------------------------------------------------
 
@@ -333,12 +337,62 @@ export function advanceCommerce(state: WorldState): void {
 }
 
 /**
+ * **THE RETURN LEG** (item 131): a completed delivery sets the empties down in the vehicle's own
+ * output basket. **THE ONE PLACE EMPTIES ENTER THE WORLD**, and both vehicles come through it.
+ *
+ * A SOURCE, not a transfer. The bottles left the lot inside the soda and were paid for at the
+ * till; what this mints is the glass coming back off a lorry from a town that is not simulated —
+ * `runTicksFor`' fiction, seen from the other end. So there is no clock to carry: an empty is
+ * shelf-stable (it is absent from `FRESHNESS_TICKS_BY_ITEM`, exactly as the bottle it used to be
+ * is), and the basket's clock is written to 0 out loud rather than left correct by accident.
+ *
+ * WHICH PRODUCTS COME BACK AS WHAT IS `EMPTIES_PER_DELIVERY`, and it is data because it is
+ * balance: a Six-Pack returning four bottles instead of six is a repricing of the whole soda
+ * line, and `BALANCE_HASH` folds the table in so a save cannot silently be read against it.
+ *
+ * TWO REFUSALS, AND NEITHER OF THEM IS A LOSS OF GOODS THAT EXIST:
+ *
+ *   - **A basket already holding something else is left alone.** One product per basket is the
+ *     rule everywhere (`heldOutputItem`), and today nothing but empties can ever be in a
+ *     vehicle's, so this is the rule being obeyed rather than a case with a story.
+ *   - **A full basket mints fewer.** See `VEHICLE_EMPTIES_CAPACITY` for why capping beats
+ *     stalling the vehicle, and for why a source that mints less is not plan §4's "nothing
+ *     vanishes" being bent. Every unit this function creates is put in the basket on the same
+ *     line it is counted; there is no path where one is made and then dropped.
+ */
+function landEmpties(machine: Machine, item: ItemId, count: number): void {
+  const back = emptiesForDelivery(item, count);
+  if (back === null) return;
+
+  const spec = machineSpec(machine.kind);
+  if (spec === null) return;
+
+  const held = heldOutputItem(machine, spec);
+  if (held !== 0 && held !== back.item) return;
+
+  const room = effectiveOutputCapacity(spec, machine) - machine.outputCount;
+  if (room <= 0) return;
+
+  const landed = back.count < room ? back.count : room;
+  machine.outputItem = back.item;
+  machine.outputCount += landed;
+  // Shelf-stable, so this is "no opinion" rather than a window — the reading every door in the
+  // game gives a 0. Stated rather than assumed, because a vehicle's basket having been 0 forever
+  // is exactly the kind of luck that stops being true one item later.
+  machine.outputFreshTicks = 0;
+}
+
+/**
  * A cart on the road.
  *
  * It pays on ARRIVAL rather than on dispatch, and that choice is what `Contract.inTransit` and
  * the cargo fields in net worth are for: for the length of the run the player owns goods rather
  * than cash, at the same list price, so the net-worth series does not dip and Peak Flow does not
  * record a trough that never happened.
+ *
+ * **AND IT COMES BACK WITH THE EMPTIES** (item 131). The same arrival, one line further down: the
+ * load is sold and the glass is set down in the cart's basket, where a grabber or the unload key
+ * can take it to a Washer.
  */
 function advanceCart(state: WorldState, machine: Machine): void {
   machine.runTicksRemaining -= 1;
@@ -353,6 +407,7 @@ function advanceCart(state: WorldState, machine: Machine): void {
   machine.cargoFreshTicks = 0;
   if (item === 0 || count <= 0) return;
   payForDelivery(state, item, count);
+  landEmpties(machine, item, count);
 }
 
 /**
@@ -409,6 +464,14 @@ function advanceContract(state: WorldState, contract: Contract): void {
   const gross = payForDelivery(state, contract.item, count);
   contract.runsCompleted += 1;
   contract.grossCents += gross;
+  // **THE EMPTIES COME HOME TO THE SHED THE ROUTE WAS SIGNED AT** (item 131), which is the depot
+  // the truck reverses back into rather than "the depot" in general — a lot can hold several, and
+  // a load returning to the wrong yard would be a teleport. A route whose depot has been
+  // deconstructed mid-run finds nothing here and mints nothing: the same "the lorry finishes its
+  // errand and pays" fallback `depotRunTicksForContract` takes, and the glass has nowhere on the
+  // lot to be put down.
+  const depot = machineById(state, contract.depotId);
+  if (depot !== null) landEmpties(depot, contract.item, count);
 }
 
 /**

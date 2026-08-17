@@ -52,6 +52,7 @@ import {
   type MachinePort,
   type Pipe,
   type PipeNetwork,
+  type Reservoir,
   type WorldState,
   isInsideWorld,
   isOwnedTile,
@@ -598,6 +599,22 @@ function lowestAdjacentNetwork(
  *
  * Runs BEFORE machines in `step()`, so a head filled this tick can pour on the same tick and
  * a player watching a pipe fill sees the sprinkler answer immediately rather than 50 ms late.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────────
+ * **THREE PHASES, AND THE MIDDLE ONE IS WHY** (item 137). Every network is PLANNED first, then
+ * the reservoirs are DIVIDED among the networks drawing on them, then every network is RUN.
+ *
+ * It used to be one phase: each network planned, drew and delivered before the next one was
+ * looked at. That is fine while there is one pump, and it is first-come-first-served the moment
+ * there are two. Measured on a drained pond with two disjoint networks, one pump each: the
+ * lower-id network took **40,000 ml/min and the other took zero**, every tick, forever. A player
+ * who diagnosed a shortage and built a second network had halved their time-to-collapse and
+ * bought no water at all.
+ *
+ * The fix is not a new mechanism — it is the mechanism this file already has, applied one level
+ * up. A network divides one supply among many consumers; a reservoir now divides one level among
+ * many networks, the same way, and `distribute`'s header describes both. See `shareReservoir`.
+ * ────────────────────────────────────────────────────────────────────────────────────────
  */
 export function advancePipes(state: WorldState): void {
   // Last tick's readouts are stale the moment this starts. Clearing them here rather than
@@ -615,8 +632,17 @@ export function advancePipes(state: WorldState): void {
     }
   }
 
+  // `state.networks` is sorted by id, so the plans come out in id order and every division
+  // below iterates a fixed total order. No RNG, no insertion order, no `for...in`.
+  const plans: NetworkPlan[] = [];
   for (let i = 0; i < state.networks.length; i++) {
-    advanceNetwork(state, state.networks[i]!);
+    plans.push(planNetwork(state, state.networks[i]!));
+  }
+
+  shareReservoirs(state, plans);
+
+  for (let i = 0; i < plans.length; i++) {
+    runNetwork(state, plans[i]!);
   }
 }
 
@@ -657,8 +683,121 @@ function setRefThrottled(ref: PortRef, throttled: boolean): void {
   if (throttled && ref.port !== null) ref.machine.throttled = true;
 }
 
+/**
+ * Everything one network works out about itself BEFORE any water moves (item 137).
+ *
+ * The split between this and `runNetwork` is the whole fix: planning reads the world, running
+ * writes it, and no network's plan can be coloured by another network's draw. That also means
+ * two pumps on one pond now read the SAME throttle band — under the old single-phase loop the
+ * lower-id pump could drag the pond under 25% and halve the other pump's rating inside the same
+ * tick, which is the same unfairness as the draw itself wearing a different hat.
+ */
+interface NetworkPlan {
+  network: PipeNetwork;
+  heads: PortRef[];
+  wants: number[];
+  tanks: PortRef[];
+  sources: PortRef[];
+  pump: Machine | null;
+  /** The reservoir this network's pump stands on, if any. */
+  reservoir: Reservoir | null;
+  totalDemand: number;
+  /** What this network would draw if it were the only one on the pond. */
+  requestMl: number;
+  /** What it may actually draw once the pond has been divided. Set by `shareReservoirs`. */
+  allowanceMl: number;
+}
+
+/**
+ * Divide each reservoir among the networks drawing on it, in ascending network id order.
+ *
+ * ────────────────────────────────────────────────────────────────────────────────────────
+ * **THE SAME DIVISION `distribute` DOES, ONE LEVEL UP** (item 137). A network hands one supply
+ * to many consumers; a reservoir hands one level to many networks. Uncontended is the common
+ * case and costs nothing: a pond with one drawing network grants that network its whole request,
+ * which is byte-for-byte what the code did before this function existed. THAT IS LOAD-BEARING —
+ * every golden fixture and every single-pump world must be untouched by this, and the only
+ * behaviour that may change is the contended case, which is the bug.
+ *
+ * **WHY SHARING RATHER THAN REFUSING THE SECOND PUMP.** There is exactly one reservoir in the
+ * world (`state.ts`), so "refuse a pump on an already-tapped reservoir" is not a small rule — it
+ * is "one pumped network per lot, forever", which forecloses a build the plan never forbade.
+ * Plan §5's cap is one pump per NETWORK, and item 130's diagnosis correctly told the owner a
+ * second network was legal; the honest fix is to make that second network worth something rather
+ * than to retroactively make the advice wrong. Sharing also keeps the full-pond case exactly as
+ * it already was — two networks genuinely do double throughput while there is water for both —
+ * so the second pump degrades gracefully into half a share instead of falling off a cliff.
+ *
+ * **THE TAIL GOES TO THE LOWEST NETWORK ID, AND DOES NOT ROTATE.** `distribute` rotates its
+ * remainder because a network's consumers are handed whole intakes and the leftover is a real
+ * share; here the leftover is at most one millilitre per drawing network per tick against a
+ * recharge of tens of thousands a minute, and rotating it would mean a new stored offset on
+ * `Reservoir` — a save-format field, a migration, and every golden hash moved, to redistribute
+ * less than a drop. A fixed total order is deterministic, which is the property that actually
+ * matters. If a reservoir ever grows a rotation offset for another reason, use it here too.
+ * ────────────────────────────────────────────────────────────────────────────────────────
+ */
+function shareReservoirs(state: WorldState, plans: readonly NetworkPlan[]): void {
+  for (let i = 0; i < plans.length; i++) plans[i]!.allowanceMl = plans[i]!.requestMl;
+
+  for (let r = 0; r < state.reservoirs.length; r++) {
+    const reservoir = state.reservoirs[r]!;
+
+    const drawing: NetworkPlan[] = [];
+    for (let i = 0; i < plans.length; i++) {
+      const plan = plans[i]!;
+      if (plan.reservoir !== null && plan.reservoir.id === reservoir.id && plan.requestMl > 0) {
+        drawing.push(plan);
+      }
+    }
+    // One claimant is not a division, and nobody's allowance moves. The overwhelmingly common
+    // case, and the reason this whole phase is invisible to a one-pump world.
+    if (drawing.length < 2) continue;
+
+    let totalRequest = 0;
+    for (let i = 0; i < drawing.length; i++) totalRequest += drawing[i]!.requestMl;
+    // Enough for everybody: no contention, no division, everyone draws in full. A full pond is
+    // this branch, which is why a second pump still doubles throughput while the water lasts.
+    if (totalRequest <= reservoir.levelMl) continue;
+
+    // Equal shares until every request is met or the pond runs out, then the remainder one
+    // millilitre each in id order. Terminates in at most `n + 1` rounds for the same reason
+    // `distribute` does: each round either satisfies somebody outright or makes the next share
+    // zero.
+    const granted: number[] = [];
+    for (let i = 0; i < drawing.length; i++) granted.push(0);
+
+    let remaining = reservoir.levelMl;
+    for (let round = 0; round <= drawing.length && remaining > 0; round++) {
+      let unsatisfied = 0;
+      for (let i = 0; i < drawing.length; i++) {
+        if (granted[i]! < drawing[i]!.requestMl) unsatisfied += 1;
+      }
+      if (unsatisfied === 0) break;
+
+      const share = divFloor(remaining, unsatisfied);
+      if (share <= 0) break;
+
+      for (let i = 0; i < drawing.length && remaining > 0; i++) {
+        const need = drawing[i]!.requestMl - granted[i]!;
+        if (need <= 0) continue;
+        const take = need < share ? need : share;
+        granted[i] = granted[i]! + take;
+        remaining -= take;
+      }
+    }
+    for (let i = 0; i < drawing.length && remaining > 0; i++) {
+      if (granted[i]! >= drawing[i]!.requestMl) continue;
+      granted[i] = granted[i]! + 1;
+      remaining -= 1;
+    }
+
+    for (let i = 0; i < drawing.length; i++) drawing[i]!.allowanceMl = granted[i]!;
+  }
+}
+
 /** Scratch arrays, rebuilt per network. Locals, never module state — see the header. */
-function advanceNetwork(state: WorldState, network: PipeNetwork): void {
+function planNetwork(state: WorldState, network: PipeNetwork): NetworkPlan {
   network.supplyMl = 0;
   network.demandMl = 0;
   network.deliveredMl = 0;
@@ -727,7 +866,7 @@ function advanceNetwork(state: WorldState, network: PipeNetwork): void {
 
   // --- supply: the pump's rate, capped by what its source can actually give ---
   let capacityMl = 0;
-  let source = null;
+  let source: Reservoir | null = null;
   if (pump === null) {
     // No pump means no supply, and no banked supply either — a network cannot save up while
     // its pump is missing and then dump a tick's worth the moment one is placed.
@@ -768,7 +907,29 @@ function advanceNetwork(state: WorldState, network: PipeNetwork): void {
 
   const placeable = totalDemand + tankSpace;
   const request = capacityMl < placeable ? capacityMl : placeable;
-  const drawnMl = pump === null ? 0 : takeWater(state, source, request, WaterDraw.Metered);
+
+  return {
+    network,
+    heads,
+    wants,
+    tanks,
+    sources,
+    pump,
+    reservoir: source,
+    totalDemand,
+    requestMl: pump === null ? 0 : request,
+    // The uncontended answer, so a plan that never reaches `shareReservoirs` — there is none
+    // today, and this is the value that keeps that true if one ever appears — draws in full.
+    allowanceMl: pump === null ? 0 : request,
+  };
+}
+
+/** The half of the tick that MOVES WATER. Everything it needs was decided in `planNetwork`. */
+function runNetwork(state: WorldState, plan: NetworkPlan): void {
+  const { network, heads, wants, tanks, sources, pump, totalDemand } = plan;
+
+  const drawnMl =
+    pump === null ? 0 : takeWater(state, plan.reservoir, plan.allowanceMl, WaterDraw.Metered);
   if (pump !== null) pump.flowMlPerMinute = drawnMl * TICKS_PER_MINUTE;
 
   // --- sources, then tanks, cover the shortfall — both in id order ---

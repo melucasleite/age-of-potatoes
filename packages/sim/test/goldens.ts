@@ -77,6 +77,7 @@ export const FIXTURE_NAMES = [
   'the-till',
   'mid-field',
   'flavour-line',
+  'bottle-return',
 ] as const;
 
 export type FixtureName = (typeof FIXTURE_NAMES)[number];

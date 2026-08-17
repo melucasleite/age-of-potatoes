@@ -356,6 +356,36 @@ export const ItemId = {
 
   /** A boxed Artesian Well — see `MachineKind.ArtesianWell`. */
   BoxedArtesianWell: 79,
+
+  /**
+   * **AN EMPTY THAT CAME BACK FROM A DELIVERY** (item 131), and **THE FIFTIETH AND LAST NODE
+   * OF THE RECIPE GRAPH.** Plan §5 caps it at ~50 and the header above this enum spent the
+   * forty-ninth on item 111's flavour tier. This is the fiftieth. There is no fifty-first
+   * without an owner's raise.
+   *
+   * **IT COST ONE NODE BECAUSE THE OWNER RULED FOR THE WASHER** (2026-08-17, verbatim: *"Okey
+   * washer it is."*). The ask was a Recycling Centre, which is two nodes — this item plus a
+   * machine — and would have landed the graph at 51. A Washer that already washes dirty things
+   * clean needs no second machine to explain the verb, so the recipe goes on the Washer
+   * (`MACHINE_RECIPES`) and the used bottle is the whole of the cost.
+   *
+   * **THE REJECTED ALTERNATIVE, RECORDED SO NOBODY RE-PROPOSES IT:** having a delivery return
+   * `ItemId.Bottle` directly. Zero nodes and strictly worse — a return leg with no processing
+   * is a discount on bottles wearing a logistics costume, and there is nothing to build.
+   *
+   * **SELLABLE, AND THAT IS THE ANTI-RUBBISH CLAUSE.** A player who never builds the loop
+   * still accumulates these the moment they deliver a soda, and plan §4's floor says nothing a
+   * player owns is stranded — so an empty has a price and an exit at the bin, exactly as a
+   * retired drone part does. `USED_BOTTLE_SCRAP_CENTS` is a TENTH of a clean bottle, which is
+   * the whole of the argument for washing rather than scrapping: the same empty is worth ten
+   * times more through a Washer than through a bin, and no player has to do arithmetic to see
+   * it. Not purchasable: there is no shop for other people's empties.
+   *
+   * **NOT PERISHABLE.** It is absent from `FRESHNESS_TICKS_BY_ITEM`, like the bottle it used to
+   * be — glass does not spoil, and a clock here would put a countdown on the one good in the
+   * game whose entire purpose is to be left in a heap until somebody walks past.
+   */
+  UsedBottle: 80,
 } as const;
 
 export type ItemId = (typeof ItemId)[keyof typeof ItemId];
@@ -755,6 +785,22 @@ export const SWEETCORN_PREMIUM_CENTS = flavourPremiumCents(CORN_PRICE_CENTS);
 
 /** Plan §4: "syrup + carbonated water + bottle → soda (~$16)". This is the ~$16. */
 export const SODA_PRICE_CENTS = 1600;
+
+/**
+ * What the bin pays for an empty (item 131). **A TENTH OF A CLEAN BOTTLE, AND THE RATIO IS THE
+ * WHOLE POINT.**
+ *
+ * A clean `ItemId.Bottle` is 120¢, so an empty run through a Washer is worth 120¢ and an empty
+ * dropped in the bin is worth 12¢. That gap is what makes the loop worth building without a
+ * single number needing to be balanced against a clock: washing beats scrapping tenfold, always,
+ * and a player who works it out once never has to work it out again.
+ *
+ * IT IS NOT ZERO, and that is the anti-rubbish clause. Item 131 asked whether a player who never
+ * builds the centre should be left holding empties they cannot get rid of, and plan §4's floor
+ * answers it — nothing a player owns is stranded. Twelve cents is deposit money: enough that the
+ * bin is a real exit, nowhere near enough to be a strategy.
+ */
+export const USED_BOTTLE_SCRAP_CENTS = 12;
 
 /**
  * The two bundles, and the reason they exist.
@@ -1194,6 +1240,16 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.BoxedDroneBay, slug: 'boxed-drone-bay', ...BOXED },
   { id: ItemId.BoxedPartsBench, slug: 'boxed-parts-bench', ...BOXED },
   { id: ItemId.BoxedArtesianWell, slug: 'boxed-artesian-well', ...BOXED },
+
+  // The return leg's good (item 131). Filed after the boxes rather than beside the bottle it
+  // came from, because these rows are in id order and 80 is the end of the list.
+  {
+    id: ItemId.UsedBottle,
+    slug: 'used-bottle',
+    listPriceCents: USED_BOTTLE_SCRAP_CENTS,
+    purchasable: false,
+    sellable: true,
+  },
 ];
 
 /**
@@ -2410,6 +2466,117 @@ export const WORK_RATE_SCALE = 100;
  * Wear is per OPERATION, never per second — plan §4 states that rule as absolute, and
  * `advanceConverter` applies it only on a completed operation.
  */
+// --- the return leg (item 131) ---------------------------------------------------------
+//
+// **BOTTLES COME BACK.** A delivery leaves the lot with soda and the vehicle comes home with the
+// empties, which a Washer turns back into bottles the Bottler can use again. The owner's ask in
+// full: *"at a recycling center that takes used bottles, used bottles out of the depot once they
+// come back from a delivery and turns them into clean bottles to be used by the bottler."*
+//
+// **ALL OF THEM COME BACK — THE WASHING IS THE COST, NOT ATTRITION.** Item 131 leaned this way
+// and the 2026-08-17 sandbox ruling settles it: reward attention rather than punish absence. A
+// fraction would have been arithmetic nobody asked for, and a percentage that quietly eats
+// bottles is a tax the player cannot watch being levied.
+//
+// **THEY LAND IN THE VEHICLE'S OWN OUTPUT BASKET, WHICH IS "THE DEPOT'S FLOOR" IN THIS FILE'S OWN
+// VOCABULARY.** The basket is a door a grabber already opens, a hand already unloads, net worth
+// already invoices, and `applyDeconstructMachine` already hands back — so the return leg needed
+// no new field on `Machine`, no new save field, and no migration at all. A dedicated
+// `returnedCount` pair would have been a second output buffer with its own doors to keep in step
+// with the first, which is the shape this file refuses everywhere else.
+//
+// What it costs instead is one honest widening at two gates. `grabberSource` and
+// `applyUnloadMachine` both bailed on `spec.outputItem === null`, a check that reads "this
+// machine makes nothing" and MEANT "this machine's basket has no name". A basket has named
+// itself since item 111 (`machine.outputItem`), so both now ask `nextOutputItem` — which returns
+// null for exactly the machines the old check excluded and a name for the one case it wrongly
+// excluded too. The same sentence, spelled so it is true of a vehicle.
+//
+// It also keeps the loop PHYSICAL, which is the half the ask is really about: the empties come
+// home to the far side of the lot next to the road, and getting them to a Washer is a belt, an
+// arm, or a walk. A refund straight into the player's bag would have been the same money with
+// the game taken out of it.
+
+/**
+ * How many empties one delivered unit comes home as, by product.
+ *
+ * **A TABLE RATHER THAN A FIELD ON `ITEM_SPECS`**, on `MACHINE_RECIPES`' precedent and for its
+ * reason: three goods in a roster of forty-five contain a bottle, and a `bottlesPerUnit: 0` on
+ * the other forty-two would ask every future good a question it does not have.
+ *
+ * The counts are the bottles that actually went out, read straight off the recipes that built
+ * each product: a Soda is one `ItemId.Bottle` (see the Bottler), a Six-Pack is `SIX_PACK_COUNT`
+ * sodas, and a Snack Combo is a bag of chips and one soda. Nothing here is invented — every
+ * number is a bottle the player bought and shipped. `test/factory.test.ts` holds it to that.
+ *
+ * `returnsItem` is spelled out rather than hard-coded in the reader so the mint lands on the
+ * goods census: a data path that names a good has to say what it does to goods
+ * (`DATA_IDENTITY_VERDICTS`), and this one MINTS while `item` is a LOOKUP key. Hidden inside a
+ * function, the mint would have been invisible to `dataItemFields()`.
+ */
+export interface EmptiesRow {
+  /** The delivered good. A row key — nothing here re-labels it. */
+  readonly item: ItemId;
+  /** What comes back in its place. */
+  readonly returnsItem: ItemId;
+  /** How many, per delivered unit. */
+  readonly count: number;
+}
+
+export const EMPTIES_PER_DELIVERY: readonly EmptiesRow[] = [
+  { item: ItemId.Soda, returnsItem: ItemId.UsedBottle, count: 1 },
+  { item: ItemId.SixPack, returnsItem: ItemId.UsedBottle, count: SIX_PACK_COUNT },
+  { item: ItemId.SnackCombo, returnsItem: ItemId.UsedBottle, count: 1 },
+];
+
+/**
+ * What comes home when `count` of `item` are delivered, or null for the forty-two goods that
+ * return nothing. **The one reader of `EMPTIES_PER_DELIVERY`.**
+ */
+export function emptiesForDelivery(
+  item: ItemId,
+  count: number,
+): { item: ItemId; count: number } | null {
+  if (count <= 0) return null;
+  for (let i = 0; i < EMPTIES_PER_DELIVERY.length; i++) {
+    const row = EMPTIES_PER_DELIVERY[i]!;
+    if (row.item === item) return { item: row.returnsItem, count: row.count * count };
+  }
+  return null;
+}
+
+/**
+ * How many empties a vehicle holds before somebody has to come and get them.
+ *
+ * **ONE CART-LOAD OF SIX-PACKS**, which is the largest single return the assisted rung can
+ * generate: `CART_CAPACITY × SIX_PACK_COUNT`, 20 × 6. It is a literal rather than that product
+ * because `CART_CAPACITY` is declared *below* `MACHINE_SPECS` and a spec cannot read a constant
+ * that has not been evaluated yet — so `test/factory.test.ts` pins the identity instead, and the
+ * two cannot drift without a red test saying so.
+ *
+ * **AN OVERFULL BASKET MINTS FEWER EMPTIES. IT NEVER STALLS THE VEHICLE, AND IT NEVER DESTROYS
+ * ANYTHING.** Both halves are load-bearing.
+ *
+ * The first half is what protects every save already on disk. The obvious alternative — refuse to
+ * dispatch while the basket is full — puts a brand-new stall in the middle of the one ladder
+ * whose entire selling point is that you stop touching it, and it would freeze a standing route
+ * on a lot whose owner has never heard of recycling. A depot running 100 six-packs a trip would
+ * need room for 600 empties before it was allowed to leave. That is a feature holding a feature
+ * hostage.
+ *
+ * The second half is why a cap is not a plan §4 violation, and the distinction is exact:
+ * **nothing that exists is deleted, because the empties do not exist yet.** Those bottles left the
+ * lot inside the soda and were paid for at the till. This is a SOURCE, and a source that mints
+ * less has minted less — `advanceCart` and `advanceContract` are its only two callers and both
+ * put every unit they mint into the basket, so there is no path on which a unit is created and
+ * then dropped. Contrast a cart's *cargo*, which is goods the player owns, and which
+ * `applyDeconstructMachine` therefore hands back to the last bottle.
+ *
+ * So the rule a player learns is "keep it drained and you get all of them" — the sandbox ruling's
+ * shape exactly: attention rewarded, absence not punished.
+ */
+export const VEHICLE_EMPTIES_CAPACITY = 120;
+
 export const MACHINE_SPECS: readonly MachineSpec[] = [
   {
     kind: MachineKind.SellBin,
@@ -3194,10 +3361,14 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     workRatePerTick: 0,
     // Its cargo hold is `CART_CAPACITY`, not `inputCapacity`: a cart holds ONE product per run
     // in `machine.cargoItem`/`cargoCount`, which is a different shape from a recipe's parallel
-    // per-line buffers. Leaving these at zero keeps `effectiveInputCapacity` from ever being
+    // per-line buffers. Leaving this at zero keeps `effectiveInputCapacity` from ever being
     // asked a question about a vehicle.
     inputCapacity: 0,
-    outputCapacity: 0,
+    // **THE BASKET IS THE RETURN SHELF** (item 131) — where the empties from a completed run are
+    // put down. It was 0, which said "a cart makes nothing" and was read everywhere as "a cart's
+    // basket cannot be looked into". The cart still makes nothing (`outputItem` below is null and
+    // stays null); what it now has is somewhere to set down what the lorry brought back.
+    outputCapacity: VEHICLE_EMPTIES_CAPACITY,
     tankCapacityMl: 0,
     wearPerOperation: 0,
     inputs: [],
@@ -3228,8 +3399,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     priceCents: 40_000,
     workPerOperation: 0,
     workRatePerTick: 0,
+    // The floor a depot's routes stand on is `contract.stocked`, per route; this is the OTHER
+    // floor (item 131), where the empties land when a truck comes home. Same size as the cart's
+    // for the same reason a bin has one price: two vehicles doing one thing should not need two
+    // numbers to describe it.
     inputCapacity: 0,
-    outputCapacity: 0,
+    outputCapacity: VEHICLE_EMPTIES_CAPACITY,
     tankCapacityMl: 0,
     wearPerOperation: 0,
     inputs: [],
@@ -3691,9 +3866,36 @@ export interface MachineRecipeRow {
 
 export const MACHINE_RECIPES: readonly MachineRecipeRow[] = [
   {
+    // **THE MACHINE THE OWNER RULED FOR** (item 131, 2026-08-17: *"Okey washer it is."*). It
+    // washes dirty things clean, and an empty that came back from a delivery is a dirty thing,
+    // so the second job needs no second machine and no sentence explaining the verb.
+    //
+    // **THE BOTTLE LINE SITS BETWEEN THE GOLD ONE AND THE PLAIN ONE, AND THAT POSITION IS A
+    // SAVE-COMPATIBILITY RULE BEFORE IT IS A PRIORITY.** `MACHINE_HOPPERS` is built as
+    // `spec.inputs` plus every unseen item in RECIPE ORDER, and `machine.inputCounts` is stored
+    // parallel to it in every save on disk — so declaring the bottles FIRST would have inserted a
+    // hopper at index 1 and slid the gold-potato line to index 2, which silently relabels every
+    // saved Washer's gold potatoes as used bottles. Second keeps the existing indices exactly
+    // where they are and lands the new hopper on the end, which is the case `readInputCounts` was
+    // already written to absorb. See the `MACHINE_HOPPERS` header for the rule in full.
+    //
+    // It is also the right priority on its merits, and it is this file's own idiom: order is
+    // production priority, and the scarce input goes above the staple exactly as the flavoured
+    // chip lines go above plain salt. Empties arrive in BURSTS — one lorry, one armful — while
+    // russets arrive continuously, so a burst clears promptly and the line falls straight back to
+    // potatoes rather than a heap of glass sitting in a hopper for the rest of the session.
+    //
+    // **WHAT A SHARED WASHER COSTS, SAID OUT LOUD:** a basket holds one product at a time
+    // (`heldOutputItem`), so a Washer mid-bottle will not start a potato until the bottles are
+    // taken away, and an arm pointed at a Slicer refuses a clean bottle and lights RED. That is
+    // `basketBlocksRecipe`'s ordinary "look downstream" stall, in the vocabulary the whole
+    // factory is taught in, and the two builds that answer it are a filtered arm or a second
+    // Washer. It is a visible stall rather than a silent one, which is the trade this file makes
+    // everywhere else.
     kind: MachineKind.Washer,
     recipes: [
       { consumes: [{ item: ItemId.GoldPotato, count: 1 }], output: ItemId.WashedGoldPotato },
+      { consumes: [{ item: ItemId.UsedBottle, count: 1 }], output: ItemId.Bottle },
       { consumes: [{ item: ItemId.RussetPotato, count: 1 }], output: ItemId.WashedPotato },
     ],
   },
@@ -4594,6 +4796,15 @@ function balanceDigest(): string {
     h,
     `${ROAD_EDGE_TILE_X}:${RUN_TICKS_PER_TILE_FROM_ROAD}:${CART_RUN_BASE_TICKS}:${CART_CAPACITY}:${DEPOT_RUN_BASE_TICKS}:${DEPOT_LOAD_TICKS}:${DEPOT_STOCK_CAPACITY}:${DEPOT_MAX_CONTRACTS}:${CONTRACT_MAX_QUANTITY}:${DESTINATION_MAX_LENGTH}`,
   );
+  // The return leg (item 131). `MACHINE_SPECS` above already folds in the two baskets' capacity
+  // and the Washer's new recipe, so this line is the half that lives in a table of its own: which
+  // products come home as empties, what they come home AS, and how many. Change a Six-Pack from
+  // six bottles to four and a saved world's in-flight lorry is carrying a different future.
+  for (let i = 0; i < EMPTIES_PER_DELIVERY.length; i++) {
+    const row = EMPTIES_PER_DELIVERY[i]!;
+    h = fnv1aString(h, `empties:${row.item}>${row.returnsItem}x${row.count}`);
+  }
+  h = fnv1aString(h, `${VEHICLE_EMPTIES_CAPACITY}:${USED_BOTTLE_SCRAP_CENTS}`);
   // Soil. A tile's soil is rolled once and saved, and the modifiers are read every time a crop is
   // sown on it — so a build that retuned sand would grow a different crop on the same saved tile.
   for (let i = 0; i < SOIL_SPECS.length; i++) {

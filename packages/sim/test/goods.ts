@@ -636,6 +636,15 @@ export const CLOCK_CROSSING_VERDICTS: Readonly<Record<string, ClockDoorVerdict>>
     ClockDoorVerdict.Carries, //                            a torn-up route hands the lorry back.
   'commerce:refundContract:addItemFresh(spoilTickFromRemaining(state, contract.stockedFreshTicks))':
     ClockDoorVerdict.Carries, //                            and the floor.
+  'commerce:landEmpties:outputFreshTicks = 0': ClockDoorVerdict.MintsShelfStable, // the empties
+  //                                                        come home (item 131). NOT `Clears`:
+  //                                                        the basket is being FILLED, and 0 here
+  //                                                        is "no opinion" rather than "nothing
+  //                                                        left to count". The claim is checked
+  //                                                        rather than trusted — `ItemId.UsedBottle`
+  //                                                        is absent from `FRESHNESS_TICKS_BY_ITEM`,
+  //                                                        and the live scenarios assert that what
+  //                                                        actually lands is a good with no window.
   'commerce:refundContract:inTransitFreshTicks = 0': ClockDoorVerdict.Clears,
   'commerce:refundContract:stockedFreshTicks = 0': ClockDoorVerdict.Clears,
   // --- the primitives' own take-doors ---
@@ -787,6 +796,27 @@ export const MOVE_VERDICTS: Readonly<Record<string, MoveVerdict>> = {
   //                                                         on its own by a live scenario that
   //                                                         stops before the run completes.
   'commerce:depotAccept:stocked': MoveVerdict.Conserving, //  claw → depot floor.
+  'commerce:landEmpties:outputCount': MoveVerdict.Source, //  **THE RETURN LEG** (item 131). Glass
+  //                                                         enters the world here, off a lorry
+  //                                                         from a town that is not simulated —
+  //                                                         the same fiction `runTicksFor`
+  //                                                         describes, seen from the other end.
+  //                                                         The bottles it mints were bought and
+  //                                                         shipped inside a soda, so this is a
+  //                                                         SOURCE and not the other half of a
+  //                                                         transfer: the goods that left went
+  //                                                         out through `payForDelivery` and are
+  //                                                         money now.
+  //                                                         **ONE ROW BECAUSE THERE IS ONE WRITE**
+  //                                                         — the census keys by the function that
+  //                                                         writes the count, and both vehicles
+  //                                                         come through this door. That is the
+  //                                                         collapse `MOVE_VERDICTS`' own header
+  //                                                         warns about, so BOTH triggers are
+  //                                                         driven live rather than one standing
+  //                                                         in for the other: a cart coming home
+  //                                                         and a truck coming home are separate
+  //                                                         scenarios in `move-census-live`.
   'commerce:refundContract:inTransit': MoveVerdict.Conserving, // cancelled route → bag.
   'commerce:refundContract:stocked': MoveVerdict.Conserving, //   ditto, the waiting floor.
   // --- the bag, and the primitives every other row goes through ---
@@ -1350,6 +1380,16 @@ export const DATA_IDENTITY_VERDICTS: Readonly<Record<string, DataIdentity>> = {
   //                                                     id is in the world before anything holds
   //                                                     it. That is door 9's fix, seen from here.
   'CROP_SPECS[].seedItem': DataIdentity.Mints, //        a harvest hands a seed back.
+  'EMPTIES_PER_DELIVERY[].item': DataIdentity.Lookup, // which delivered good this row is ABOUT.
+  //                                                     A key, exactly like a price row: nothing
+  //                                                     in a container is re-labelled by it, and
+  //                                                     the soda it names has already been sold
+  //                                                     and paid for by the time it is read.
+  'EMPTIES_PER_DELIVERY[].returnsItem': DataIdentity.Mints, // and what comes home in its place
+  //                                                     (item 131). A mint: `landEmpties` writes
+  //                                                     this id straight onto `machines[].outputItem`,
+  //                                                     which the node sweep can see and a save
+  //                                                     carries — the harmless majority shape.
   'CROP_SPECS[].yieldItem': DataIdentity.Mints, //       the crop itself.
   'FRESHNESS_TICKS_BY_ITEM[].item': DataIdentity.Lookup, // a row key, not a container.
   'MACHINE_RECIPES[].recipes[].consumes[].item': DataIdentity.Consumes,

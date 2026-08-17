@@ -1902,3 +1902,244 @@ describe('the Artesian Well ([[130]])', () => {
     );
   });
 });
+
+// --- item 122: the surplus, weighed where it is made -------------------------------------
+
+describe('the surplus a pump draws above demand ([[122]])', () => {
+  /**
+   * ONE EQUATION, PER TICK, ON ONE NETWORK: `drawn === delivered + the tank's gain`.
+   *
+   * THIS IS NOT THE CENSUS AGAIN. The census above sums the whole world over thousands of
+   * ticks and asks whether the books close; it caught item 122's mutants, and it very nearly
+   * did not — read its own header, which records that the first draft of it watched a
+   * permanently-starved network where `surplus` is structurally zero. A global sum has that
+   * failure mode built in: any regime that never reaches the surplus branch still balances.
+   *
+   * This is the local statement instead, and it names the quantity item 122 is about rather
+   * than a total it happens to be inside. Every millilitre this network drew from the pond
+   * either landed in a consumer or landed in the tank, THIS TICK, exactly — no window to
+   * average over, nowhere for a destroyed or minted drop to hide. A tank covering a shortfall
+   * shows up as a negative gain and the equation is unchanged, which is why it can run on
+   * every tick of the fixture rather than only the comfortable ones.
+   *
+   * (`srcTaken` is absent from the equation because a water network has no outlet ports. On a
+   * converter network the identity is `drawn + drawnFromOutlets === delivered + gain`.)
+   */
+  it('LANDS EVERY DRAWN MILLILITRE in a consumer or the tank, on every single tick', () => {
+    const { state, tank } = pipedHeadWorld(1_340, true);
+    for (const machine of state.machines) machine.tankMl = 0;
+
+    let surplusTicks = 0;
+    let shortfallTicks = 0;
+
+    const minute = (): void => {
+      for (let i = 0; i < 2_000; i++) {
+        const drawnBefore = state.stats.waterDrawnMl;
+        const tankBefore = tank!.tankMl;
+        stepMany(state, 1);
+
+        const drawn = state.stats.waterDrawnMl - drawnBefore;
+        const gain = tank!.tankMl - tankBefore;
+        const delivered = state.networks[0]!.deliveredMl;
+
+        expect(drawn, `the surplus went missing at tick ${state.tick}`).toBe(delivered + gain);
+        if (gain > 0) surplusTicks += 1;
+        if (gain < 0) shortfallTicks += 1;
+      }
+    };
+
+    // A full pond: the pump out-supplies the head every tick and the difference goes to the tank.
+    minute();
+    // Then the pond is drained under it, so the pump drops to the sip band, the head outruns it,
+    // and the tank spends the run giving back what it banked. BOTH DIRECTIONS THROUGH THE SAME
+    // EQUATION — a buffer that is only ever watched while it fills is half-watched.
+    pond(state).levelMl = 0;
+    minute();
+
+    // And the run has to have ACTUALLY BUFFERED, or the equation above was 0 === 0 + 0 for two
+    // thousand ticks and would pass with the surplus branch deleted — which is the exact hole
+    // item 122 was filed about, and the exact way a test written to close it fails to.
+    expect(
+      surplusTicks,
+      'the tank never absorbed, so the surplus branch never ran',
+    ).toBeGreaterThan(0);
+    expect(
+      shortfallTicks,
+      'the tank never gave back, so a negative gain was never seen',
+    ).toBeGreaterThan(0);
+  });
+});
+
+// --- item 137: two networks, one pond ----------------------------------------------------
+
+/**
+ * TWO GENUINELY DISJOINT NETWORKS, ONE PUMP EACH, both standing on the pond's north bank.
+ *
+ * A tank rather than a head on the end of each run, on purpose: a tank's draw is a flat
+ * `intakeMlPerTick` with no activation period and no moisture to read, so what each network
+ * gets out of the pond is exactly what its tank gained. A sprinkler would put its own 100-tick
+ * rhythm between the pond and the measurement, which is noise in a test about division.
+ *
+ * The one-pump-per-network rule is intact and load-bearing here: these are two networks with
+ * one pump each, which is the build item 130 told the owner was legal.
+ */
+function racingNetworks(
+  seed: number,
+  wells = 0,
+): { state: WorldState; pumpA: Machine; pumpB: Machine; tankA: Machine; tankB: Machine } {
+  const state = createWorld(seed);
+  state.unlocked = [TechId.Pumps, TechId.PipedSprinklers];
+  state.moneyCents = 10_000_000;
+
+  const pumpA = spawnMachine(state, MachineKind.Pump, 12, 12)!;
+  for (let x = 11; x >= 9; x--) spawnPipe(state, x, 12, LiquidId.Water);
+  const tankA = spawnMachine(state, MachineKind.Tank, 7, 12)!;
+
+  const pumpB = spawnMachine(state, MachineKind.Pump, 14, 12)!;
+  for (let x = 15; x <= 17; x++) spawnPipe(state, x, 12, LiquidId.Water);
+  const tankB = spawnMachine(state, MachineKind.Tank, 18, 12)!;
+
+  const banks = [
+    [13, 12],
+    [11, 13],
+    [11, 15],
+  ];
+  for (let i = 0; i < wells; i++) wellAt(state, banks[i]![0]!, banks[i]![1]!);
+
+  rebuildNetworks(state);
+  return { state, pumpA, pumpB, tankA, tankB };
+}
+
+/** What each tank gained, and what the pond gave up, over one minute from a drained pond. */
+function drainedMinute(state: WorldState, tankA: Machine, tankB: Machine) {
+  pond(state).levelMl = 0;
+  tankA.tankMl = 0;
+  tankB.tankMl = 0;
+  const drawnBefore = state.stats.waterDrawnMl;
+  stepMany(state, TICKS_PER_MINUTE);
+  return {
+    gainA: tankA.tankMl,
+    gainB: tankB.tankMl,
+    drawn: state.stats.waterDrawnMl - drawnBefore,
+  };
+}
+
+describe('two networks racing for one pond ([[137]])', () => {
+  it('are two separate networks with one pump each, which is the build under test', () => {
+    const { state, pumpA, pumpB } = racingNetworks(1_400);
+    expect(state.networks).toHaveLength(2);
+    expect(pumpA.network).not.toBe(pumpB.network);
+    expect(pumpA.network).toBeGreaterThan(0);
+    expect(pumpB.network).toBeGreaterThan(0);
+
+    // And the rule that keeps the ledger a division is untouched: joining the two runs is
+    // still refused before it can happen.
+    expect(
+      pipePathRefusal(
+        state,
+        [
+          { x: 9, y: 11 },
+          { x: 10, y: 11 },
+          { x: 11, y: 11 },
+          { x: 12, y: 11 },
+          { x: 13, y: 11 },
+          { x: 14, y: 11 },
+          { x: 15, y: 11 },
+        ],
+        LiquidId.Water,
+        PIPE_MAX_PATH_TILES,
+      ),
+    ).toBe(BuildRefusal.TwoPumpsOneNetwork);
+  });
+
+  it('BOTH DOUBLE THROUGHPUT ON A FULL POND — the second pump is worth what it looks worth', () => {
+    const { state, pumpA, pumpB } = racingNetworks(1_401);
+    for (const machine of state.machines) machine.tankMl = 0;
+    stepMany(state, 100);
+
+    // Nothing here is a change; it is the case that already worked, pinned so that fixing the
+    // drained case cannot quietly pay for itself out of the full one.
+    expect(pumpA.flowMlPerMinute).toBe(PUMP_RATE_ML_PER_MINUTE);
+    expect(pumpB.flowMlPerMinute).toBe(PUMP_RATE_ML_PER_MINUTE);
+  });
+
+  it('**SHARE A DRAINED POND** rather than handing the whole recharge to the lower machine id', () => {
+    // ────────────────────────────────────────────────────────────────────────────────────
+    //  THE BUG, MEASURED: on a drained pond the first network by machine id took the entire
+    //  tick's recharge — 40,000 ml/min — and the second was handed 0, every tick, forever. A
+    //  player who diagnosed a shortage and built a second network halved their
+    //  time-to-collapse and bought no water at all, and nothing told them.
+    //
+    //  THIS TEST BITES: reverted to the single-phase loop it reads gainB === 0.
+    // ────────────────────────────────────────────────────────────────────────────────────
+    const { state, tankA, tankB } = racingNetworks(1_402);
+    const { gainA, gainB, drawn } = drainedMinute(state, tankA, tankB);
+
+    expect(gainB, 'the second network was starved, which is item 137 exactly').toBeGreaterThan(0);
+    expect(gainA).toBeGreaterThan(0);
+
+    // Fair, not merely non-zero: neither network may be fobbed off with a token trickle. The
+    // tail is one millilitre a tick to the lower id, so the two shares sit within a whisker of
+    // each other rather than exactly on it.
+    const low = gainA < gainB ? gainA : gainB;
+    const high = gainA < gainB ? gainB : gainA;
+    expect(high - low).toBeLessThanOrEqual(TICKS_PER_MINUTE);
+
+    // NOTHING IS INVENTED BY SHARING. The pond gave up exactly what it makes, and both tanks
+    // together hold exactly that — the one-ledger invariant across two networks at once.
+    expect(gainA + gainB).toBe(drawn);
+    expect(drawn).toBe(RESERVOIR_RECHARGE_ML_PER_MINUTE);
+  });
+
+  it('shares the WELLS too, so three wells and two networks starve neither', () => {
+    const { state, tankA, tankB } = racingNetworks(1_403, WELL_MAX_PER_RESERVOIR);
+    expect(wellsOnReservoir(state, pond(state))).toBe(WELL_MAX_PER_RESERVOIR);
+
+    const { gainA, gainB, drawn } = drainedMinute(state, tankA, tankB);
+    expect(gainB).toBeGreaterThan(0);
+    expect(gainA).toBeGreaterThan(0);
+    expect(gainA + gainB).toBe(drawn);
+
+    // Item 130's boost reaches BOTH networks rather than deepening the winner's cup: the
+    // minute's total is the bored pond's rate, and each side gets about half of it.
+    const bored =
+      RESERVOIR_RECHARGE_ML_PER_MINUTE + WELL_MAX_PER_RESERVOIR * WELL_RECHARGE_ML_PER_MINUTE;
+    expect(drawn).toBe(bored);
+    const low = gainA < gainB ? gainA : gainB;
+    expect(low).toBeGreaterThan(bored / 3);
+  });
+
+  it('THE POND STILL ALWAYS RECOVERS with two pumps on it, which is the §4 floor', () => {
+    // The anti-softlock clause is not weakened by sharing — two pumps between them can still
+    // take only what the pond makes, so the moment demand eases the level climbs.
+    const { state, tankA, tankB } = racingNetworks(1_404);
+    pond(state).levelMl = 0;
+    stepMany(state, TICKS_PER_MINUTE);
+    expect(reservoirThrottle(pond(state))).toBe(ReservoirThrottle.Sip);
+
+    // Fill both tanks so neither network has anywhere to put water, and leave it alone.
+    tankA.tankMl = machineSpec(tankA.kind)!.tankCapacityMl;
+    tankB.tankMl = machineSpec(tankB.kind)!.tankCapacityMl;
+    stepMany(state, TICKS_PER_MINUTE * 10);
+    expect(pond(state).levelMl).toBeGreaterThan(0);
+  });
+
+  it('keeps the books closed across BOTH networks at once', () => {
+    // The one-ledger invariant, with the division running: every millilitre the pond gave up
+    // is in one tank or the other, tick by tick, with nothing in flight between them.
+    const { state, tankA, tankB } = racingNetworks(1_405);
+    pond(state).levelMl = 0;
+    for (const machine of state.machines) machine.tankMl = 0;
+
+    for (let i = 0; i < 2_000; i++) {
+      const drawnBefore = state.stats.waterDrawnMl;
+      const held = tankA.tankMl + tankB.tankMl;
+      stepMany(state, 1);
+      expect(
+        tankA.tankMl + tankB.tankMl - held,
+        `the books did not balance at tick ${state.tick}`,
+      ).toBe(state.stats.waterDrawnMl - drawnBefore);
+    }
+    expect(state.stats.waterDrawnMl).toBeGreaterThan(0);
+  });
+});
