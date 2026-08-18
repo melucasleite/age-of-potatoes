@@ -72,8 +72,6 @@ function machine(overrides: Partial<MachineView> = {}): MachineView {
     skippedCount: 0,
     cargoItem: 0,
     cargoCount: 0,
-    cargoTicksToSpoil: -1,
-    cargoFrozen: 0,
     seedShelfItem: 0,
     seedShelfCount: 0,
     bleedCentsLast60s: 0,

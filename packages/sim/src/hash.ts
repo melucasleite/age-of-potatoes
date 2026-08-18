@@ -143,16 +143,6 @@ export function hashStateUint32(state: WorldState): number {
       d.num(box.condition);
       d.num(box.investedCents);
     }
-    // FRESHNESS, LENGTH FIRST, IN THE SLOT'S SORTED ORDER. Two bags holding twelve potatoes are
-    // not the same world if one of them is about to lose four of them, so the deadlines are in
-    // the digest — and the list is counted even when empty, because "no clock on this" is a fact
-    // about the world and skipping it would let a shelf-stable stack and a perishable one collide.
-    d.num(slot.stacks.length);
-    for (let j = 0; j < slot.stacks.length; j++) {
-      const stack = slot.stacks[j]!;
-      d.num(stack.spoilAtTick);
-      d.num(stack.count);
-    }
   }
 
   d.text('field');
@@ -169,10 +159,6 @@ export function hashStateUint32(state: WorldState): number {
     d.num(tile.moisture);
     d.num(tile.moistureAccum);
     d.num(tile.soil);
-    d.num(tile.fertility);
-    d.num(tile.fertilityWear);
-    d.num(tile.readyAge);
-    d.num(tile.compost);
     d.num(tile.zone);
   }
 
@@ -185,8 +171,6 @@ export function hashStateUint32(state: WorldState): number {
     const entry = state.soilMemory[i]!;
     d.num(entry.tile);
     d.num(entry.soil);
-    d.num(entry.fertility);
-    d.num(entry.fertilityWear);
   }
 
   d.text('machines');
@@ -204,18 +188,10 @@ export function hashStateUint32(state: WorldState): number {
     // otherwise — the same reason every other collection here is preceded by its count.
     d.num(machine.inputCounts.length);
     for (let j = 0; j < machine.inputCounts.length; j++) d.num(machine.inputCounts[j]!);
-    // And how much clock each of those lines is running (item 112). Length first for the reason
-    // directly above; the two arrays are always the same length, and hashing both lengths is a
-    // cheap way for a corrupt save to fail here rather than three systems later.
-    d.num(machine.inputFreshTicks.length);
-    for (let j = 0; j < machine.inputFreshTicks.length; j++) d.num(machine.inputFreshTicks[j]!);
     d.num(machine.outputCount);
     // And WHAT is in that buffer (item 111). A count with no name stopped being enough the day
     // a Seasoner could make four different things out of the same hopper.
     d.num(machine.outputItem);
-    // And how long what is in it keeps (item 112). Two Washers each holding forty washed
-    // potatoes, one of them made an hour earlier, are two different worlds.
-    d.num(machine.outputFreshTicks);
     d.num(machine.tankMl);
     d.num(machine.condition);
     d.num(machine.opCount);
@@ -237,10 +213,6 @@ export function hashStateUint32(state: WorldState): number {
     // skipped when it is zero is a field whose absence and whose zero encode the same bytes.
     d.num(machine.cargoItem);
     d.num(machine.cargoCount);
-    // How much clock the cargo has left (item 110). A container that preserves time is world
-    // state as much as the goods themselves are: two cellars holding ten potatoes each, one of
-    // them loaded an hour later, are two different worlds.
-    d.num(machine.cargoFreshTicks);
     d.num(machine.runTicksRemaining);
     // The harvester dock's seed shelf (item 088). Zero on everything else, and counted anyway,
     // for the reason directly above.
@@ -333,13 +305,7 @@ export function hashStateUint32(state: WorldState): number {
     d.num(contract.item);
     d.num(contract.quantityPerRun);
     d.num(contract.stocked);
-    // The two clocks a route keeps (item 115): the floor's, which is spent every tick, and the
-    // lorry's, which is frozen for the length of a run. Two worlds whose depots hold the same
-    // count of the same product with different time left on it are genuinely different worlds —
-    // one of them cancels back into produce and the other into compost.
-    d.num(contract.stockedFreshTicks);
     d.num(contract.inTransit);
-    d.num(contract.inTransitFreshTicks);
     d.num(contract.phase);
     d.num(contract.ticksRemaining);
     d.num(contract.runsCompleted);
@@ -369,9 +335,6 @@ export function hashStateUint32(state: WorldState): number {
     d.num(bot.workTicks);
     d.num(bot.carryItem);
     d.num(bot.carryCount);
-    // The armful's clock (item 115). A bot two minutes from dropping compost on a shelf is not
-    // the same world as one that just filled its arms, however identical the count.
-    d.num(bot.carryFreshTicks);
     // The seed pocket (item 088). A bot that pocketed a seed genuinely differs from one that
     // did not, and a replay that dropped it would diverge only when the seed reached a shelf.
     d.num(bot.seedItem);
@@ -407,9 +370,6 @@ export function hashStateUint32(state: WorldState): number {
       const entry = belt.items[j]!;
       d.num(entry.dist);
       d.num(entry.item);
-      // A belt runs a clock now (item 112). Two identical-looking belts whose potatoes were
-      // loaded ten minutes apart are two different worlds, and one of them is about to compost.
-      d.num(entry.freshTicks);
     }
   }
 
@@ -425,9 +385,6 @@ export function hashStateUint32(state: WorldState): number {
     d.num(grabber.tier);
     d.num(grabber.filter);
     d.num(grabber.held);
-    // And the clock on what it is holding (item 112) — a stalled arm can hold one potato for an
-    // hour, so the claw is a container like any other and hashes like one.
-    d.num(grabber.heldFreshTicks);
     d.num(grabber.cooldown);
     d.num(grabber.opCount);
   }
@@ -604,12 +561,6 @@ export function findNonIntegerFields(state: WorldState): string[] {
   for (let i = 0; i < state.inventory.length; i++) {
     const slot = state.inventory[i]!;
     check(`inventory[${i}].count`, slot.count);
-    for (let j = 0; j < slot.stacks.length; j++) {
-      // A spoil tick is arithmetic on the clock and a bucket size; a count is a count. Both are
-      // integers by construction and checked rather than reasoned about.
-      check(`inventory[${i}].stacks[${j}].spoilAtTick`, slot.stacks[j]!.spoilAtTick);
-      check(`inventory[${i}].stacks[${j}].count`, slot.stacks[j]!.count);
-    }
     for (let j = 0; j < slot.boxes.length; j++) {
       // A box carries cents and a condition, which are exactly the two kinds of number that go
       // fractional when somebody divides without flooring. The dials are small integers and
@@ -631,8 +582,6 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`field[${i}].growthTarget`, tile.growthTarget);
     check(`field[${i}].moisture`, tile.moisture);
     check(`field[${i}].moistureAccum`, tile.moistureAccum);
-    check(`field[${i}].fertility`, tile.fertility);
-    check(`field[${i}].fertilityWear`, tile.fertilityWear);
   }
 
   for (let i = 0; i < state.machines.length; i++) {
@@ -641,9 +590,6 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].tankMl`, machine.tankMl);
     for (let j = 0; j < machine.inputCounts.length; j++) {
       check(`machines[${i}].inputCounts[${j}]`, machine.inputCounts[j]!);
-    }
-    for (let j = 0; j < machine.inputFreshTicks.length; j++) {
-      check(`machines[${i}].inputFreshTicks[${j}]`, machine.inputFreshTicks[j]!);
     }
     for (let j = 0; j < machine.ports.length; j++) {
       check(`machines[${i}].ports[${j}].ml`, machine.ports[j]!.ml);
@@ -658,8 +604,6 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].flowMlPerMinute`, machine.flowMlPerMinute);
     check(`machines[${i}].scanCursor`, machine.scanCursor);
     check(`machines[${i}].cargoCount`, machine.cargoCount);
-    check(`machines[${i}].cargoFreshTicks`, machine.cargoFreshTicks);
-    check(`machines[${i}].outputFreshTicks`, machine.outputFreshTicks);
     check(`machines[${i}].seedShelfCount`, machine.seedShelfCount);
     check(`machines[${i}].runTicksRemaining`, machine.runTicksRemaining);
     check(`machines[${i}].untouchedTicks`, machine.untouchedTicks);
@@ -712,24 +656,16 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`networks[${i}].deliveredMl`, network.deliveredMl);
   }
 
-  for (let i = 0; i < state.field.length; i++) {
-    const tile = state.field[i]!;
-    check(`field[${i}].readyAge`, tile.readyAge);
-    check(`field[${i}].compost`, tile.compost);
-  }
-
   for (let i = 0; i < state.belts.length; i++) {
     const belt = state.belts[i]!;
     check(`belts[${i}].moveAccum`, belt.moveAccum);
     for (let j = 0; j < belt.items.length; j++) {
       check(`belts[${i}].items[${j}].dist`, belt.items[j]!.dist);
-      check(`belts[${i}].items[${j}].freshTicks`, belt.items[j]!.freshTicks);
     }
   }
 
   for (let i = 0; i < state.grabbers.length; i++) {
     check(`grabbers[${i}].cooldown`, state.grabbers[i]!.cooldown);
-    check(`grabbers[${i}].heldFreshTicks`, state.grabbers[i]!.heldFreshTicks);
   }
 
   const streamKeys = Object.keys(state.streams).sort();

@@ -97,8 +97,6 @@ function withItem(v: WorldView, item: number, count: number, boxedMachineKind = 
     sellable: boxedMachineKind === 0 ? 1 : 0,
     boxedMachineKind,
     boxes: [],
-    ticksToSpoil: -1,
-    spoilingCount: 0,
   } as WorldView['inventory'][number]);
   return v;
 }

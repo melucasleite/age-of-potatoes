@@ -43,7 +43,6 @@ import {
   SPRINKLER_POUR_ML,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
-  WiltStage,
   beltSpec,
   boxedMachineScrapCents,
   cropSpec,
@@ -53,8 +52,6 @@ import {
   machineKindForBoxedItem,
   machineHoppers,
   machineSpec,
-  storageAgingPerTick,
-  wiltStageForAge,
 } from './data';
 import { grabberNextPickup, grabberWouldAccept } from './belts';
 import { dockBotWrenchDue } from './bots';
@@ -165,15 +162,8 @@ export interface FieldView {
   ready: number[];
   /** 1 when the tile reads as dry to the player. */
   dry: number[];
-  fertility: number[];
   /** `SoilType` per tile: 1 loam, 2 sand, 3 clay. Rolled once, never changed. */
   soil: number[];
-  /** `WiltStage` per tile: 0 fresh, 1 drooping, 2 turned. */
-  wilt: number[];
-  /** Ticks the tile has stood mature, for the "going Day-Old" countdown in the HUD. */
-  readyAge: number[];
-  /** Compost lying on the tile, waiting to be picked up. */
-  compost: number[];
   /** Owning zone id, or 0. Drives the chunked zone-paint bake. */
   zone: number[];
   /**
@@ -265,8 +255,9 @@ export interface MachineView {
   wantsCount: number;
   wantsHeld: number;
   /**
-   * How many of `outputCount` have overcooked, and what they turned into (0 for machines
-   * whose output cannot spoil).
+   * How many of `outputCount` have overcooked, and what they turned into (0 for machines whose
+   * output cannot overcook — which is all of them but the Fryer). Overcooking is a demand-pull
+   * product tier, not a clock on a good: it survived item 124 untouched.
    *
    * Plan §5's "nothing invisible": a browning basket is a fact about the world the player is
    * entitled to see on the machine, and the cause — a full buffer nobody is emptying — is
@@ -344,41 +335,6 @@ export interface MachineView {
    */
   cargoItem: number;
   cargoCount: number;
-
-  /**
-   * **HOW LONG THE LOAD IN THAT BOX HAS LEFT** (item 114), or **-1 when there is nothing to
-   * count**. The sentinel is `InventoryView.ticksToSpoil`'s, deliberately and to the letter, so
-   * `hud/freshness.ts` reads a container with the vocabulary it already had for the player's own
-   * bag — one voice for "4:12", not two.
-   *
-   * This is the half item 110 left undone and its absence was a live bug, not a gap: since 110 a
-   * hand cart SPENDS its contents' clock and turns them to Compost where they stand, and the two
-   * fields above say "12 potatoes" with no hint that eleven of them have four minutes to live. A
-   * box that quietly kills your food should say so.
-   *
-   * **-1 MEANS THE SIM HAS NO OPINION, WHICH IS THREE DIFFERENT SITUATIONS AND ONE SENTENCE.** An
-   * empty box; a box of shelf-stable goods (`freshnessTicks` 0 — chips, seeds, compost); and the
-   * format-18 grandfathered load whose clock was never recorded and which `advanceStorageSpoilage`
-   * therefore does not age either. All three are boxes that are killing nothing, so all three say
-   * nothing, and none of them may be drawn as a countdown.
-   */
-  cargoTicksToSpoil: number;
-  /**
-   * 1 when this container STOPS the clock instead of spending it — the Root Cellar, and today the
-   * Root Cellar alone (`STORAGE_AGING_BY_KIND`).
-   *
-   * **A SECOND FIELD RATHER THAN A SECOND SENTINEL**, because "frozen" and "nothing to count" are
-   * genuinely different facts and folding the cellar into -1 would throw away the number the
-   * player most wants from it. A cellar does not RESET the window — item 110's whole finding was
-   * that players believed boxes did — it BANKS it, and the potatoes come out with exactly the
-   * remainder they went in with. So a frozen container publishes both: the flag says the clock is
-   * held, and `cargoTicksToSpoil` says what is being held.
-   *
-   * **HUD CONTRACT**: `cargoTicksToSpoil` is a countdown only while this is 0. A surface that
-   * ignores this flag draws a Root Cellar as a timer that never moves, which is the exact
-   * misreading item 114 exists to prevent.
-   */
-  cargoFrozen: number;
 
   /**
    * The harvester dock's SEED shelf (item 088), beside the produce shelf above. Zero/0 on every
@@ -575,10 +531,8 @@ export interface ZoneView {
   tiles: number;
   planted: number;
   mature: number;
-  wilting: number;
-  wilted: number;
+
   dry: number;
-  compost: number;
 }
 
 /**
@@ -627,23 +581,6 @@ export interface InventoryView {
   boxedMachineKind: number;
   /** One entry per boxed machine. Empty on every ordinary row. Reused between frames. */
   boxes: BoxedMachineView[];
-  /**
-   * Ticks until the soonest-expiring part of this stack turns to Compost, or **-1 when nothing
-   * in it ever will**.
-   *
-   * **A COUNTDOWN RATHER THAN THE DEADLINE, AND THAT IS THE ONE INTERESTING CHOICE HERE.** The
-   * world stores an absolute `spoilAtTick` because an absolute tick needs nobody to decrement it
-   * (see `FreshStack`); the HUD wants the opposite, because "4:12 left" is a sentence and "spoils
-   * at tick 918,400" is not. Subtracting once, here, in the projection, is the seam doing its job
-   * — the renderer never has to know what tick it is, which is the same reason it is handed
-   * `stage` rather than `growth`.
-   *
-   * -1 for shelf-stable goods rather than a very large number, so "never" and "a long time" can
-   * never be confused by a progress bar dividing by a maximum.
-   */
-  ticksToSpoil: number;
-  /** How many units of this row are in that soonest-expiring heap. 0 when nothing perishes. */
-  spoilingCount: number;
 }
 
 /**
@@ -677,8 +614,9 @@ export interface HourBucketView {
   ticks: number;
   /** Permille of machine throughput wasted this hour, or -1 when nothing ran. */
   wastePermille: number;
-  /** -1: spoilage is not measured per hour yet — the accumulator does not exist in `WorldStats`. */
-  spoilagePermille: number;
+  // There was a `spoilagePermille` here, hardcoded to -1 for a system that was "not measured yet".
+  // Item 124 deleted spoilage, so it was never going to be measured — a field pinned forever to a
+  // sentinel is a contract that lies, and two test stubs existed only to keep satisfying it.
 }
 
 /** The numbers the HUD panel reads, already reduced. All integers, all cents or counts. */
@@ -895,21 +833,6 @@ export interface ContractView {
   destination: string;
   /** Stock counted toward the next run. */
   stocked: number;
-  /**
-   * Ticks of freshness the FLOOR has left, or 0 for a shelf-stable route and an empty one
-   * (item 115).
-   *
-   * **PUBLISHED BECAUSE ITEM 114 IS THE STANDING LESSON**: item 110 taught containers to spend a
-   * window and turn their contents to Compost, told no surface about it, and the honest summary of
-   * that release was *"the game destroys your food correctly and silently"*. A depot floor now
-   * spends a clock too, and "40 potatoes" says the same words the whole way down to zero unless
-   * somebody can read this.
-   *
-   * The lorry's clock is deliberately NOT published beside it: `inTransitFreshTicks` is frozen for
-   * the length of a run, so a countdown drawn from it would sit still and read as broken. What a
-   * panel wants about a truck is `ticksRemaining`, which is already here.
-   */
-  stockedFreshTicks: number;
   runsCompleted: number;
   grossCents: number;
   /** `ContractPhase`: 0 waiting on stock, 1 loading, 2 out on the road. */
@@ -1014,11 +937,7 @@ export function createWorldView(): WorldView {
       moisturePermille: new Array<number>(FIELD_TILE_COUNT).fill(0),
       ready: new Array<number>(FIELD_TILE_COUNT).fill(0),
       dry: new Array<number>(FIELD_TILE_COUNT).fill(0),
-      fertility: new Array<number>(FIELD_TILE_COUNT).fill(0),
       soil: new Array<number>(FIELD_TILE_COUNT).fill(0),
-      wilt: new Array<number>(FIELD_TILE_COUNT).fill(0),
-      readyAge: new Array<number>(FIELD_TILE_COUNT).fill(0),
-      compost: new Array<number>(FIELD_TILE_COUNT).fill(0),
       zone: new Array<number>(FIELD_TILE_COUNT).fill(0),
       lastPouredTick: new Array<number>(FIELD_TILE_COUNT).fill(0),
     },
@@ -1151,11 +1070,7 @@ function projectField(state: WorldState, out: WorldView): void {
     field.moisturePermille[i] = permille(tile.moisture, MOISTURE_MAX);
     field.ready[i] = ready ? 1 : 0;
     field.dry[i] = tile.moisture < MOISTURE_DRY_THRESHOLD ? 1 : 0;
-    field.fertility[i] = tile.fertility;
     field.soil[i] = tile.soil;
-    field.wilt[i] = ready ? wiltStageForAge(tile.readyAge) : WiltStage.Fresh;
-    field.readyAge[i] = tile.readyAge;
-    field.compost[i] = tile.compost;
     field.zone[i] = tile.zone;
     field.lastPouredTick[i] = tile.lastPouredTick;
   }
@@ -1167,10 +1082,6 @@ function projectField(state: WorldState, out: WorldView): void {
   field.moisturePermille.length = state.field.length;
   field.ready.length = state.field.length;
   field.dry.length = state.field.length;
-  field.fertility.length = state.field.length;
-  field.wilt.length = state.field.length;
-  field.readyAge.length = state.field.length;
-  field.compost.length = state.field.length;
   field.zone.length = state.field.length;
   field.lastPouredTick.length = state.field.length;
 }
@@ -1237,8 +1148,6 @@ function projectMachines(state: WorldState, out: WorldView): void {
         skippedCount: 0,
         cargoItem: 0,
         cargoCount: 0,
-        cargoTicksToSpoil: -1,
-        cargoFrozen: 0,
         seedShelfItem: 0,
         seedShelfCount: 0,
         bleedCentsLast60s: 0,
@@ -1330,12 +1239,6 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.skippedCount = machine.skippedCount;
     mv.cargoItem = machine.cargoItem;
     mv.cargoCount = machine.cargoCount;
-    // The container clock, and whether it is running (item 114). `cargoFrozen` reads the same
-    // table `tick.ts` reads and tests it the same way (`spent <= 0`), and it is gated on there
-    // being a clock at all: an EMPTY Root Cellar is not "frozen", it is a shed, and a surface
-    // that said otherwise would be advertising preservation nobody had bought yet.
-    mv.cargoTicksToSpoil = cargoTicksToSpoil(machine, spec);
-    mv.cargoFrozen = mv.cargoTicksToSpoil >= 0 && storageAgingPerTick(machine.kind) <= 0 ? 1 : 0;
     mv.seedShelfItem = machine.seedShelfItem;
     mv.seedShelfCount = machine.seedShelfCount;
     mv.bleedCentsLast60s = bleedCentsWithinWindow(machine, state.tick);
@@ -1344,36 +1247,6 @@ function projectMachines(state: WorldState, out: WorldView): void {
   }
 
   out.machines.length = count;
-}
-
-/**
- * What a container's load has left, or -1 for "nothing to count" (item 114).
- *
- * **EVERY LINE BELOW MIRRORS `advanceStorageSpoilage` IN `tick.ts`, AND THAT IS THE WHOLE RISK OF
- * THIS FUNCTION.** The projection may not import the tick loop, so the gate deciding *which boxes
- * spend a clock* is written twice — and the failure mode of the two drifting apart is precisely
- * the one item 114 was filed against: a surface confidently counting down a machine the sim never
- * ages, which is a stuck timer wearing a countdown's clothes. It is held together by behaviour
- * rather than by hope: `container-clock-view.test.ts` ticks a real world holding every kind that
- * can take cargo and asserts the projection's story against what the goods actually did.
- *
- * The gate, in the tick loop's own order:
- *   · a load, and a load with a recorded clock — `cargoFreshTicks` of 0 is format 18's
- *     grandfathered cargo, which `tick.ts` skips and which therefore has no countdown to publish;
- *   · `MachineRole.Storage`, **or** the harvester dock by kind, whose shelf is the same three
- *     fields and drains onto a belt with nobody clicking anything (item 112).
- *
- * **THE DELIVERY CART IS EXCLUDED HERE BECAUSE IT IS EXCLUDED THERE**, by role — its load is on
- * the road and `tick.ts` spends nothing on it. Whether that is right is a live balance question
- * item 112 left open for the owner; what is NOT open is that the view must describe the sim it
- * has, and a cart drawn with a falling clock would be the first lie this field ever told.
- */
-function cargoTicksToSpoil(machine: Machine, spec: MachineSpec | null): number {
-  if (spec === null) return -1;
-  if (machine.cargoCount <= 0 || machine.cargoItem === 0) return -1;
-  if (machine.cargoFreshTicks <= 0) return -1;
-  if (spec.role !== MachineRole.Storage && machine.kind !== MachineKind.HarvesterDock) return -1;
-  return machine.cargoFreshTicks;
 }
 
 /**
@@ -1790,10 +1663,7 @@ function projectZones(state: WorldState, out: WorldView): void {
         tiles: 0,
         planted: 0,
         mature: 0,
-        wilting: 0,
-        wilted: 0,
         dry: 0,
-        compost: 0,
       };
       out.zones.push(zv);
     }
@@ -1806,10 +1676,7 @@ function projectZones(state: WorldState, out: WorldView): void {
     zv.tiles = 0;
     zv.planted = 0;
     zv.mature = 0;
-    zv.wilting = 0;
-    zv.wilted = 0;
     zv.dry = 0;
-    zv.compost = 0;
   }
 
   out.zones.length = count;
@@ -1830,17 +1697,12 @@ function projectZones(state: WorldState, out: WorldView): void {
     if (zv === undefined) continue;
 
     zv.tiles += 1;
-    zv.compost += tile.compost;
     if (tile.moisture < MOISTURE_DRY_THRESHOLD) zv.dry += 1;
     if (tile.crop === CropId.None) continue;
 
     zv.planted += 1;
     if (tile.growth < tile.growthTarget) continue;
-
-    const stage = wiltStageForAge(tile.readyAge);
-    if (stage === WiltStage.Wilted) zv.wilted += 1;
-    else if (stage === WiltStage.Wilting) zv.wilting += 1;
-    else zv.mature += 1;
+    zv.mature += 1;
   }
 }
 
@@ -2045,8 +1907,6 @@ function projectInventory(state: WorldState, out: WorldView): void {
         sellable: 0,
         boxedMachineKind: 0,
         boxes: [],
-        ticksToSpoil: -1,
-        spoilingCount: 0,
       };
       out.inventory.push(iv);
     }
@@ -2054,16 +1914,6 @@ function projectInventory(state: WorldState, out: WorldView): void {
     iv.count = slot.count;
     iv.sellable = isSellable(slot.item) ? 1 : 0;
     iv.boxedMachineKind = machineKindForBoxedItem(slot.item) ?? 0;
-
-    const head = slot.stacks[0];
-    if (head === undefined) {
-      iv.ticksToSpoil = -1;
-      iv.spoilingCount = 0;
-    } else {
-      const left = head.spoilAtTick - state.tick;
-      iv.ticksToSpoil = left < 0 ? 0 : left;
-      iv.spoilingCount = head.count;
-    }
 
     // The nested list is pooled exactly as the row list above it is: grow into it, overwrite in
     // place, then truncate. `view()` buffers are reused forever, and a box left over from last
@@ -2127,11 +1977,6 @@ export interface TileInspection {
   growthTarget: number;
   growthPermille: number;
   ready: number;
-  /** `WiltStage`: 0 fresh, 1 drooping, 2 turned. */
-  wilt: number;
-  readyAge: number;
-  fertility: number;
-  compost: number;
   zone: number;
 }
 
@@ -2152,10 +1997,6 @@ export function inspectTile(state: WorldState, tileX: number, tileY: number): Ti
       growthTarget: 0,
       growthPermille: 0,
       ready: 0,
-      wilt: WiltStage.Fresh,
-      readyAge: 0,
-      fertility: 0,
-      compost: 0,
       zone: 0,
     };
   }
@@ -2175,10 +2016,6 @@ export function inspectTile(state: WorldState, tileX: number, tileY: number): Ti
     growthTarget: tile.growthTarget,
     growthPermille: permille(tile.growth, tile.growthTarget > 0 ? tile.growthTarget : 1),
     ready: ready ? 1 : 0,
-    wilt: ready ? wiltStageForAge(tile.readyAge) : WiltStage.Fresh,
-    readyAge: tile.readyAge,
-    fertility: tile.fertility,
-    compost: tile.compost,
     zone: tile.zone,
   };
 }
@@ -2224,8 +2061,7 @@ function projectStats(state: WorldState, out: WorldView): void {
 
   // The hour strip: every closed bucket, then the hour in progress as the last entry — which
   // the Shift Report's adopt branch recognises by its short `ticks`. Waste is telescoped from
-  // the same two monotone accumulators the buckets carry; spoilage is not measured per hour
-  // yet, and -1 says so rather than pretending zero.
+  // the same two monotone accumulators the buckets carry.
   for (let i = 0; i < stats.hours.length; i++) {
     const bucket = stats.hours[i]!;
     writeHourBucket(
@@ -2279,7 +2115,6 @@ function writeHourBucket(
       itemsSold: 0,
       ticks: 0,
       wastePermille: -1,
-      spoilagePermille: -1,
     };
     buffer[index] = v;
   }
@@ -2291,7 +2126,6 @@ function writeHourBucket(
   v.itemsSold = itemsSold;
   const throughput = inputsWasted + itemsProduced;
   v.wastePermille = throughput > 0 ? permille(inputsWasted, throughput) : -1;
-  v.spoilagePermille = -1;
 }
 
 /**
@@ -2360,7 +2194,6 @@ function projectCommerce(state: WorldState, out: WorldView): void {
     cv.destination = contract.destination;
     cv.stocked = contract.stocked;
     cv.runsCompleted = contract.runsCompleted;
-    cv.stockedFreshTicks = contract.stockedFreshTicks;
     cv.grossCents = contract.grossCents;
     cv.phase = contract.phase;
     cv.ticksRemaining = contract.ticksRemaining;
@@ -2404,7 +2237,6 @@ function blankContract(): ContractView {
     quantityPerRun: 0,
     destination: '',
     stocked: 0,
-    stockedFreshTicks: 0,
     runsCompleted: 0,
     grossCents: 0,
     phase: 0,

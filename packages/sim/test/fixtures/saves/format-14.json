@@ -1059,10 +1059,7 @@
     "nextPipeId": 1,
     "nextReservoirId": 2,
     "nextZoneId": 1,
-    "ownedParcels": [
-      0,
-      1
-    ],
+    "ownedParcels": [0, 1],
     "pipes": [],
     "reservoirs": [
       {
@@ -1496,9 +1493,7 @@
       "longestHandsFreeTicks": 699,
       "longestUntouchedMachineTicks": 0,
       "netWorthCents": 10005350,
-      "netWorthSamples": [
-        5350
-      ],
+      "netWorthSamples": [5350],
       "nextNetWorthSampleTick": 1200,
       "peakNetWorthCents": 10005350,
       "repairKitSpendCents": 0,

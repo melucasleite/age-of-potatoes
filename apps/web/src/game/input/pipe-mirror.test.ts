@@ -71,13 +71,7 @@ import { ToolMode } from './tools';
 function world(): WorldState {
   const state = createWorld(9137);
   state.moneyCents = 100_000_000;
-  state.unlocked = [
-    TechId.Belts,
-    TechId.Pumps,
-    TechId.PipedSprinklers,
-    TechId.IrrigationHub,
-    TechId.Composting,
-  ];
+  state.unlocked = [TechId.Belts, TechId.Pumps, TechId.PipedSprinklers, TechId.IrrigationHub];
   return state;
 }
 
@@ -234,9 +228,8 @@ describe('the farm mirror agrees with `machineFootprintFree`', () => {
     const v0 = project(state);
     const field = firstFieldTile(v0);
 
-    // Plant one, compost another, leave a third bare — three states of the same rule.
+    // Plant one, leave another bare — the two states of the same rule.
     addItem(state, ItemId.PotatoSeed, 10);
-    addItem(state, ItemId.Compost, 10);
     standOn(state, field.x, field.y);
     run(state, { type: 'PlantTile', tileX: field.x, tileY: field.y, crop: CropId.RussetPotato });
     expect(tileAt(state, field.x, field.y)!.crop).toBe(CropId.RussetPotato);
@@ -353,25 +346,9 @@ describe('the farm mirror agrees with `machineFootprintFree`', () => {
     expect(band.tone).toBe('zone');
     // Both halves of the sim's one sentence: every crop gives back its seed, and a ripe one
     // gives back its produce too. A count is quoted for the seed, which is exact, and NOT for
-    // the produce, which is `fertility + an RNG roll` the tell must not draw.
+    // the produce, which is `HARVEST_BASE_COUNT + an RNG roll` the tell must not draw.
     expect(band.label).toContain('russet potato');
     expect(band.label).toContain('1 potato seed');
-  });
-
-  it('counts the compost it hands back, since that number is exact', () => {
-    const state = world();
-    const field = firstFieldTile(project(state));
-    const tile = tileAt(state, field.x, field.y)!;
-    tile.compost = 3;
-
-    const band = ghostBand(
-      project(state),
-      { tileX: field.x, tileY: field.y },
-      ToolMode.PlaceSprinkler,
-      0,
-    )!;
-    expect(band.tone).toBe('zone');
-    expect(band.label).toContain('3 compost');
   });
 
   it('says nothing about a hand-back on a bare farm tile', () => {

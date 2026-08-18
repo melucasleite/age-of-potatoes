@@ -51,16 +51,6 @@ export interface PouchItem {
    * drops the figure rather than quietly showing what it would have been worth.
    */
   readonly sellable: number;
-  /**
-   * Ticks until part of this stack turns to Compost, or -1 when it never does.
-   *
-   * The pouch is the only surface that shows freshness WITHOUT the player opening anything
-   * ([[035]]), and goods age only in the player's hands — a stack inside a machine, a crate or
-   * the Root Cellar has no clock running — so the thing the player is carrying is the object
-   * §5 wants the state drawn on. The chip stays silent until the clock is worth reading.
-   */
-  readonly ticksToSpoil: number;
-  readonly spoilingCount: number;
 }
 
 export interface PouchSlice {
@@ -240,12 +230,11 @@ export interface BenchSlice {
 }
 
 /**
- * One zone's readout line — plan §5's "47/60 planted · 12 mature · 3 dry", with the two
- * withering counts [[021]] adds to it.
+ * One zone's readout line — plan §5's "47/60 planted · 12 mature · 3 dry".
  *
- * The counts come from the sim, which owns what a zone contains. `atRiskCents` does not:
- * cents are the sim's, but which of them are "at risk" is a phrasing decision, and those
- * live on this side of the seam (`derive-lot.ts`).
+ * The counts come from the sim, which owns what a zone contains. The NAMES do not: `cropName`
+ * and `regrows` are phrasing decisions and those live on this side of the seam
+ * (`derive-lot.ts`).
  */
 export interface ZoneRow {
   readonly id: number;
@@ -280,15 +269,7 @@ export interface ZoneRow {
   readonly tiles: number;
   readonly planted: number;
   readonly mature: number;
-  /** Past its grace and drooping. Still harvests at full price. */
-  readonly wilting: number;
-  /** Turned. Harvests as Day-Old at half, and collapses to compost if left. */
-  readonly wilted: number;
   readonly dry: number;
-  readonly compost: number;
-  readonly atRiskCents: number;
-  /** The slice of `atRiskCents` on crops within ~a minute of turning Day-Old ([[021]]). */
-  readonly imminentCents: number;
 }
 
 /**
@@ -313,33 +294,15 @@ export interface ZoneCropOption {
 }
 
 /**
- * The single cash-phrased alert (plan §5). Null far more often than not, and that is the
- * design — see `derive-lot.ts` on why the sixty-second delay is the feature.
- */
-export interface LotAlert {
-  readonly id: string;
-  readonly text: string;
-  readonly costCents: number;
-}
-
-/**
  * The state of the lot, as opposed to the state of the wallet.
  *
  * Read by two panels that ask the same question at different moments: the zone card wants to
- * know what is wilting now, and the Welcome Back card wants to know what the factory looks
- * like to someone who has forgotten building it.
+ * know what is planted right now, and the Welcome Back card wants to know what the factory
+ * looks like to someone who has forgotten building it.
  */
 export interface LotSlice {
   readonly version: number;
   readonly zones: readonly ZoneRow[];
-  readonly wilting: number;
-  readonly wilted: number;
-  readonly atRiskCents: number;
-  /** Cents on crops within ~a minute of turning — the deadline the alert switches tense for. */
-  readonly imminentCents: number;
-  /** Compost lying on the ground, waiting to be swept up. */
-  readonly compost: number;
-  readonly alert: LotAlert | null;
   /** Machines the player built. The sell bin is scenery and is not counted. */
   readonly machines: number;
   readonly running: number;
@@ -481,14 +444,6 @@ export interface InventoryRow {
    */
   readonly placeTool: number;
   readonly boxes: readonly InventoryBox[];
-  /**
-   * Ticks until the soonest-expiring heap in this stack turns to Compost, or **-1 when nothing
-   * in it ever will**. Copied from the projection; see `freshness.ts` for why there is no
-   * fraction beside it and why -1 is not a big number.
-   */
-  readonly ticksToSpoil: number;
-  /** How many units are in that heap. 0 on a row with no clock on it. */
-  readonly spoilingCount: number;
 }
 
 /** Everything the player is carrying. Goods, seeds, and boxed machines, in the sim's order. */
@@ -504,9 +459,9 @@ export interface InventorySlice {
 /**
  * One Grow Zone, as a thing you could point an Agri-Bot dock at ([[038]]).
  *
- * Deliberately not `ZoneRow`: that one is the field card's readout — what is wilting and what it
- * is worth — and this one is a target. They describe the same rectangles and answer different
- * questions, and merging them would put an `atRiskCents` on a button.
+ * Deliberately not `ZoneRow`: that one is the field card's readout — what is planted and how
+ * much of it is ripe — and this one is a target. They describe the same rectangles and answer different
+ * questions, and merging them would put a machine census on a button.
  */
 export interface DockZoneOption {
   readonly id: number;
@@ -712,12 +667,6 @@ export const ZERO_DOCK: DockSlice = Object.freeze({
 export const ZERO_LOT: LotSlice = Object.freeze({
   version: 0,
   zones: Object.freeze([]),
-  wilting: 0,
-  wilted: 0,
-  atRiskCents: 0,
-  imminentCents: 0,
-  compost: 0,
-  alert: null,
   machines: 0,
   running: 0,
   halted: 0,

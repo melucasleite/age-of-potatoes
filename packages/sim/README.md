@@ -298,13 +298,12 @@ sixty-tile paint is one trace entry instead of sixty, which is what keeps replay
 eventual undo one step per player action. The auto-replant toggle is rejected by the reducer
 until the seed hopper is researched: locked in the simulation, not just in the UI.
 
-**Withering.** A matured tile accrues `readyAge`, one per tick, inside `step()` — so freshness
-counts active factory minutes and nothing else, and a closed tab ages no crop because time
-does not pass. Grace is ~30 active minutes, then a five-minute telegraphed droop, then the
-crop turns and harvests as a **Day-Old** good at `floor(list / 2)`. Left longer it collapses
-into **Compost** on the tile, which the player can still pick up. There is no path out of a
-crop tile that pays zero, and there is no roll anywhere in it — a crop that wilted on a die
-roll would teach nothing.
+**~~Withering~~ — DELETED, item [[124]] (owner ruling, 2026-08-17).** A matured tile used to
+accrue `readyAge` one per tick inside `step()`, sit out ~30 active minutes of grace, droop for
+five telegraphed minutes, turn and harvest as a **Day-Old** good at `floor(list / 2)`, and finally
+collapse into **Compost** on the tile. **None of that exists.** `readyAge`, `WiltStage`, the five
+Day-Old ids and `ItemId.Compost` are gone from the code, and a ripe crop now waits in the ground
+unchanged forever. **A tile has exactly two states that matter to a harvest: growing, and ready.**
 
 ## The farm
 
@@ -328,11 +327,20 @@ between 0 and 1, so sand's 1150‰ is a target 13% lower rather than growth 15% 
 at planting it is exact, visible in the save, and cannot drift, and loam divides to exactly what the
 line computed before soil existed. Moisture goes the other way, through `CropTile.moistureAccum`:
 clay at 700‰ under a Russet's drain of 1 floors to **zero**, so a clay tile would never dry out at
-all without the accumulator. Fertility decay is **a counter, never a roll** — five harvests a star,
-floored at 1, so exhausted ground still feeds you while you go and fetch fertilizer.
+all without the accumulator.
 
-**Goods age in the player's hands and nowhere else.** That one sentence is how §4's _"timers freeze
-inside machine hoppers"_ is implemented: a machine buffer is `inputCounts: number[]`, a bare count
+**~~Fertility~~ — DELETED, item [[124]].** Soil quality was a 1–3★ roll that fell a star every five
+harvests and was restored by Fertilizer. It is gone in full: no `fertility`, no `fertilityWear`, no
+`SystemId.FieldInit`, no ★ anywhere in the HUD. `takeHarvest` now pays `HARVEST_BASE_COUNT` — which
+is the **old 3★ ceiling** — plus the untouched fair coin, so no save got worse and a field that had
+worn down to 1★ tripled. **Soil TYPE survives** and still scales the growth target once at sowing;
+it is flavour and geometry, never a yield multiplier.
+
+**~~Goods age in the player's hands and nowhere else~~ — NOTHING AGES ANYWHERE, item [[124]].** The
+paragraph below is kept because its _reasoning_ is why the deletion was cheap, and because it is the
+clearest statement in this repo of what a machine buffer is. Read it as history: the sentence it
+opens with was true of items 035 and 110–119 and is now true of nothing. That one sentence was how
+§4's _"timers freeze inside machine hoppers"_ was implemented: a machine buffer is `inputCounts: number[]`, a bare count
 per recipe line, and counts have no timer — so freeze is **structural** rather than a rule somebody
 could forget. The alternative was giving every buffer in the game per-stack spoil ticks and then
 advancing them with the world while held, which turns one integer into a list of pairs on every
@@ -340,7 +348,16 @@ machine, in the hash, in the save, in the migration, in the loader, in `advanceC
 `consumeRecipe` and in every grabber hand-off — to model a clock whose only legal value is
 _stopped_. That half stands.
 
-**The other half of that paragraph used to say goods handed back OUT of a machine are stamped fresh
+**~~Container freshness — the whole 110–119 family~~ — DELETED, item [[124]].** Everything from
+here to the end of this paragraph describes a system that no longer exists: `FreshStack`,
+`cargoFreshTicks`, `STORAGE_AGING_BY_KIND`, `spoilTickFor` and the six per-tick spoilage sweeps are
+all gone, and **the sim now runs one fewer pass over every machine, belt and slot per tick.** The
+Root Cellar's freeze is not a feature any more because there is no clock to stop; the migration
+re-purposed it as bulk storage instead (`ROOT_CELLAR_CAPACITY`). Kept struck rather than deleted
+because it was argued at length and a future pass that finds the argument without this headstone
+will rebuild it.
+
+~~The other half of that paragraph used to say goods handed back OUT of a machine are stamped fresh
 from that tick, and that "is not a laundering exploit worth closing". It was, and item 110 closed
 it.** The reasoning was sound when it was written — the cost was two hand-verbs and a walk — and
 then item 105 built the storage verb and the walk went away: _"a round trip through an eighty dollar
@@ -354,23 +371,28 @@ Root Cellar"_ and is what its $250 now buys that a barrow does not. A load whose
 box becomes Compost where it stands; nothing vanishes inside a box either. Recipe machines are
 untouched by any of it — their buffers are still bare counts, and **processing is still
 preservation**, which is §4's thesis for the whole section and the one thing that was never the
-problem.
+problem.~~
 
-**A crate is an item, not a building, and that only becomes obvious when you try it the other way.**
-A placeable Crate would be a box that preserves, which is a Root Cellar with a smaller number on it
-— the same "two names for one rule" the belt junction ruling refuses. (When this was written the
-argument was stronger still, because back then _every_ box froze its contents; item 110 left only
-the cellar doing it, and the conclusion is the same one.) The distinction §4 actually draws is between goods **loose**
-and goods **crated**, and both of those are in your arms. So the Crate is a consumable you pack a
-stack into, refused rather than eaten when it would not help, and the Root Cellar is a hundred slots
-where the clock stops.
+**~~A crate is an item, not a building~~ — the question stopped existing, item [[124]].** The
+argument was that a placeable Crate would be a box that preserves, which is a Root Cellar with a
+smaller number on it. **With no clock, no box preserves anything**, so there is nothing to be two
+names for. `PackCrate` is deleted and `ItemId.Crate` survives only as a **sellable** spec, the
+`DronePart` precedent, so a player holding crates has an exit. ⚠️ It is still flagged
+`purchasable: true`, which means the stand sells an $8 item that does nothing — a known one-line
+fix deliberately not taken in that wave because `spec.purchasable` feeds `BALANCE_HASH` and
+flipping it repins all 20 goldens.
+
+**The Root Cellar is now bulk storage**, not a freezer: `ROOT_CELLAR_CAPACITY` = 500, up from 100,
+deliberately a named constant so the owner can move it. Its price, footprint and Agronomy gate are
+unchanged. It was kept rather than deleted because a player may already own one.
 
 **The armful gates the verb, not the container.** `addItem` is deliberately still unbounded, because
 half the things that put goods in the bag are involuntary — a belt taken up with forty slices on it,
 a machine boxed with a full hopper, a cancelled contract, a refund — and a cap enforced inside
 `addItem` would have to either destroy those goods or refuse the verb that returns them. Both are
 fines for misplacement, which §4 rules out flat. So the cap is asked at the voluntary door instead:
-harvest, buy, unload, take-from-storage, pick up compost. **A full player cannot harvest and the
+harvest, buy, unload, take-from-storage. (There was a fifth — pick up compost — until item [[124]]
+deleted the good; nothing is ever left lying on a tile now.) **A full player cannot harvest and the
 crop stays in the ground**, which is the anti-softlock answer as well as the criterion — a tile you
 could not pick is a tile that is still there when you come back with room. Boxed machines are
 exempt: a box is not a good, the bin refuses one, and demolishing a factory must not fill your hands
@@ -696,7 +718,16 @@ non-empty result is a bug in units, not in the hash.
 ## Saves
 
 `serialize(state)` produces a plain-JSON `SaveEnvelope`; `restoreWorld(value)` parses,
-migrates, and deserializes one. The chain is at **format 11** — the farm: every perishable stack in
+migrates, and deserializes one. **The chain is at format 22** — item [[124]], which deletes the
+waste loop and is the one migration in this list that takes features AWAY. Every field it drops is
+either a **clock** (nobody paid for it — dropped silently) or a **good** (somebody did — converted
+or bought out): Day-Old stock becomes its fresh grade 1:1, `Compost` pays 20¢/unit and `Fertilizer`
+120¢ into the wallet, a built or boxed Composter refunds its own invoice, the Composting node
+refunds $120, and every tile becomes best-quality. **No save gets worse.** The per-format history
+below is left exactly as written — each entry describes the format as it was, which is the only way
+a migration chain can be read.
+
+Format 11 was the farm: every perishable stack in
 the bag carries the tick it turns, every field tile carries its soil, its moisture remainder and its
 fertility counter, every machine carries the zone a dock is bound to, the player carries the cart
 they are towing, and the world carries a sorted list of Agri-Bots. Four items landed in one release

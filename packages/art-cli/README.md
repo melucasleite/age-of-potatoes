@@ -174,7 +174,8 @@ like this fails the gate automatically instead of shipping four walk frames and 
 The untested next candidate is `rd_animation__any_animation` (64px), which at **$0.25 a
 take** exceeds the $0.15 per-strip cap before its first retry — using it is a budget
 decision for a human, not a default. The four crop strips therefore still ship their
-committed 4-frame originals, and the renderer's tint-and-sag wilt fake stays.
+committed 4-frame originals. (The renderer's tint-and-sag wilt fake used to stay too; item 124
+deleted the wilt mechanic, so the crop strips are now growth stages and nothing else.)
 
 A manifest entry opts in by declaring `frames: N` — its native cell count — plus an
 animation `promptStyle` (frame pixel sizes are fixed per style; see `ANIMATION_FRAME_SIZES`
@@ -186,8 +187,9 @@ Three rules make the mode deterministic:
 1. **The over-ask.** RD only sells 4/6/8/10/12/16 frames (`frames_duration` — named like a
    timing knob, actually the count). A 5-cell strip requests 6 frames and keeps the first
    `frames − 1` plus the **last** — the animation's end state is what the final cell is
-   for (a grow-then-wither strip's cell 4 must be fully wilted, not the halfway sag drawn
-   en route). The kept indices are recorded in the sidecar.
+   for (the instance that motivated it: `crop_gold_potato_strip`'s cell 5 had to be the fully
+   withered plant, not the halfway sag drawn en route — the rule outlived the wilt mechanic that
+   needed it, and the next end-state strip will want it just as much). The kept indices are recorded in the sidecar.
 2. **The geometry gate.** Every take is reassembled and column-checked before it is
    accepted: exactly one opaque cluster per cell, no cluster straddling a boundary
    (`post/geometry.ts` — the wave-8 check that separated the one shippable strip from

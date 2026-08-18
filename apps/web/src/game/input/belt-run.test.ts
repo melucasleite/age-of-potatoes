@@ -88,7 +88,7 @@ describe('the sim already turns corners', () => {
     const second = beltAt(state, x + 3, y)!;
     expect(first.id).not.toBe(second.id);
 
-    expect(beltInsert(first, 0, ItemId.RussetPotato, 0)).toBe(true);
+    expect(beltInsert(first, 0, ItemId.RussetPotato)).toBe(true);
     for (let tick = 0; tick < 400; tick++) run(state, []);
 
     expect(first.items).toHaveLength(0);
@@ -117,7 +117,7 @@ describe('the sim already turns corners', () => {
 
     const first = beltAt(state, x, y)!;
     const second = beltAt(state, x + 3, y + 1)!;
-    beltInsert(first, 0, ItemId.RussetPotato, 0);
+    beltInsert(first, 0, ItemId.RussetPotato);
     for (let tick = 0; tick < 400; tick++) run(state, []);
 
     expect(first.items).toHaveLength(1);
@@ -139,7 +139,7 @@ describe('one bent drag is one command, refused whole', () => {
     expect(first.dir).toBe(Direction.East);
     expect(second.dir).toBe(Direction.South);
 
-    beltInsert(first, 0, ItemId.RussetPotato, 0);
+    beltInsert(first, 0, ItemId.RussetPotato);
     for (let tick = 0; tick < 400; tick++) run(state, []);
     expect(second.items).toHaveLength(1);
   });

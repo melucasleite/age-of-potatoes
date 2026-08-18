@@ -41,8 +41,11 @@ function bar(storage: Storage = fakeStorage()): Hotbar {
   return hotbar;
 }
 
-/** A boxed machine with a build cursor — the canonical assignable item. */
-const PLACEABLE = ItemId.BoxedComposter;
+/** A boxed machine with a build cursor — the canonical assignable item.
+ *
+ * Was `BoxedComposter` until [[124]] deleted the machine. Any boxed kind with a `ToolMode`
+ * does the job; the two only have to be DIFFERENT so the swap and replace cases are real. */
+const PLACEABLE = ItemId.BoxedHandCart;
 const PLACEABLE_2 = ItemId.BoxedRootCellar;
 
 describe('the default layout', () => {
@@ -103,7 +106,7 @@ describe('digit mapping', () => {
 
 describe('item shortcuts', () => {
   it('resolves a boxed machine to the cursor that places it', () => {
-    expect(itemPlaceTool(PLACEABLE)).toBe(ToolMode.PlaceComposter);
+    expect(itemPlaceTool(PLACEABLE)).toBe(ToolMode.PlaceHandCart);
   });
 
   it('refuses a plain good — a potato has no placement cursor', () => {

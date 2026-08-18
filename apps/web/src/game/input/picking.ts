@@ -54,9 +54,6 @@ export interface TileQuery {
   ready: boolean;
   dry: boolean;
   moisturePermille: number;
-  fertility: number;
-  /** Compost lying on the tile. Refuses a field-placed machine exactly as a crop does. */
-  compost: number;
   /** The machine whose footprint covers this tile, if any. */
   machine: MachineView | null;
   /** Renderer-side hint only. The sim re-checks and harmlessly rejects (§12). */
@@ -148,8 +145,6 @@ export function tileAtView(v: WorldView, tileX: number, tileY: number): TileQuer
     ready: index >= 0 && field.ready[index] === 1,
     dry: index >= 0 && field.dry[index] === 1,
     moisturePermille: index >= 0 ? (field.moisturePermille[index] ?? 0) : 0,
-    fertility: index >= 0 ? (field.fertility[index] ?? 0) : 0,
-    compost: index >= 0 ? (field.compost[index] ?? 0) : 0,
     machine,
     withinReach: tileWithinReach(v, tileX, tileY),
   };

@@ -57,7 +57,7 @@ export const ToolMode = {
    * takes back one layer of what you did, so the ladder is guessable rather than memorised:
    *
    *   - press on grass → `Till`, and the whole rect breaks ground.
-   *   - press on a LADEN farm tile — a crop in it, a compost heap on it, or both → `Unplant`,
+   *   - press on a LADEN farm tile — a crop growing in it → `Unplant`,
    *     and the whole rect hands that back and STAYS FARMLAND.
    *   - press on BARE farmland → `Untill`, and the whole rect goes back to grass.
    *
@@ -70,8 +70,10 @@ export const ToolMode = {
    * ONE MODE PER DRAG, and a tile that does not match it is skipped rather than converted the
    * other way — the sim's ruling, and the reason a rect over mixed ground is readable at all.
    * The sim skips per tile on its own account too: occupied ground (machines, belts, arms,
-   * pipes, water) is passed over in every mode, and soil quality stays
-   * roll-once-per-position-ever (`soilMemory`), so tilling is never a reroll.
+   * pipes, water) is passed over in every mode, and the soil TYPE (loam/sand/clay — growth
+   * speed and water drain, never yield and never degrading) stays roll-once-per-position-ever
+   * (`soilMemory`), so tilling is never a reroll. Not to be confused with the soil QUALITY
+   * [[124]] deleted: `fertility` was a yield multiplier that stepped down as you harvested.
    */
   Till: 34,
 
@@ -113,7 +115,21 @@ export const ToolMode = {
   // and `toolFootprint` were written to make, finally being cashed.
   PlaceHandCart: 22,
   PlaceRootCellar: 23,
+
+  /**
+   * **RETIRED** ([[124]]). The owner deleted the entire waste loop — nothing spoils, so there
+   * is nothing to compost and no fertilizer to make — and `MachineKind.Composter` went with it.
+   * This tool has no `BUILD_ROWS` entry, no `PLACEMENT_TOOLS` membership and no
+   * `toolMachineKind` mapping. Nothing offers it and the sim would refuse the placement anyway.
+   *
+   * **THE ID STAYS SPENT AND THE MEMBER STAYS IN THE ENUM**, for the reason spelled out at
+   * `ToolMode.PlacePartsBench`: `hotbar.ts` validates a saved layout against
+   * `Object.values(ToolMode)` and one unknown number rejects the WHOLE layout, so deleting 24
+   * would wipe the toolbelt of exactly the player who had pinned a Composter to it. Reusing 24
+   * for a future tool would be worse still — it would open something else entirely.
+   */
   PlaceComposter: 24,
+
   PlaceOrangeTree: 25,
   PlaceLemonTree: 26,
   PlaceKolaTree: 27,
@@ -231,27 +247,17 @@ export const ToolMode = {
   PlaceCarbonator: 49,
   PlaceBottler: 50,
   /**
-   * **WORK A BAG OF FERTILIZER INTO THE SOIL** ([[104]]) — the verb `agronomy-composting` has
-   * been promising for $120 and never had.
+   * **RETIRED** ([[124]]). Fertilizer, soil quality and the Composter that made the bags were
+   * all deleted together, so there is no `ItemId.Fertilizer` for `itemPlaceTool()` to resolve,
+   * no `ApplyFertilizer` command for `intentCommand` to build, and no `IntentAction.Fertilize`.
    *
-   * `ApplyFertilizer` HAD ZERO EMITTERS IN THIS APP. The command existed, the reducer worked,
-   * `IntentAction.Fertilize` was wired end to end in the sim, and the Composter that makes the
-   * bags builds correctly — the only thing missing was a cursor, so the bag's one use was
-   * selling it back at 120¢, which `data.ts` calls the consolation prize *"so that a player who
-   * over-composts is not holding a good with no exit"*. Only the consolation prize shipped.
+   * Item [[104]] shipped this cursor to fix the opposite problem — the command had ZERO
+   * emitters, so a bag's only use was selling it back — which is worth recording, because the
+   * lesson generalises: a verb with no cursor is invisible, and the fix is either to build the
+   * cursor or to delete the verb. This wave chose the second.
    *
-   * SHAPED ON `UseRepairKit` DELIBERATELY, because it is the same object: a consumable, bought
-   * or made rather than built, aimed at a TILE rather than at a machine, with no build-menu row
-   * and no permanent digit. It reaches the hand the same way — `itemPlaceTool()` resolves
-   * `ItemId.Fertilizer` to this cursor, so dragging a bag out of the bag onto the hotbar gives
-   * it a digit. That resolver is also what `Hotbar.assignItem` asks, which is why a bag used to
-   * be refused by the bar with a flash: `-1` meant "not a thing a digit can hold".
-   *
-   * IT DOES WALK, UNLIKE THE KIT, and that is not an inconsistency — it is the one difference
-   * between them that the sim already decided. `IntentAction.Fertilize` exists, `intentCommand`
-   * builds `ApplyFertilizer` from it, and `intentTargetSubtiles` aims at the tile exactly as
-   * Water does. Nothing had to be invented on the far side of the seam; `reachAdjusted` simply
-   * had to name it.
+   * **THE ID STAYS SPENT.** See `ToolMode.PlacePartsBench` for why an enum member outlives its
+   * feature: a saved hotbar is validated whole, and one unknown number discards all of it.
    */
   ApplyFertilizer: 51,
 
@@ -397,9 +403,9 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     // ALL THREE RUNGS IN ONE SENTENCE ([[127]]), each keyed on WHERE YOU START, because the
     // anchor is the only thing the player controls about which one a drag means — so the hint
     // is written in that grammar rather than listing what the tool can do in the abstract.
-    // "or compost" is not padding: a bare composted tile was a dead end for this tool until
-    // item 127, and this line is where a player finds out it is not one any more.
-    hint: 'start on grass to till, on a crop or compost to lift it, on bare dirt for grass',
+    // A bare tile with nothing growing on it was a dead end for this tool until item 127, and
+    // this line is where a player finds out it is not one any more.
+    hint: 'start on grass to till, on a crop to lift it, on bare dirt for grass',
     costCents: 0,
     // A rect, like zone painting: a click is a 1×1 drag, so single tiles still work.
     gesture: 'rect',
@@ -522,14 +528,15 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
   },
   [ToolMode.PlaceRootCellar]: {
     label: 'Root Cellar',
-    hint: 'a hundred slots, and nothing in it ever wilts',
+    hint: 'five hundred slots for a harvest bigger than the line can eat',
     costCents: machinePrice(MachineKind.RootCellar),
     gesture: 'click',
   },
+  /** The retired composter's tombstone row — see `ToolMode.PlaceComposter`. Nothing offers it. */
   [ToolMode.PlaceComposter]: {
     label: 'Composter',
-    hint: 'spoiled goods in, fertilizer out',
-    costCents: machinePrice(MachineKind.Composter),
+    hint: 'retired — nothing spoils any more',
+    costCents: 0,
     gesture: 'click',
   },
   [ToolMode.PlaceOrangeTree]: {
@@ -726,12 +733,10 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     gesture: 'click',
   },
 
+  /** The retired bag's tombstone row — see `ToolMode.ApplyFertilizer`. Nothing offers it. */
   [ToolMode.ApplyFertilizer]: {
     label: 'Fertilizer',
-    // The star is the number the band and the hover tell both print, so the hint teaches the
-    // unit rather than restating the verb. A `click`, not a `paint`: one bag is one tile, and a
-    // held drag across a row would spend eight of them on ground that mostly did not need it.
-    hint: 'click a farm tile to work a bag in — one star of soil, and the wear resets',
+    hint: 'retired — soil has no quality to improve',
     costCents: 0,
     gesture: 'click',
   },
@@ -806,8 +811,6 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       return MachineKind.HandCart;
     case ToolMode.PlaceRootCellar:
       return MachineKind.RootCellar;
-    case ToolMode.PlaceComposter:
-      return MachineKind.Composter;
     case ToolMode.PlaceOrangeTree:
       return MachineKind.OrangeTree;
     case ToolMode.PlaceLemonTree:
@@ -858,10 +861,11 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       // `ToolMode.PlacePipe` reaches this line and MUST: a pipe is not a `MachineKind` and
       // never will be, so it has no spec, no footprint and no place in `PLACEMENT_TOOLS`.
       // Its command is `PlacePipe`, built in `pointer.ts` from the drag.
-      // `ToolMode.PlacePartsBench` reaches this line ON PURPOSE and stays here: the bench is
-      // retired ([[090]]), so it has no kind, no row and no membership below — but the enum
-      // member survives because a saved hotbar is validated against `Object.values(ToolMode)`
-      // and one unknown number rejects the WHOLE layout. See the member's own note.
+      // `ToolMode.PlacePartsBench`, `ToolMode.PlaceComposter` and `ToolMode.ApplyFertilizer`
+      // reach this line ON PURPOSE and stay here: all three are retired ([[090]], [[124]]), so
+      // none has a kind, a row or a membership below — but the enum members survive because a
+      // saved hotbar is validated against `Object.values(ToolMode)` and one unknown number
+      // rejects the WHOLE layout. See each member's own note.
       return null;
   }
 }
@@ -897,7 +901,6 @@ const PLACEMENT_TOOLS: readonly ToolMode[] = [
   ToolMode.PlaceBeltJunction,
   ToolMode.PlaceHandCart,
   ToolMode.PlaceRootCellar,
-  ToolMode.PlaceComposter,
   ToolMode.PlaceOrangeTree,
   ToolMode.PlaceLemonTree,
   ToolMode.PlaceKolaTree,

@@ -26,9 +26,7 @@
         "ySub": 3200
       }
     ],
-    "ceremonies": [
-      "agri-bot-first-harvest"
-    ],
+    "ceremonies": ["agri-bot-first-harvest"],
     "contracts": [],
     "field": [
       {
@@ -1085,9 +1083,7 @@
     "nextPipeId": 1,
     "nextReservoirId": 2,
     "nextZoneId": 2,
-    "ownedParcels": [
-      0
-    ],
+    "ownedParcels": [0],
     "pipes": [],
     "reservoirs": [
       {
@@ -1521,11 +1517,7 @@
       "longestHandsFreeTicks": 703,
       "longestUntouchedMachineTicks": 0,
       "netWorthCents": 10006250,
-      "netWorthSamples": [
-        10005400,
-        10005250,
-        10006250
-      ],
+      "netWorthSamples": [10005400, 10005250, 10006250],
       "nextNetWorthSampleTick": 3600,
       "peakNetWorthCents": 10006250,
       "repairKitSpendCents": 0,

@@ -48,7 +48,7 @@ import { createDockFields, deriveDock } from './derive-dock';
 import type { DockFields } from './derive-dock';
 import { createInventoryFields, deriveInventory } from './derive-inventory';
 import type { InventoryFields } from './derive-inventory';
-import { RiskWatch, createLotFields, deriveLot } from './derive-lot';
+import { createLotFields, deriveLot } from './derive-lot';
 import type { LotFields } from './derive-lot';
 import { createServiceFields, deriveService } from './derive-service';
 import type { ServiceFields } from './derive-service';
@@ -136,7 +136,6 @@ export class HudStore {
   private readonly lotScratch: LotFields = createLotFields();
   private readonly shopScratch: ShopFields = createShopFields();
   private readonly inventoryScratch: InventoryFields = createInventoryFields();
-  private readonly riskWatch = new RiskWatch();
   private readonly harvestPace = new HarvestPace();
   private clipboardDueTick = -(2 ** 30);
 
@@ -216,10 +215,6 @@ export class HudStore {
     this.selector = selectTool;
     this.dispatcher = dispatch;
     this.meter.reset();
-    // A fresh world does not inherit the last one's bleed. Without this, loading a save
-    // could fire the sixty-second alert on the first publish, which is the exact
-    // fire-immediately behaviour the delay exists to prevent.
-    this.riskWatch.reset();
     // Same rule for the whisper's hour clock: a fresh world does not inherit the last one's
     // harvest baseline, or the first Clipboard read would difference two different farms.
     this.harvestPace.reset();
@@ -288,7 +283,7 @@ export class HudStore {
     if (this.setService(deriveService(view, this.serviceScratch))) changed = true;
     if (this.setBench(deriveBench(view, this.benchScratch))) changed = true;
     if (this.setDock(deriveDock(view, this.dockScratch))) changed = true;
-    if (this.setLot(deriveLot(view, this.riskWatch, this.lotScratch))) changed = true;
+    if (this.setLot(deriveLot(view, this.lotScratch))) changed = true;
     if (this.setShop(deriveShop(view, this.shopScratch))) changed = true;
     if (this.setInventory(inventory)) changed = true;
 
@@ -693,13 +688,12 @@ export class HudStore {
   }
 
   /**
-   * The lot slice: what is wilting, what that costs, and what the machines are doing.
+   * The lot slice: what is planted where, and what the machines are doing.
    *
-   * Every number here moves in discrete jumps — a tile changes wilt stage, a lamp changes
-   * colour — so this comparison genuinely settles rather than merely narrowing. The one
-   * thing that could have made it churn is the alert, which is why the sixty-second arming
-   * lives in `RiskWatch` and produces a null-or-stable object rather than a countdown: an
-   * alert carrying "58 seconds so far" would rebuild this slice on every publish forever.
+   * Every number here moves in discrete jumps — a tile is sown or harvested, a lamp changes
+   * colour — so this comparison genuinely settles rather than merely narrowing. The one thing
+   * that could ever have made it churn was the wilt alert's arming counter, and that whole
+   * mechanism is gone ([[124]]).
    *
    * ⚠️ **THE ZONE COMPARISON IS NOW LOAD-BEARING FOR A CONTROL, NOT ONLY FOR A READOUT**
    * ([[102]]). `crop`, `priority` and `autoReplant` are the three fields the zone panel writes,
@@ -711,17 +705,10 @@ export class HudStore {
    */
   private setLot(next: LotFields): boolean {
     const current = this.lot;
-    const alert = next.alert;
-    const was = current.alert;
 
     if (
       current.autoReplantOwned === next.autoReplantOwned &&
       current.cropOptions.length === next.cropOptions.length &&
-      current.wilting === next.wilting &&
-      current.wilted === next.wilted &&
-      current.atRiskCents === next.atRiskCents &&
-      current.imminentCents === next.imminentCents &&
-      current.compost === next.compost &&
       current.machines === next.machines &&
       current.running === next.running &&
       current.halted === next.halted &&
@@ -729,8 +716,7 @@ export class HudStore {
       current.starved === next.starved &&
       current.blocked === next.blocked &&
       current.sprinklers === next.sprinklers &&
-      current.zones.length === next.zones.length &&
-      (was === null ? alert === null : alert !== null && was.text === alert.text)
+      current.zones.length === next.zones.length
     ) {
       let same = true;
       // The picker's own rows: which crops are offered (a research change) and how many seeds
@@ -751,11 +737,8 @@ export class HudStore {
           a.id !== b.id ||
           a.planted !== b.planted ||
           a.mature !== b.mature ||
-          a.wilting !== b.wilting ||
-          a.wilted !== b.wilted ||
           a.dry !== b.dry ||
-          a.tiles !== b.tiles ||
-          a.compost !== b.compost
+          a.tiles !== b.tiles
         ) {
           same = false;
           break;
@@ -782,12 +765,6 @@ export class HudStore {
       zones: Object.freeze(next.zones.map((zone) => Object.freeze({ ...zone }))),
       cropOptions: Object.freeze(next.cropOptions.map((option) => Object.freeze({ ...option }))),
       autoReplantOwned: next.autoReplantOwned,
-      wilting: next.wilting,
-      wilted: next.wilted,
-      atRiskCents: next.atRiskCents,
-      imminentCents: next.imminentCents,
-      compost: next.compost,
-      alert: alert === null ? null : Object.freeze({ ...alert }),
       machines: next.machines,
       running: next.running,
       halted: next.halted,

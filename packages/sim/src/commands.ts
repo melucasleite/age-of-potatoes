@@ -150,34 +150,18 @@ export interface SwingScytheCommand {
   tileY: number;
 }
 
-/**
- * Work a bag of Fertilizer into a tile, putting a fertility star back.
- *
- * The closing arrow of plan §4's loop — *"spoiled goods → Compost → Fertilizer"* — and the reason
- * a player builds a Composter at all. Reach-gated like every verb you do with your hands, and
- * **refused rather than consumed** on a tile already at full stars: misplacement is never a fine.
- */
-export interface ApplyFertilizerCommand {
-  type: 'ApplyFertilizer';
-  tileX: number;
-  tileY: number;
-}
-
-/**
- * Pack a perishable stack into a crate, buying it §4's *"45 crated"*.
- *
- * NOT REACH-GATED, and not a placement: a crate is a thing in your bag that you put other things
- * in your bag into. There is nothing to stand next to. It is the same shape as
- * `SellBoxedMachine`, which is also paperwork done from the inventory panel.
- *
- * Consumes one `ItemId.Crate` and is refused — never consumed — when it would not help: an
- * unperishable item, an empty bag, or goods that are already crated and would gain nothing.
- */
-export interface PackCrateCommand {
-  type: 'PackCrate';
-  item: ItemId;
-  count: number;
-}
+// **TWO VERBS RETIRED HERE, NOT TOMBSTONED** (item 124).
+//
+// `ApplyFertilizer` worked a bag of Fertilizer into a tile to put a fertility star back — the
+// closing arrow of plan §4's loop. `PackCrate` packed a perishable stack into a crate for §4's
+// *"45 crated"*. There is no fertility to restore and no clock to extend, so both are gone
+// rather than left refusing everything.
+//
+// **THE `Command` UNION IS NOT A SAVED ENUM, WHICH IS WHY THESE CAN LEAVE OUTRIGHT** where
+// `ItemId.Fertilizer` and `IntentAction.Fertilize` had to stay burned. A command is a `type`
+// STRING, and the only place a string can persist is `WorldState.trace` — which is a debug
+// record replayed by tests, not save state a returning player is holding. The 21 → 22 migration
+// pays out anything either verb could have been aimed at.
 
 /** Buy and place a machine at its invoice price. */
 export interface PlaceMachineCommand {
@@ -762,8 +746,6 @@ export type Command =
   | PlantTileCommand
   | HarvestTileCommand
   | SwingScytheCommand
-  | ApplyFertilizerCommand
-  | PackCrateCommand
   | HitchCartCommand
   | UnhitchCartCommand
   | SetDockZoneCommand

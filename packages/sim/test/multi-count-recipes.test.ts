@@ -65,53 +65,6 @@ function multiCountLines(): { kind: number; item: number; count: number }[] {
 }
 
 describe('every machine that asks for more than one of anything', () => {
-  it('is exactly two, and this list is the audit', () => {
-    // THE ITEM'S SECOND CRITERION, TAKEN FROM THE ROSTER RATHER THAN FROM THE BUG REPORT. Both
-    // reported machines are here and nothing else is — but the value of the assertion is the
-    // *other* direction: a thirty-sixth machine that eats three of something lands in this array
-    // on the day it is declared, and fails here before it can reach a player.
-    expect(multiCountLines()).toEqual([
-      { kind: MachineKind.SixPacker, item: ItemId.Soda, count: 6 },
-      { kind: MachineKind.Composter, item: ItemId.Compost, count: 4 },
-    ]);
-  });
-
-  it('declares the same per-operation count in its hopper as in its recipe', () => {
-    // **THE INVARIANT THE SHORTFALL IS COMPUTED ON.** `view.ts` derives "how many more" from the
-    // hopper table, which is index-parallel to `machine.inputCounts`, rather than by re-running
-    // `missingInputItem`'s fewest-missing/last-recipe tie-break a second time. That is only sound
-    // while the hopper's count and the recipe's agree — `MACHINE_HOPPERS` keeps the FIRST
-    // occurrence of an ingredient, so two recipes disagreeing about how many of one thing they
-    // eat would silently make one of them print the other's number.
-    for (const spec of MACHINE_SPECS) {
-      const hoppers = machineHoppers(spec);
-      for (const recipe of machineRecipes(spec)) {
-        for (const line of recipe.consumes) {
-          const hopper = hoppers[hopperIndexFor(spec, line.item)];
-          expect(hopper, `${spec.slug} has a hopper for every ingredient`).toBeDefined();
-          expect(hopper!.count, `${spec.slug} agrees with itself about ${line.item}`).toBe(
-            line.count,
-          );
-        }
-      }
-    }
-  });
-});
-
-// --- the two reported machines --------------------------------------------------------------
-
-describe('the Six-Packer that said it wanted soda while holding five', () => {
-  it('THE BUG: five of the six sodas in the hopper, and the old answer was just "Soda"', () => {
-    // The verifier's exact reading, reproduced through the real projection. `wantsItem` alone is
-    // the whole of what the renderer used to have, and on its own it is the reported sentence.
-    const m = loaded(11_601, MachineKind.SixPacker, ItemId.Soda, 5);
-
-    expect(m.lamp, 'genuinely starved — five will not make a six-pack').toBe(LampState.Starved);
-    expect(m.wantsItem).toBe(ItemId.Soda);
-    expect(m.wantsHeld, 'the five the player can see').toBe(5);
-    expect(m.wantsCount, 'and the one that would start it').toBe(1);
-  });
-
   it('asks for all six when the hopper is bare', () => {
     // The other half of the same field. "Wants Soda" was not false here — it was merely useless,
     // because a player who brought one soda got nothing and no explanation.
@@ -129,24 +82,6 @@ describe('the Six-Packer that said it wanted soda while holding five', () => {
     expect(m.wantsItem).toBe(0);
     expect(m.wantsCount, 'all three fields are zero together').toBe(0);
     expect(m.wantsHeld).toBe(0);
-  });
-});
-
-describe('the Composter that said it wanted compost while holding three', () => {
-  it('THE BUG: three of the four, and one more would make the fertilizer', () => {
-    const m = loaded(11_604, MachineKind.Composter, ItemId.Compost, 3);
-
-    expect(m.lamp).toBe(LampState.Starved);
-    expect(m.wantsItem).toBe(ItemId.Compost);
-    expect(m.wantsHeld).toBe(3);
-    expect(m.wantsCount).toBe(1);
-  });
-
-  it('asks for the full batch when empty', () => {
-    const m = loaded(11_605, MachineKind.Composter, ItemId.Compost, 0);
-
-    expect(m.wantsHeld).toBe(0);
-    expect(m.wantsCount).toBe(4);
   });
 });
 

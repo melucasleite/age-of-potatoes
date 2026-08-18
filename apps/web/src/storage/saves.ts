@@ -310,7 +310,11 @@ export interface RefusedWorld {
    * inventing a world — the old behaviour, where an empty database silently became a fixed-seed
    * lot, is exactly what the front door replaces.
    */
-  reason: 'format-too-new' | 'unreadable' | 'unavailable' | 'no-world';
+  // `in-use` is the one refusal that is not about the save at all: the world is fine, another
+  // live tab simply has it open, and playing it here would have both tabs saving over each
+  // other ([[138]], `lease.ts`). It refuses for the same reason the others do — a world this
+  // build must not write to — which is why it belongs in this union rather than beside it.
+  reason: 'format-too-new' | 'unreadable' | 'unavailable' | 'no-world' | 'in-use';
   message: string;
   error?: unknown;
 }

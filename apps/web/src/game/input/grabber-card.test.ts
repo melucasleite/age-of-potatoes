@@ -183,18 +183,18 @@ describe('grabberCard — what the source offers', () => {
     );
   });
 
-  it("offers a machine's output and its spoiled twin, because the arm can be pointed at either", () => {
+  it("offers a machine's output and its overcooked twin, because the arm can be pointed at either", () => {
     const view = withArm(createWorldView(), 5, 5, Direction.East, GrabberTier.Mk2);
     withMachine(view, 4, 5, MachineKind.Fryer, {
       outputItem: ItemId.RussetPotato,
-      overcookedItem: ItemId.DayOldPotato,
+      overcookedItem: ItemId.RusticStyleChips,
     });
 
     const card = grabberCard(view, 1);
     expect(card?.source).toBe(ArmSource.Machine);
     expect(card?.sourceKind).toBe(MachineKind.Fryer);
     expect(card?.candidates).toContain(ItemId.RussetPotato);
-    expect(card?.candidates).toContain(ItemId.DayOldPotato);
+    expect(card?.candidates).toContain(ItemId.RusticStyleChips);
   });
 
   // The reported bug's own machine: `outputItem` is 0 on a dock, so the shelves are the only

@@ -11,18 +11,16 @@ import { describe, expect, it } from 'vitest';
 import {
   type WorldState,
   CropId,
+  HARVEST_BASE_COUNT,
   ItemId,
   MachineKind,
   MOISTURE_MAX,
   SPRINKLER_CHARGE_ML,
   SPRINKLER_PERIOD_TICKS,
   TillMode,
-  WILT_GRACE_TICKS,
-  WILT_WINDOW_TICKS,
   addItem,
   createWorld,
   cropSpec,
-  freshnessTicks,
   itemCount,
   machineSpec,
   plantCrop,
@@ -88,17 +86,7 @@ describe('who may stand on farmland', () => {
     expect(itemCount(state, ItemId.PotatoSeed), 'the seed did not come back').toBe(seedsBefore + 1);
   });
 
-  it('takes waiting compost too, rather than being blocked by it', () => {
-    const state = funded(6721);
-    tileAt(state, 8, 8)!.compost = 2;
-    expect(place(state, MachineKind.Sprinkler, 8, 8), 'waiting compost blocked the head').toBe(
-      true,
-    );
-    expect(itemCount(state, ItemId.Compost), 'the compost was left in the ground').toBe(2);
-    expect(tileAt(state, 8, 8)!.compost).toBe(0);
-  });
-
-  it('**A RIPE TILE PAYS THE HARVEST, WHICH IS THE RULING** — produce, compost and seed', () => {
+  it('**A RIPE TILE PAYS THE HARVEST, WHICH IS THE RULING** — produce and seed', () => {
     // The open question item 121 left open, settled here and argued in `clearFieldTileForMachine`:
     // return the produce rather than refuse. What the player gets is EXACTLY what pulling the tile
     // by hand first would have paid them, because it is the same `takeHarvest`.
@@ -107,40 +95,20 @@ describe('who may stand on farmland', () => {
     const tile = tileAt(state, 6, 6)!;
     plantCrop(state, tile, spec);
     tile.growth = tile.growthTarget;
-    tile.compost = 3;
-    const fertility = tile.fertility;
     const seedsBefore = itemCount(state, ItemId.PotatoSeed);
 
     expect(place(state, MachineKind.Sprinkler, 6, 6), 'a ripe tile refused the head').toBe(true);
-    // The yield is `fertility + a 0-or-1 roll`, so this brackets it rather than pinning the roll.
+    // The yield is `HARVEST_BASE_COUNT + a 0-or-1 roll`, so this brackets it rather than pinning
+    // the roll.
     const picked = itemCount(state, ItemId.RussetPotato);
     expect(picked, 'the ripe crop was destroyed instead of handed back').toBeGreaterThanOrEqual(
-      fertility,
+      HARVEST_BASE_COUNT,
     );
-    expect(picked).toBeLessThanOrEqual(fertility + 1);
-    expect(itemCount(state, ItemId.Compost), 'the compost went with it').toBe(3);
+    expect(picked).toBeLessThanOrEqual(HARVEST_BASE_COUNT + 1);
     expect(itemCount(state, ItemId.PotatoSeed), 'a one-shot crop owes a seed back').toBe(
       seedsBefore + 1,
     );
     expect(tileAt(state, 6, 6)!.crop).toBe(CropId.None);
-  });
-
-  it('a TURNED tile pays the Day-Old grade, exactly as a hand harvest of it would', () => {
-    // The age a standing crop carries crosses this boundary as the GRADE, which is the whole
-    // reason a full freshness window on the way out is honest rather than a laundering trick:
-    // the tile's `readyAge` is not thrown away, it is spent here.
-    const state = funded(6723);
-    const spec = cropSpec(CropId.RussetPotato)!;
-    const tile = tileAt(state, 6, 6)!;
-    plantCrop(state, tile, spec);
-    tile.growth = tile.growthTarget;
-    tile.readyAge = WILT_GRACE_TICKS + WILT_WINDOW_TICKS + 1;
-
-    expect(place(state, MachineKind.Sprinkler, 6, 6)).toBe(true);
-    expect(itemCount(state, ItemId.DayOldPotato), 'a turned crop came back fresh').toBeGreaterThan(
-      0,
-    );
-    expect(itemCount(state, ItemId.RussetPotato), 'a turned crop paid the full grade').toBe(0);
   });
 
   it('a REGROWING crop loses its plant, so it gets a seed back a hand harvest would not give', () => {
@@ -250,24 +218,6 @@ describe('who may stand on farmland', () => {
       itemCount(state, ItemId.RussetPotato),
       'the crop was destroyed rather than added to a bag that was already enormous',
     ).toBeGreaterThan(before);
-  });
-
-  it('what the hand-back MINTS on the shelf-stable doors really is shelf-stable', () => {
-    // **THE VERDICT, FALSIFIED RATHER THAN ASSERTED.** Two of the three bag doors on
-    // `clearFieldTileForMachine` claim `MintsShelfStable` — a claim of FACT about the goods, and
-    // the one verdict in the table a machine can actually check. Door 8 made this exact claim
-    // while carrying potatoes.
-    expect(freshnessTicks(ItemId.Compost), 'compost keeps a clock').toBe(0);
-    for (const crop of [
-      CropId.RussetPotato,
-      CropId.SugarCane,
-      CropId.Corn,
-      CropId.ChiliPepper,
-      CropId.GoldPotato,
-    ]) {
-      const seed = cropSpec(crop)!.seedItem;
-      expect(freshnessTicks(seed), `seed ${String(seed)} keeps a clock`).toBe(0);
-    }
   });
 });
 
@@ -401,11 +351,11 @@ describe('watering around the obstruction', () => {
 });
 
 describe('deconstruction hands the ground back', () => {
-  it('soil, fertility, and moisture ride through placement and deconstruction untouched', () => {
+  it('soil and moisture ride through placement and deconstruction untouched', () => {
     const state = funded(678);
     const tile = tileAt(state, 7, 7)!;
     tile.moisture = MOISTURE_MAX;
-    const before = { soil: tile.soil, fertility: tile.fertility };
+    const before = { soil: tile.soil };
 
     expect(place(state, MachineKind.Sprinkler, 7, 7)).toBe(true);
     const machine = machineAt(state, 7, 7)!;
@@ -422,7 +372,6 @@ describe('deconstruction hands the ground back', () => {
 
     const after = tileAt(state, 7, 7)!;
     expect(after.soil).toBe(before.soil);
-    expect(after.fertility).toBe(before.fertility);
     // Deconstruction itself moves no moisture: one tick of ordinary decay for the tick the
     // command rode in on, and not a drop more.
     expect(after.moisture).toBe(moistureBefore - 1);

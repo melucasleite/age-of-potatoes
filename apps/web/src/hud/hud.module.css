@@ -516,33 +516,14 @@
   color: #8a6234;
 }
 
-/*
- * The freshness warning on a chip ([[035]]).
- *
- * Amber is the field card's "wilting" and red is its "Day-Old" — the same two colours the player
- * already learned mean "there is a clock on this" out in the rows. Reusing them is the point: a
- * potato turning in the ground and a potato turning in your arms are the same fact in two places,
- * and giving the second one a new colour would make it look like a different system.
- *
- * Tabular figures because it is a clock and clocks must not jiggle as the digits change.
- */
-.stackFresh {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  color: #f2a93b;
-  font-variant-numeric: tabular-nums;
-}
+/* Small and square. Present or absent, which is the cue that survives a player who cannot
+   separate two hues — worn by the empty watering can below.
 
-.stackFreshGoing {
-  color: #d94f36;
-}
-
-/* Small, square, and the same 6px mark the one permitted alert wears. Present or absent, which
-   is the cue that survives a player who cannot separate the two colours above. */
-.stackFreshMark {
+   ⚠️ NAMED `.stackFreshMark` UNTIL [[124]], and the rename is the whole point: it was born as
+   the dot on a per-stack freshness clock (`.stackFresh` / `.stackFreshGoing`, deleted with the
+   clock), and the CAN borrowed it. A class named after a system the game no longer has is the
+   next reader's wrong turn. */
+.stackWarnMark {
   width: 5px;
   height: 5px;
   background: currentcolor;
@@ -562,9 +543,8 @@
   gap: 5px;
 }
 
-/* Empty: the same red the fresh-clock and the field alert already mean "act soon" with —
-   gentle by wording, loud by colour, and carrying the square mark that survives a player who
-   cannot tell the hues apart. The chip sets the colour once; the count and label — which
+/* Empty: red for "act soon" — gentle by wording, loud by colour, and carrying the square mark
+   that survives a player who cannot tell the hues apart. The chip sets the colour once; the count and label — which
    carry their own colours on an ordinary stack — defer to it here, and the mark's
    `currentcolor` picks it up for free. */
 .canChipEmpty {
@@ -2216,43 +2196,6 @@
     inset 0 3px 0 -1px #8a6234;
 }
 
-/*
- * A stack with a clock on it ([[035]]). Two marks, redundant on purpose, exactly like the crate
- * corner and the warm tint above: a wedge in the one free corner, and a shift in the cell itself.
- *
- * THE WEDGE IS THE COLOURBLIND-SAFE HALF, because it is a shape question — it is there or it is
- * not — and the tint is the one that makes a bag full of potatoes readable in a single sweep. The
- * two bands are the field card's amber and red, so a stack turning in your arms wears the same
- * colour as a crop turning in the ground.
- *
- * Top RIGHT, because top left is the crate corner, bottom left is the dial strip and bottom right
- * is the count. Inset 5px to clear the slot's notched clip-path, which cuts the diagonal.
- */
-.invSlotFresh {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 11px;
-  height: 11px;
-  background: #f2a93b;
-  box-shadow: inset 0 0 0 1px #14100e;
-  clip-path: polygon(100% 0, 0 0, 100% 100%);
-}
-
-.invSlotFreshGoing {
-  background: #d94f36;
-}
-
-/* Warmer than a good, cooler than a boxed machine — and neither can collide with it, since a
-   boxed machine has no clock and never will (§4: processed is shelf-stable forever). */
-.invSlotTurning {
-  background: linear-gradient(180deg, #33251a 0%, #261c13 100%);
-}
-
-.invSlotGoing {
-  background: linear-gradient(180deg, #3a2118 0%, #2a1812 100%);
-}
-
 .invSlotCount {
   position: absolute;
   /* Clear of the notched corner: the clip-path cuts 5px off the diagonal and a badge parked in
@@ -2332,28 +2275,6 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #9a8873;
-}
-
-/*
- * The clock, in a sentence, above the price ([[035]]).
- *
- * Quiet by default and it has to be: this line is on EVERY good, including the ones that keep
- * forever, so at rest it must read as a caption rather than as a notice. It earns colour only
- * when the sim's countdown crosses one of `freshness.ts`'s two display thresholds.
- */
-.invFresh {
-  font-size: 11px;
-  line-height: 1.4;
-  color: #9a8873;
-}
-
-.invFreshTurning {
-  color: #f2a93b;
-}
-
-.invFreshGoing {
-  color: #d94f36;
-  font-weight: 700;
 }
 
 .invValue {
@@ -3197,9 +3118,13 @@
 /* --- the field card ------------------------------------------------------------- */
 
 /*
- * The withering readout ([[021]]). It sits above the clipboard rather than on it: the
- * clipboard is paper the player reads at leisure, and a field going Day-Old is the one
- * thing in this corner with a deadline on it.
+ * The field card. It sits above the clipboard rather than on it: the clipboard is paper the
+ * player reads at leisure, and the field is the thing the player is usually mid-gesture with.
+ *
+ * ⚠️ IT WAS THE WITHERING READOUT ([[021]]) AND ITS DEADLINE IS GONE ([[124]]). The original
+ * argument for this position was that a field going Day-Old was the one thing in this corner
+ * with a clock on it. Nothing has a clock now; the card survives because "Zone 1 · Russet
+ * Potato · 1/12 planted · 12 dry" is still the fastest read of a field on the lot.
  */
 .fieldCard {
   width: 100%;
@@ -3276,42 +3201,6 @@
   content: '·';
   margin: 0 6px;
   color: #6d5c4d;
-}
-
-/* Amber: still saveable at full price. The colour the sprinkler's barrel warning uses. */
-.fieldWilting {
-  color: #f2a93b;
-}
-
-/* Red: already discounted, and on its way to compost. */
-.fieldWilted {
-  color: #d94f36;
-}
-
-/*
- * The alert. It has earned sixty seconds of continuous bleed by the time it renders, so it
- * is allowed to be the loudest thing in the corner — and it is the ONLY thing in the HUD
- * permitted to be, per plan §5.
- */
-.fieldAlert {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  margin-top: 9px;
-  padding-top: 9px;
-  border-top: 2px solid #14100e;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: #ef8f68;
-}
-
-.fieldAlertMark {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  margin-top: 1px;
-  background: #d94f36;
-  box-shadow: 0 0 0 1px rgba(20, 16, 14, 0.45);
 }
 
 /* --- the Welcome Back card ------------------------------------------------------ */

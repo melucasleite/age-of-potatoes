@@ -124,8 +124,6 @@ describe('the chips-in-your-pocket note', () => {
       sellable: 1,
       boxedMachineKind: 0,
       boxes: [],
-      ticksToSpoil: -1,
-      spoilingCount: 0,
     })) as unknown as WorldView['inventory'];
     return view;
   }

@@ -55,12 +55,14 @@ export const CropId = {
 export type CropId = (typeof CropId)[keyof typeof CropId];
 
 /**
- * What a field tile is made of. §5: *"Soil types (loam/sand/clay) and 1–3★ fertility make
- * placement a decision."*
+ * What a field tile is made of. §5 used to read *"Soil types (loam/sand/clay) and 1–3★ fertility
+ * make placement a decision."* **THE FERTILITY HALF OF THAT SENTENCE IS GONE** (item 124, owner
+ * ruling 2026-08-17) and the plan document is struck to match: there is no soil quality, no ★
+ * rating and no decay-with-harvests. Every tile yields the old best case.
  *
- * Rolled once per tile at world creation from `SystemId.SoilInit` — a **new** stream, so every
- * world that already exists keeps the fertility it rolled (see `rng.ts`). Permanent save surface,
- * like every other id in this file.
+ * SOIL TYPE ITSELF SURVIVES and is still rolled once per tile at world creation from
+ * `SystemId.SoilInit`. It is flavour, not a multiplier — nothing reads it as a yield term, and
+ * nothing may. Permanent save surface, like every other id in this file.
  */
 export const SoilType = {
   /** The middle of every axis, and the value a migrated tile gets: nothing changes. */
@@ -105,21 +107,13 @@ export function soilSpec(id: SoilType): SoilSpec | null {
 export const SOIL_ROLL_TABLE: readonly SoilType[] = [SoilType.Loam, SoilType.Sand, SoilType.Clay];
 
 /**
- * How many harvests one tile gives up before it loses a star, and the floor it stops at.
- *
- * **A FIXED COUNT, NEVER A ROLL** (item 030's constraint, and plan §7 ruling 5's house style).
- * Five is chosen against the anti-softlock floor rather than against a feel: a tile bottoms out
- * at `FERTILITY_MIN` after ten harvests at best, and `FERTILITY_MIN` is 1, so exhausted ground
- * still yields — there is no path to a tile that pays zero. Compost-fed recovery is the other
- * half and it is real: `ApplyFertilizer` puts a star back and resets the counter.
- */
-export const HARVESTS_PER_FERTILITY_STEP = 5;
-export const FERTILITY_PER_FERTILIZER = 1;
-
-/**
- * Plan §5 caps the recipe graph at ~50 items. We are at **44 items plus 5 liquids = 49 nodes**:
- * the original 26 (the soda line spent 6 item slots and 4 liquid slots), the crop roster's 8
- * (gold potato trio, two tree fruits, fertilizer, scythe, crate), item 039's drone part —
+ * Plan §5 caps the recipe graph at ~50 items. We are at **38 items plus 5 liquids = 43 nodes**,
+ * and `recycling.test.ts` asserts exactly that — a comment here that disagrees with that test is
+ * the comment that is wrong. **IT READ 49, THEN 50, AND ITEM 124 HANDED SEVEN BACK**: the five
+ * Day-Old grades, `Compost` and `Fertilizer` all left when the waste loop was deleted, which was
+ * a side effect of that item and not its point. The census is the original 26 (the soda line
+ * spent 6 item slots and 4 liquid slots), what is left of the crop roster's 8
+ * (gold potato trio, two tree fruits, scythe, crate), item 039's drone part —
  * which [[090]] left with no producer and no consumer, but which still occupies its node because
  * a returning player's stock has to have a price to sell at — and item 111's flavour tier of 9.
  *
@@ -145,23 +139,20 @@ export const ItemId = {
   PlainChips: 6,
   SeasonedChips: 7,
 
-  /** Wilted produce. Sells at half list as "Day-Old" — a discount, never a hole (plan §4). */
-  DayOldPotato: 8,
-
-  /** What an unharvested wilted crop collapses into. Nothing ever vanishes (plan §4). */
-  Compost: 9,
+  // 8, 9, 12, 15 and 18 are SPENT AND UNSPELLED (item 124). They were `DayOldPotato`,
+  // `Compost`, `DayOldCane`, `DayOldCorn` and `DayOldChili` — the Day-Old grades and the
+  // thing an unpicked crop collapsed into. Nothing rots, so nothing has a lesser grade and
+  // there is no compost for it to become. The numbers stay burned because they are in old
+  // saves, and the 21 → 22 migration is the only code that may name them.
 
   CaneSeed: 10,
   SugarCane: 11,
-  DayOldCane: 12,
 
   CornSeed: 13,
   Corn: 14,
-  DayOldCorn: 15,
 
   ChiliSeed: 16,
   ChiliPepper: 17,
-  DayOldChili: 18,
 
   /**
    * Chips that sat in a blocked Fryer until they caught colour. Plan §2: "overcooked chips
@@ -236,21 +227,14 @@ export const ItemId = {
   // themselves are machines (see `CropId`); these are what comes out of them.
   GoldPotatoSeed: 50,
   GoldPotato: 51,
-  DayOldGoldPotato: 52,
+  // 52 was `DayOldGoldPotato` and is spent (item 124). See the note above `CaneSeed`.
   /** Orange Tree fruit. Sellable produce, and nothing eats it — §8 defers fruit sodas past 1.0. */
   Orange: 53,
   Lemon: 54,
 
-  /**
-   * Compost, composted. Plan §4: *"spoiled goods → Compost → Fertilizer (+yield or +grace)"*.
-   *
-   * **THE "+YIELD" HALF, AND ONLY THAT HALF.** §4 offers a choice of two effects and item 035
-   * says pick one; `CropTile.fertility` already exists, already decides yield, and — as of the
-   * crop roster — already decays with harvests, so restoring it needs no new tile field and
-   * lands exactly where the decay took something away. "+grace" would have meant a second clock
-   * per tile competing with `readyAge` for the same sentence.
-   */
-  Fertilizer: 55,
+  // 55 was `Fertilizer` and is spent (item 124). Fertility is not a feature, so nothing
+  // restores it and nothing is made of compost. The 21 → 22 migration pays out any a
+  // player was holding at list and is the only code that may name the number.
 
   /**
    * The push-scythe: plan §3's assisted rung of the harvesting ladder, three tiles a swing.
@@ -281,7 +265,8 @@ export const ItemId = {
 
   // --- boxes for everything above ------------------------------------------------------
   BoxedRootCellar: 58,
-  BoxedComposter: 59,
+  // 59 was `BoxedComposter` and is spent (item 124): the machine is gone, so its box is
+  // too. A boxed one in a returning player's bag is refunded by the 21 → 22 migration.
   BoxedHandCart: 60,
   BoxedOrangeTree: 61,
   BoxedLemonTree: 62,
@@ -358,10 +343,16 @@ export const ItemId = {
   BoxedArtesianWell: 79,
 
   /**
-   * **AN EMPTY THAT CAME BACK FROM A DELIVERY** (item 131), and **THE FIFTIETH AND LAST NODE
-   * OF THE RECIPE GRAPH.** Plan §5 caps it at ~50 and the header above this enum spent the
-   * forty-ninth on item 111's flavour tier. This is the fiftieth. There is no fifty-first
-   * without an owner's raise.
+   * **AN EMPTY THAT CAME BACK FROM A DELIVERY** (item 131). It was **the fiftieth and last node
+   * of the recipe graph** when it landed, and that is why it was shaped the way it was — see the
+   * ruling below.
+   *
+   * **THE CEILING MOVED UNDER IT.** Item 124 deleted the waste loop the day after, and the five
+   * Day-Old grades, `Compost` and `Fertilizer` went with it: the graph now stands at 43 of ~50,
+   * so there are seven free nodes where there were none. **That headroom was not earned and is
+   * not a budget** — it is the change in the count that fell out of deleting a feature. Anyone
+   * spending it should know it came from there, and `recycling.test.ts` is where the number is
+   * pinned.
    *
    * **IT COST ONE NODE BECAUSE THE OWNER RULED FOR THE WASHER** (2026-08-17, verbatim: *"Okey
    * washer it is."*). The ask was a Recycling Centre, which is two nodes — this item plus a
@@ -381,9 +372,8 @@ export const ItemId = {
    * times more through a Washer than through a bin, and no player has to do arithmetic to see
    * it. Not purchasable: there is no shop for other people's empties.
    *
-   * **NOT PERISHABLE.** It is absent from `FRESHNESS_TICKS_BY_ITEM`, like the bottle it used to
-   * be — glass does not spoil, and a clock here would put a countdown on the one good in the
-   * game whose entire purpose is to be left in a heap until somebody walks past.
+   * Nothing in this game spoils since item 124, so the heap it sits in is safe indefinitely —
+   * which was already true of glass and is now true of the potatoes beside it.
    */
   UsedBottle: 80,
 } as const;
@@ -455,22 +445,30 @@ export const MachineKind = {
    */
   BeltJunction: 24,
 
-  // --- keeping things (plan §4's spoilage softeners) ------------------------------------
+  // --- keeping things -------------------------------------------------------------------
   //
   // `MachineRole.Storage`: placed, moved, boxed, invoiced, ownership-gated and reach-checked by
   // exactly the code that does all of that for a Fryer, and loaded and emptied by
   // `LoadMachine`/`UnloadMachine`, which already exist, already count a `handCarry` touch, and
   // already have a walk-to errand wired. Not one line of any of that was written for these.
   /**
-   * §4: *"frozen in a Root Cellar"*. The clock stops, and it stops for the ordinary reason every
-   * clock in a machine stops — nothing inside any machine ages, because a buffer holds counts and
-   * counts have no timer. What the Cellar buys on top of that is **a hundred slots**: it is the
-   * one place in the game to put a harvest you cannot process yet, and the crate in your arms
-   * holds twenty for thirty minutes.
+   * **BULK STORAGE, AND THAT IS NOW ITS WHOLE JOB** (item 124, and flagged for the owner).
+   *
+   * It used to be the fridge: §4's *"frozen in a Root Cellar"*, the only 0 in the storage
+   * ageing table. Nothing spoils any more, so the freeze it sold is a freeze everything gets
+   * for free, and a $250 machine whose entire pitch has evaporated is a machine a player was
+   * robbed of. Deleting it was the other option and it is the worse one — somebody built this.
+   *
+   * So it keeps its price, its four tiles and its Agronomy node, and what it sells instead is
+   * the half of its old pitch that survives intact: **capacity**. `inputCapacity` goes from a
+   * hundred to `ROOT_CELLAR_CAPACITY`, which is what makes it the one place to put a harvest
+   * you cannot process yet against a hand cart's twenty-four.
    */
   RootCellar: 25,
-  /** Compost → Fertilizer. An ordinary converter; it is here for the recipe, not the role. */
-  Composter: 26,
+  // 26 was `Composter` and is SPENT AND UNSPELLED (item 124). It converted Compost to
+  // Fertilizer; both ends of that recipe are gone, so it is not tombstoned the way the Parts
+  // Bench is — a headstone exists to price a box a player still holds, and the 21 → 22
+  // migration refunds every Composter and every box of one instead of leaving either behind.
   /**
    * Plan §3's assisted rung of the TRANSPORT ladder: "Wheelbarrow/hand cart".
    *
@@ -670,7 +668,7 @@ export const RUSTIC_STYLE_DENOMINATOR = 100;
 
 /**
  * Seventy percent of seasoned, floored. The one function anything pricing a burnt batch may
- * call, and the same shape as `dayOldPriceCents` for the same reason.
+ * call — a ratio written once, so nothing can drift away from it.
  *
  * It reads the hoisted constant rather than `listPriceCents(ItemId.SeasonedChips)` because
  * `ITEM_SPECS` below is initialised with this arithmetic, and a table that called back into
@@ -844,9 +842,6 @@ export function snackComboPriceCents(): number {
  * seasoned 1400 → bagged 2000. Each step adds more absolute value than the last, which is
  * what makes finishing the line worth the belts it takes to feed it.
  *
- * Day-Old prices are `floor(list / 2)` — see `DAY_OLD_NUMERATOR` below, which is the one
- * place that ratio is written. `test/sim.test.ts` asserts the table agrees with it, so the
- * literals here can never drift away from the rule.
  */
 /**
  * The three columns every boxed-machine row shares, written once.
@@ -998,14 +993,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     sellable: true,
   },
   {
-    id: ItemId.DayOldPotato,
-    slug: 'day-old-potato',
-    listPriceCents: 100,
-    purchasable: false,
-    sellable: true,
-  },
-  { id: ItemId.Compost, slug: 'compost', listPriceCents: 20, purchasable: false, sellable: true },
-  {
     id: ItemId.CaneSeed,
     slug: 'cane-seed',
     listPriceCents: 80,
@@ -1016,13 +1003,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     id: ItemId.SugarCane,
     slug: 'sugar-cane',
     listPriceCents: 250,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.DayOldCane,
-    slug: 'day-old-cane',
-    listPriceCents: 125,
     purchasable: false,
     sellable: true,
   },
@@ -1041,13 +1021,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     sellable: true,
   },
   {
-    id: ItemId.DayOldCorn,
-    slug: 'day-old-corn',
-    listPriceCents: 110,
-    purchasable: false,
-    sellable: true,
-  },
-  {
     id: ItemId.ChiliSeed,
     slug: 'chili-seed',
     listPriceCents: 90,
@@ -1058,13 +1031,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     id: ItemId.ChiliPepper,
     slug: 'chili-pepper',
     listPriceCents: CHILI_PEPPER_PRICE_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.DayOldChili,
-    slug: 'day-old-chili',
-    listPriceCents: 150,
     purchasable: false,
     sellable: true,
   },
@@ -1156,11 +1122,23 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   // --- the roster's last crop and the orchard's fruit ---------------------------------
   //
   // ART MANIFEST, DECLARED HERE AND NOWHERE ELSE. The slugs below are the ids the art pipeline
-  // reads: `gold-potato-seed`, `gold-potato`, `day-old-gold-potato`, `orange`, `lemon`,
-  // `fertilizer`, `push-scythe` as item sprites, plus the growth strip `crop_gold_potato_strip`
-  // (one horizontal strip per crop, one generation call — §15, and never four separate calls)
-  // and three tree sprites for `orange-tree`, `lemon-tree`, `kola-tree` in `MACHINE_SPECS`.
+  // reads: `gold-potato-seed`, `gold-potato`, `orange`, `lemon`, `push-scythe` as item sprites,
+  // plus the growth strip `crop_gold_potato_strip` (one horizontal strip per crop, one generation
+  // call — §15, and never four separate calls) and three tree sprites for `orange-tree`,
+  // `lemon-tree`, `kola-tree` in `MACHINE_SPECS`.
   // Nothing here generates art; this table is the declaration the art pass reads off.
+  //
+  // **`day-old-gold-potato` AND `fertilizer` WERE ON THIS LIST AND ARE GONE** (item 124). Both
+  // items were deleted, and `item_day_old_gold_potato`, `item_fertilizer` and `machine_composter`
+  // were pulled out of `art/manifest.json` with them — the atlas went 170 → 167 frames. The
+  // committed originals and their prompt sidecars stay on disk in `art/originals/`, so the art is
+  // re-bakeable if the ruling is ever reversed; nothing in the atlas claims the game draws them.
+  //
+  // ⚠️ `crop_gold_potato_strip` IS FIVE CELLS AND THE GAME DRAWS FOUR. Cell 5 is the withered
+  // plant, generated for the wilt state that no longer exists. It stays because it is inside one
+  // image with the four cells that ARE drawn: separating it means cropping a committed original
+  // or re-rolling the whole plant. `growthStage` caps at `stageCount - 1`, so nothing can ask for
+  // it. Cost: 32×32 px on a page that is 44% full.
   {
     id: ItemId.GoldPotatoSeed,
     slug: 'gold-potato-seed',
@@ -1176,25 +1154,8 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     purchasable: false,
     sellable: true,
   },
-  {
-    id: ItemId.DayOldGoldPotato,
-    slug: 'day-old-gold-potato',
-    listPriceCents: 300,
-    purchasable: false,
-    sellable: true,
-  },
   { id: ItemId.Orange, slug: 'orange', listPriceCents: 260, purchasable: false, sellable: true },
   { id: ItemId.Lemon, slug: 'lemon', listPriceCents: 240, purchasable: false, sellable: true },
-  {
-    // Crafted from compost and never bought: a Composter is the only source, which is the entire
-    // reason to build one. Sellable at a token price so that a player who over-composts is not
-    // holding a good with no exit — §4's floor again.
-    id: ItemId.Fertilizer,
-    slug: 'fertilizer',
-    listPriceCents: 120,
-    purchasable: false,
-    sellable: true,
-  },
   {
     // §3's 15-Minute Rule against the $150 barrel sprinkler's anchor: era-1 income is about $10 a
     // minute, so an assisted tool wants to sit near $60–$100. The scythe is the cheapest of the
@@ -1219,7 +1180,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   },
 
   { id: ItemId.BoxedRootCellar, slug: 'boxed-root-cellar', ...BOXED },
-  { id: ItemId.BoxedComposter, slug: 'boxed-composter', ...BOXED },
   { id: ItemId.BoxedHandCart, slug: 'boxed-hand-cart', ...BOXED },
   { id: ItemId.BoxedOrangeTree, slug: 'boxed-orange-tree', ...BOXED },
   { id: ItemId.BoxedLemonTree, slug: 'boxed-lemon-tree', ...BOXED },
@@ -1287,7 +1247,6 @@ export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly
     { kind: MachineKind.TruckDepot, item: ItemId.BoxedTruckDepot },
     { kind: MachineKind.BeltJunction, item: ItemId.BoxedBeltJunction },
     { kind: MachineKind.RootCellar, item: ItemId.BoxedRootCellar },
-    { kind: MachineKind.Composter, item: ItemId.BoxedComposter },
     { kind: MachineKind.HandCart, item: ItemId.BoxedHandCart },
     // A boxed tree. It is a sapling in a sack, and it keeps nothing but its invoice — the fruit
     // in its buffer comes back to the player's hands with everything else `DeconstructMachine`
@@ -1409,233 +1368,30 @@ export function isSellable(id: ItemId): boolean {
   return spec !== null && spec.sellable;
 }
 
-// --- withering and spoilage -------------------------------------------------------
+// --- nothing rots ------------------------------------------------------------------
 //
-// Plan §7 ruling 6: "spoilage teaches layout, not panic." Every number below was softened
-// deliberately and none of them should be tightened to "make it feel like a game".
-
-/**
- * In-ground grace after a crop matures: ~30 active minutes (plan §4, §7 ruling 6). An
- * active hour is 72,000 ticks, so a minute is 1,200 and thirty of them is this.
- *
- * The stated reason for the length: plan §2's staggered horizons put the player's own
- * build projects at 15 minutes or more, and a grace shorter than that would make every long
- * build interruptible by dirt.
- */
-export const WILT_GRACE_TICKS = 36_000;
-/** The telegraphed droop before the crop actually turns — five active minutes of warning. */
-export const WILT_WINDOW_TICKS = 6_000;
-/** How long a wilted crop sits pickable before it collapses into compost. Ten minutes. */
-export const COMPOST_AFTER_TICKS = 12_000;
-/** What one collapsed crop leaves on the tile. Nothing vanishes (plan §4). */
-export const COMPOST_PER_CROP = 1;
-
-/**
- * The Day-Old ratio, written once. Money is cents and nothing here divides by 100, so the
- * rounding policy is stated rather than implied: floor, always, in the player's favour
- * nowhere and against them nowhere.
- */
-export const DAY_OLD_NUMERATOR = 1;
-export const DAY_OLD_DENOMINATOR = 2;
-
-/** Half of list, floored. The one function anything charging for Day-Old goods may call. */
-export function dayOldPriceCents(freshItem: ItemId): number {
-  return divFloor(listPriceCents(freshItem) * DAY_OLD_NUMERATOR, DAY_OLD_DENOMINATOR);
-}
-
-/** Freshness of a matured tile, derived from its age. There is no clock but the tick. */
-export const WiltStage = {
-  /** Growing, or mature and inside its grace. */
-  Fresh: 0,
-  /** Mature, past grace, visibly drooping. Still harvests as the fresh good. */
-  Wilting: 1,
-  /** Turned. Harvests as the Day-Old good; collapses to compost if left. */
-  Wilted: 2,
-} as const;
-
-export type WiltStage = (typeof WiltStage)[keyof typeof WiltStage];
-
-/** Which freshness band a matured tile's age falls in. Pure arithmetic, no rolls. */
-export function wiltStageForAge(readyAge: number): WiltStage {
-  if (readyAge < WILT_GRACE_TICKS) return WiltStage.Fresh;
-  if (readyAge < WILT_GRACE_TICKS + WILT_WINDOW_TICKS) return WiltStage.Wilting;
-  return WiltStage.Wilted;
-}
-
-// --- harvested-inventory spoilage --------------------------------------------------
+// **THIS SECTION IS DELIBERATELY EMPTY OF MECHANIC** (item 124, owner ruling 2026-08-17:
+// *"I want fertility to not be a feature at all, and I want wasting to not be a feature at
+// all, like these old day potatoes and the compost. I want all of that gone."*).
 //
-// Everything above this line is the IN-GROUND half (item 021): a crop that matures and is left
-// there. Everything below is the HARVESTED half (item 035): a good in the player's hands, in a
-// crate, or in a cellar, with a clock on it.
+// It held plan §4's whole waste loop, in two halves. The IN-GROUND half (item 021) was
+// `WILT_GRACE_TICKS`, `WILT_WINDOW_TICKS`, `COMPOST_AFTER_TICKS`, `COMPOST_PER_CROP`,
+// `WiltStage` and `wiltStageForAge`: a matured crop drooped, turned, and finally collapsed
+// into compost on the tile. The HARVESTED half (items 035 and 110–119) was
+// `FRESHNESS_TICKS_BY_ITEM`, `freshnessTicks`, `isPerishable`, `FRESHNESS_BUCKET_TICKS`,
+// `FRESHNESS_MAX_STACKS`, `CRATE_FRESHNESS_TICKS`, `CRATE_PACK_CAPACITY`,
+// `STORAGE_AGING_BY_KIND`, `storageAgingPerTick`, `COMPOST_PER_SPOILED_ITEM` and
+// `COMPOST_PER_FERTILIZER`: a clock on every good in every container, a Day-Old grade at
+// `DAY_OLD_NUMERATOR / DAY_OLD_DENOMINATOR`, and a Composter that turned the wreckage back
+// into Fertilizer. All of it is gone, and so are the item ids at both ends.
 //
-// §4's thesis is the title of its own section — **"processing IS preservation"** — and §7 ruling
-// 6 is the sticky note: **"spoilage teaches layout, not panic."** Every number here was chosen
-// soft and none of them should be tightened to make it feel like a game.
+// **A CROP LEFT IN THE GROUND IS THE SAME CROP FOREVER, AND SO IS A POTATO IN A CART.** The
+// only thing that reads a tick and a good in the same sentence now is growth.
 //
-// THE CLOCK IS TICKS AND ONLY TICKS. `TICKS_PER_ACTIVE_HOUR` is 72,000, so an active minute is
-// 1,200: fifteen minutes is 18,000, forty-five is 54,000, and §4's six-minute slice window is
-// 7,200. Nothing here reads `Date`; the package would not type-check if it tried. Close the tab
-// for a week and not one potato ages, because time does not pass.
-
-/**
- * How long each perishable good keeps in the player's hands, in ticks. **ONE TABLE** (item 035's
- * instruction 3), and an item that is not in it is shelf-stable forever.
- *
- * The absence of a row is the interesting half. §4: *"Raw is perishable, intermediates are
- * urgent, **processed is shelf-stable forever**"* — so the chip line's ladder crosses a line at
- * the Fryer, and it is not an arbitrary one: everything before the oil is a wet vegetable and
- * everything after it is a fried snack. That makes the Fryer the preservation step, and it makes
- * the lesson *get the slices to the Fryer inside six minutes* rather than *do not leave things
- * lying about*, which is the difference between teaching layout and teaching panic.
- *
- * Day-Old goods keep half as long as fresh ones. They are the same produce, already turned once;
- * a Day-Old potato that outlasted a fresh one would be the table arguing with itself.
- *
- * Bought consumables — bottles, kola nuts, repair kits — do not spoil. Their prices are stable
- * and posted (locked decision 3) and a consumable that rotted would make stocking up a trap.
- */
-export const FRESHNESS_TICKS_BY_ITEM: readonly { readonly item: ItemId; readonly ticks: number }[] =
-  [
-    // Raw produce: ~15 active minutes loose (§4).
-    { item: ItemId.RussetPotato, ticks: 18_000 },
-    { item: ItemId.GoldPotato, ticks: 18_000 },
-    { item: ItemId.SugarCane, ticks: 18_000 },
-    { item: ItemId.Corn, ticks: 18_000 },
-    { item: ItemId.ChiliPepper, ticks: 18_000 },
-    { item: ItemId.Orange, ticks: 18_000 },
-    { item: ItemId.Lemon, ticks: 18_000 },
-    // Already turned once. Half of fresh.
-    { item: ItemId.DayOldPotato, ticks: 9_000 },
-    { item: ItemId.DayOldGoldPotato, ticks: 9_000 },
-    { item: ItemId.DayOldCane, ticks: 9_000 },
-    { item: ItemId.DayOldCorn, ticks: 9_000 },
-    { item: ItemId.DayOldChili, ticks: 9_000 },
-    // §4's "intermediates are urgent — fresh slices ~6 min, the first real layout puzzle".
-    // A washed potato is a wet potato, so it keeps the same six minutes a slice does.
-    { item: ItemId.WashedPotato, ticks: 7_200 },
-    { item: ItemId.PotatoSlices, ticks: 7_200 },
-  ];
-
-/** How long this good keeps loose, or 0 for the shelf-stable majority. */
-export function freshnessTicks(item: ItemId): number {
-  for (let i = 0; i < FRESHNESS_TICKS_BY_ITEM.length; i++) {
-    const row = FRESHNESS_TICKS_BY_ITEM[i]!;
-    if (row.item === item) return row.ticks;
-  }
-  return 0;
-}
-
-export function isPerishable(item: ItemId): boolean {
-  return freshnessTicks(item) > 0;
-}
-
-/**
- * Spoil ticks are rounded DOWN to a multiple of this, and stacks merge when they land on the
- * same one. One active minute.
- *
- * **THIS IS WHAT KEEPS THE SAVE SMALL, AND THE SAVE SIZE IS THE STATED RISK OF THIS FEATURE.**
- * Freshness breaks the merge rule the inventory has always had — two potatoes picked ten minutes
- * apart are not interchangeable — so a slot becomes a list of stacks, and a player who harvests
- * one tile at a time would otherwise write one stack per harvest, forever. Quantising to a minute
- * means everything picked inside the same minute is one stack, which is exactly the resolution a
- * player can perceive (§12's rule: do not spend the JSON budget until saves exceed ~5 MB).
- *
- * DOWN rather than to-nearest, so the rounding is never in the player's favour by accident and
- * two builds cannot disagree about a half.
- */
-export const FRESHNESS_BUCKET_TICKS = 15 * TICKS_PER_SECOND;
-
-/**
- * What one packing crate buys, in ticks: **§4's "45 crated"**, and how many goods it covers.
- *
- * Forty-five active minutes, replacing whatever window the stack had — so a potato with two
- * minutes left and a potato just pulled both come out of the crate with forty-five. That is
- * generous on purpose and it is the softener doing its job: §7 ruling 6 wants spoilage to teach
- * layout, and a player who has just watched a stack start to turn should be able to *fix it* with
- * eight dollars rather than watch it go.
- *
- * Twenty units per crate, which is one Fryer's buffer and one cart's load — the sizes the rest of
- * the game already counts in.
- */
-export const CRATE_FRESHNESS_TICKS = 54_000;
-export const CRATE_PACK_CAPACITY = 20;
-
-/**
- * **HOW FAST THE CLOCK RUNS INSIDE A CONTAINER**, in ticks of freshness spent per tick of world.
- * The top rung of §4's ladder — *"potato ~15 min loose / 45 crated / frozen in a Root Cellar"* —
- * written as data instead of as prose (item 110).
- *
- * **1 IS THE DEFAULT AND THE DEFAULT IS THE POINT.** An unlisted container ages its contents at
- * exactly the speed the player's own arms do, so a storage machine added in a year's time by
- * somebody who never read this file is a box, not a fridge. The failure direction of forgetting
- * to answer is "no free preservation", which is the only safe one: the whole of item 110 is the
- * story of a container that preserved by accident and turned rot into something a player opts
- * out of.
- *
- * **THE ROOT CELLAR IS 0 AND IT IS THE ONLY 0 IN THE GAME.** §4 names it — *"frozen in a Root
- * Cellar"* — and `MACHINE_SPECS` prices it accordingly: $250, four tiles, an Agronomy node
- * underneath, against the hand cart's $80. That freeze was never the bug. The bug was that
- * EVERY box froze the clock and then handed back a brand-new window on top, so the cellar's
- * $250 bought a player nothing they did not already have in a barrow.
- *
- * **THE HAND CART IS 1 BECAUSE ITS OWN SPEC SAYS SO**, and that sentence predates this item:
- * *"It preserves as well as a crate does not — 15 minutes, exactly what the goods had loose —
- * because a cart is a barrow with a tarp over it, and a hand cart that also refrigerated would
- * make the $250 Root Cellar the second-best fridge in the game."* This table is that comment
- * finally being true.
- *
- * Integer ticks per tick, so the only rates expressible are "runs" and "stopped". That is
- * deliberate: the middle rung of the ladder is the CRATE, and a crate is an item a player packs
- * (`CRATE_FRESHNESS_TICKS`), not a building they stand next to. A container that slowed the clock
- * by half would be a third preservation mechanic nobody asked for.
- */
-export const STORAGE_AGING_BY_KIND: readonly {
-  readonly kind: MachineKind;
-  readonly ticksPerTick: number;
-}[] = [
-  { kind: MachineKind.RootCellar, ticksPerTick: 0 },
-  { kind: MachineKind.HandCart, ticksPerTick: 1 },
-];
-
-/** Ticks of freshness a container spends per world tick. 0 stops the clock; 1 is loose speed. */
-export function storageAgingPerTick(kind: MachineKind): number {
-  for (let i = 0; i < STORAGE_AGING_BY_KIND.length; i++) {
-    const row = STORAGE_AGING_BY_KIND[i]!;
-    if (row.kind === kind) return row.ticksPerTick;
-  }
-  return 1;
-}
-
-/**
- * The most distinct stacks one inventory slot will hold. **A HARD CAP, AND THE REASON IS THE
- * SAVE FILE** (item 035, and §12's JSON-for-debuggability budget).
- *
- * Eight is derived rather than picked: the longest window in the game is a crated stack at 45
- * active minutes, and the coarsest a player would notice is the difference between "spoils in the
- * next minute" and "spoils in five" — so eight buckets across any window is fine-grained enough
- * to sort a bag by, and it bounds one slot at eight pairs of integers no matter how pathological
- * the play is. Sixty-five item ids × eight stacks × two numbers is a few kilobytes at the
- * absolute worst, against a 5 MB budget.
- *
- * When a ninth would appear, the two SOONEST-EXPIRING stacks merge and keep the sooner tick. That
- * direction is the pessimistic one on purpose: merging fresh goods into an old stack can only
- * ever cost the player freshness they were about to lose anyway, whereas merging old into fresh
- * would let a player top a stack up forever and never spoil anything.
- */
-export const FRESHNESS_MAX_STACKS = 8;
-
-/**
- * A spoiled stack becomes this much Compost per unit. **NOTHING VANISHES** (§4, and item 021's
- * standing constraint): there is no path in this game out of a good that pays zero.
- *
- * One for one rather than a fraction, because a fraction is a rounding rule nobody asked for and
- * because Compost is worth 20¢ against a 200¢ potato — the loss is already ninety percent, and
- * making it ninety-five would buy nothing but arithmetic.
- */
-export const COMPOST_PER_SPOILED_ITEM = 1;
-
-/** Compost one Composter operation eats. Four spoiled potatoes make one bag of Fertilizer. */
-export const COMPOST_PER_FERTILIZER = 4;
+// The one rule that reads like this and IS NOT THIS is plan §4's *"nothing vanishes"* — the
+// invariant that a good never silently disappears between belt, claw, hopper, bag and bin.
+// That is a census over quantities (`test/goods.ts`) and it never had anything to do with
+// decay. It survives untouched and it is what proves this deletion lost nobody a potato.
 
 /**
  * The armful cap is GONE, on the record (item 068, owner ruling 2026-08-14, from play:
@@ -1659,10 +1415,9 @@ export interface CropSpec {
   readonly growthVariancePermille: number;
   /** Seed consumed to plant. */
   readonly seedItem: ItemId;
-  /** What a harvest yields, before the fertility and bonus terms. */
+  /** What a harvest yields. The count is `HARVEST_BASE_COUNT` + the coin — no fertility term
+   * since item 124; see `takeHarvest`. */
   readonly yieldItem: ItemId;
-  /** What a *wilted* harvest yields instead. Half price, badged Day-Old. */
-  readonly dayOldItem: ItemId;
   /** Renderer growth stages, including the bare-soil stage. */
   readonly stageCount: number;
   /**
@@ -1684,7 +1439,6 @@ export const CROP_SPECS: readonly CropSpec[] = [
     growthVariancePermille: 150,
     seedItem: ItemId.PotatoSeed,
     yieldItem: ItemId.RussetPotato,
-    dayOldItem: ItemId.DayOldPotato,
     stageCount: 5,
     regrowTicks: 0,
     moistureDrainPerTick: 1,
@@ -1698,7 +1452,6 @@ export const CROP_SPECS: readonly CropSpec[] = [
     growthVariancePermille: 120,
     seedItem: ItemId.CaneSeed,
     yieldItem: ItemId.SugarCane,
-    dayOldItem: ItemId.DayOldCane,
     stageCount: 5,
     regrowTicks: 60 * TICKS_PER_SECOND,
     moistureDrainPerTick: 2,
@@ -1712,7 +1465,6 @@ export const CROP_SPECS: readonly CropSpec[] = [
     growthVariancePermille: 100,
     seedItem: ItemId.CornSeed,
     yieldItem: ItemId.Corn,
-    dayOldItem: ItemId.DayOldCorn,
     stageCount: 5,
     regrowTicks: 0,
     moistureDrainPerTick: 1,
@@ -1725,7 +1477,6 @@ export const CROP_SPECS: readonly CropSpec[] = [
     growthVariancePermille: 150,
     seedItem: ItemId.ChiliSeed,
     yieldItem: ItemId.ChiliPepper,
-    dayOldItem: ItemId.DayOldChili,
     stageCount: 5,
     regrowTicks: 45 * TICKS_PER_SECOND,
     moistureDrainPerTick: 1,
@@ -1751,7 +1502,6 @@ export const CROP_SPECS: readonly CropSpec[] = [
     growthVariancePermille: 150,
     seedItem: ItemId.GoldPotatoSeed,
     yieldItem: ItemId.GoldPotato,
-    dayOldItem: ItemId.DayOldGoldPotato,
     stageCount: 5,
     regrowTicks: 0,
     moistureDrainPerTick: 3,
@@ -1777,8 +1527,22 @@ export const MOISTURE_DRY_THRESHOLD = 1800;
 /** Growth accrues only while the tile holds water. No overwatering is possible (plan §2). */
 export const GROWTH_PER_WATERED_TICK = 1;
 
-export const FERTILITY_MIN = 1;
-export const FERTILITY_MAX = 3;
+/**
+ * **WHAT ONE HARVEST PAYS, BEFORE THE COIN** (item 124).
+ *
+ * It was `tile.fertility + bonus`, with fertility a 1–3 star roll that fell a star every five
+ * harvests and was put back by Fertilizer. Fertility is not a feature any more, so the term it
+ * contributed had to become a constant, and the constant is **the old `FERTILITY_MAX`**: every
+ * tile now pays what only the best ground used to.
+ *
+ * THE DIRECTION IS THE WHOLE ARGUMENT. Taking the mean, or the floor, would have made some
+ * existing save strictly worse the moment it loaded — a player sitting on 3★ ground would open
+ * the game to find their field pays less than it did yesterday, which is a patch note reaching
+ * into somebody's lot. Taking the max cannot make any save worse, and a player who had ground
+ * down to 1★ opens the game to triple yields. It is also the reading the owner's 2026-08-17
+ * ruling on a fast, big-number economy points at.
+ */
+export const HARVEST_BASE_COUNT = 3;
 
 /** One pour from the can. */
 export const HAND_POUR_ML = 2000;
@@ -1996,11 +1760,12 @@ export const MachineRole = {
   Junction: 9,
 
   /**
-   * A box with a lid: holds one product, and stamps a freshness window on what goes in.
+   * A box with a lid: holds one product, and how much of it is `inputCapacity`.
    *
    * NO WORK CYCLE — it never wears, never jams, never takes a dial, exactly like the two
-   * vehicles and the junction. What it does have is `MachineSpec.preserveTicks`, which is the
-   * only mechanical difference between a Crate, a Root Cellar and a hand cart.
+   * vehicles and the junction. Since item 124 there is nothing else to know about one: the
+   * freshness window a box used to stamp on its contents is gone, so a Root Cellar and a hand
+   * cart differ in how much they hold and whether they follow you, and in nothing else.
    */
   Storage: 10,
   /**
@@ -2259,13 +2024,15 @@ export interface MachineSpec {
    * A SPEC FLAG RATHER THAN A CHECK ON KIND, exactly like `moistureSensing` above: the
    * footprint rule (`machineFootprintFree` in tick.ts) consults the flag AND NOTHING ELSE, so
    * the Fryer stays behind the fence without a kind-switch at the rule site, and the day a
-   * moisture probe wants in it is a data change. The ground underneath is never touched: soil,
-   * fertility, and moisture ride through placement and deconstruction untouched.
+   * moisture probe wants in it is a data change. The ground underneath is never touched: soil and
+   * moisture ride through placement and deconstruction untouched. (There was a third — fertility —
+   * until item 124 deleted it.)
    *
    * **A PLANTED TILE NO LONGER REFUSES** (item 121, owner ask 2026-08-17). Item 067 hosted an
    * EMPTY farm tile only, on the house rule that nothing is silently destroyed. The placement
-   * now HANDS THE CROP BACK instead — the seed always, the produce as well if it was ripe, and
-   * any waiting compost — which keeps the house rule by paying it rather than by refusing.
+   * now HANDS THE CROP BACK instead — the seed always, and the produce as well if it was ripe —
+   * which keeps the house rule by paying it rather than by refusing. (It used to hand back any
+   * waiting compost too; since item 124 nothing is ever left lying on a tile.)
    * `clearFieldTileForMachine` in tick.ts is the one place that happens.
    *
    * THE IRRIGATION HUB IS DELIBERATELY IN: it is the same watering family (`role` says so),
@@ -2442,7 +2209,7 @@ export const WORK_RATE_SCALE = 100;
  *
  *   wearPerOperation = 600 × ticksPerOperation ÷ 12,000 = ticksPerOperation ÷ 20
  *
- * - 60-tick machines (Fryer, Composter): 60 ÷ 20 = **3** → 200 ops × 60 ticks = 12,000
+ * - 60-tick machines (the Fryer): 60 ÷ 20 = **3** → 200 ops × 60 ticks = 12,000
  *   ticks = 10.0 busy minutes from full to wrench-due. Exact.
  * - 30-tick machines: 30 ÷ 20 = 1.5, and condition is an integer, so the half rounds by
  *   duty: machines that heat, cut, grind, or pressurize (Slicer, Seasoner, Juicer, Kettle,
@@ -2576,6 +2343,24 @@ export function emptiesForDelivery(
  * shape exactly: attention rewarded, absence not punished.
  */
 export const VEHICLE_EMPTIES_CAPACITY = 120;
+
+/**
+ * **WHAT THE ROOT CELLAR SELLS NOW THAT NOTHING SPOILS** (item 124 — flagged for the owner as a
+ * decision, not presented as settled).
+ *
+ * The cellar's entire pitch was §4's *"frozen in a Root Cellar"*: it was the only container in
+ * the game whose clock ran at zero. Item 124 deleted every clock, which left a $250 four-tile
+ * machine, gated behind an Agronomy node, selling a property that dirt now has. Deleting it was
+ * the alternative and it is worse — a player who saved up for one would open the game and find
+ * it gone — so it keeps its price and takes a new job.
+ *
+ * Five hundred, against the hundred it used to hold and the hand cart's twenty-four. The
+ * multiple is chosen so the sentence *"the one place to put a harvest you cannot process yet"*
+ * stays true of it and only it: twenty carts' worth in four tiles, which no amount of barrows
+ * reproduces. It is not derived from anything, and it is a number the owner should feel free to
+ * move — that is what makes it a constant here rather than a literal in the spec row.
+ */
+export const ROOT_CELLAR_CAPACITY = 500;
 
 export const MACHINE_SPECS: readonly MachineSpec[] = [
   {
@@ -3471,9 +3256,10 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
   // pair doing a second job. That is a container, not a warehouse: "what is in this" stays one
   // word and one number, and a player who wants two products puts down a second box.
   {
-    // THE CLOCK STOPS. §4 names it — "frozen in a Root Cellar" — and it is the top rung of the
-    // storage ladder, so it is dear, big, and needs the Agronomy node under it. Nothing in it ever
-    // turns, forever, which is why it holds five times a crate and costs thirty times as much.
+    // **BULK STORAGE** (item 124). The clock it used to stop no longer exists, so what it sells
+    // is `ROOT_CELLAR_CAPACITY` — see `MachineKind.RootCellar` for why it was re-purposed rather
+    // than deleted, and note that the price, footprint and tech node are all exactly what they
+    // were: this is a machine finding a new job, not a machine being re-costed.
     kind: MachineKind.RootCellar,
     slug: 'root-cellar',
     role: MachineRole.Storage,
@@ -3482,7 +3268,7 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     priceCents: 25_000,
     workPerOperation: 0,
     workRatePerTick: 0,
-    inputCapacity: 100,
+    inputCapacity: ROOT_CELLAR_CAPACITY,
     outputCapacity: 0,
     tankCapacityMl: 0,
     wearPerOperation: 0,
@@ -3501,11 +3287,12 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
   {
     // Plan §3's assisted rung of the TRANSPORT ladder. Storage that follows you.
     //
-    // It preserves as well as a crate does not — 15 minutes, exactly what the goods had loose —
-    // because a cart is a barrow with a tarp over it, and a hand cart that also refrigerated
-    // would make the $250 Root Cellar the second-best fridge in the game. What it buys is the
-    // TRIP: twenty-four goods at the cost of walking slower, which is precisely §1's rule that an
-    // assisted tool compresses trips and never replaces the verb.
+    // What it buys is the TRIP: twenty-four goods at the cost of walking slower, which is
+    // precisely §1's rule that an assisted tool compresses trips and never replaces the verb.
+    // It used to buy nothing else on purpose — a cart that also refrigerated would have made the
+    // $250 Root Cellar the second-best fridge in the game — and since item 124 there are no
+    // fridges to rank, so the cart and the cellar differ only in how much they hold and whether
+    // they follow you.
     kind: MachineKind.HandCart,
     slug: 'hand-cart',
     role: MachineRole.Storage,
@@ -3522,34 +3309,6 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     outputItem: null,
     overcookOutputItem: null,
     requiresTech: null,
-    liquid: LiquidId.None,
-    ports: [],
-    pumpRateMlPerMinute: 0,
-    intakeMlPerTick: 0,
-    coverageRadiusTiles: 0,
-    moistureSensing: false,
-    fieldPlaceable: false,
-  },
-  {
-    // Compost → Fertilizer, and an ordinary `Converter` with nothing special about it at all.
-    // That is the point: §4's loop closes with a recipe, so it closes in the recipe executor.
-    kind: MachineKind.Composter,
-    slug: 'composter',
-    role: MachineRole.Converter,
-    tilesWide: 2,
-    tilesHigh: 2,
-    priceCents: 12_000,
-    workPerOperation: 60 * WORK_RATE_SCALE,
-    workRatePerTick: WORK_RATE_SCALE,
-    inputCapacity: 20,
-    outputCapacity: 20,
-    tankCapacityMl: 0,
-    /** A 60-tick op, so the time rule gives exactly 3 (see the wear derivation above). */
-    wearPerOperation: 3,
-    inputs: [{ item: ItemId.Compost, count: COMPOST_PER_FERTILIZER }],
-    outputItem: ItemId.Fertilizer,
-    overcookOutputItem: null,
-    requiresTech: TechId.Composting,
     liquid: LiquidId.None,
     ports: [],
     pumpRateMlPerMinute: 0,
@@ -4276,7 +4035,9 @@ export const PARCEL_TILES = 16;
  *
  * SIXTY-FOUR TILES A SIDE BECAUSE THE PLAN NAMES THAT NUMBER AND NO OTHER. Plan §5's Land
  * paragraph fixes no size at all, but §8's roadmap does — v0.2 is *"Zone brush, 64×64 map,
- * withering"* — and it is the only map dimension written down anywhere in the design. The
+ * withering"* — and it is the only map dimension written down anywhere in the design. **The
+ * `withering` half of that quote was struck from the plan on 2026-08-17 (item 124); the number
+ * was not, and the number is the only part this constant ever borrowed.** The
  * roadmap slipped (the shipped game reached the soda line still on 16×16) but the number did
  * not stop being the plan's answer, and `FIELD_TILES_WIDE` below has carried a comment
  * pointing at it since v0.1.
@@ -4693,7 +4454,7 @@ function balanceDigest(): string {
     const spec = CROP_SPECS[i]!;
     h = fnv1aString(
       h,
-      `${spec.id}:${spec.slug}:${spec.growthTicks}:${spec.growthVariancePermille}:${spec.seedItem}:${spec.yieldItem}:${spec.dayOldItem}:${spec.regrowTicks}:${spec.moistureDrainPerTick}:${spec.requiresTech}`,
+      `${spec.id}:${spec.slug}:${spec.growthTicks}:${spec.growthVariancePermille}:${spec.seedItem}:${spec.yieldItem}:${spec.regrowTicks}:${spec.moistureDrainPerTick}:${spec.requiresTech}`,
     );
   }
   for (let i = 0; i < MACHINE_SPECS.length; i++) {
@@ -4743,7 +4504,7 @@ function balanceDigest(): string {
   );
   h = fnv1aString(
     h,
-    `${WILT_GRACE_TICKS}:${WILT_WINDOW_TICKS}:${COMPOST_AFTER_TICKS}:${COMPOST_PER_CROP}:${DAY_OLD_NUMERATOR}/${DAY_OLD_DENOMINATOR}:${AUTO_REPLANT_PERIOD_TICKS}:${ZONE_PAINT_MAX_SPAN}:${BELT_ITEM_SPACING_SUBTILES}:${BELT_MAX_LENGTH_TILES}:${WORK_RATE_SCALE}`,
+    `${AUTO_REPLANT_PERIOD_TICKS}:${ZONE_PAINT_MAX_SPAN}:${BELT_ITEM_SPACING_SUBTILES}:${BELT_MAX_LENGTH_TILES}:${WORK_RATE_SCALE}`,
   );
   h = fnv1aString(
     h,
@@ -4814,27 +4575,12 @@ function balanceDigest(): string {
       `${spec.id}:${spec.slug}:${spec.growthPermille}:${spec.moistureDrainPermille}`,
     );
   }
-  // Harvested-inventory spoilage. THE FRESHNESS TABLE IS THE LOAD-BEARING HALF: a saved world
-  // holds stacks whose spoil ticks were computed from these windows, so a build that shortened a
-  // potato's fifteen minutes would describe a stack it did not write as further from turning than
-  // it is. The bucket and the stack cap ride along because they decide which stacks a save has at
-  // all. (The armful cap used to ride here too; item 068 removed it from the game entirely.)
-  for (let i = 0; i < FRESHNESS_TICKS_BY_ITEM.length; i++) {
-    const row = FRESHNESS_TICKS_BY_ITEM[i]!;
-    h = fnv1aString(h, `${row.item}>${row.ticks}`);
-  }
-  h = fnv1aString(
-    h,
-    `${FRESHNESS_BUCKET_TICKS}:${FRESHNESS_MAX_STACKS}:${CRATE_FRESHNESS_TICKS}:${CRATE_PACK_CAPACITY}:${COMPOST_PER_SPOILED_ITEM}:${COMPOST_PER_FERTILIZER}:${HARVESTS_PER_FERTILITY_STEP}:${FERTILITY_PER_FERTILIZER}:${FERTILITY_MIN}/${FERTILITY_MAX}`,
-  );
-  // How fast the clock runs inside a container (item 110). Load-bearing for the same reason the
-  // windows above are: a saved world holds boxes whose remaining freshness was counted down at
-  // these rates, so a build that unfroze the Root Cellar would describe a saved cellar's contents
-  // as something they are not.
-  for (let i = 0; i < STORAGE_AGING_BY_KIND.length; i++) {
-    const row = STORAGE_AGING_BY_KIND[i]!;
-    h = fnv1aString(h, `store:${row.kind}>${row.ticksPerTick}`);
-  }
+  // What one harvest pays before the coin (item 124). It replaced the whole freshness and
+  // fertility block that used to be digested here — the per-item windows, the bucket, the stack
+  // cap, the crate, the compost ratios, the fertility bounds and the container ageing table —
+  // and it is load-bearing for the one reason any of those were: a saved world's next harvest is
+  // counted with it, so a build that changed it would pay a saved field differently.
+  h = fnv1aString(h, `harvest:${HARVEST_BASE_COUNT}:cellar:${ROOT_CELLAR_CAPACITY}`);
   // The assisted tier and the bots. Every one of these is a rate or a capacity a saved world is
   // mid-way through spending: a hitched cart's next step, a bot's next harvest, a swing's width.
   h = fnv1aString(

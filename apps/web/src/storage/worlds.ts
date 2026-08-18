@@ -46,6 +46,12 @@ import {
   isStorageAvailable,
 } from './db';
 import { logInfo, logWarn } from './log';
+// The player-facing channel ([[041]]). `notices.ts` imports nothing at all, so this arrow
+// points one way like the one below it.
+import { NoticeId, publishNotice } from './notices';
+// The orphan rescue ([[138]]). It imports nothing from here — the clock and the money peek it
+// needs arrive as arguments — so this arrow points one way like the two around it.
+import { announceRescue, findOrphanedWorlds, planOrphanRescue } from './orphans';
 // `trace.ts` imports nothing from here, so this arrow points one way and stays that way.
 import { clearTraceForWorld } from './trace';
 
@@ -373,41 +379,316 @@ export function freshSeed(): number {
 // --- the database part ------------------------------------------------------------------
 
 /**
- * The read is memoised for the page's lifetime, and the write invalidates it.
+ * A PLAN, not a value: given the registry as it actually is on disk at this instant, say what
+ * should replace it. Null means "nothing to do".
  *
- * StrictMode mounts everything twice and the front door, the boot path and the autosave all
- * want the registry within the same few milliseconds. Without the memo, two concurrent first
- * reads would each find no registry, each run the adoption migration, and each mint a
- * different id for the same world — one of which would win and the other of which would leave
- * a world nothing points at. One promise means one migration.
+ * THIS TYPE IS THE FIX FOR [[138]] AND THE REASON IS WORTH STATING PLAINLY. Every mutation in
+ * this file used to be a read-modify-write in three separate steps — read the memo, build a
+ * new registry from it, write the whole record set back — and the memo it read was populated
+ * once, on page load, and never refreshed. Two tabs therefore each held a private snapshot,
+ * and the second one to write erased every world the first had created since. Not a field:
+ * the list. A `New Game` in one tab and a routine autosave in the other, sixty seconds apart,
+ * and the new lot's card was gone.
+ *
+ * A plan cannot do that, because it never sees a snapshot. It is handed the current record,
+ * inside the transaction that will write its result, and there is no instant between the two
+ * for another tab to fit a world into.
+ *
+ * PLANS RUN EXACTLY ONCE PER `mutate` CALL, so capturing something out of one is legal — the
+ * sweep below does it. They must not perform I/O, and they must not read the memo.
  */
-let cached: Promise<WorldRegistry> | null = null;
+export type RegistryPlan = (current: WorldRegistry) => WorldRegistry | null;
 
-/** Drop the memo. Tests, and every write below. */
-export function invalidateRegistry(): void {
-  cached = null;
+export interface RegistryWrite {
+  /** The registry as it now stands: the plan's output, or the unchanged record. */
+  registry: WorldRegistry;
+  /** False when the plan declined, and false when the write was attempted and failed. */
+  wrote: boolean;
+  /** Set only when a write was attempted and rejected. Never swallowed — see `mutate`. */
+  error?: unknown;
 }
+
+/**
+ * Where the registry lives, as a seam — the same discipline as `SaveRecordStore` in `saves.ts`
+ * and for the same reason: there is no IndexedDB in this workspace's test environment, so the
+ * one operation that can lose a player's lot has to be reachable without a browser.
+ */
+export interface RegistryStore {
+  read(): Promise<WorldRegistry | undefined>;
+  /** Read, apply, write — atomically with respect to every other client of this database. */
+  mutate(plan: RegistryPlan, base: WorldRegistry): Promise<RegistryWrite>;
+}
+
+/**
+ * The real one.
+ *
+ * ONE READWRITE TRANSACTION OVER `worlds`, AND THAT IS THE WHOLE GUARANTEE. IndexedDB
+ * serialises overlapping readwrite transactions across every connection to a database,
+ * including the connection held by the tab next door — so a read followed by a write inside
+ * one transaction is a genuine compare-and-swap against other tabs, which is a stronger thing
+ * than any amount of in-page bookkeeping could buy. No lock to acquire, no message to lose,
+ * no retry loop: the browser already owns this problem and has since 2011.
+ */
+export function idbRegistryStore(): RegistryStore {
+  return {
+    async read() {
+      const db = await getDb();
+      return db.get(WORLDS_STORE, REGISTRY_KEY);
+    },
+    async mutate(plan, base) {
+      const db = await getDb();
+      const tx = db.transaction(WORLDS_STORE, 'readwrite');
+      const store = tx.objectStore(WORLDS_STORE);
+      // The read that matters. `base` is only reached on a database that has never held a
+      // registry record at all, where there is by definition no other tab's work to lose.
+      const stored = (await store.get(REGISTRY_KEY)) ?? base;
+      const next = plan(stored);
+      if (next === null) {
+        await tx.done;
+        return { registry: stored, wrote: false };
+      }
+      await store.put(next, REGISTRY_KEY);
+      await tx.done;
+      return { registry: next, wrote: true };
+    },
+  };
+}
+
+/**
+ * The test one. Structured-clones on the way in and out, and serialises its mutations.
+ *
+ * BOTH OF THOSE ARE FIDELITY, NOT TIDINESS. IndexedDB stores a copy, so a store that handed
+ * back the same object every caller already held would let two "tabs" share one registry by
+ * reference and pass a concurrency test for entirely the wrong reason. And the queue is what
+ * makes `mutate` atomic here in the way the transaction makes it atomic there — without it a
+ * test could interleave two mutations in a way no browser ever would, and prove nothing.
+ */
+export function memoryRegistryStore(initial?: WorldRegistry): RegistryStore {
+  let value = initial === undefined ? undefined : copy(initial);
+  let queue: Promise<unknown> = Promise.resolve();
+
+  function serialise<T>(job: () => T): Promise<T> {
+    const run = queue.then(job, job);
+    queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  return {
+    read: () => serialise(() => (value === undefined ? undefined : copy(value))),
+    mutate: (plan, base) =>
+      serialise(() => {
+        const stored = value === undefined ? base : copy(value);
+        const next = plan(stored);
+        if (next === null) return { registry: stored, wrote: false };
+        value = copy(next);
+        return { registry: next, wrote: true };
+      }),
+  };
+}
+
+function copy<T>(value: T): T {
+  return typeof structuredClone === 'function'
+    ? structuredClone(value)
+    : (JSON.parse(JSON.stringify(value)) as T);
+}
+
+export interface RegistryClient {
+  /** The registry, memoised for the life of this client. */
+  read(): Promise<WorldRegistry>;
+  /** Drop the memo. The cross-tab listener, and tests. */
+  invalidate(): void;
+  /**
+   * Apply a plan. `what` is a plain-English verb phrase for the failure card — "start a new
+   * lot", "rename a lot" — so a write that cannot be honoured says which one it was.
+   */
+  mutate(plan: RegistryPlan, what: string): Promise<RegistryWrite>;
+}
+
+/**
+ * A registry client with its own memo.
+ *
+ * THE MEMO SURVIVED THE FIX, DELIBERATELY, and it is worth being clear about what it is now
+ * for. Its original job is still real: StrictMode mounts everything twice and the front door,
+ * the boot path and the autosave all want the registry within the same few milliseconds, so
+ * without it two concurrent first reads would each find no registry, each run the adoption
+ * migration, and each mint a different id for the same world. One promise means one migration.
+ *
+ * What changed is that no WRITE consults it any more. It is a read cache for drawing cards,
+ * and a stale card is a cosmetic problem that the cross-tab broadcast below fixes as a
+ * courtesy. Correctness lives entirely in `store.mutate`, so the broadcast may be dropped,
+ * unsupported, or arrive late and nothing is lost.
+ */
+export function createRegistryClient(
+  store: RegistryStore,
+  options: { seed?: () => Promise<WorldRegistry>; announce?: () => void } = {},
+): RegistryClient {
+  let cached: Promise<WorldRegistry> | null = null;
+  const seed = options.seed ?? (() => Promise.resolve(emptyRegistry()));
+
+  function read(): Promise<WorldRegistry> {
+    cached ??= load().catch((error: unknown) => {
+      // A failed read must not poison the page: the next call gets to try again. An empty
+      // registry is the safe answer in the meantime — it shows the front door with no cards,
+      // which is wrong but harmless, where a thrown error would be a blank screen.
+      cached = null;
+      logWarn('Could not read the world registry.', error);
+      return emptyRegistry();
+    });
+    return cached;
+  }
+
+  async function load(): Promise<WorldRegistry> {
+    return (await store.read()) ?? (await seed());
+  }
+
+  return {
+    read,
+    invalidate() {
+      cached = null;
+    },
+    async mutate(plan, what) {
+      const base = await read();
+      try {
+        const result = await store.mutate(plan, base);
+        // Priming the memo is safe NOW and was the bug BEFORE, and the difference is where
+        // the value came from: this one was merged against the current record inside the
+        // transaction that wrote it, rather than derived from a snapshot taken on page load.
+        cached = Promise.resolve(result.registry);
+        if (result.wrote) options.announce?.();
+        return result;
+      } catch (error) {
+        cached = null;
+        reportRegistryFailure(what, error);
+        return { registry: base, wrote: false, error };
+      }
+    },
+  };
+}
+
+/**
+ * A registry write that did not land, said out loud.
+ *
+ * IT USED TO BE A `console.warn` AND THAT IS HALF OF WHY [[138]] WAS A WORLD-EATER. The other
+ * half was the stale memo, which is fixed above; this half is that when the fix does not
+ * apply — a full disk, a browser that has revoked the origin's storage — the game carried on
+ * exactly as if the write had worked. A player can then press New Game, play a lot for an
+ * hour, and have it exist only in a tab. [[041]]'s constraint is blunt about this and it is
+ * the right constraint: never fail a save silently, because a silent failure is worse than a
+ * visible one — the player keeps playing.
+ */
+function reportRegistryFailure(what: string, error: unknown): void {
+  logWarn(`Could not ${what}: the list of lots could not be written.`, error);
+  publishNotice({
+    id: NoticeId.RegistryWriteFailed,
+    tone: 'warning',
+    title: 'The game could not update your list of lots.',
+    body:
+      'Your factory itself is fine and is still being saved as normal — this is the short ' +
+      `list of lots on the front door, not the lots themselves. The game tried to ${what} ` +
+      'and the list would not save. If your browser is low on disk space, freeing some and ' +
+      'reloading should fix it; your worlds will still be here.',
+  });
+}
+
+// --- one registry per page, and one message when it changes -----------------------------
+
+/**
+ * Other tabs' writes drop this page's read memo.
+ *
+ * A COURTESY, NOT A CORRECTNESS MECHANISM, and the distinction is the whole reason this is
+ * four lines rather than a protocol. Writes are already safe — see `idbRegistryStore` — so a
+ * message that is never delivered, arrives out of order, or is unsupported by the browser
+ * costs exactly one thing: a front door that shows a lot list from a minute ago until the
+ * next write. There is no acknowledgement, no sequence number and no payload, because
+ * anything that carried state would be a second source of truth for the thing IndexedDB is
+ * already the source of truth for.
+ */
+const REGISTRY_CHANNEL = 'snack-mogul:registry';
+
+let broadcast: BroadcastChannel | null = null;
+
+function openBroadcast(): void {
+  if (typeof BroadcastChannel === 'undefined') return;
+  try {
+    broadcast = new BroadcastChannel(REGISTRY_CHANNEL);
+    broadcast.onmessage = () => {
+      defaultClient.invalidate();
+    };
+  } catch {
+    // A browser that has the constructor but refuses to open one (some privacy modes). The
+    // registry is still correct; the cards are just not live. Nothing to say to anybody.
+    broadcast = null;
+  }
+}
+
+const defaultClient: RegistryClient = createRegistryClient(idbRegistryStore(), {
+  seed: adoptLegacyRecords,
+  announce: () => {
+    broadcast?.postMessage(1);
+  },
+});
+
+if (isStorageAvailable()) openBroadcast();
+
+/** Drop the memo. Tests, and the cross-tab listener above. */
+export function invalidateRegistry(): void {
+  defaultClient.invalidate();
+}
+
+/**
+ * The registry, with the orphan check having run exactly once first ([[138]], `orphans.ts`).
+ *
+ * IT RUNS HERE RATHER THAN IN `bootWorld` FOR ONE REASON: the player this exists for may have
+ * no world left to boot. If every lot they own lost its card, the front door is empty and the
+ * only button is New Game — so a rescue that waited for a boot would never reach the person
+ * whose whole list is missing. This is the read the front door does on mount, so putting it
+ * here is what makes the recovered lots appear on the first paint rather than never.
+ *
+ * The extra cost is one key enumeration of `saves`, once per page. Everything after that is
+ * the memo, exactly as before.
+ */
+let reconciled: Promise<void> | null = null;
 
 export function readRegistry(): Promise<WorldRegistry> {
-  cached ??= loadRegistry().catch((error: unknown) => {
-    // A failed read must not poison the page: the next call gets to try again. An empty
-    // registry is the safe answer in the meantime — it shows the front door with no cards,
-    // which is wrong but harmless, where a thrown error would be a blank screen.
-    cached = null;
-    logWarn('Could not read the world registry.', error);
-    return emptyRegistry();
-  });
-  return cached;
+  if (!isStorageAvailable()) return Promise.resolve(emptyRegistry());
+  reconciled ??= rescueOrphans();
+  return reconciled.then(() => defaultClient.read());
 }
 
-async function loadRegistry(): Promise<WorldRegistry> {
-  if (!isStorageAvailable()) return emptyRegistry();
+async function rescueOrphans(): Promise<void> {
+  try {
+    const current = await defaultClient.read();
+    const found = await findOrphanedWorlds(new Set(current.worlds.map((world) => world.id)));
+    if (found.length === 0) return;
 
-  const db = await getDb();
-  const stored = await db.get(WORLDS_STORE, REGISTRY_KEY);
-  if (stored !== undefined) return stored;
+    let rescued: WorldRecord[] = [];
+    const result = await defaultClient.mutate((live) => {
+      // Planned against the LIVE record, not against `current` — this is a registry write like
+      // any other and it plays by the same rule. A world another tab restored a moment ago is
+      // in `live`, so `planOrphanRescue` sees it as known and does not file a second card for
+      // the same lot under a different name.
+      const plan = planOrphanRescue(live, found, { now: Date.now(), peekMoney: peekMoneyCents });
+      rescued = plan.rescued;
+      return plan.rescued.length === 0 ? null : plan.registry;
+    }, 'put a recovered lot back on the list');
 
-  return adoptLegacyRecords();
+    if (result.wrote && rescued.length > 0) announceRescue(rescued);
+  } catch (error) {
+    // Best-effort throughout: a failed check is a list that is missing a card it was already
+    // missing, and it must never be the reason the front door does not draw.
+    logWarn('Could not check for lots that had lost their card.', error);
+  }
+}
+
+/** Every mutation in this file goes through here. Never call `store.mutate` directly. */
+function mutateRegistry(plan: RegistryPlan, what: string): Promise<RegistryWrite> {
+  if (!isStorageAvailable()) {
+    return Promise.resolve({ registry: emptyRegistry(), wrote: false });
+  }
+  return defaultClient.mutate(plan, what);
 }
 
 /**
@@ -508,23 +789,6 @@ async function adoptLegacySession(worldId: string): Promise<void> {
   }
 }
 
-/** Write the registry and drop the memo. Every mutation below goes through this. */
-async function writeRegistry(registry: WorldRegistry): Promise<WorldRegistry> {
-  cached = Promise.resolve(registry);
-  try {
-    const db = await getDb();
-    await db.put(WORLDS_STORE, registry, REGISTRY_KEY);
-  } catch (error) {
-    // The registry is small and rewritten often, so a failed write is very likely a full disk
-    // — the same condition `quota.ts` handles for saves. It is survivable here in a way it is
-    // not there: the in-memory copy is correct for this session, and the next successful write
-    // catches the record up. What must NOT happen is an exception escaping into the front door.
-    cached = null;
-    logWarn('Could not write the world registry. This session will still work.', error);
-  }
-  return registry;
-}
-
 /** The world `bootWorld()` should load, or null when there is nothing to load. */
 export async function activeWorld(): Promise<WorldRecord | null> {
   const registry = await readRegistry();
@@ -553,12 +817,19 @@ export async function worldSeedOf(id: string): Promise<number | null> {
  * active id and there is exactly one right answer at that moment.
  */
 export async function activateWorld(id: string): Promise<WorldRecord | null> {
-  const registry = await readRegistry();
-  const world = findWorld(registry, id);
-  if (world === null || world.deletedAt !== null) return null;
-  if (registry.activeId === id) return world;
-  await writeRegistry({ ...registry, activeId: id });
-  return world;
+  const result = await mutateRegistry((current) => {
+    const world = findWorld(current, id);
+    if (world === null || world.deletedAt !== null) return null;
+    if (current.activeId === id) return null;
+    return { ...current, activeId: id };
+  }, 'select a lot');
+
+  // Read the answer out of the registry the write produced rather than out of the one the
+  // plan was handed, so a card another tab deleted a second ago reports as gone rather than
+  // as selected. `activeId` is the one field here two tabs can honestly disagree about, and
+  // losing that argument costs nothing: `newestWorld` is what Continue actually follows.
+  const world = findWorld(result.registry, id);
+  return world !== null && world.deletedAt === null ? world : null;
 }
 
 /**
@@ -573,25 +844,57 @@ export async function activateWorld(id: string): Promise<WorldRecord | null> {
 export async function createWorldRecord(
   options: { name?: string; avatar?: number } = {},
 ): Promise<WorldRecord> {
-  const registry = await readRegistry();
   const now = Date.now();
-  const world: WorldRecord = {
-    id: newWorldId(),
-    name: options.name ?? nextWorldName(registry),
-    seed: freshSeed(),
+  // Minted OUTSIDE the plan, because a plan must be a pure function of the registry and these
+  // three are neither. The name is not: "Lot #3" is a fact about the list as it stands at the
+  // instant of the write, which is exactly the sort of thing that used to be computed against
+  // a page-old snapshot and hand two tabs the same name.
+  const id = newWorldId();
+  const seed = freshSeed();
+
+  const result = await mutateRegistry(
+    (current) => ({
+      ...current,
+      activeId: id,
+      worlds: [
+        ...current.worlds,
+        {
+          id,
+          name: options.name ?? nextWorldName(current),
+          seed,
+          createdAt: now,
+          lastPlayedAt: now,
+          summary: { tick: 0, moneyCents: null, formatVersion: 0 },
+          avatar: options.avatar ?? 1,
+          deletedAt: null,
+        },
+      ],
+    }),
+    'start a new lot',
+  );
+
+  const stored = findWorld(result.registry, id);
+  if (stored !== null) {
+    logInfo(`New world "${stored.name}" (${id}) with seed ${String(seed)}.`);
+    return stored;
+  }
+
+  // The write did not land, and `reportRegistryFailure` has already said so on screen. The
+  // caller still gets a record because the alternative is a front door that cannot navigate,
+  // and the world is genuinely playable — it will simply have no card until the write works.
+  // `rescueOrphanedWorlds` in `orphans.ts` is the other half of this: the lot's save envelope
+  // is enough to rebuild the card on a later boot, so this is a delay rather than a loss.
+  logWarn(`New world ${id} is not on the list: its registry write failed.`);
+  return {
+    id,
+    name: options.name ?? 'Lot #1',
+    seed,
     createdAt: now,
     lastPlayedAt: now,
     summary: { tick: 0, moneyCents: null, formatVersion: 0 },
     avatar: options.avatar ?? 1,
     deletedAt: null,
   };
-  await writeRegistry({
-    ...registry,
-    activeId: world.id,
-    worlds: [...registry.worlds, world],
-  });
-  logInfo(`New world "${world.name}" (${world.id}) with seed ${String(world.seed)}.`);
-  return world;
 }
 
 /**
@@ -602,9 +905,15 @@ export async function createWorldRecord(
  */
 export async function touchWorld(id: string, summary: WorldSummary): Promise<void> {
   try {
-    const registry = await readRegistry();
-    if (findWorld(registry, id) === null) return;
-    await writeRegistry(withWorld(registry, id, { summary, lastPlayedAt: Date.now() }));
+    const now = Date.now();
+    await mutateRegistry((current) => {
+      // THE AUTOSAVE'S WRITE, AND THEREFORE THE ONE [[138]] WAS OBSERVED THROUGH. It fires
+      // once a minute for as long as a tab is playing, so before the fix a second tab was a
+      // metronome erasing whatever the first tab had done since page load. Now it is handed
+      // the live record and patches one world inside it, which is all it ever meant to do.
+      if (findWorld(current, id) === null) return null;
+      return withWorld(current, id, { summary, lastPlayedAt: now });
+    }, 'update a lot card');
   } catch (error) {
     logWarn('Could not update the world card after saving.', error);
   }
@@ -622,21 +931,27 @@ export async function touchWorld(id: string, summary: WorldSummary): Promise<voi
  * not an error: it is the front door, where the new-game picker does this job instead.
  */
 export async function setActiveWorldAvatar(avatar: number): Promise<boolean> {
-  const registry = await readRegistry();
-  const next = planAvatarChange(registry, avatar);
-  if (next === null) return false;
-  // Identity means "already wearing it" — see `planAvatarChange`. Re-picking the farmer you
-  // are already dressed as must not cost a registry write on every click.
-  if (next !== registry) await writeRegistry(next);
-  return true;
+  const result = await mutateRegistry((current) => {
+    const next = planAvatarChange(current, avatar);
+    // Identity means "already wearing it" — see `planAvatarChange`. Re-picking the farmer you
+    // are already dressed as must not cost a registry write on every click.
+    return next === null || next === current ? null : next;
+  }, 'change the farmer');
+
+  const world = findWorld(result.registry, result.registry.activeId);
+  return world !== null && world.deletedAt === null && (world.avatar ?? 0) === avatar;
 }
 
 export async function renameWorld(id: string, name: string): Promise<void> {
   const trimmed = name.trim();
   if (trimmed === '') return;
-  const registry = await readRegistry();
-  if (findWorld(registry, id) === null) return;
-  await writeRegistry(withWorld(registry, id, { name: trimmed.slice(0, 40) }));
+  await mutateRegistry(
+    (current) =>
+      findWorld(current, id) === null
+        ? null
+        : withWorld(current, id, { name: trimmed.slice(0, 40) }),
+    'rename a lot',
+  );
 }
 
 /**
@@ -646,27 +961,38 @@ export async function renameWorld(id: string, name: string): Promise<void> {
  * deletes the world they were on does not end up pointing at a card that no longer exists.
  */
 export async function deleteWorld(id: string): Promise<WorldRegistry> {
-  const registry = await readRegistry();
-  const world = findWorld(registry, id);
-  if (world === null || world.deletedAt !== null) return registry;
+  const now = Date.now();
+  let deleted: WorldRecord | null = null;
 
-  const tombstoned = withWorld(registry, id, { deletedAt: Date.now() });
-  const nextActive =
-    registry.activeId === id ? (newestWorld(tombstoned)?.id ?? null) : registry.activeId;
-  logInfo(
-    `Deleted "${world.name}". Its save is kept for ${String(
-      Math.round(WORLD_TOMBSTONE_MS / 86_400_000),
-    )} days and can be restored until then.`,
-  );
-  return writeRegistry({ ...tombstoned, activeId: nextActive });
+  const result = await mutateRegistry((current) => {
+    const world = findWorld(current, id);
+    if (world === null || world.deletedAt !== null) return null;
+    deleted = world;
+    const tombstoned = withWorld(current, id, { deletedAt: now });
+    return {
+      ...tombstoned,
+      activeId: current.activeId === id ? (newestWorld(tombstoned)?.id ?? null) : current.activeId,
+    };
+  }, 'delete a lot');
+
+  if (deleted !== null) {
+    logInfo(
+      `Deleted "${(deleted as WorldRecord).name}". Its save is kept for ${String(
+        Math.round(WORLD_TOMBSTONE_MS / 86_400_000),
+      )} days and can be restored until then.`,
+    );
+  }
+  return result.registry;
 }
 
 /** Undo a delete, any time inside the retention window. */
 export async function restoreDeletedWorld(id: string): Promise<WorldRegistry> {
-  const registry = await readRegistry();
-  const world = findWorld(registry, id);
-  if (world === null || world.deletedAt === null) return registry;
-  return writeRegistry(withWorld(registry, id, { deletedAt: null }));
+  const result = await mutateRegistry((current) => {
+    const world = findWorld(current, id);
+    if (world === null || world.deletedAt === null) return null;
+    return withWorld(current, id, { deletedAt: null });
+  }, 'restore a deleted lot');
+  return result.registry;
 }
 
 /**
@@ -681,9 +1007,24 @@ export async function restoreDeletedWorld(id: string): Promise<WorldRegistry> {
  */
 export async function sweepTombstones(now: number = Date.now()): Promise<number> {
   try {
-    const registry = await readRegistry();
-    const expired = expiredTombstones(registry, now);
-    if (expired.length === 0) return 0;
+    // CLAIM FIRST, DELETE SECOND, and the order is the fix rather than a tidy-up. It used to
+    // read the registry, delete the envelopes, and only then write the shortened list — so a
+    // tab holding a stale registry could sweep a world the player had restored in another tab
+    // a moment earlier, and the restore would survive in the list with nothing behind it.
+    // Removing the records inside the transaction claims them: a concurrent restore either
+    // landed first (in which case `deletedAt` is null and this plan does not match it) or
+    // lands after, by which point there is no record left to restore.
+    let expired: WorldRecord[] = [];
+    const claim = await mutateRegistry((current) => {
+      expired = expiredTombstones(current, now);
+      if (expired.length === 0) return null;
+      const gone = new Set(expired.map((world) => world.id));
+      return { ...current, worlds: current.worlds.filter((world) => !gone.has(world.id)) };
+    }, 'tidy up deleted lots');
+
+    // Nothing matched, or the write did not land. Either way, touch no envelopes: the only
+    // licence to delete a save is a registry that no longer mentions it.
+    if (expired.length === 0 || !claim.wrote) return 0;
 
     const db = await getDb();
     const tx = db.transaction(SAVES_STORE, 'readwrite');
@@ -702,11 +1043,6 @@ export async function sweepTombstones(now: number = Date.now()): Promise<number>
     // for a meal nobody remembers eating.
     for (const world of expired) await clearTraceForWorld(world.seed);
 
-    const gone = new Set(expired.map((world) => world.id));
-    await writeRegistry({
-      ...registry,
-      worlds: registry.worlds.filter((world) => !gone.has(world.id)),
-    });
     logInfo(`Collected ${String(expired.length)} world(s) deleted more than two weeks ago.`);
     return expired.length;
   } catch (error) {

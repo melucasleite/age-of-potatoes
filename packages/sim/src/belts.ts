@@ -45,7 +45,6 @@ import {
   directionStepX,
   directionStepY,
   machineAt,
-  machineOutputFreshness,
   nextOutputItem,
   nextStorageItem,
   putHopper,
@@ -138,7 +137,7 @@ function handOffFromHead(state: WorldState, belt: Belt): void {
   // The clock crosses the seam with the item (item 112). A run the player built out of four
   // segments must age a potato exactly as one long belt would, or the fix would be defeated by
   // laying belt in short pieces.
-  if (beltInsert(next, index * SUBTILE, head.item, head.freshTicks)) {
+  if (beltInsert(next, index * SUBTILE, head.item)) {
     belt.items.pop();
   }
 }
@@ -254,7 +253,7 @@ function advanceJunction(state: WorldState, machine: Machine): void {
       const outFace = (machine.junctionOutCursor + j) % JUNCTION_FACES.length;
       // A junction has no buffer, so it has no clock of its own to keep: the item's own remainder
       // crosses with it, exactly as it does over a belt seam (item 112).
-      if (!placeOnFace(state, machine, outFace, head.item, head.freshTicks)) continue;
+      if (!placeOnFace(state, machine, outFace, head.item)) continue;
 
       source.items.pop();
       machine.junctionInCursor = (inFace + 1) % JUNCTION_FACES.length;
@@ -292,13 +291,7 @@ function feedingBelt(state: WorldState, machine: Machine, face: number): Belt | 
 }
 
 /** Try to put one item on the belt at a face. False when there is no belt, or no room. */
-function placeOnFace(
-  state: WorldState,
-  machine: Machine,
-  face: number,
-  item: ItemId,
-  freshTicks: number,
-): boolean {
+function placeOnFace(state: WorldState, machine: Machine, face: number, item: ItemId): boolean {
   const dir = JUNCTION_FACES[face]!;
   const tileX = machine.tileX + directionStepX(dir);
   const tileY = machine.tileY + directionStepY(dir);
@@ -310,7 +303,7 @@ function placeOnFace(
 
   const index = beltIndexOfTile(belt, tileX, tileY);
   if (index < 0) return false;
-  return beltInsert(belt, index * SUBTILE, item, freshTicks);
+  return beltInsert(belt, index * SUBTILE, item);
 }
 
 // --- grabbers ---------------------------------------------------------------------
@@ -354,13 +347,6 @@ function advanceGrabber(state: WorldState, grabber: Grabber): void {
   const spec = grabberSpec(grabber.tier);
   if (spec === null) return;
 
-  // **THE CLAW SPENDS THE CLOCK IT IS HOLDING** (item 112), before anything else this tick and
-  // whether the arm is mid-swing or stalled — a jammed destination can leave an arm holding one
-  // potato for an hour, and an arm that froze it would be a one-item refrigerator on a stick.
-  // Clamps at 1 rather than reaching 0, exactly as a hopper line does: a claw has no id field to
-  // rewrite, so the compost happens wherever the item finally lands.
-  if (grabber.held !== 0 && grabber.heldFreshTicks > 1) grabber.heldFreshTicks -= 1;
-
   if (grabber.cooldown > 0) {
     grabber.cooldown -= 1;
     return;
@@ -377,7 +363,6 @@ function advanceGrabber(state: WorldState, grabber: Grabber): void {
 
   if (grabberPlace(state, grabber)) {
     grabber.held = 0;
-    grabber.heldFreshTicks = 0;
     grabber.opCount += 1;
     grabber.cooldown = spec.swingTicks;
   }
@@ -467,19 +452,14 @@ function grabberSource(
   sy: number,
   commit: boolean,
 ): ItemId | 0 {
-  // **THE CLOCK IS RECORDED ON COMMIT AND ONLY ON COMMIT** (item 112). `grabber.heldFreshTicks`
-  // is what the claw is carrying, and the peek has no business writing it — the peek is asked
-  // several times a swing, by the look-ahead and by `view.ts`'s lamp, and a peek with a side
-  // effect would make the arm's clock depend on how often something looked at it.
+  // **A PEEK NEVER WRITES ANYTHING** — it is asked several times a swing, by the look-ahead and
+  // by `view.ts`'s lamp, so every mutation below is behind `commit`.
   const belt = beltAt(state, sx, sy);
   if (belt !== null) {
     const at = beltItemIndexAt(belt, sx, sy, grabber.filter);
     if (at < 0) return 0;
     const entry = belt.items[at]!;
-    if (commit) {
-      grabber.heldFreshTicks = entry.freshTicks;
-      belt.items.splice(at, 1);
-    }
+    if (commit) belt.items.splice(at, 1);
     return entry.item;
   }
 
@@ -498,17 +478,12 @@ function grabberSource(
       if (!commit) return machine.cargoItem as ItemId;
       const took = takeDockShelf(machine, 1);
       if (took === null) return 0;
-      grabber.heldFreshTicks = took.freshTicks;
       return took.item;
     }
     if (shelf === DockShelf.Seed) {
-      // Seeds are shelf-stable, so there is no clock to carry; the claw is cleared rather than
-      // left holding the last perishable's remainder, which would be a stale number riding a
-      // handful of turnip seeds into a cellar.
       if (!commit) return machine.seedShelfItem as ItemId;
       const seeds = takeDockSeedShelf(machine, 1);
       if (seeds === null) return 0;
-      grabber.heldFreshTicks = 0;
       return seeds.item;
     }
     return 0;
@@ -524,14 +499,6 @@ function grabberSource(
   //
   // The filter judges what is on the shelf, exactly as it judges a dock's: an arm filtered to
   // chips leaves a cellar of potatoes alone rather than emptying it.
-  //
-  // **THE CLOCK THE BOX HANDS BACK USED TO BE DROPPED HERE, AND THAT WAS THE AUTOMATED EXPLOIT**
-  // (item 112). The old comment read: *"`takeStorage` returns the remaining freshness for the
-  // hand's sake, and a belt has nowhere to put it — a belt item is an `ItemId` and nothing else
-  // (item 035's ruling). So goods leaving a cellar by arm arrive at their destination clockless,
-  // exactly as they always have."* Every clause was true, and the consequence was that
-  // `cellar → arm → belt → arm → cellar` returned 18,000 ticks on goods that had 2,400 left, with
-  // nobody clicking anything. A belt item has somewhere to put a clock now, and so does the claw.
   if (spec.role === MachineRole.Storage) {
     if (!storageIsParked(state, machine)) return 0;
     const held = nextStorageItem(machine);
@@ -541,7 +508,6 @@ function grabberSource(
 
     const took = takeStorage(machine, 1);
     if (took === null) return 0;
-    grabber.heldFreshTicks = took.freshTicks;
     return took.item;
   }
 
@@ -561,11 +527,8 @@ function grabberSource(
   if (grabber.filter !== 0 && next !== grabber.filter) return 0;
   if (!commit) return next;
 
-  // Read before the take, because the last unit off a basket zeroes the basket's clock.
-  const freshTicks = machineOutputFreshness(machine, spec);
   const taken = takeOneOutput(machine, spec);
   if (taken === null) return 0;
-  grabber.heldFreshTicks = freshTicks;
   return taken;
 }
 
@@ -620,8 +583,10 @@ function dockShelfFor(state: WorldState, grabber: Grabber, dock: Machine): DockS
   const produce = dock.cargoCount > 0 ? (dock.cargoItem as ItemId) : 0;
   const seeds = dock.seedShelfCount > 0 ? (dock.seedShelfItem as ItemId) : 0;
 
-  // The filter judges what is actually on the shelf, exactly as it judges the next unit out of
-  // a Fryer: an arm filtered to fresh potatoes leaves a Day-Old shelf alone.
+  // The filter judges what is actually on the shelf, exactly as it judges the next unit out of a
+  // Fryer: an arm filtered to Russets leaves a shelf of Chili alone. (The example used to be
+  // "fresh potatoes vs a Day-Old shelf"; item 124 deleted that grade. The rule is unchanged — a
+  // dock shelf still holds one product at a time, and the filter still judges the product.)
   if (filter !== 0) {
     if (produce === filter) return DockShelf.Produce;
     if (seeds === filter) return DockShelf.Seed;
@@ -707,9 +672,7 @@ function grabberDeliver(
     if (index < 0) return false;
     // The middle of the tile, so an arm feeding a belt mid-run leaves room on both sides.
     const dist = index * SUBTILE + divFloor(SUBTILE, 2);
-    return commit
-      ? beltInsert(belt, dist, item, grabber.heldFreshTicks)
-      : beltCanInsert(belt, dist);
+    return commit ? beltInsert(belt, dist, item) : beltCanInsert(belt, dist);
   }
 
   const machine = machineAt(state, tx, ty);
@@ -724,14 +687,8 @@ function grabberDeliver(
   // teaching this file what a contract is. It refuses when no route on that depot names the
   // item, or when the floor is full; after item 085 an arm reads that refusal before it grabs,
   // so a mis-aimed belt now leaves its goods on the belt instead of in a frozen claw.
-  //
-  // **THE ARM HANDS OVER THE CLOCK IT IS CARRYING** (item 115), the same line the Storage branch
-  // below gained in item 112 and for the same reason: this call used to pass nothing at all, and
-  // `cart → arm → belt → arm → depot → CancelContract` minted a full window with no clicking.
   if (machineSpecFor.role === MachineRole.TruckDepot) {
-    return commit
-      ? depotAccept(state, machine, item, grabber.heldFreshTicks)
-      : depotCanAccept(state, machine, item);
+    return commit ? depotAccept(state, machine, item) : depotCanAccept(state, machine, item);
   }
   // THE SELL BIN SELLS ON ARRIVAL (item 087). Gated by KIND rather than by `MachineRole.Inert`,
   // on item 083's precedent: "inert" means "has no work cycle", which is a statement about the
@@ -768,17 +725,10 @@ function grabberDeliver(
   //
   // Gated on the way in as well as the way out, by the same function, for the same reason: an arm
   // must no more fill a cart the player is towing than empty one.
-  //
-  // **THE ARM HANDS OVER THE CLOCK IT IS CARRYING** (item 112). This line used to pass a literal
-  // 0 — "no opinion", which `putStorage` answers with a full window — on the reasoning that *"goods
-  // on a belt have no freshness at all, because a belt is a place goods pass through rather than
-  // sit in"*, and it closed with *"closing it means a spoil tick per belt item, which is a bigger
-  // change than this one and should be argued on its own."* That is the argument this item had,
-  // and the spoil tick won: the loop it left open needed no player at all.
   if (machineSpecFor.role === MachineRole.Storage) {
     if (!storageIsParked(state, machine)) return false;
     return commit
-      ? putStorage(machine, machineSpecFor, item, 1, grabber.heldFreshTicks) > 0
+      ? putStorage(machine, machineSpecFor, item, 1) > 0
       : storageRoomFor(machine, machineSpecFor, item) > 0;
   }
   // An arm puts what it is holding into the line of the recipe that wants it. A Combo Packer
@@ -788,10 +738,8 @@ function grabberDeliver(
   const line = hopperLineFor(machineSpecFor, machine, item);
   if (line < 0) return false;
   if (!commit) return true;
-  // Through the hopper's one door, with the claw's clock (item 112) — the belt-fed twin of the
-  // hand's `applyLoadMachine`, and the merge is what stops a belt trickling one fresh pepper into
-  // a starved Seasoner every minute and keeping the whole hopper young.
-  putHopper(machine, line, item, 1, grabber.heldFreshTicks);
+  // Through the hopper's one door — the belt-fed twin of the hand's `applyLoadMachine`.
+  putHopper(machine, line, item, 1);
   return true;
 }
 

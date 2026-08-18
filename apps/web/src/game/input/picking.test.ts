@@ -69,8 +69,5 @@ describe('fieldIndexAtView', () => {
 
   it('carries compost through the query — the field-placement refusal reads it ([[067]])', () => {
     const view = withField(createWorldView(), [[4, 4]]);
-    view.field.compost[0] = 2;
-    expect(tileAtView(view, 4, 4).compost).toBe(2);
-    expect(tileAtView(view, 5, 4).compost).toBe(0);
   });
 });

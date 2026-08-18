@@ -1047,9 +1047,7 @@
         "efficiencyLevel": 0,
         "flowMlPerMinute": 0,
         "id": 2,
-        "inputCounts": [
-          0
-        ],
+        "inputCounts": [0],
         "investedCents": 12000,
         "jammed": false,
         "junctionInCursor": 0,
@@ -1085,10 +1083,7 @@
         "efficiencyLevel": 0,
         "flowMlPerMinute": 0,
         "id": 3,
-        "inputCounts": [
-          6,
-          6
-        ],
+        "inputCounts": [6, 6],
         "investedCents": 112000,
         "jammed": false,
         "junctionInCursor": 0,
@@ -1160,9 +1155,7 @@
     "nextPipeId": 1,
     "nextReservoirId": 2,
     "nextZoneId": 1,
-    "ownedParcels": [
-      0
-    ],
+    "ownedParcels": [0],
     "pipes": [],
     "reservoirs": [
       {
@@ -1596,12 +1589,7 @@
       "longestHandsFreeTicks": 4001,
       "longestUntouchedMachineTicks": 600,
       "netWorthCents": 10004024,
-      "netWorthSamples": [
-        10005400,
-        10006320,
-        10006320,
-        10006320
-      ],
+      "netWorthSamples": [10005400, 10006320, 10006320, 10006320],
       "nextNetWorthSampleTick": 4800,
       "peakNetWorthCents": 10006320,
       "repairKitSpendCents": 0,

@@ -170,8 +170,9 @@ function sourceItems(
     machineOutputs(machine.kind, items);
     // What a Fryer hands over first is its BURNT chips, and `grabberSource` filters on what is
     // actually next out of the buffer rather than on what the machine makes on a good day. So
-    // the spoiled twin is a real thing to filter FOR (an arm that only carries seconds to the
-    // bin) and to filter AGAINST, and it belongs on the grid either way.
+    // the overcooked twin is a real thing to filter FOR (an arm that only carries seconds to
+    // the bin) and to filter AGAINST, and it belongs on the grid either way. It is a product
+    // tier, not a clock — [[124]] left it alone on purpose.
     push(items, machine.overcookedItem);
   }
 

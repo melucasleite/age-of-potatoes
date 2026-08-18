@@ -1252,25 +1252,6 @@
       "paletteSubset": ["ink", "chip_gold", "lamp_starved", "tater_dark", "soil_deep"]
     },
     {
-      "id": "item_day_old_gold_potato",
-      "provider": "retro-diffusion",
-      "width": 32,
-      "height": 32,
-      "prompt": "two dull shrivelled old potatoes side by side, wrinkled and going soft, faded greyish gold skin with big dark brown blotches on it, clearly past their best and no longer fresh, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no mould fuzz, no flies, no leaves, centred, transparent background, no text",
-      "promptStyle": "rd_fast__default",
-      "anchor": "center",
-      "atlasGroup": "items",
-      "paletteSubset": [
-        "ink",
-        "tater_dark",
-        "tater_mid",
-        "stone_mid",
-        "stone_light",
-        "soil_deep",
-        "soil_dark"
-      ]
-    },
-    {
       "id": "item_orange",
       "provider": "retro-diffusion",
       "width": 32,
@@ -1299,26 +1280,6 @@
       "anchor": "center",
       "atlasGroup": "items",
       "paletteSubset": ["ink", "chip_gold", "lamp_starved", "leaf_mid", "leaf_dark", "soil_deep"]
-    },
-    {
-      "id": "item_fertilizer",
-      "provider": "retro-diffusion",
-      "width": 32,
-      "height": 32,
-      "prompt": "one fat sack of fertilizer standing upright, a plump cream coloured burlap bag gathered and tied at the top, one wide dark brown band straight across its middle, a heap of dark crumbly earth spilling over the tied top, game inventory item icon, chunky readable silhouette, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no writing, no logos, no labels, no paper, centred, transparent background, no text",
-      "promptStyle": "rd_fast__default",
-      "anchor": "center",
-      "atlasGroup": "items",
-      "paletteSubset": [
-        "ink",
-        "bone",
-        "stone_light",
-        "stone_mid",
-        "soil_deep",
-        "soil_dark",
-        "soil_mid",
-        "leaf_dark"
-      ]
     },
     {
       "id": "item_push_scythe",
@@ -1400,28 +1361,6 @@
         "leaf_dark",
         "leaf_mid",
         "leaf_light"
-      ]
-    },
-    {
-      "id": "machine_composter",
-      "provider": "retro-diffusion",
-      "width": 64,
-      "height": 64,
-      "prompt": "a bold simple pixel art compost heap in an open wooden box, one low square timber box across the bottom third of the frame with four thick corner posts, one very big rounded mound of dark brown crumbly compost heaped high above the open top of the box and spilling over its front edge, a few broad green leaves sticking out of the mound, low three-quarter view, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no roof, no walls above the box, no lid, no door, no hut, no shed, no barrel, no flies, no worms, no tools, centred and filling the frame, transparent background, no text",
-      "promptStyle": "rd_fast__default",
-      "anchor": "bottom-center",
-      "atlasGroup": "machines",
-      "paletteSubset": [
-        "ink",
-        "wood_dark",
-        "wood_mid",
-        "wood_light",
-        "soil_deep",
-        "soil_dark",
-        "soil_mid",
-        "leaf_deep",
-        "leaf_dark",
-        "leaf_mid"
       ]
     },
     {

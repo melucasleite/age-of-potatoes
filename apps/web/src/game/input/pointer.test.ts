@@ -122,8 +122,6 @@ function withItem(view: WorldView, item: number, count: number, sellable: number
     sellable,
     boxedMachineKind: 0,
     boxes: [],
-    ticksToSpoil: -1,
-    spoilingCount: 0,
   } as WorldView['inventory'][number]);
   return view;
 }
@@ -651,7 +649,14 @@ describe('the till tool ([[066]])', () => {
     );
   }
 
-  /** Three farm tiles at y=4: (4,4) bare, (5,4) planted, (6,4) composted. */
+  /**
+   * Three farm tiles at y=4: (4,4) bare, (5,4) planted, (6,4) bare.
+   *
+   * ⚠️ (6,4) HELD A COMPOST HEAP UNTIL [[124]] and was the fixture's third state — laden with
+   * no crop in it. "Laden" is now exactly "has a crop", so the tile is a second BARE one; it
+   * is kept rather than dropped because the partition assertion below wants more than one tile
+   * on the un-till side of the line.
+   */
   function ladder(): WorldView {
     const view = owning(
       withFieldTiles(createWorldView(), [
@@ -661,7 +666,6 @@ describe('the till tool ([[066]])', () => {
       ]),
     );
     view.field.crop[1] = CropId.RussetPotato; // (5,4)
-    view.field.compost[2] = 3; // (6,4)
     return view;
   }
 
@@ -670,15 +674,13 @@ describe('the till tool ([[066]])', () => {
     expect(tillModeFor(view, { tileX: 10, tileY: 10 })).toBe(TillMode.Till);
     expect(tillModeFor(view, { tileX: 4, tileY: 4 })).toBe(TillMode.Untill);
     expect(tillModeFor(view, { tileX: 5, tileY: 4 })).toBe(TillMode.Unplant);
-    // A COMPOST HEAP IS LADEN TOO ([[127]] ruling 2). This tile used to be a dead end for the
-    // till — `Till` passed it over as already-farm and `Untill` refused it for the heap.
-    expect(tillModeFor(view, { tileX: 6, tileY: 4 })).toBe(TillMode.Unplant);
+    expect(tillModeFor(view, { tileX: 6, tileY: 4 })).toBe(TillMode.Untill);
   });
 
   it('un-plant takes exactly the LADEN farm tiles, which is un-till’s complement', () => {
     const view = ladder();
     expect(tillConverts(view, 5, 4, TillMode.Unplant)).toBe(true); // crop
-    expect(tillConverts(view, 6, 4, TillMode.Unplant)).toBe(true); // compost
+    expect(tillConverts(view, 6, 4, TillMode.Unplant)).toBe(false); // bare farmland
     expect(tillConverts(view, 4, 4, TillMode.Unplant)).toBe(false); // bare farmland
     expect(tillConverts(view, 9, 9, TillMode.Unplant)).toBe(false); // grass
 
@@ -715,9 +717,12 @@ describe('the till tool ([[066]])', () => {
     const view = ladder();
     view.field.ready[1] = 1; // (5,4) is ripe, so the produce is named too
 
-    // Anchored on the crop, dragged across the compost: one drag, both kinds of goods.
+    // Anchored on the crop and dragged across a BARE tile: the drag is two cells wide and only
+    // one of them converts, which is the point — the phrase counts tiles the reducer will
+    // actually lift, not tiles the pointer waved over. (It read "lift 2 tiles · … + 3 compost"
+    // until [[124]], when the second tile stopped being laden.)
     const band = tillBandFor(view, [5, 4], [6, 4]);
-    expect(band.label).toBe('lift 2 tiles · returns russet potato + 1 potato seed + 3 compost');
+    expect(band.label).toBe('lift 1 tile · returns russet potato + 1 potato seed');
   });
 
   it('a rect that converts nothing says so IN THE MODE IT IS IN, all three of them', () => {
@@ -821,7 +826,7 @@ describe('the till tool ([[066]])', () => {
     expect(tillConverts(view, 4, 4, TillMode.Till)).toBe(false); // already farmland
   });
 
-  it('un-till converts only EMPTY farmland — a planted or compost tile keeps its floor', () => {
+  it('un-till converts only EMPTY farmland — a planted tile keeps its floor', () => {
     const view = owning(
       withFieldTiles(createWorldView(), [
         [4, 4],
@@ -830,11 +835,10 @@ describe('the till tool ([[066]])', () => {
       ]),
     );
     view.field.crop[1] = CropId.RussetPotato; // (5,4)
-    view.field.compost[2] = 1; // (6,4)
 
     expect(tillConverts(view, 4, 4, TillMode.Untill)).toBe(true);
-    expect(tillConverts(view, 5, 4, TillMode.Untill)).toBe(false);
-    expect(tillConverts(view, 6, 4, TillMode.Untill)).toBe(false);
+    expect(tillConverts(view, 5, 4, TillMode.Untill)).toBe(false); // a crop is in it
+    expect(tillConverts(view, 6, 4, TillMode.Untill)).toBe(true);
     expect(tillConverts(view, 9, 9, TillMode.Untill)).toBe(false); // grass already
   });
 });

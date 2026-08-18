@@ -40,9 +40,9 @@ export interface ShiftBucket {
    *
    * The projection carries only the DIFFERENCE of the two lifetime accumulators, and no
    * arithmetic can recover the halves from it — see `sim-contract.ts`. So the two rows print
-   * "not yet projected" rather than a confident zero, which is the same discipline waste and
-   * spoilage get and for the same reason: a false zero on a receipt is a lie with a decimal
-   * point on it.
+   * "not yet projected" rather than a confident zero, which is the same discipline the waste
+   * row gets and for the same reason: a false zero on a receipt is a lie with a decimal point
+   * on it.
    */
   readonly split: number;
   /** Water drawn in the hour, in millilitres. */
@@ -67,13 +67,17 @@ export const ZERO_BUCKET: ShiftBucket = Object.freeze({
 });
 
 /**
- * Waste % and spoilage % measure systems that arrive with the Entropy release, so they are
- * not measured yet — and the rows are shown anyway, labelled, rather than hidden.
+ * Waste % measures machine wear, which arrives with the Entropy release, so it is not measured
+ * yet — and the row is shown anyway, labelled, rather than hidden.
  *
- * Plan §8's standing rule is "fake the far side of every interface, stubs listed
- * explicitly", and a report that grows two new rows three releases from now is worse than
- * one whose shape was stable from the first hour. `measured: 0` is what makes the row print
- * "not yet measured" instead of a confident and false "0.0%".
+ * Plan §8's standing rule is "fake the far side of every interface, stubs listed explicitly",
+ * and a report that grows a new row three releases from now is worse than one whose shape was
+ * stable from the first hour. `measured: 0` is what makes the row print "not yet measured"
+ * instead of a confident and false "0.0%".
+ *
+ * ⚠️ A STUB IS A PROMISE, SO IT ONLY FITS A SYSTEM THAT IS STILL COMING. Spoilage % shared this
+ * type until [[124]] deleted spoilage as a feature; a stub for a system that will never exist
+ * is a row that lies forever, so it was removed rather than left labelled.
  */
 export interface StubbedRatio {
   readonly permille: number;
@@ -95,7 +99,6 @@ export interface ShiftSlice {
   /** The best net $/hour any CLOSED hour has ever achieved in this world. */
   readonly bestCentsPerHour: number;
   readonly waste: StubbedRatio;
-  readonly spoilage: StubbedRatio;
   /** Ticks until the next Dawn Report, so the player knows one is coming. */
   readonly ticksUntilDawn: number;
 }
@@ -316,7 +319,6 @@ export const ZERO_SHIFT: ShiftSlice = Object.freeze({
   settled: 0,
   bestCentsPerHour: 0,
   waste: NOT_YET_MEASURED,
-  spoilage: NOT_YET_MEASURED,
   ticksUntilDawn: 0,
 });
 

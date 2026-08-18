@@ -64,7 +64,7 @@ const TILE_PX = 32;
 function world(): WorldState {
   const state = createWorld(9137);
   state.moneyCents = 100_000_000;
-  state.unlocked = [TechId.Belts, TechId.Pumps, TechId.PipedSprinklers, TechId.Composting];
+  state.unlocked = [TechId.Belts, TechId.Pumps, TechId.PipedSprinklers];
   return state;
 }
 

@@ -36,6 +36,11 @@ export type {
 export {
   REGISTRY_KEY,
   WORLD_TOMBSTONE_MS,
+  createRegistryClient,
+  emptyRegistry,
+  idbRegistryStore,
+  memoryRegistryStore,
+  peekMoneyCents,
   activateWorld,
   activeWorld,
   activeWorldId,
@@ -63,7 +68,14 @@ export {
   sweepTombstones,
   withWorld,
 } from './worlds';
-export type { LegacyAdoption, LegacyDisk } from './worlds';
+export type {
+  LegacyAdoption,
+  LegacyDisk,
+  RegistryClient,
+  RegistryPlan,
+  RegistryStore,
+  RegistryWrite,
+} from './worlds';
 // The one wall clock in the game, kept deliberately outside the save payload and outside the
 // state hash — see `session.ts`. The HUD's Welcome Back card is the only consumer.
 export {
@@ -79,6 +91,20 @@ export {
 } from './session';
 export type { PresenceHandle } from './session';
 export { requestPersistentStorage } from './persist';
+// One tab per lot ([[138]]). `bootWorld` claims below; the ordered exit hands it back.
+export { acquireWorldLease, heldWorldId, leaseRefusalMessage, releaseWorldLease } from './lease';
+export type { WorldLease } from './lease';
+// The orphan rescue ([[138]]). Driven from `readRegistry`; public for tests and triage.
+export {
+  announceRescue,
+  findOrphanedWorlds,
+  nextRescuedName,
+  parseSaveKey,
+  peekEnvelope,
+  planOrphanRescue,
+  worldIdsWithSaves,
+} from './orphans';
+export type { OrphanFinding, RescueContext } from './orphans';
 export type { PersistenceResult } from './persist';
 // The ordered exit ([[078]]): save → verify → only then tear down. `GameCanvas` is the one
 // game caller; the types are public so its deps object stays honest.
@@ -152,6 +178,7 @@ import { clearTraceForWorld } from './trace';
 import { logInfo, logWarn } from './log';
 import { NoticeId, publishNoticeOnce } from './notices';
 import type { WorldRecord } from './db';
+import { acquireWorldLease, leaseRefusalMessage } from './lease';
 import { activeWorld, sweepTombstones } from './worlds';
 
 export interface BootOptions {
@@ -225,6 +252,22 @@ export async function bootWorld(options: BootOptions = {}): Promise<BootResult> 
       outcome: { status: 'refused', reason: 'no-world', message },
       persistence,
       world: null,
+    };
+  }
+
+  // One tab per lot ([[138]]). BEFORE the load, because the point is to not start a second
+  // simulation of this world — a refusal that arrived after the world was on screen would be
+  // a refusal that had already lost the argument.
+  const lease = await acquireWorldLease(world.id);
+  if (!lease.held) {
+    const message = leaseRefusalMessage(world.name);
+    logInfo(`"${world.name}" (${world.id}) is open in another tab. Refusing to boot it twice.`);
+    return {
+      state: null,
+      fresh: false,
+      outcome: { status: 'refused', reason: 'in-use', message },
+      persistence,
+      world,
     };
   }
 

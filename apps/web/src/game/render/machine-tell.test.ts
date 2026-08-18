@@ -171,78 +171,59 @@ describe('what a stopped machine says under the cursor', () => {
 // with a hand-typed `cargoTicksToSpoil` would be a test of this file's ability to print a number
 // somebody else already agreed with.
 
-/** A container of `kind` holding `count` goods with `ticks` of window left, after `wait` ticks. */
-function box(
-  seed: number,
-  kind: MachineKind,
-  item: ItemId,
-  count: number,
-  ticks: number,
-  wait = 0,
-): MachineView {
+/** A container of `kind` holding `count` goods, projected after `wait` ticks. */
+function box(seed: number, kind: MachineKind, item: ItemId, count: number, wait = 0): MachineView {
   const state = createWorld(seed);
   const machine = spawnMachine(state, kind, 0, 0)!;
   machine.cargoItem = item;
   machine.cargoCount = count;
-  machine.cargoFreshTicks = ticks;
   if (wait > 0) stepMany(state, wait);
   return projected(state, machine);
 }
 
-describe('what a container says about the clock it is spending', () => {
-  it('says what a cart is holding and how long it has, where it used to say "idle"', () => {
-    const m = box(401, MachineKind.HandCart, ItemId.RussetPotato, 12, TICKS_PER_SECOND * 252);
+describe('what a container says it is holding', () => {
+  it('says what a cart is holding, where it used to say "idle"', () => {
+    const m = box(401, MachineKind.HandCart, ItemId.RussetPotato, 12);
 
     expect(m.lamp, 'a box has no work cycle, which is why this branch had to exist').toBe(
       LampState.Off,
     );
-    expect(storageStatus('hand cart', m)).toBe('hand cart — 12 Russet Potato (4:12 left)');
+    expect(storageStatus('hand cart', m)).toBe('hand cart — 12 Russet Potato');
   });
 
-  it('counts down as the cart spends it — the same minute, on screen', () => {
-    const later = box(
-      402,
-      MachineKind.HandCart,
-      ItemId.RussetPotato,
-      12,
-      TICKS_PER_SECOND * 252,
-      60 * TICKS_PER_SECOND,
-    );
+  // ⚠️ THIS TEST REPLACED THREE THAT COUNTED A CLOCK DOWN ([[124]]), and it is the stronger
+  // pin: those asserted that a printed number SHRANK on schedule, which was a test of the
+  // freshness feature. This asserts the feature is GONE — item 124's acceptance criterion in
+  // as many words, *"a good in a cart, hopper, bot pocket or depot shelf is unchanged after a
+  // simulated day"* — and it is the one that would fail if any per-tick sweep over containers
+  // came back. A whole simulated day is 20 Hz × 60 × 60 × 24; a thousand seconds is far past
+  // every window the game ever had (the shortest was 7,200 ticks) and keeps the suite quick.
+  it('says the same thing after a simulated day as it did on the first tick', () => {
+    const before = box(402, MachineKind.HandCart, ItemId.RussetPotato, 12);
+    const after = box(402, MachineKind.HandCart, ItemId.RussetPotato, 12, 20_000);
 
-    expect(storageStatus('hand cart', later)).toBe('hand cart — 12 Russet Potato (3:12 left)');
+    expect(storageStatus('hand cart', after)).toBe(storageStatus('hand cart', before));
+    expect(storageStatus('hand cart', after)).toBe('hand cart — 12 Russet Potato');
   });
 
-  it('calls a cellar frozen and still shows the window it is holding', () => {
-    const m = box(
-      403,
-      MachineKind.RootCellar,
-      ItemId.RussetPotato,
-      40,
-      TICKS_PER_SECOND * 252,
-      5 * 60 * TICKS_PER_SECOND,
-    );
+  it('gives a cellar the same sentence as a cart, with no word about preserving anything', () => {
+    // The $250 machine used to buy a FROZEN clock and said so — "(frozen with 4:12 left)".
+    // There is no clock to freeze, so what it buys is bulk (`ROOT_CELLAR_CAPACITY`), and the
+    // sentence is a plain count. Left as a test rather than deleted because "root cellar idle"
+    // is the bug item 114 fixed, and that fix has to survive this one.
+    const m = box(403, MachineKind.RootCellar, ItemId.RussetPotato, 40, 5 * 60 * 20);
 
-    // Five minutes went by and the number did not: that is the $250 machine working, and the
-    // word in front of it is what stops the same figure reading as a hung clock.
-    expect(storageStatus('root cellar', m)).toBe(
-      'root cellar — 40 Russet Potato (frozen with 4:12 left)',
-    );
+    const sentence = storageStatus('root cellar', m)!;
+    expect(sentence).toBe('root cellar — 40 Russet Potato');
+    expect(sentence).not.toContain('frozen');
+    expect(sentence).not.toContain('(');
   });
 
-  it('does not call an empty cellar frozen, because it is preserving nothing', () => {
+  it('says a cellar holding nothing is empty', () => {
     const state = createWorld(404);
     const cellar = spawnMachine(state, MachineKind.RootCellar, 0, 0)!;
 
     expect(storageStatus('root cellar', projected(state, cellar))).toBe('root cellar empty');
-  });
-
-  it('says nothing about time for goods that were never going to spoil', () => {
-    const m = box(405, MachineKind.RootCellar, ItemId.Compost, 10, 0);
-
-    const sentence = storageStatus('root cellar', m)!;
-    expect(sentence).toBe('root cellar — 10 Compost');
-    expect(sentence).not.toContain('frozen');
-    expect(sentence).not.toContain('(');
   });
 
   it('stays silent on anything that is not a box, so the lamp keeps its sentence', () => {
@@ -255,19 +236,15 @@ describe('what a container says about the clock it is spending', () => {
 
 describe("a harvester dock's shelves", () => {
   it('puts the clock on the produce and not on the seeds beside it', () => {
-    // The reason the clock is in brackets rather than trailing the sentence: only one of these
-    // two piles has a window, and "on the shelves, 4:12 left" would attach it to whichever noun
-    // came last — which for a shelf of seeds is a claim that is simply false.
     const state = createWorld(407);
     const dock = spawnMachine(state, MachineKind.HarvesterDock, 0, 0)!;
     dock.cargoItem = ItemId.RussetPotato;
     dock.cargoCount = 12;
-    dock.cargoFreshTicks = TICKS_PER_SECOND * 252;
     dock.seedShelfItem = ItemId.PotatoSeed;
     dock.seedShelfCount = 6;
 
     expect(dockShelfStatus('harvester dock', projected(state, dock))).toBe(
-      'harvester dock — 12 Russet Potato (4:12 left) and 6 Potato Seed on the shelves',
+      'harvester dock — 12 Russet Potato and 6 Potato Seed on the shelves',
     );
   });
 
@@ -321,13 +298,6 @@ describe('what a machine short of several says it is short of', () => {
     expect(starvedStatus('six packer', m)).toBe('six packer needs 1 more Soda');
   });
 
-  it('THE BUG: a Composter holding three no longer just "wants Compost"', () => {
-    const m = starved(502, MachineKind.Composter, ItemId.Compost, 3);
-
-    expect(m.lamp).toBe(LampState.Starved);
-    expect(starvedStatus('composter', m)).toBe('composter needs 1 more Compost');
-  });
-
   it('asks an empty Six-Packer for all six, and does not say "more" about an empty hopper', () => {
     // The second branch, and the reason `wantsHeld` is published beside the count: the shortfall
     // here is 6 and the shortfall above is 1, but what separates the two sentences is whether
@@ -337,12 +307,6 @@ describe('what a machine short of several says it is short of', () => {
     const sentence = starvedStatus('six packer', m);
     expect(sentence).toBe('six packer needs 6 Soda');
     expect(sentence).not.toContain('more');
-  });
-
-  it('asks an empty Composter for the whole batch of four', () => {
-    const m = starved(504, MachineKind.Composter, ItemId.Compost, 0);
-
-    expect(starvedStatus('composter', m)).toBe('composter needs 4 Compost');
   });
 
   it('leaves the sentence every other machine gets exactly as it was', () => {
@@ -399,23 +363,27 @@ describe('what a machine short of several says it is short of', () => {
       }
     }
 
-    // Two machines, five partial fills each minus the empty one — small, and exactly the set
-    // that was broken. If a third multi-count machine lands this number rises on its own.
-    expect(checked, 'the sweep found the machines that can tell this lie').toBe(8);
+    // ONE machine, five partial fills — the Six-Packer, which eats six sodas an operation.
+    // This read 8 until [[124]]: the Composter was the other multi-count machine in the game
+    // (four Compost to a batch) and it contributed three of the fills. The sweep is derived,
+    // not hand-listed, so the number moved on its own when the machine left `MachineKind` —
+    // and it will rise again on its own if a second multi-count machine ever lands.
+    expect(checked, 'the sweep found the machines that can tell this lie').toBe(5);
   });
 });
 
-// **THE SIXTH FRIDGE, FINALLY VISIBLE** (item 116, closing item 115's hand-off).
+// **WHAT IS WAITING ON A DEPOT FLOOR** (item 116).
 //
-// Item 115 taught a standing route's floor to spend a freshness window and published
-// `ContractView.stockedFreshTicks` for a surface that did not exist yet — its own log says so:
-// *"nothing in `apps/web` reads `stockedFreshTicks` yet"*. Until this describe block, a depot with
-// forty potatoes going over on its floor said "40/200 on the floor" in identical words from the
-// first potato to the last tick, which is item 110's silent-destruction lesson for the third time.
+// This block was written for item 115's "sixth fridge": a standing route's floor spent a
+// freshness window, and a depot with forty potatoes going over said "40/200 on the floor" in
+// identical words from the first potato to the last tick. [[124]] deleted the window, so what
+// survives is the fraction — which item 116 added in the same breath and which was never about
+// decay: a route backing up and a route running clean are different states and the sentence
+// has to tell them apart.
 //
 // The contracts here are signed with a real command and the floors are stocked by writing the
-// contract the sim owns, then projected — the clock under test is `view.ts`'s arithmetic, and a
-// hand-typed `ContractView` would be this file agreeing with itself.
+// contract the sim owns, then projected — a hand-typed `ContractView` would be this file
+// agreeing with itself.
 
 /** A depot at `tileX` with one route per entry of `items`, and the world it lives in. */
 function depotWithRoutes(
@@ -443,11 +411,10 @@ function depotWithRoutes(
   return { state, depotId: depot.id };
 }
 
-/** Put `count` of a route's product on its floor with `ticks` of window, then project. */
-function stockFloor(state: WorldState, index: number, count: number, ticks: number): void {
+/** Put `count` of a route's product on its floor. */
+function stockFloor(state: WorldState, index: number, count: number): void {
   const contract = state.contracts[index]!;
   contract.stocked = count;
-  contract.stockedFreshTicks = ticks;
 }
 
 /** The depot's sentence, read the way `index.ts` reads it. */
@@ -455,7 +422,7 @@ function depotLine(state: WorldState, depotId: number): string {
   const projection: WorldView = view(state, createWorldView());
   const depot = projection.commerce.depots.find((d) => d.id === depotId);
   expect(depot).toBeDefined();
-  return depotStatus('truck depot', depot!, projection.commerce.contracts);
+  return depotStatus('truck depot', depot!);
 }
 
 describe('what a depot says about the food waiting on its floor', () => {
@@ -465,35 +432,29 @@ describe('what a depot says about the food waiting on its floor', () => {
     expect(depotLine(state, depotId)).toBe('truck depot — click to sign a contract');
   });
 
-  it('shows the floor clock where it used to show only a fraction', () => {
-    // THE HAND-OFF, CLOSED. Ten potatoes with four minutes and twelve seconds of window left.
+  it('shows how much is waiting on the floor', () => {
     const { state, depotId } = depotWithRoutes(602, [ItemId.RussetPotato]);
-    stockFloor(state, 0, 10, TICKS_PER_SECOND * 252);
+    stockFloor(state, 0, 10);
 
-    expect(depotLine(state, depotId)).toBe(
-      'truck depot — 1 route, 10/200 on the floor (4:12 left)',
-    );
+    expect(depotLine(state, depotId)).toBe('truck depot — 1 route, 10/200 on the floor');
   });
 
-  it('counts the clock down as the sim spends it', () => {
+  // ⚠️ FIVE TESTS HERE COUNTED A FLOOR CLOCK AND [[124]] DELETED THEM WITH IT: the countdown,
+  // the shelf-stable silence, the SOONEST-of-several-routes phrasing, the "do not hedge with
+  // soonest on one route" case, and the spent floor that clamped at 1 and read "(0:00 left)".
+  // All five described `ContractView.stockedFreshTicks`, which no longer exists. What is left
+  // is the fraction — the half of the sentence item 116 added that was never about decay.
+  it('leaves a full floor unchanged after a simulated day', () => {
+    // The depot's half of item 124's acceptance criterion. A waiting floor is where a route
+    // spends nearly all of its life, and it was the sixth fridge — an unbounded warehouse that
+    // spent a freshness window. It spends nothing now.
     const { state, depotId } = depotWithRoutes(603, [ItemId.RussetPotato]);
-    stockFloor(state, 0, 10, TICKS_PER_SECOND * 252);
-    stepMany(state, 60 * TICKS_PER_SECOND);
+    stockFloor(state, 0, 10);
+    const before = depotLine(state, depotId);
+    stepMany(state, 20_000);
 
-    expect(depotLine(state, depotId)).toBe(
-      'truck depot — 1 route, 10/200 on the floor (3:12 left)',
-    );
-  });
-
-  it('says nothing about time for a route shipping something shelf-stable', () => {
-    // A bagged-chip route carries `stockedFreshTicks === 0` for the whole of its life, and 0 is
-    // "no clock" rather than "no time" — one apart from the spent floor below and its opposite.
-    const { state, depotId } = depotWithRoutes(604, [ItemId.BaggedChips]);
-    stockFloor(state, 0, 10, 0);
-
-    const sentence = depotLine(state, depotId);
-    expect(sentence).toBe('truck depot — 1 route, 10/200 on the floor');
-    expect(sentence).not.toContain('(');
+    expect(depotLine(state, depotId)).toBe(before);
+    expect(depotLine(state, depotId)).toBe('truck depot — 1 route, 10/200 on the floor');
   });
 
   it('says nothing about time when the floor is bare', () => {
@@ -502,55 +463,17 @@ describe('what a depot says about the food waiting on its floor', () => {
     expect(depotLine(state, depotId)).toBe('truck depot — 1 route, 0/200 on the floor');
   });
 
-  it('names the SOONEST of several routes, and says that it is doing so', () => {
-    // The floor is per-route and the sentence is per-depot. "(4:12 left)" beside a number
-    // covering three piles would be a true clock attached to a noun it is false of twice.
+  it('adds the routes up across a depot running several', () => {
     const { state, depotId } = depotWithRoutes(606, [
       ItemId.RussetPotato,
       ItemId.WashedPotato,
       ItemId.BaggedChips,
     ]);
-    stockFloor(state, 0, 10, TICKS_PER_SECOND * 252);
-    stockFloor(state, 1, 5, TICKS_PER_SECOND * 100);
-    stockFloor(state, 2, 7, 0);
+    stockFloor(state, 0, 10);
+    stockFloor(state, 1, 5);
+    stockFloor(state, 2, 7);
 
-    expect(depotLine(state, depotId)).toBe(
-      'truck depot — 3 routes, 22/200 on the floor (soonest 1:40 left)',
-    );
-  });
-
-  it('does not hedge with "soonest" when there is only one route to be soonest among', () => {
-    const { state, depotId } = depotWithRoutes(607, [ItemId.RussetPotato]);
-    stockFloor(state, 0, 10, TICKS_PER_SECOND * 100);
-
-    expect(depotLine(state, depotId)).not.toContain('soonest');
-  });
-
-  it('ignores a route whose floor is empty, whatever number it is still carrying', () => {
-    // `stockedFreshTicks` is only zeroed when the LAST of a pile rolls away, so a route mid-run
-    // can hold a stale figure with nothing under it. It must not win the "soonest" contest.
-    const { state, depotId } = depotWithRoutes(608, [ItemId.RussetPotato, ItemId.WashedPotato]);
-    stockFloor(state, 0, 0, 1);
-    stockFloor(state, 1, 5, TICKS_PER_SECOND * 252);
-
-    expect(depotLine(state, depotId)).toBe(
-      'truck depot — 2 routes, 5/200 on the floor (soonest 4:12 left)',
-    );
-  });
-
-  it('shows a spent floor as out of time rather than hiding it', () => {
-    // **THE CLAMP, SAID OUT LOUD.** `advanceContractSpoilage` stops at 1 instead of composting,
-    // because a route's product is fixed at signing and there is nowhere to write that the floor
-    // turned — so these goods are out of time and the game still ships them at list. That
-    // asymmetry is item 115's flag to item 046; this line is the first place a player can see it.
-    const { state, depotId } = depotWithRoutes(609, [ItemId.RussetPotato]);
-    stockFloor(state, 0, 10, 2);
-    stepMany(state, 200);
-
-    expect(state.contracts[0]!.stockedFreshTicks, 'clamped, not composted').toBe(1);
-    expect(depotLine(state, depotId)).toBe(
-      'truck depot — 1 route, 10/200 on the floor (0:00 left)',
-    );
+    expect(depotLine(state, depotId)).toBe('truck depot — 3 routes, 22/200 on the floor');
   });
 });
 

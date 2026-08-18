@@ -168,15 +168,6 @@ describe('ghostBand on farmland ([[067]])', () => {
     expect(band.label).not.toContain('a crop is in the way');
   });
 
-  it('compost is LEGAL too, and comes back counted — the number is exact', () => {
-    const view = farmView([[HOVER.tileX, HOVER.tileY]]);
-    view.field.compost[0] = 2;
-    const band = ghostBand(view, HOVER, ToolMode.PlaceSprinkler, Direction.East)!;
-    expect(band.tone).toBe('zone');
-    expect(band.label).toContain('returns 2 compost');
-    expect(band.label).not.toContain('compost in the way');
-  });
-
   it('a non-flagged machine stays banned from farmland, and the ghost says so', () => {
     // The fryer's 2×2 clips one farm tile; the whole footprint refuses, per the sim's rule.
     const view = farmView([[HOVER.tileX + 1, HOVER.tileY + 1]]);

@@ -46,9 +46,6 @@ function soakedView(tick: number, lastPouredTick: number): WorldView {
   view.field.moisturePermille = [1000];
   view.field.ready = [0];
   view.field.dry = [0];
-  view.field.wilt = [0];
-  view.field.readyAge = [0];
-  view.field.compost = [0];
   view.field.zone = [0];
   view.field.soil = [1];
   view.field.lastPouredTick = [lastPouredTick];

@@ -54,7 +54,6 @@ import {
   readCommerce,
   readGrossAndSpend,
   readSalesByItem,
-  readSpoilagePermille,
   readWastePermille,
 } from './sim-contract';
 import type { CommandSink, CommerceCommand, CommerceView } from './sim-contract';
@@ -370,7 +369,6 @@ export class ReportsStore {
     const settled = rateIsSettled(current.ticks) ? 1 : 0;
     const untilDawn = ticksUntilDawn(view.tick);
     const waste = ratio(readWastePermille(view));
-    const spoilage = ratio(readSpoilagePermille(view));
 
     const previous = this.shift;
     if (
@@ -381,8 +379,6 @@ export class ReportsStore {
       previous.bestCentsPerHour === best &&
       previous.waste.measured === waste.measured &&
       previous.waste.permille === waste.permille &&
-      previous.spoilage.measured === spoilage.measured &&
-      previous.spoilage.permille === spoilage.permille &&
       // The dawn countdown is quantised to whole seconds before comparison. Unquantised it
       // moves on every publish and would re-render the panel 6.7 times a second to redraw
       // the same string.
@@ -399,7 +395,6 @@ export class ReportsStore {
       settled,
       bestCentsPerHour: best,
       waste,
-      spoilage,
       ticksUntilDawn: untilDawn,
     });
     return true;
@@ -730,8 +725,8 @@ export function itemLabel(item: number): string {
 
   const name = itemName(item);
   if (machineKindForBoxedItem(item as ItemId) !== null) return name;
-  // "Bagged Chili Chips" → "Bagged chili chips"; "Day-Old Potato" → "Day-old potato". One
-  // capital, at the front, exactly as a line on an invoice is written.
+  // "Bagged Chili Chips" → "Bagged chili chips". One capital, at the front, exactly as a line
+  // on an invoice is written.
   return name.charAt(0) + name.slice(1).toLowerCase();
 }
 

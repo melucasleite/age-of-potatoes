@@ -14,6 +14,8 @@
 // (`saveWorld`/`startAutosave` published it before we ever see the false). Leaving anyway
 // would be the one path in this directory that knowingly walks away from unsaved play.
 
+import { releaseWorldLease } from './lease';
+
 /**
  * What the exit needs from the running game. Deliberately three closures rather than the
  * autosave handle itself, so the ordering below is testable without a browser, a world, or
@@ -61,6 +63,14 @@ export async function saveBeforeExit(deps: ExitDeps): Promise<boolean> {
 export async function performExit(deps: ExitDeps, leave: () => void): Promise<boolean> {
   const safe = await saveBeforeExit(deps);
   if (!safe) return false;
+  // Hand the lot back before leaving ([[138]]). The page is about to show the front door and
+  // the player may well walk straight back into the same lot; without this, the tab would be
+  // refused entry to a world only it is holding. Closing the tab needs no call — the browser
+  // releases a document's Web Locks when the document dies — so this exists purely for the
+  // soft navigation, and it runs only AFTER the save is verified: giving up the claim while
+  // unsaved play was still in memory would open the door to the exact second writer this
+  // whole mechanism exists to keep out.
+  releaseWorldLease();
   leave();
   return true;
 }

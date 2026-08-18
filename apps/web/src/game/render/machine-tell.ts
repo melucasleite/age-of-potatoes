@@ -21,9 +21,8 @@ import {
   TICKS_PER_SECOND,
   machineSpec,
 } from '@snack/sim';
-import type { ContractView, DepotView, MachineView, ReservoirView } from '@snack/sim';
+import type { DepotView, MachineView, ReservoirView } from '@snack/sim';
 
-import { containerFreshnessNote } from '../../hud/freshness';
 import { formatEta } from '../../hud/format';
 import { itemName } from '../../hud/item-copy';
 // `formatWater` and `formatPermille` live in `reports/format.ts` and are IMPORTED rather than
@@ -74,7 +73,7 @@ export function blockedStatus(name: string, m: MachineView): string {
  * `missingInputItem` is a predicate — `count < line.count` — and a predicate read aloud drops the
  * quantity that made it true. A Six-Packer eats six sodas an operation, so a packer holding five
  * of them was starved, correctly, and said *"six packer wants Soda"* at a player who could see
- * five sodas in the hopper. Same for a Composter three Compost into a batch of four.
+ * five sodas in the hopper. Same for any machine that eats several of one thing per batch.
  *
  *   · nothing in the hopper, one per operation → **"washer wants Russet Potato"**. Untouched, and
  *     it is the sentence thirty-odd machines get: there is no quantity to drop, so there is
@@ -105,21 +104,6 @@ export function starvedStatus(name: string, m: MachineView): string {
 }
 
 /**
- * The clock in parentheses after the goods it is about, or `''` when there is nothing to say.
- *
- * **PARENTHESES RATHER THAN A TRAILING CLAUSE**, and the harvester dock is why: its shelves line
- * names two piles — *"12 russet potatoes and 6 potato seeds on the shelves"* — and only one of
- * them has a clock. "…on the shelves, 4:12 left" would attach the countdown to whichever noun the
- * reader's eye landed on last, which for a shelf of seeds is a claim that is not merely unhelpful
- * but false. A bracket binds to the thing in front of it, so one form works everywhere and no
- * surface has to own a second phrasing for the two-pile case.
- */
-function cargoClock(m: MachineView): string {
-  const note = containerFreshnessNote(m.cargoTicksToSpoil, m.cargoFrozen === 1);
-  return note === null ? '' : ` (${note})`;
-}
-
-/**
  * **WHAT IS IN THE BOX, AND HOW LONG IT HAS** — the ribbon's sentence for a `MachineRole.Storage`
  * machine, or `null` for anything that is not one. Item 114.
  *
@@ -127,39 +111,34 @@ function cargoClock(m: MachineView): string {
  * `LampState.Off` and fell to the bottom of the lamp switch as **"root cellar idle"** — which is
  * true of a shed holding ninety potatoes in the least useful possible way. `pointer.ts` noticed
  * that in item 105 and wrote its own line in the other corner of the screen; this is the ribbon
- * finally saying it too, and saying the half that line still cannot, because `cargoTicksToSpoil`
- * did not exist until now.
+ * finally saying it too.
  *
  * **GATED ON THE ROLE, NEVER ON THE KIND** — `storageRoomFor`'s law, and the reason the hand cart
  * gets this sentence for free. A kind check here would be a second opinion about what a box is,
  * and it would be wrong on the day a third container ships.
  *
- * An empty box says so and stops. It deliberately does NOT say "frozen": an empty Root Cellar is
- * preserving nothing, and `cargoFrozen` is 0 there for that reason (see `MachineView`).
+ * An empty box says so and stops.
  */
 export function storageStatus(name: string, m: MachineView): string | null {
   const spec = machineSpec(m.kind as MachineKind);
   if (spec === null || spec.role !== MachineRole.Storage) return null;
   if (m.cargoCount <= 0 || m.cargoItem === 0) return `${name} empty`;
-  return `${name} — ${m.cargoCount} ${itemName(m.cargoItem)}${cargoClock(m)}`;
+  return `${name} — ${m.cargoCount} ${itemName(m.cargoItem)}`;
 }
 
 /**
- * The harvester dock's two shelves, in words — moved out of `index.ts` by item 114 so the clock it
- * now carries can be tested. `null` when both shelves are bare, which hands the dock back to the
- * lamp switch exactly as the inlined version did.
+ * The harvester dock's two shelves, in words — moved out of `index.ts` by item 114 so it can be
+ * tested. `null` when both shelves are bare, which hands the dock back to the lamp switch exactly
+ * as the inlined version did.
  *
  * **THE PRODUCE SHELF IS A CONTAINER AND ITEM 112 MADE IT ONE IN THE SIM** — it is literally the
  * same `cargo` triple a cellar uses, and an arm drains it onto a belt with nobody clicking
- * anything. So it ages at loose speed, and a full shed with a stalled belt is the exact shape of
- * this item's bug: a pile of produce visibly stacking up while its window runs out unannounced.
- * The seed shelf takes no clock and wants none; seeds are shelf-stable, and `cargoClock` returns
- * nothing for the produce side too whenever what is on it does not spoil.
+ * anything. Both shelves are plain counts: nothing on either of them ages ([[124]]).
  */
 export function dockShelfStatus(name: string, m: MachineView): string | null {
   const shelved = m.cargoCount > 0 && m.cargoItem !== 0;
   const seeded = m.seedShelfCount > 0 && m.seedShelfItem !== 0;
-  const produce = `${m.cargoCount} ${itemName(m.cargoItem)}${cargoClock(m)}`;
+  const produce = `${m.cargoCount} ${itemName(m.cargoItem)}`;
   const seeds = `${m.seedShelfCount} ${itemName(m.seedShelfItem)}`;
 
   if (shelved && seeded) return `${name} — ${produce} and ${seeds} on the shelves`;
@@ -169,56 +148,22 @@ export function dockShelfStatus(name: string, m: MachineView): string | null {
 }
 
 /**
- * **THE DEPOT FLOOR, AND HOW LONG IT HAS** — moved here from `index.ts` by item 116 so the clock
- * item 115 published can be both worn and tested.
+ * **THE DEPOT FLOOR** — moved here from `index.ts` by item 116 so it can be tested.
  *
- * Item 115 taught a standing route's floor to spend a freshness window — the sixth fridge, an
- * unbounded warehouse that a route with a run size it could never reach would refrigerate
- * forever — and published `ContractView.stockedFreshTicks` for a HUD that did not yet exist.
- * This is that HUD. Without it the depot line said *"40/60 on the floor"* in identical words from
- * the first potato to the last tick of its window, which is item 110's silent-destruction lesson
- * a third time.
+ * Without it the depot line said nothing about how full the floor was, and a route backing up
+ * looked identical to a route running clean.
  *
- * **THE FLOOR IS PER-ROUTE AND THE SENTENCE IS PER-DEPOT, SO THE CLOCK IS THE SOONEST AND SAYS
- * SO.** A depot with three routes has three piles and three windows; "40/60 on the floor (4:12
- * left)" would be a true number attached to a noun covering three piles it is false of two of.
- * The word "soonest" appears exactly when there is more than one route to be soonest among —
- * with a single route the clock IS the floor's, and hedging it would be its own small lie.
- *
- * **0 IS "NO CLOCK" AND 1 IS "OUT OF TIME", ONE APART AND OPPOSITE.** `advanceContractSpoilage`
- * clamps at 1 rather than composting, because a route's product is fixed at signing and there is
- * nowhere to write that the floor turned — so a spent floor sits at 1 and still ships at list.
- * Zero means a shelf-stable route, an empty floor, or a grandfathered save. `containerFreshnessNote`
- * reads -1 as its "nothing to say" sentinel, so 0 is mapped to it here rather than being passed
- * through as a countdown that has already finished.
- *
- * The spent floor therefore reads "(0:00 left)" and stays there. That is the honest rendering of
- * a clamp, not a stuck timer: those goods ARE out of time and the game ships them anyway, which
- * is the asymmetry item 115 flagged to item 046 rather than priced. If 046 decides a spent floor
- * should compost, this sentence needs no edit — it will simply stop being reachable.
+ * ⚠️ THIS SENTENCE USED TO CARRY A CLOCK ([[124]] removed it). A standing route's floor spent a
+ * freshness window, and the line reported the SOONEST of a depot's routes because one depot can
+ * hold three piles with three deadlines. Nothing on a depot floor ages now, so the floor is a
+ * plain fraction and the parenthetical is gone.
  */
-export function depotStatus(
-  name: string,
-  depot: DepotView,
-  contracts: readonly ContractView[],
-): string {
+export function depotStatus(name: string, depot: DepotView): string {
   if (depot.contractIds.length === 0) return `${name} — click to sign a contract`;
   const routes = depot.contractIds.length === 1 ? '1 route' : `${depot.contractIds.length} routes`;
   const floor = `${depot.stocked}/${depot.capacity} on the floor`;
 
-  let soonest = -1;
-  for (const contract of contracts) {
-    if (contract.depotId !== depot.id) continue;
-    // A route with nothing on its floor has no clock to be soonest, whatever number it is
-    // carrying — `stockedFreshTicks` is only zeroed when the last of a pile rolls away.
-    if (contract.stocked <= 0 || contract.stockedFreshTicks <= 0) continue;
-    if (soonest < 0 || contract.stockedFreshTicks < soonest) soonest = contract.stockedFreshTicks;
-  }
-
-  const note = containerFreshnessNote(soonest, false);
-  if (note === null) return `${name} — ${routes}, ${floor}`;
-  const clock = depot.contractIds.length > 1 ? `soonest ${note}` : note;
-  return `${name} — ${routes}, ${floor} (${clock})`;
+  return `${name} — ${routes}, ${floor}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────

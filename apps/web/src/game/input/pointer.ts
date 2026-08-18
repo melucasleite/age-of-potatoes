@@ -46,8 +46,6 @@ import type { Command, MachineView, WorldView } from '@snack/sim';
 import {
   CropId,
   Direction,
-  FERTILITY_MAX,
-  FERTILITY_MIN,
   IntentAction,
   ItemId,
   LIQUID_SPECS,
@@ -59,10 +57,9 @@ import {
   PortFlow,
   SUBTILE,
   TillMode,
-  WiltStage,
   beltSpec,
   cropSpec,
-  harvestItemForWilt,
+  harvestItemFor,
   itemSpec,
   liquidSpec,
   listPriceCents,
@@ -605,10 +602,12 @@ export class PointerInput {
    */
   statusTell(): string | null {
     const view = this.host.latestView();
-    // The soil is last because it is the least specific thing under the cursor: a machine
-    // standing on a farm tile is what the player is pointing AT, and the dirt beneath it is
-    // scenery. Same order, one more rung ([[104]]).
-    return this.queueTell() ?? machineTell(view, this.hover) ?? soilTell(view, this.hover);
+    // ⚠️ THERE WAS A THIRD RUNG HERE AND [[124]] REMOVED IT. `soilTell` printed the tile's
+    // fertility as `★★☆` and ranked below the machine tell because dirt is the least specific
+    // thing under a cursor. Soil has no quality to report now — every tile grows the same
+    // crop at the same yield forever — so the rung is gone rather than left printing `★★★`
+    // at every tile on the lot, which is the shape of readout item 057 was a whole wave about.
+    return this.queueTell() ?? machineTell(view, this.hover);
   }
 
   /**
@@ -782,11 +781,6 @@ export class PointerInput {
     // the sim refuses that click silently, since a refusal spends nothing.
     if (tool === ToolMode.Plant) return plantBand(view, hover, this.system.armedCrop);
 
-    // The fertilizer ghost ([[104]]): this tile's soil, and what a bag would do to it. Same 1×1
-    // pattern, and the same argument — the decision "which tile gets the bag I am holding" is
-    // one the player makes with the cursor, so the answer belongs under it.
-    if (tool === ToolMode.ApplyFertilizer) return fertilizerBand(view, hover);
-
     const grabber = this.grabberUnderCursor();
     if (grabber !== null && toolMachineKind(tool) === null) return grabberBand(hover, grabber);
 
@@ -871,11 +865,6 @@ export function primaryCommand(
     // cell" is the sim's shape, and this side only aims it.
     case ToolMode.UseRepairKit:
       return { type: 'UseRepairKit', tileX: tile.tileX, tileY: tile.tileY };
-    // The bag of fertilizer ([[104]]), on the kit's shape: a consumable aimed at a tile. The
-    // reducer refuses without spending — a bagless click, a tile already at 3★, ground that is
-    // not farmland — so this side only aims, exactly as it does for the kit.
-    case ToolMode.ApplyFertilizer:
-      return { type: 'ApplyFertilizer', tileX: tile.tileX, tileY: tile.tileY };
     // THE ARMED CROP, NOT A CONSTANT ([[103]]). This line read `crop: V01_CROP` — "the only
     // crop in v0.1" — for the whole of v0.2, which is how four researched crops, four
     // purchasable seeds and the $25 cane node came to have no way into the ground. The sim
@@ -1432,14 +1421,6 @@ export function reachAdjusted(view: WorldView, tile: HoverTile, direct: Command)
       );
     case 'HarvestTile':
       return tileErrand(view, direct, IntentAction.Harvest, direct.tileX, direct.tileY, 0, 0);
-    // Fertilizing walks ([[104]]). `IntentAction.Fertilize` has been in the sim's table since
-    // the verb existed, wired through `intentTargetSubtiles` and `intentCommand` exactly as
-    // Water is — it was simply the only one of the fourteen with no construction site anywhere
-    // in this app. Shipping the in-reach case alone would have made the bag work only while
-    // standing on the tile, which is the dead-click this wrapper exists to abolish.
-    case 'ApplyFertilizer':
-      return tileErrand(view, direct, IntentAction.Fertilize, direct.tileX, direct.tileY, 0, 0);
-
     // The refill carries no tile of its own — "fill the can" is a fact about the player, not
     // about a tile — so the errand is aimed at the WATER TILE THE PLAYER CLICKED. The sim
     // re-aims the walk at the nearest point of that reservoir's shoreline
@@ -1937,15 +1918,16 @@ function runFor(drag: Drag): DragRun {
  * Which of the THREE ways a till drag converts, decided by its ANCHOR ([[127]]).
  *
  * ────────────────────────────────────────────────────────────────────────────────────
- *  Press on grass and the drag tills. Press on a farm tile with SOMETHING ON IT — a crop in
- *  the ground, a compost heap on top, or both — and the drag lifts that something and leaves
- *  the ground as farmland. Press on BARE farmland and the drag goes back to grass.
+ *  Press on grass and the drag tills. Press on a farm tile with A CROP IN THE GROUND and the
+ *  drag lifts that crop and leaves the ground as farmland. Press on BARE farmland and the drag
+ *  goes back to grass.
  *
  *  THE MIDDLE RUNG IS WHY THIS STOPPED BEING A BOOLEAN. It used to be `isField ? Untill :
  *  Till`, and "is this farmland" is no longer enough of a question: the sim now splits the
  *  farm tiles in two, and `Unplant`/`Untill` are exact complements over them (`applyTillTile`,
- *  `packages/sim/src/tick.ts`). So this asks the sim's own laden test — `crop !== None ||
- *  compost > 0` — off the view columns the sim projects for it.
+ *  `packages/sim/src/tick.ts`). So this asks the sim's own laden test — `crop !== None`, which
+ *  was `crop !== None || compost > 0` until [[124]] deleted compost — off the view column the
+ *  sim projects for it.
  *
  *  NOT A GATE, AND MORE THAN A GHOST (§12). Every other mirror in this file only colours a
  *  preview, and the sim re-checks it. This one also picks the `mode` field the command
@@ -1957,7 +1939,7 @@ function runFor(drag: Drag): DragRun {
 export function tillModeFor(view: WorldView, anchor: TilePoint): TillMode {
   const query = tileAtView(view, anchor.tileX, anchor.tileY);
   if (!query.isField) return TillMode.Till;
-  return query.crop !== 0 || query.compost > 0 ? TillMode.Unplant : TillMode.Untill;
+  return query.crop !== 0 ? TillMode.Unplant : TillMode.Untill;
 }
 
 /**
@@ -1988,11 +1970,10 @@ export function tillConverts(
   if (grabberAtView(view, tileX, tileY) !== null) return false;
   if (pipeAtView(view, tileX, tileY) !== null) return false;
   if (mode === TillMode.Till) return !query.isField;
-  // LADEN and BARE, the sim's two halves of the farm tiles: `tile.crop === CropId.None &&
-  // tile.compost <= 0` is the line `applyTillTile` skips an `Unplant` on, and the pair
-  // `untillTile` refuses on. Read here off the same two view columns, so one predicate is
-  // negated rather than two written.
-  const laden = query.crop !== 0 || query.compost > 0;
+  // LADEN and BARE, the sim's two halves of the farm tiles: `tile.crop === CropId.None` is the
+  // line `applyTillTile` skips an `Unplant` on, and the one `untillTile` refuses on. Read here
+  // off the same view column, so one predicate is negated rather than two written.
+  const laden = query.crop !== 0;
   if (mode === TillMode.Unplant) return query.isField && laden;
   return query.isField && !laden;
 }
@@ -2177,8 +2158,8 @@ function handCommand(view: WorldView, machine: MachineView): Command | null {
  *     click did nothing at all — the flavour tier reachable by conveyor and not by hand.
  *   · **The entire soda line was already unloadable BY HAND** and had been since it landed.
  *     The switch listed the chip line and returned null for everything else, so a Grinder
- *     with kola nuts in your arms, a Six-Packer with bottles, a Composter with a rotten
- *     stack — every one of them ignored the click. This is the second time this exact hazard
+ *     with kola nuts in your arms, a Six-Packer with bottles, a Bottler with an empty
+ *     one — every one of them ignored the click. This is the second time this exact hazard
  *     has been recorded on this function: [[038]]'s note above says the planter dock "fell
  *     through `machineInputItem`'s chip-line switch to null, so hand-loading seeds was
  *     simply impossible, which is how the owner found it." That fix added a branch for the
@@ -2649,74 +2630,6 @@ export function plantBand(view: WorldView, hover: HoverTile, crop: CropId): Band
 }
 
 /**
- * **THE FERTILIZER GHOST** ([[104]]): this tile's soil, and whether a bag would help it.
- *
- * The refusals mirror `applyApplyFertilizer` line for line — an empty bag, ground that is not
- * farmland, and a tile already at `FERTILITY_MAX`, which the reducer declines rather than
- * consuming (`fertilizeTile` returns false and nothing is spent). A silent refusal is exactly
- * what this band is for.
- */
-export function fertilizerBand(view: WorldView, hover: HoverTile): BandState {
-  const bounds = { x: hover.tileX, y: hover.tileY, w: 1, h: 1 };
-  const query = tileAtView(view, hover.tileX, hover.tileY);
-  const bags = countOf(view, ItemId.Fertilizer);
-
-  const refusal = !query.isField
-    ? 'only farmland takes it'
-    : query.fertility >= FERTILITY_MAX
-      ? 'this soil is already rich'
-      : bags <= 0
-        ? 'no fertilizer in the bag'
-        : '';
-
-  return {
-    ...bounds,
-    tone: refusal === '' ? 'zone' : 'blocked',
-    label:
-      refusal === ''
-        ? `${soilStars(query.fertility)} → ${soilStars(query.fertility + 1)} · ${bags} left`
-        : `fertilizer · ${refusal}`,
-    dir: Direction.None,
-  };
-}
-
-/**
- * Fertility as stars: `★★☆` for 2 of 3. The one rendering of the number, shared by the
- * fertilizer ghost and the soil tell so the two cannot describe one tile differently.
- */
-export function soilStars(fertility: number): string {
-  const filled = Math.max(0, Math.min(FERTILITY_MAX, fertility));
-  return '★'.repeat(filled) + '☆'.repeat(FERTILITY_MAX - filled);
-}
-
-/**
- * **WHAT THE SOIL UNDER THE CURSOR IS WORTH** ([[104]]), or `null` off the field.
- *
- * FERTILITY IS THE YIELD, AS A DIRECT ADDITIVE TERM — `state.ts`'s harvest is
- * `tile.fertility + bonus` — and it steps down every five harvests to a floor of 1★, so a farm
- * quietly loses more than half its output over its first twenty pulls. Until this line, the
- * number was published on the tile view, read by the picker, and displayed **nowhere**: one HUD
- * surface launders it into a dollar total for crops already wilting, and nothing showed it as
- * fertility. A wound you cannot see and a cure you cannot apply are the same bug from both ends.
- *
- * ON BARE SOIL AS WELL AS PLANTED SOIL, which is the criterion that decides the surface: the
- * question it answers is "where do I plant next", and that is asked of empty ground.
- *
- * BELOW `machineTell` IN `statusTell`'s ORDER, honouring [[097]]'s rule rather than inventing a
- * second one: a machine standing on the tile is the more specific thing to be pointing at, and a
- * complaint from it outranks any readout.
- */
-export function soilTell(view: WorldView | null, tile: HoverTile | null): string | null {
-  if (view === null || tile === null) return null;
-  const query = tileAtView(view, tile.tileX, tile.tileY);
-  if (!query.isField) return null;
-  const stars = soilStars(query.fertility);
-  if (query.fertility <= FERTILITY_MIN) return `soil ${stars} — worn thin`;
-  if (query.fertility >= FERTILITY_MAX) return `soil ${stars} — rich`;
-  return `soil ${stars}`;
-}
-
-/**
  * The band over an arm the cursor is on: which way it points, and whether R will be obeyed.
  *
  * THIS IS THE AFTER-PLACEMENT HALF OF "MAKE ROTATION LEGIBLE". The ghost gets a chevron so the
@@ -2975,11 +2888,11 @@ function footprintClear(view: WorldView, bounds: Bounds): boolean {
  *
  * ────────────────────────────────────────────────────────────────────────────────────
  *  ONE CLAUSE, AND ITEM 121 IS WHY IT IS ONE. This used to refuse a flagged machine over a
- *  crop ("a crop is in the way") or over compost, on item 067's house rule that nothing is
- *  silently destroyed. The owner's ruling supersedes it and keeps the rule intact by paying
- *  instead: the placement lifts the crop and hands back the seed, the produce and the compost
- *  (`clearFieldTileForMachine` in the sim). So both clauses are DELETED here, and what is left
- *  mirrors `machineFootprintFree`'s field branch exactly — `fieldPlaceable` is the whole test.
+ *  crop ("a crop is in the way"), on item 067's house rule that nothing is silently destroyed.
+ *  The owner's ruling supersedes it and keeps the rule intact by paying instead: the placement
+ *  lifts the crop and hands back the seed and the produce (`clearFieldTileForMachine` in the
+ *  sim). So the clause is DELETED here, and what is left mirrors `machineFootprintFree`'s field
+ *  branch exactly — `fieldPlaceable` is the whole test.
  *
  *  **DO NOT LET A SECOND CLAUSE GROW BACK.** A legality that read the crop would flicker from
  *  legal to illegal under a stationary cursor as a tile ripened, which is the worst shape a
@@ -3009,16 +2922,16 @@ function farmRefusal(view: WorldView, bounds: Bounds, fieldPlaceable: boolean): 
  *  they were saving. So the ghost names the goods before the click: *"Buy Sprinkler · returns 1
  *  potato seed"*.
  *
- *  EVERY NOUN COMES OFF THE SIM'S OWN SLUGS, never a second table — `harvestItemForWilt` is
- *  exported precisely so this does not mirror the Day-Old ternary, and the seed is
- *  `CropSpec.seedItem`. A tell that invented its own names would eventually name the wrong
- *  thing, which is worse than saying nothing.
+ *  EVERY NOUN COMES OFF THE SIM'S OWN SLUGS, never a second table — `harvestItemFor` is
+ *  exported precisely so this does not keep its own opinion about what a crop yields, and the
+ *  seed is `CropSpec.seedItem`. A tell that invented its own names would eventually name the
+ *  wrong thing, which is worse than saying nothing.
  *
- *  COUNTS ARE GIVEN ONLY WHERE THEY ARE CERTAIN. Seeds and compost are exact — one seed per
- *  cropped tile, and `compost` is a number on the view. The PRODUCE count is deliberately not
- *  quoted: it is `fertility + a 0-or-1 RNG roll`, and the roll is drawn from a stream that
- *  `nextBelow` MUTATES, so peeking it for a tooltip would risk a determinism bug for a string.
- *  The produce is named and left uncounted, which is the honest half of what is known.
+ *  COUNTS ARE GIVEN ONLY WHERE THEY ARE CERTAIN. Seeds are exact — one per cropped tile. The
+ *  PRODUCE count is deliberately not quoted: it is `HARVEST_BASE_COUNT + a 0-or-1 RNG roll`,
+ *  and the roll is drawn from a stream that `nextBelow` MUTATES, so peeking it for a tooltip
+ *  would risk a determinism bug for a string. The produce is named and left uncounted, which
+ *  is the honest half of what is known.
  *
  *  AGGREGATED OVER THE WHOLE FOOTPRINT, because a 2×2 Irrigation Hub lifts four tiles and a
  *  tell that described only the anchor would undercount by three.
@@ -3056,7 +2969,6 @@ interface TileXY {
  */
 function handBackOver(view: WorldView, tiles: readonly TileXY[]): string {
   let seeds = 0;
-  let compost = 0;
   let crop = 0;
   let mixed = false;
   const produce: number[] = [];
@@ -3065,7 +2977,6 @@ function handBackOver(view: WorldView, tiles: readonly TileXY[]): string {
     const at = tiles[i]!;
     const query = tileAtView(view, at.x, at.y);
     if (!query.isField) continue;
-    compost += query.compost;
     if (query.crop === 0) continue;
     // ONE SEED PER PLANT IN THE GROUND, ripe or not — including a regrowing crop, which a
     // hand harvest leaves standing and a placement uproots (the sim's ruling).
@@ -3075,19 +2986,11 @@ function handBackOver(view: WorldView, tiles: readonly TileXY[]): string {
     if (!query.ready) continue;
     const spec = cropSpec(query.crop as CropId);
     if (spec === null) continue;
-    // The Day-Old grade is the sim's opinion, read through the sim's own scalar rather than
-    // re-derived from `wilt` here. `wilt` is a `FieldView` column, so this reads it by index
-    // instead of widening `TileQuery`, which every drag frame builds for every tile.
-    // `FieldView.wilt` crosses the seam as a bare number (§12), the same way `PipeView.liquid`
-    // and `GrabberView.dir` do — branded here, at the one place that reads it.
-    const wilt = (
-      query.fieldIndex >= 0 ? (view.field.wilt[query.fieldIndex] ?? 0) : 0
-    ) as WiltStage;
-    const item = harvestItemForWilt(wilt, spec);
+    const item = harvestItemFor(spec);
     if (!produce.includes(item)) produce.push(item);
   }
 
-  if (seeds === 0 && compost === 0) return '';
+  if (seeds === 0) return '';
 
   const parts: string[] = [];
   for (let i = 0; i < produce.length; i++) parts.push(goodsName(produce[i]!));
@@ -3099,7 +3002,6 @@ function handBackOver(view: WorldView, tiles: readonly TileXY[]): string {
         : `${seeds} ${goodsName(seedSpec.seedItem)}${seeds === 1 ? '' : 's'}`,
     );
   }
-  if (compost > 0) parts.push(`${compost} compost`);
   return `returns ${parts.join(' + ')}`;
 }
 

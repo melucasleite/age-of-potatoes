@@ -135,7 +135,7 @@ export function truckAt(
  * `taken` holds the lanes other trucks from this depot are using this instant, so a depot
  * running two contracts at once does not stack one lorry on top of another. It is the LAST
  * tiebreak, well below not driving through a machine: two trucks sharing a row looks busy,
- * and one driving through a Composter looks broken.
+ * and one driving through a Fryer looks broken.
  */
 export function chooseLane(
   tileY: number,

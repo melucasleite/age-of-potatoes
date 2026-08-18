@@ -212,7 +212,6 @@ export const MACHINE_MOTION: Record<MachineKind, MotionSpec> = {
     wave: 'jitter',
     periodMs: 420,
   },
-  [MachineKind.Composter]: { name: 'heave', driver: 'progress', wave: 'lift', periodMs: 1400 },
   [MachineKind.HandCart]: { name: 'trundle', driver: 'towed', wave: 'lift', periodMs: 260 },
   [MachineKind.OrangeTree]: {
     name: 'orange-sway',

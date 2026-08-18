@@ -17,8 +17,9 @@ retires a tool with a small ceremony. Your first watering can ends up bronzed on
 with the number of tiles you personally watered.
 
 Money is both the resource and the score. Prices are stable and posted — the pressure
-comes from upkeep: machines wear with use, raw crops spoil while processed goods keep
-forever, and reservoirs run down if you overdraw them. A sloppy factory bleeds margin. A
+comes from upkeep: machines wear with use, and reservoirs run down if you overdraw them.
+**Nothing rots** — no crop wilts, no good spoils, and dirt is just dirt (owner ruling,
+2026-08-17). A sloppy factory bleeds margin. A
 well-run one prints money and, because every machine's work-cycle sound is quantized to a
 shared beat grid, literally grooves.
 

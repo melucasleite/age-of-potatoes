@@ -3,7 +3,7 @@
     "avatar1_walk_down": {
       "frame": {
         "x": 0,
-        "y": 500,
+        "y": 467,
         "w": 144,
         "h": 48
       },
@@ -25,7 +25,7 @@
     "avatar1_walk_side": {
       "frame": {
         "x": 145,
-        "y": 500,
+        "y": 467,
         "w": 144,
         "h": 48
       },
@@ -47,7 +47,7 @@
     "avatar1_walk_up": {
       "frame": {
         "x": 290,
-        "y": 500,
+        "y": 467,
         "w": 144,
         "h": 48
       },
@@ -69,7 +69,7 @@
     "avatar2_walk_down": {
       "frame": {
         "x": 435,
-        "y": 500,
+        "y": 467,
         "w": 144,
         "h": 48
       },
@@ -91,7 +91,7 @@
     "avatar2_walk_side": {
       "frame": {
         "x": 580,
-        "y": 500,
+        "y": 467,
         "w": 144,
         "h": 48
       },
@@ -113,7 +113,7 @@
     "avatar2_walk_up": {
       "frame": {
         "x": 725,
-        "y": 500,
+        "y": 467,
         "w": 144,
         "h": 48
       },
@@ -135,7 +135,7 @@
     "avatar3_walk_down": {
       "frame": {
         "x": 870,
-        "y": 500,
+        "y": 467,
         "w": 144,
         "h": 48
       },
@@ -157,7 +157,7 @@
     "avatar3_walk_side": {
       "frame": {
         "x": 0,
-        "y": 549,
+        "y": 516,
         "w": 144,
         "h": 48
       },
@@ -179,7 +179,7 @@
     "avatar3_walk_up": {
       "frame": {
         "x": 145,
-        "y": 549,
+        "y": 516,
         "w": 144,
         "h": 48
       },
@@ -201,7 +201,7 @@
     "avatar4_walk_down": {
       "frame": {
         "x": 290,
-        "y": 549,
+        "y": 516,
         "w": 144,
         "h": 48
       },
@@ -223,7 +223,7 @@
     "avatar4_walk_side": {
       "frame": {
         "x": 435,
-        "y": 549,
+        "y": 516,
         "w": 144,
         "h": 48
       },
@@ -245,7 +245,7 @@
     "avatar4_walk_up": {
       "frame": {
         "x": 580,
-        "y": 549,
+        "y": 516,
         "w": 144,
         "h": 48
       },
@@ -267,7 +267,7 @@
     "avatar5_walk_down": {
       "frame": {
         "x": 725,
-        "y": 549,
+        "y": 516,
         "w": 144,
         "h": 48
       },
@@ -289,7 +289,7 @@
     "avatar5_walk_side": {
       "frame": {
         "x": 870,
-        "y": 549,
+        "y": 516,
         "w": 144,
         "h": 48
       },
@@ -311,7 +311,7 @@
     "avatar5_walk_up": {
       "frame": {
         "x": 0,
-        "y": 598,
+        "y": 565,
         "w": 144,
         "h": 48
       },
@@ -1320,7 +1320,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_day_old_gold_potato": {
+    "item_drone_part": {
       "frame": {
         "x": 231,
         "y": 205,
@@ -1342,7 +1342,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_drone_part": {
+    "item_gold_chips": {
       "frame": {
         "x": 264,
         "y": 205,
@@ -1364,7 +1364,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_fertilizer": {
+    "item_gold_potato": {
       "frame": {
         "x": 297,
         "y": 205,
@@ -1386,7 +1386,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_gold_chips": {
+    "item_gold_potato_seed": {
       "frame": {
         "x": 330,
         "y": 205,
@@ -1408,7 +1408,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_gold_potato": {
+    "item_gold_potato_slices": {
       "frame": {
         "x": 363,
         "y": 205,
@@ -1430,7 +1430,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_gold_potato_seed": {
+    "item_kola_nut": {
       "frame": {
         "x": 396,
         "y": 205,
@@ -1452,7 +1452,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_gold_potato_slices": {
+    "item_kola_powder": {
       "frame": {
         "x": 429,
         "y": 205,
@@ -1474,7 +1474,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_kola_nut": {
+    "item_lemon": {
       "frame": {
         "x": 462,
         "y": 205,
@@ -1496,7 +1496,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_kola_powder": {
+    "item_orange": {
       "frame": {
         "x": 495,
         "y": 205,
@@ -1518,7 +1518,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_lemon": {
+    "item_plain_chips": {
       "frame": {
         "x": 528,
         "y": 205,
@@ -1540,7 +1540,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_orange": {
+    "item_potato": {
       "frame": {
         "x": 561,
         "y": 205,
@@ -1562,7 +1562,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_plain_chips": {
+    "item_potato_slices": {
       "frame": {
         "x": 594,
         "y": 205,
@@ -1584,7 +1584,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_potato": {
+    "item_push_scythe": {
       "frame": {
         "x": 627,
         "y": 205,
@@ -1606,7 +1606,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_potato_slices": {
+    "item_repair_kit": {
       "frame": {
         "x": 660,
         "y": 205,
@@ -1628,7 +1628,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_push_scythe": {
+    "item_rustic_style_chips": {
       "frame": {
         "x": 693,
         "y": 205,
@@ -1650,7 +1650,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_repair_kit": {
+    "item_seasoned_chips": {
       "frame": {
         "x": 726,
         "y": 205,
@@ -1672,7 +1672,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_rustic_style_chips": {
+    "item_seasoned_gold_chips": {
       "frame": {
         "x": 759,
         "y": 205,
@@ -1694,7 +1694,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_seasoned_chips": {
+    "item_six_pack": {
       "frame": {
         "x": 792,
         "y": 205,
@@ -1716,7 +1716,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_seasoned_gold_chips": {
+    "item_snack_combo": {
       "frame": {
         "x": 825,
         "y": 205,
@@ -1738,7 +1738,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_six_pack": {
+    "item_soda": {
       "frame": {
         "x": 858,
         "y": 205,
@@ -1760,7 +1760,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_snack_combo": {
+    "item_sweetcorn_chips": {
       "frame": {
         "x": 891,
         "y": 205,
@@ -1782,7 +1782,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_soda": {
+    "item_washed_gold_potato": {
       "frame": {
         "x": 924,
         "y": 205,
@@ -1804,7 +1804,7 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_sweetcorn_chips": {
+    "item_washed_potato": {
       "frame": {
         "x": 957,
         "y": 205,
@@ -1826,54 +1826,10 @@
       "anchorMode": "center",
       "group": "items"
     },
-    "item_washed_gold_potato": {
-      "frame": {
-        "x": 990,
-        "y": 205,
-        "w": 32,
-        "h": 32
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 32,
-        "h": 32
-      },
-      "sourceSize": {
-        "w": 32,
-        "h": 32
-      },
-      "anchorMode": "center",
-      "group": "items"
-    },
-    "item_washed_potato": {
-      "frame": {
-        "x": 0,
-        "y": 238,
-        "w": 32,
-        "h": 32
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 32,
-        "h": 32
-      },
-      "sourceSize": {
-        "w": 32,
-        "h": 32
-      },
-      "anchorMode": "center",
-      "group": "items"
-    },
     "lamp_blocked": {
       "frame": {
         "x": 0,
-        "y": 647,
+        "y": 614,
         "w": 14,
         "h": 14
       },
@@ -1895,7 +1851,7 @@
     "lamp_halted": {
       "frame": {
         "x": 15,
-        "y": 647,
+        "y": 614,
         "w": 14,
         "h": 14
       },
@@ -1917,7 +1873,7 @@
     "lamp_jammed": {
       "frame": {
         "x": 30,
-        "y": 647,
+        "y": 614,
         "w": 14,
         "h": 14
       },
@@ -1939,7 +1895,7 @@
     "lamp_off": {
       "frame": {
         "x": 45,
-        "y": 647,
+        "y": 614,
         "w": 14,
         "h": 14
       },
@@ -1961,7 +1917,7 @@
     "lamp_running": {
       "frame": {
         "x": 60,
-        "y": 647,
+        "y": 614,
         "w": 14,
         "h": 14
       },
@@ -1983,7 +1939,7 @@
     "lamp_starved": {
       "frame": {
         "x": 75,
-        "y": 647,
+        "y": 614,
         "w": 14,
         "h": 14
       },
@@ -2005,7 +1961,7 @@
     "lamp_utility": {
       "frame": {
         "x": 90,
-        "y": 647,
+        "y": 614,
         "w": 14,
         "h": 14
       },
@@ -2134,31 +2090,9 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
-    "machine_composter": {
-      "frame": {
-        "x": 357,
-        "y": 271,
-        "w": 64,
-        "h": 64
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 64,
-        "h": 64
-      },
-      "sourceSize": {
-        "w": 64,
-        "h": 64
-      },
-      "anchorMode": "bottom-center",
-      "group": "machines"
-    },
     "machine_delivery_cart": {
       "frame": {
-        "x": 780,
+        "x": 715,
         "y": 336,
         "w": 32,
         "h": 32
@@ -2180,7 +2114,7 @@
     },
     "machine_drone_bay": {
       "frame": {
-        "x": 422,
+        "x": 357,
         "y": 271,
         "w": 64,
         "h": 64
@@ -2202,7 +2136,7 @@
     },
     "machine_fryer": {
       "frame": {
-        "x": 487,
+        "x": 422,
         "y": 271,
         "w": 64,
         "h": 64
@@ -2224,7 +2158,7 @@
     },
     "machine_grinder": {
       "frame": {
-        "x": 552,
+        "x": 487,
         "y": 271,
         "w": 64,
         "h": 64
@@ -2246,7 +2180,7 @@
     },
     "machine_hand_cart": {
       "frame": {
-        "x": 813,
+        "x": 748,
         "y": 336,
         "w": 32,
         "h": 32
@@ -2268,7 +2202,7 @@
     },
     "machine_harvester_dock": {
       "frame": {
-        "x": 617,
+        "x": 552,
         "y": 271,
         "w": 64,
         "h": 64
@@ -2290,7 +2224,7 @@
     },
     "machine_irrigation_hub": {
       "frame": {
-        "x": 682,
+        "x": 617,
         "y": 271,
         "w": 64,
         "h": 64
@@ -2312,7 +2246,7 @@
     },
     "machine_juicer": {
       "frame": {
-        "x": 747,
+        "x": 682,
         "y": 271,
         "w": 64,
         "h": 64
@@ -2334,7 +2268,7 @@
     },
     "machine_kettle": {
       "frame": {
-        "x": 812,
+        "x": 747,
         "y": 271,
         "w": 64,
         "h": 64
@@ -2356,7 +2290,7 @@
     },
     "machine_kola_tree": {
       "frame": {
-        "x": 877,
+        "x": 812,
         "y": 271,
         "w": 64,
         "h": 64
@@ -2378,7 +2312,7 @@
     },
     "machine_lemon_tree": {
       "frame": {
-        "x": 942,
+        "x": 877,
         "y": 271,
         "w": 64,
         "h": 64
@@ -2400,8 +2334,8 @@
     },
     "machine_maintenance_station": {
       "frame": {
-        "x": 0,
-        "y": 336,
+        "x": 942,
+        "y": 271,
         "w": 64,
         "h": 64
       },
@@ -2422,7 +2356,7 @@
     },
     "machine_orange_tree": {
       "frame": {
-        "x": 65,
+        "x": 0,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2444,7 +2378,7 @@
     },
     "machine_piped_sprinkler": {
       "frame": {
-        "x": 846,
+        "x": 781,
         "y": 336,
         "w": 32,
         "h": 32
@@ -2466,7 +2400,7 @@
     },
     "machine_planter_dock": {
       "frame": {
-        "x": 130,
+        "x": 65,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2488,7 +2422,7 @@
     },
     "machine_pump": {
       "frame": {
-        "x": 195,
+        "x": 130,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2510,7 +2444,7 @@
     },
     "machine_root_cellar": {
       "frame": {
-        "x": 260,
+        "x": 195,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2532,7 +2466,7 @@
     },
     "machine_seasoner": {
       "frame": {
-        "x": 325,
+        "x": 260,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2554,7 +2488,7 @@
     },
     "machine_six_packer": {
       "frame": {
-        "x": 390,
+        "x": 325,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2576,7 +2510,7 @@
     },
     "machine_slicer": {
       "frame": {
-        "x": 455,
+        "x": 390,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2598,7 +2532,7 @@
     },
     "machine_sprinkler": {
       "frame": {
-        "x": 879,
+        "x": 814,
         "y": 336,
         "w": 32,
         "h": 32
@@ -2620,7 +2554,7 @@
     },
     "machine_syrup_mixer": {
       "frame": {
-        "x": 520,
+        "x": 455,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2642,7 +2576,7 @@
     },
     "machine_tank": {
       "frame": {
-        "x": 585,
+        "x": 520,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2664,7 +2598,7 @@
     },
     "machine_truck_depot": {
       "frame": {
-        "x": 650,
+        "x": 585,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2686,7 +2620,7 @@
     },
     "machine_washer": {
       "frame": {
-        "x": 715,
+        "x": 650,
         "y": 336,
         "w": 64,
         "h": 64
@@ -2709,7 +2643,7 @@
     "pipe_cap": {
       "frame": {
         "x": 0,
-        "y": 467,
+        "y": 434,
         "w": 32,
         "h": 32
       },
@@ -2731,7 +2665,7 @@
     "pipe_corner": {
       "frame": {
         "x": 33,
-        "y": 467,
+        "y": 434,
         "w": 32,
         "h": 32
       },
@@ -2753,7 +2687,7 @@
     "pipe_cross": {
       "frame": {
         "x": 66,
-        "y": 467,
+        "y": 434,
         "w": 32,
         "h": 32
       },
@@ -2775,7 +2709,7 @@
     "pipe_straight": {
       "frame": {
         "x": 99,
-        "y": 467,
+        "y": 434,
         "w": 32,
         "h": 32
       },
@@ -2797,7 +2731,7 @@
     "pipe_stub": {
       "frame": {
         "x": 132,
-        "y": 467,
+        "y": 434,
         "w": 32,
         "h": 32
       },
@@ -2819,7 +2753,7 @@
     "pipe_tee": {
       "frame": {
         "x": 165,
-        "y": 467,
+        "y": 434,
         "w": 32,
         "h": 32
       },
@@ -2841,7 +2775,7 @@
     "player_walk_down": {
       "frame": {
         "x": 145,
-        "y": 598,
+        "y": 565,
         "w": 144,
         "h": 48
       },
@@ -2863,7 +2797,7 @@
     "player_walk_side": {
       "frame": {
         "x": 290,
-        "y": 598,
+        "y": 565,
         "w": 144,
         "h": 48
       },
@@ -2885,7 +2819,7 @@
     "player_walk_up": {
       "frame": {
         "x": 435,
-        "y": 598,
+        "y": 565,
         "w": 144,
         "h": 48
       },
@@ -2907,7 +2841,7 @@
     "tech_agronomy_cane": {
       "frame": {
         "x": 0,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -2929,7 +2863,7 @@
     "tech_agronomy_chili": {
       "frame": {
         "x": 65,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -2951,7 +2885,7 @@
     "tech_agronomy_corn": {
       "frame": {
         "x": 130,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -2973,7 +2907,7 @@
     "tech_agronomy_seed_hopper": {
       "frame": {
         "x": 195,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -2995,7 +2929,7 @@
     "tech_charter_assembly": {
       "frame": {
         "x": 260,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3017,7 +2951,7 @@
     "tech_charter_workshop": {
       "frame": {
         "x": 325,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3039,7 +2973,7 @@
     "tech_commerce_upgrade_bench": {
       "frame": {
         "x": 390,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3061,7 +2995,7 @@
     "tech_fabrication_finishing": {
       "frame": {
         "x": 455,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3083,7 +3017,7 @@
     "tech_fabrication_fryer": {
       "frame": {
         "x": 520,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3105,7 +3039,7 @@
     "tech_fabrication_wash_and_slice": {
       "frame": {
         "x": 585,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3127,7 +3061,7 @@
     "tech_hydraulics_irrigation_hub": {
       "frame": {
         "x": 650,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3149,7 +3083,7 @@
     "tech_hydraulics_piped_sprinklers": {
       "frame": {
         "x": 715,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3171,7 +3105,7 @@
     "tech_hydraulics_pumps": {
       "frame": {
         "x": 780,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3193,7 +3127,7 @@
     "tech_hydraulics_recirculator": {
       "frame": {
         "x": 845,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3215,7 +3149,7 @@
     "tech_logistics_belts": {
       "frame": {
         "x": 910,
-        "y": 662,
+        "y": 629,
         "w": 64,
         "h": 64
       },
@@ -3237,7 +3171,7 @@
     "tech_logistics_belts_express": {
       "frame": {
         "x": 0,
-        "y": 727,
+        "y": 694,
         "w": 64,
         "h": 64
       },
@@ -3259,7 +3193,7 @@
     "tech_logistics_belts_fast": {
       "frame": {
         "x": 65,
-        "y": 727,
+        "y": 694,
         "w": 64,
         "h": 64
       },
@@ -3281,7 +3215,7 @@
     "terrain_grass": {
       "frame": {
         "x": 0,
-        "y": 792,
+        "y": 759,
         "w": 32,
         "h": 32
       },
@@ -3303,7 +3237,7 @@
     "terrain_shore_edge": {
       "frame": {
         "x": 33,
-        "y": 792,
+        "y": 759,
         "w": 32,
         "h": 32
       },
@@ -3325,7 +3259,7 @@
     "terrain_shore_inner": {
       "frame": {
         "x": 66,
-        "y": 792,
+        "y": 759,
         "w": 32,
         "h": 32
       },
@@ -3347,7 +3281,7 @@
     "terrain_shore_outer": {
       "frame": {
         "x": 99,
-        "y": 792,
+        "y": 759,
         "w": 32,
         "h": 32
       },
@@ -3369,7 +3303,7 @@
     "terrain_soil": {
       "frame": {
         "x": 132,
-        "y": 792,
+        "y": 759,
         "w": 32,
         "h": 32
       },
@@ -3391,7 +3325,7 @@
     "terrain_soil_tilled": {
       "frame": {
         "x": 165,
-        "y": 792,
+        "y": 759,
         "w": 32,
         "h": 32
       },
@@ -3413,7 +3347,7 @@
     "terrain_water": {
       "frame": {
         "x": 198,
-        "y": 792,
+        "y": 759,
         "w": 32,
         "h": 32
       },
@@ -3434,8 +3368,8 @@
     },
     "tool_deconstruct": {
       "frame": {
-        "x": 33,
-        "y": 238,
+        "x": 990,
+        "y": 205,
         "w": 32,
         "h": 32
       },
@@ -3456,7 +3390,7 @@
     },
     "tool_hand": {
       "frame": {
-        "x": 66,
+        "x": 0,
         "y": 238,
         "w": 32,
         "h": 32
@@ -3478,7 +3412,7 @@
     },
     "tool_harvest": {
       "frame": {
-        "x": 99,
+        "x": 33,
         "y": 238,
         "w": 32,
         "h": 32
@@ -3500,7 +3434,7 @@
     },
     "tool_plant": {
       "frame": {
-        "x": 132,
+        "x": 66,
         "y": 238,
         "w": 32,
         "h": 32
@@ -3522,7 +3456,7 @@
     },
     "tool_till": {
       "frame": {
-        "x": 165,
+        "x": 99,
         "y": 238,
         "w": 32,
         "h": 32
@@ -3544,7 +3478,7 @@
     },
     "tool_water": {
       "frame": {
-        "x": 198,
+        "x": 132,
         "y": 238,
         "w": 32,
         "h": 32
@@ -3566,7 +3500,7 @@
     },
     "tool_water_empty": {
       "frame": {
-        "x": 231,
+        "x": 165,
         "y": 238,
         "w": 32,
         "h": 32
@@ -3588,7 +3522,7 @@
     },
     "tool_water_half": {
       "frame": {
-        "x": 264,
+        "x": 198,
         "y": 238,
         "w": 32,
         "h": 32
@@ -3610,7 +3544,7 @@
     },
     "truck_down": {
       "frame": {
-        "x": 912,
+        "x": 847,
         "y": 336,
         "w": 32,
         "h": 32
@@ -3632,7 +3566,7 @@
     },
     "truck_side": {
       "frame": {
-        "x": 945,
+        "x": 880,
         "y": 336,
         "w": 64,
         "h": 32
@@ -3654,8 +3588,8 @@
     },
     "truck_up": {
       "frame": {
-        "x": 0,
-        "y": 401,
+        "x": 945,
+        "y": 336,
         "w": 32,
         "h": 32
       },
@@ -3699,7 +3633,7 @@
     "ui_pipe_nub": {
       "frame": {
         "x": 198,
-        "y": 467,
+        "y": 434,
         "w": 12,
         "h": 12
       },
@@ -3721,7 +3655,7 @@
     "zone_overlay": {
       "frame": {
         "x": 0,
-        "y": 434,
+        "y": 401,
         "w": 32,
         "h": 32
       },
@@ -3743,7 +3677,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.aaa200d8.png",
+    "image": "atlas.f15d5596.png",
     "format": "RGBA8888",
     "size": {
       "w": 1024,
@@ -3797,20 +3731,20 @@
         "y": 205,
         "width": 1022,
         "height": 65,
-        "count": 40
+        "count": 38
       },
       {
         "group": "machines",
         "x": 0,
         "y": 271,
-        "width": 1009,
-        "height": 162,
-        "count": 34
+        "width": 1006,
+        "height": 129,
+        "count": 33
       },
       {
         "group": "overlay",
         "x": 0,
-        "y": 434,
+        "y": 401,
         "width": 32,
         "height": 32,
         "count": 1
@@ -3818,7 +3752,7 @@
       {
         "group": "pipes",
         "x": 0,
-        "y": 467,
+        "y": 434,
         "width": 210,
         "height": 32,
         "count": 7
@@ -3826,7 +3760,7 @@
       {
         "group": "player",
         "x": 0,
-        "y": 500,
+        "y": 467,
         "width": 1014,
         "height": 146,
         "count": 18
@@ -3834,7 +3768,7 @@
       {
         "group": "status",
         "x": 0,
-        "y": 647,
+        "y": 614,
         "width": 104,
         "height": 14,
         "count": 7
@@ -3842,7 +3776,7 @@
       {
         "group": "tech",
         "x": 0,
-        "y": 662,
+        "y": 629,
         "width": 974,
         "height": 129,
         "count": 17
@@ -3850,7 +3784,7 @@
       {
         "group": "terrain",
         "x": 0,
-        "y": 792,
+        "y": 759,
         "width": 230,
         "height": 32,
         "count": 7

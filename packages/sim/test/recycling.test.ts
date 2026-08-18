@@ -38,7 +38,6 @@ import {
   depotAccept,
   deserialize,
   emptiesForDelivery,
-  freshnessTicks,
   hashState,
   hopperIndexFor,
   isPurchasable,
@@ -99,27 +98,32 @@ function loadedDepot(state: WorldState, item: ItemId, quantityPerRun: number): M
     destination: 'Ridgeline Grocers',
   });
   expect(state.contracts, 'the route was signed').toHaveLength(1);
-  for (let i = 0; i < quantityPerRun; i++) depotAccept(state, depot, item, 0);
+  for (let i = 0; i < quantityPerRun; i++) depotAccept(state, depot, item);
   return depot;
 }
 
 // --- the node budget --------------------------------------------------------------------------
 
 describe('the recipe graph after item 131', () => {
-  it('STANDS AT 50 OF ~50, which is the whole reason this is a Washer recipe and not a machine', () => {
+  it('STANDS AT 43 OF ~50 — it was 50 until item 124 deleted seven nodes', () => {
     // Plan §5 caps the graph at ~50 items and `data.ts`'s `ItemId` header calls the cap "a real
     // constraint". The count is non-boxed items plus liquids: a boxed machine is not a node,
     // because nothing eats one, nothing makes one, and no belt will ever carry one.
     const nodes = ITEM_SPECS.filter((spec) => !spec.slug.startsWith('boxed-')).length;
     const liquids = Object.values(LiquidId).filter((id) => id !== LiquidId.None).length;
 
-    expect(nodes).toBe(45);
+    expect(nodes).toBe(38);
     expect(liquids).toBe(5);
-    expect(nodes + liquids).toBe(50);
+    expect(nodes + liquids).toBe(43);
 
-    // **THE SENTENCE THIS TEST EXISTS TO MAKE UNAVOIDABLE.** There is no headroom left. The next
-    // feature that wants a node buys a raise from the owner or it does not ship, and the way it
-    // finds that out is this line going red rather than a paragraph nobody re-read.
+    // **THE HEADROOM CAME BACK, AND IT CAME BACK BY ACCIDENT.** This read 45 + 5 = 50 with no
+    // room left at all, which is why item 131 put its recipe on the Washer rather than building
+    // a Recycling Centre. Item 124 then deleted the waste loop and took seven nodes out with it
+    // — `DayOldPotato`, `DayOldCane`, `DayOldCorn`, `DayOldChili`, `DayOldGoldPotato`, `Compost`
+    // and `Fertilizer` — none of which was the point of that item.
+    //
+    // The ceiling assertion below is the one that matters and it has not moved: the next feature
+    // that wants a node still finds out here rather than in a paragraph nobody re-read.
     expect(nodes + liquids).toBeLessThanOrEqual(50);
   });
 
@@ -163,11 +167,6 @@ describe('the used bottle', () => {
     expect(isPurchasable(ItemId.UsedBottle)).toBe(false);
     expect(listPriceCents(ItemId.UsedBottle)).toBe(USED_BOTTLE_SCRAP_CENTS);
     expect(listPriceCents(ItemId.Bottle)).toBe(listPriceCents(ItemId.UsedBottle) * 10);
-  });
-
-  it('keeps no clock, exactly as the bottle it used to be does not', () => {
-    expect(freshnessTicks(ItemId.UsedBottle)).toBe(0);
-    expect(freshnessTicks(ItemId.Bottle)).toBe(0);
   });
 });
 
@@ -269,7 +268,7 @@ describe('a completed delivery returns its empties', () => {
     stepUntil(state, 8_000, () => depot.outputCount > 0);
     expect(depot.outputCount).toBe(3);
 
-    for (let i = 0; i < 3; i++) depotAccept(state, depot, ItemId.Soda, 0);
+    for (let i = 0; i < 3; i++) depotAccept(state, depot, ItemId.Soda);
     stepUntil(state, 8_000, () => depot.outputCount > 3);
     expect(depot.outputCount).toBe(6);
   });
@@ -305,7 +304,7 @@ describe('a full basket', () => {
     depot.outputItem = ItemId.UsedBottle;
     depot.outputCount = VEHICLE_EMPTIES_CAPACITY;
 
-    for (let i = 0; i < 40; i++) depotAccept(state, depot, ItemId.Soda, 0);
+    for (let i = 0; i < 40; i++) depotAccept(state, depot, ItemId.Soda);
     const contract = state.contracts[0]!;
     stepUntil(state, 40_000, () => contract.runsCompleted >= 3);
 

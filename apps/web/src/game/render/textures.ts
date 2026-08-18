@@ -14,7 +14,7 @@ import { ATLAS_FRAMES, ATLAS_JSON_URL } from '@/art/manifest.generated';
 
 import { AVATAR_COUNT } from './avatar';
 import { LAMP_FRAME, LAMP_PX, lampFrame } from './lamps';
-import { stripCells, stripHasWiltCell } from './strips';
+import { stripCells } from './strips';
 
 /**
  * The grid every painter in this file draws on, which is NOT the grid the game ships on.
@@ -216,7 +216,6 @@ export const ART = {
   uiWrench: 'ui_wrench',
   uiDroplet: 'ui_droplet',
   uiReady: 'ui_ready',
-  uiCompost: 'ui_compost',
   /** A 1×1 white pixel. Bars, pips, and zone fills are this tinted and stretched. */
   uiPixel: 'ui_pixel',
   uiZoneFill: 'ui_zone_fill',
@@ -283,11 +282,9 @@ for (const spec of CROP_SPECS) {
   const full = frameSlug(spec.slug);
   const parts = full.split('_');
   const short = parts[parts.length - 1]!;
-  // `<=` rather than `<`: ONE SPARE NAME past the sim's last growth stage. `view()` publishes
-  // at most `stageCount - 1`, so nothing asks for the spare today — it is registered so that
-  // when a strip arrives carrying a wilted frame, the cell is addressable without a second
-  // edit here. On today's four-cell strips the spare clamps to the last growth cell, which is
-  // exactly what a wilted crop already draws.
+  // `<=` rather than `<`: ONE SPARE NAME past the sim's last growth stage, kept because
+  // `view()` publishes at most `stageCount - 1` and a strip that ships an extra cell should
+  // still be addressable. It clamps to the last growth cell when the strip is short.
   for (let stage = 1; stage <= spec.stageCount; stage++) {
     STRIPS[ART.cropStage(spec.id as number, stage)] = [`crop_${full}_strip`, `crop_${short}_strip`];
   }
@@ -362,29 +359,11 @@ for (let avatar = 1; avatar <= AVATAR_COUNT; avatar++) {
   }
 }
 
-/**
- * Stage count by crop id, for the wilted-frame question below. Read once from the same
- * specs the STRIPS table was built from, so the two cannot disagree about what a crop is.
- */
-const CROP_STAGE_COUNT = new Map<number, number>(
-  CROP_SPECS.map((spec) => [spec.id as number, spec.stageCount]),
-);
-
 export interface ArtSet {
   /** The texture for a frame name, or a magenta "missing" square. Never throws. */
   get(name: string): Texture;
   /** True when the frame came from the real atlas rather than a placeholder. */
   isReal(name: string): boolean;
-  /**
-   * The crop's REAL wilted frame, or `null` when its strip does not carry one.
-   *
-   * `null` rather than a clamped cell, deliberately: `get(cropStage(id, stageCount))` on a
-   * four-cell strip answers with the mature plant — a real texture, the wrong picture — so
-   * the caller could never tell art from clamp. This is the renderer's one honest way to
-   * ask "did the pipeline ever generate the dying plant?", and the field keeps its
-   * tint-and-sag fallback (item 021) exactly as long as the answer is no.
-   */
-  cropWiltFrame(crop: number): Texture | null;
   /** How many requested frames fell back to placeholders. Reported by the dev overlay. */
   readonly placeholderCount: number;
   destroy(): void;
@@ -465,11 +444,7 @@ export async function loadArt(renderer: Renderer): Promise<ArtSet> {
   // them in `owned` would hand the next host a destroyed spritesheet.
   const sliced = new Map<string, Texture>();
 
-  /**
-   * The whole strip a cell name slices from, or `null`. Split out of `fromStrip` so
-   * `cropWiltFrame` can inspect the picture's cell count WITHOUT taking a clamped cell —
-   * the clamp is exactly the behaviour it exists to see past.
-   */
+  /** The whole strip a cell name slices from, or `null`. Split out of `fromStrip`. */
   function stripSource(name: string): Texture | null {
     const candidates = STRIPS[name];
     if (candidates === undefined || sheet === null) return null;
@@ -542,20 +517,6 @@ export async function loadArt(renderer: Renderer): Promise<ArtSet> {
       generated.set(name, made);
       placeholderCount += 1;
       return made;
-    },
-    cropWiltFrame(crop: number): Texture | null {
-      const stages = CROP_STAGE_COUNT.get(crop);
-      if (stages === undefined) return null;
-      // The spare name STRIPS registered one past the growth run — see the `<=` note there.
-      const name = ART.cropStage(crop, stages);
-      const base = stripSource(name);
-      if (base === null) return null;
-      // Only a strip that truly carries the extra cell answers; a four-cell strip would
-      // clamp to its mature frame, and "mature" is the one thing a wilted crop must not be.
-      if (!stripHasWiltCell(stripCells(base.frame.width, base.frame.height), stages)) {
-        return null;
-      }
-      return fromStrip(name);
     },
     isReal(name: string): boolean {
       return fromAtlas(name) !== null;
@@ -917,16 +878,6 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   // The seven lamp shapes are registered below, next to the masks they are drawn from.
 
   [ART.uiPixel]: { width: 1, height: 1, paint: (g) => g.rect(0, 0, 1, 1).fill(PALETTE.white) },
-
-  [ART.uiCompost]: {
-    paint: (g) => {
-      // A low heap that sits on the soil rather than standing on it.
-      g.rect(3, 11, 10, 4).fill(0x4a3a24);
-      g.rect(5, 9, 6, 2).fill(0x5c4a2e);
-      g.rect(6, 12, 2, 1).fill(0x6f7a3a);
-      g.rect(10, 10, 2, 1).fill(0x6f7a3a);
-    },
-  },
 
   [ART.uiZoneFill]: { paint: (g) => g.rect(0, 0, PAINT_PX, PAINT_PX).fill(PALETTE.white) },
   [ART.uiZoneEdgeN]: { paint: (g) => g.rect(0, 0, PAINT_PX, 1).fill(PALETTE.white) },
@@ -1576,19 +1527,6 @@ const MACHINE_LOOKS: Record<string, MachinePaint> = {
     g.rect(4, h - 16, w - 8, 4).fill(PALETTE.potato);
   },
 
-  composter: (g, w, h) => {
-    // Open slatted bin with the heap standing proud of the top, steaming. Deliberately the
-    // only machine on the lot with something SPILLING out of it.
-    g.rect(2, 8, w - 4, h - 10).fill(PALETTE.woodDark);
-    for (let y = 11; y < h - 4; y += 4) {
-      g.rect(3, y, w - 6, 2).fill(PALETTE.wood);
-    }
-    g.rect(5, 6, w - 10, 5).fill(0x4a3a24);
-    g.rect(8, 4, w - 16, 3).fill(0x5c4a2e);
-    g.rect(10, 3, 3, 2).fill(0x6f7a3a);
-    g.rect(w - 14, 5, 3, 2).fill(0x6f7a3a);
-  },
-
   // The two docks are one sprite with two doors, because they are one shed with two jobs —
   // and the thing that tells them apart is what is stacked outside: crates on the harvester,
   // seed sacks on the planter. The bot itself is drawn by `bots.ts` and is usually elsewhere.
@@ -1881,17 +1819,12 @@ const ITEM_LOOKS: Record<string, ItemLook> = {
   'potato-slices': { body: 0xf0dfae, accent: 0xd6bd82, shape: 'flake' },
   'plain-chips': { body: 0xf2cf7a, accent: 0xd9a63a, shape: 'flake' },
   'seasoned-chips': { body: 0xe89a35, accent: 0xb96a1c, shape: 'flake' },
-  'day-old-potato': { body: 0x8c8060, accent: 0x5e553f, shape: 'round' },
-  compost: { body: 0x4a3a24, accent: 0x6f7a3a, shape: 'round' },
   'cane-seed': { body: 0x6f7a3a, accent: 0x4a5424, shape: 'seed' },
   'sugar-cane': { body: 0x8fc85c, accent: 0x5d8f2c, shape: 'stick' },
-  'day-old-cane': { body: 0x8a9070, accent: 0x5f6449, shape: 'stick' },
   'corn-seed': { body: 0xd8c46a, accent: 0x9a8a3c, shape: 'seed' },
   corn: { body: 0xf2cf4a, accent: 0xb99a1c, shape: 'stick' },
-  'day-old-corn': { body: 0xa79b6a, accent: 0x776d45, shape: 'stick' },
   'chili-seed': { body: 0x9c4a3a, accent: 0x6b2f22, shape: 'seed' },
   'chili-pepper': { body: 0xd8402f, accent: 0x8f2418, shape: 'stick' },
-  'day-old-chili': { body: 0x93685f, accent: 0x64443c, shape: 'stick' },
 
   // --- the second farming era's goods ([[023]], [[030]], [[035]]) ----------------------
   //
@@ -1900,11 +1833,8 @@ const ITEM_LOOKS: Record<string, ItemLook> = {
   // rather than the Russet's darker outline. `guessItemLook` would have made both of them the
   // same brown circle, and a belt carrying two grades of potato would carry one.
   'gold-potato': { body: 0xe8c04a, accent: 0xfae7a2, shape: 'round' },
-  'day-old-gold-potato': { body: 0xa89660, accent: 0x776a42, shape: 'round' },
   orange: { body: 0xe08a2c, accent: 0xf2a748, shape: 'round' },
   lemon: { body: 0xdcc63c, accent: 0xf2e06a, shape: 'round' },
-  // Earth, not produce: a low dark mound, deliberately the drabbest chip on any belt.
-  fertilizer: { body: 0x53412a, accent: 0x6f7a3a, shape: 'powder' },
   // Tools and containers are the two things here that are not food, and they say so by being
   // the only chips with a straight metal edge and a lid line respectively.
   'push-scythe': { body: 0xb9c0cc, accent: 0x8a5c28, shape: 'stick' },

@@ -20,10 +20,8 @@
 //
 // FOUR THINGS IT REFUSES TO DO, each of which would have been shorter to write:
 //
-//   IT DOES NOT RUN A CLOCK. Freshness ([[035]]) arrives as `ticksToSpoil`, already subtracted
-//   from the world's absolute `spoilAtTick` by the projection, and is copied across untouched.
-//   What this lane owns is only WHEN A CELL GOES AMBER — two display thresholds, named as such,
-//   in `freshness.ts`. Nothing here decides when food spoils and nothing here counts down.
+//   IT DOES NOT RUN A CLOCK, and since [[124]] there is no clock to run: nothing in the bag
+//   ages, so a cell's only states are what it is, how many, and whether it is boxed.
 //
 //   IT DOES NOT PRICE ANYTHING. Every figure on a box comes off the view — `investedCents` and
 //   `scrapCents` are the sim's own arithmetic, and `SellBoxedMachine` pays exactly the number
@@ -57,7 +55,6 @@ import type { ToolMode } from '@/game/input/tools';
 
 import { ItemIcon } from './ItemIcon';
 import { formatCents } from './format';
-import { freshnessBand, freshnessNote, isWarning } from './freshness';
 import { beginHotbarDrag } from './hotbar-drag';
 import { hudStore } from './store';
 import { keepFocus, PanelRow, PanelWindow } from './PanelFrame';
@@ -259,40 +256,16 @@ function Slot({
   const boxed = row.boxedKind !== 0;
   const next = row.boxes[0];
 
-  // FRESHNESS IS DRAWN ONLY WHEN IT IS NEWS, which is this file's own rule twice over: the dial
-  // strip is absent on a machine with three dials at zero, and "next out" is absent on a single
-  // box, both because a mark that is always there is a mark nobody reads on the day it means
-  // something. A perishable stack with twelve minutes left looks exactly like a bag of chips —
-  // correctly, because neither one is asking for anything. The pane, one click away, always
-  // answers the question in full.
-  const band = freshnessBand(row.ticksToSpoil);
-  const warning = isWarning(band);
-
   return (
     <button
       type="button"
       aria-pressed={selected}
-      className={cx(
-        s.invSlot,
-        boxed && s.invSlotBoxed,
-        band === 'turning' && s.invSlotTurning,
-        band === 'going' && s.invSlotGoing,
-        selected && s.invSlotOn,
-      )}
+      className={cx(s.invSlot, boxed && s.invSlotBoxed, selected && s.invSlotOn)}
       // The name is not printed in the cell, so it has to be reachable some other way for a
       // player who cannot place a sprite — the pointer gets a tooltip, the screen reader gets
-      // the label, and the pane gets the long form. A wedge is a colour and colours have no
-      // accessible name, so the clock joins both strings rather than only the tooltip.
-      title={
-        warning
-          ? `${row.name} — ${row.count} — ${freshnessNote(row.ticksToSpoil, row.spoilingCount, row.count)}`
-          : `${row.name} — ${row.count}`
-      }
-      aria-label={
-        warning
-          ? `${row.name}, ${row.count}, ${freshnessNote(row.ticksToSpoil, row.spoilingCount, row.count)}`
-          : `${row.name}, ${row.count}`
-      }
+      // the label, and the pane gets the long form.
+      title={`${row.name} — ${row.count}`}
+      aria-label={`${row.name}, ${row.count}`}
       onMouseDown={keepFocus}
       // EVERY cell is draggable towards the hotbar, placeable or not — the refusal happens
       // at the DROP, as a flash on the slot ([[061]]), because "you cannot shortcut a
@@ -306,15 +279,6 @@ function Slot({
     >
       <ItemIcon item={row.id} size={SLOT_ICON} />
       {boxed ? <span className={s.invSlotCrate} /> : null}
-      {/*
-        Two cues for one fact, exactly as the crate corner and the warm tint are: a wedge in the
-        free corner and a shift in the cell's own colour. One of the two survives a player who
-        cannot tell amber from red, and the wedge is the one that does — it is present or it is
-        not, which is a shape question rather than a hue question.
-      */}
-      {warning ? (
-        <span className={cx(s.invSlotFresh, band === 'going' && s.invSlotFreshGoing)} />
-      ) : null}
       <span className={s.invSlotCount}>{row.count}</span>
       {boxed && next !== undefined ? <DialStrip box={next} /> : null}
     </button>
@@ -385,18 +349,15 @@ function Detail({
 }
 
 /**
- * A stack of goods: how long it keeps, and what it is worth if the bin will take it.
+ * A stack of goods: what it is worth if the bin will take it.
  *
  * The value is dropped rather than zeroed when the bin refuses the stack, the same call
  * `Pouch.tsx` makes and for the same reason: "8 seeds · $4" is a price for a transaction that
- * cannot happen, and a price beside something unsellable reads as a promise. The clock is not
- * dropped for the same rows, because a seed keeping forever is still true and still worth
- * knowing — the two facts are independent and only one of them is a claim about money.
+ * cannot happen, and a price beside something unsellable reads as a promise.
  */
 function GoodsDetail({ row }: { row: InventoryRow }) {
   return (
     <>
-      <Freshness row={row} />
       {row.sellable !== 1 ? (
         <div className={s.invNotForSale}>the bin does not take these</div>
       ) : (
@@ -406,33 +367,6 @@ function GoodsDetail({ row }: { row: InventoryRow }) {
         </div>
       )}
     </>
-  );
-}
-
-/**
- * The honest half: the clock in words, on every good, whether or not it has one.
- *
- * ABOVE THE PRICE, DELIBERATELY. What a stack is worth is a fact about the bin; how long it has
- * left is a fact about the stack, and it is the one that decides whether the walk to the bin is
- * still the right move. A player reading top to bottom should meet the deadline before the money.
- *
- * "Keeps indefinitely" is printed rather than omitted, and only looks like filler until you read
- * it on a bag of chips: §4's *processing is preservation* is the reward for building the line,
- * and this is the only place in the game that ever says so in a sentence.
- */
-function Freshness({ row }: { row: InventoryRow }) {
-  const band = freshnessBand(row.ticksToSpoil);
-
-  return (
-    <div
-      className={cx(
-        s.invFresh,
-        band === 'turning' && s.invFreshTurning,
-        band === 'going' && s.invFreshGoing,
-      )}
-    >
-      {freshnessNote(row.ticksToSpoil, row.spoilingCount, row.count)}
-    </div>
   );
 }
 

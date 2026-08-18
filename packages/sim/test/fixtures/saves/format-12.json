@@ -897,9 +897,7 @@
     "nextPipeId": 1,
     "nextReservoirId": 2,
     "nextZoneId": 1,
-    "ownedParcels": [
-      0
-    ],
+    "ownedParcels": [0],
     "pipes": [],
     "reservoirs": [
       {
@@ -957,18 +955,7 @@
       "longestHandsFreeTicks": 7922,
       "longestUntouchedMachineTicks": 0,
       "netWorthCents": 6500,
-      "netWorthSamples": [
-        5400,
-        5000,
-        5000,
-        6550,
-        6550,
-        6550,
-        6550,
-        6550,
-        6550,
-        6500
-      ],
+      "netWorthSamples": [5400, 5000, 5000, 6550, 6550, 6550, 6550, 6550, 6550, 6500],
       "nextNetWorthSampleTick": 12000,
       "peakNetWorthCents": 6550,
       "repairKitSpendCents": 0,

@@ -36,7 +36,6 @@ import {
   BeltTier,
   BotKind,
   BotPhase,
-  COMPOST_PER_SPOILED_ITEM,
   CropId,
   Direction,
   FIELD_TILES_WIDE,
@@ -51,12 +50,10 @@ import {
   cropSpec,
   depotAccept,
   deserialize,
-  freshnessTicks,
   fromPayload,
   machineHoppers,
   machineSpec,
   plantCrop,
-  remainingFreshness,
   serialize,
   spawnBelt,
   spawnBot,
@@ -69,7 +66,6 @@ import {
   toPayload,
 } from '../src/index';
 import {
-  type ClockSite,
   type GoodsHolding,
   BAG_DOOR_VERDICTS,
   BagDoorVerdict,
@@ -78,17 +74,12 @@ import {
   MoveVerdict,
   basketGrades,
   boxLedger,
-  clockBearingPaths,
-  clockFieldCoverage,
   unfilledNumbers,
   goodsLedger,
   itemBearingPaths,
-  ledgerClock,
-  ledgerClocks,
   ledgerCount,
   ledgerDelta,
   ledgerItems,
-  perishable,
   sumBoxes,
   sumLedger,
   unnamedGoods,
@@ -153,12 +144,6 @@ interface MoveCheck {
    * the caller rather than the row. A scenario driving one half on purpose says so here.
    */
   readonly verdict?: MoveVerdict;
-  /**
-   * Set to a reason when the goods this moves have no clock at all (seeds, boxes, compost), which
-   * makes the mint check vacuous rather than skipped. A REASON, not a boolean, because "this one
-   * is exempt" is the sentence three items in this family shipped a bug inside of.
-   */
-  readonly clockless?: string;
   /** Build a world with its goods already aged, and return the move to make. */
   build(): { state: WorldState; act: () => void };
 }
@@ -188,16 +173,6 @@ function combinedVerdict(covers: readonly string[]): MoveVerdict | 'mixed' {
   return MoveVerdict.Conserving;
 }
 
-/** Whether any perishable in this ledger is carrying a PART-SPENT clock — see `AGE_TICKS`. */
-function hasAgedGoods(ledger: Map<ItemId, GoodsHolding>): boolean {
-  for (const item of ledgerItems(ledger)) {
-    if (!perishable(item)) continue;
-    const clock = ledgerClock(ledger, item);
-    if (clock > 0 && clock < freshnessTicks(item)) return true;
-  }
-  return false;
-}
-
 /**
  * **DRIVE ONE VERB AND HOLD IT TO ITS OWN VERDICT.**
  *
@@ -208,15 +183,6 @@ function checkMove(check: MoveCheck): void {
   const { state, act } = check.build();
   const before = goodsLedger(state);
   const verdict = check.verdict ?? combinedVerdict(check.covers);
-
-  // The guard that stops this harness from lying about its own reach.
-  if (verdict === MoveVerdict.Conserving && check.clockless === undefined) {
-    expect(
-      hasAgedGoods(before),
-      `${check.name}: nothing it moves has a part-spent clock, so a mint would be invisible ` +
-        'here. Age the goods, or declare "clockless" with a reason.',
-    ).toBe(true);
-  }
 
   act();
   const after = goodsLedger(state);
@@ -250,25 +216,6 @@ function checkMove(check: MoveCheck): void {
     expect(ledgerCount(after, item), `${story()} — units of item ${item} changed`).toBe(
       ledgerCount(before, item),
     );
-  }
-  // **UNIT BY UNIT, NOT MINIMUM AGAINST MINIMUM** (item 118). `ledgerClock` is a minimum across
-  // every holder of an id, so a mint on one holder was invisible whenever a second holder was
-  // running a sooner clock — measured at 4,321 hiding behind 1,111. The counts are already known
-  // equal by the loop above, so the two lists are the same length: pair them freshest-first and
-  // no unit can come out ahead of the unit it replaced.
-  for (const item of ledgerItems(before, after)) {
-    if (!perishable(item)) continue;
-    const was = ledgerClocks(before, item).sort((a, b) => b - a);
-    const now = ledgerClocks(after, item).sort((a, b) => b - a);
-    for (let i = 0; i < Math.min(was.length, now.length); i++) {
-      // A zero is "no opinion" rather than "expired" — the game's own reading everywhere a clock
-      // is passed — and a take door is entitled to answer it with a full window.
-      if (was[i]! <= 0 || now[i]! <= 0) continue;
-      expect(
-        now[i],
-        `${story()} — the ${i + 1}th freshest unit of item ${item} came out FRESHER than it went in`,
-      ).toBeLessThanOrEqual(was[i]!);
-    }
   }
 }
 
@@ -310,12 +257,7 @@ function farmWithHarvester(seed: number): { state: WorldState; dock: Machine } {
 const CHECKS: readonly MoveCheck[] = [
   {
     name: 'a hand loads an aged armful into a container',
-    covers: [
-      'state:putStorage:cargoCount',
-      'state:removeItem:count',
-      'state:takeFromStacks:count',
-      'state:takeFromStacks:stacks[]',
-    ],
+    covers: ['state:putStorage:cargoCount', 'state:removeItem:count'],
     build() {
       const state = agedBag(12_001, ItemId.RussetPotato, 8);
       const cellar = spawnMachine(state, MachineKind.RootCellar, 6, 6)!;
@@ -333,12 +275,7 @@ const CHECKS: readonly MoveCheck[] = [
   },
   {
     name: 'a hand takes it back out again',
-    covers: [
-      'state:takeStorage:cargoCount',
-      'state:addItemFresh:count',
-      'state:addStack:count',
-      'state:addStack:stacks[]',
-    ],
+    covers: ['state:takeStorage:cargoCount', 'state:addItem:count'],
     build() {
       const state = agedBag(12_002, ItemId.RussetPotato, 8);
       const cellar = spawnMachine(state, MachineKind.RootCellar, 6, 6)!;
@@ -361,7 +298,6 @@ const CHECKS: readonly MoveCheck[] = [
     // Seasoner, so its output basket — call site `#1` — is empty and this drives nothing there.
     // Until item 121 numbered the bag doors, the bare key covered both and this claim read as
     // coverage of a basket nobody had put anything in.
-    doors: ['tick:applyDeconstructMachine:addItemFresh#2'],
     build() {
       // A Seasoner with peppers but no chips is starved, so it never runs and stays boxable —
       // `freshness-doors.test.ts`' trick, and the supported way to hold a hopper still.
@@ -383,11 +319,10 @@ const CHECKS: readonly MoveCheck[] = [
     name: 'a belt is laid, loaded, and taken up one tile at a time',
     covers: ['state:beltInsert:items[]', 'belts:beltTakeFromTile:items[]'],
     // `#2` is the CUT: this belt is three tiles, so the one-tile branch above it never runs.
-    doors: ['tick:applyRemoveBeltTile:addItemFresh#2'],
     build() {
       const state = agedBag(12_004, ItemId.RussetPotato, 1);
       const belt = spawnBelt(state, BeltTier.Basic, 4, 4, Direction.East, 3)!;
-      beltInsert(belt, 0, ItemId.RussetPotato, remainingFreshness(state, ItemId.RussetPotato));
+      beltInsert(belt, 0, ItemId.RussetPotato);
       standOn(state, 4, 4);
       return {
         state,
@@ -398,11 +333,10 @@ const CHECKS: readonly MoveCheck[] = [
   {
     name: 'a whole loaded belt run is torn up at once',
     covers: [],
-    doors: ['tick:applyRemoveBelt:addItemFresh'],
     build() {
       const state = agedBag(12_005, ItemId.RussetPotato, 1);
       const belt = spawnBelt(state, BeltTier.Basic, 4, 4, Direction.East, 3)!;
-      beltInsert(belt, 0, ItemId.RussetPotato, remainingFreshness(state, ItemId.RussetPotato));
+      beltInsert(belt, 0, ItemId.RussetPotato);
       standOn(state, 4, 4);
       return { state, act: () => run(state, { type: 'RemoveBelt', beltId: belt.id }) };
     },
@@ -419,19 +353,18 @@ const CHECKS: readonly MoveCheck[] = [
       const belt = spawnBelt(state, BeltTier.Basic, 2, 4, Direction.East, 4)!;
       spawnGrabber(state, GrabberTier.Mk1, 6, 4, Direction.East, 0);
       spawnMachine(state, MachineKind.RootCellar, 7, 4);
-      beltInsert(belt, 0, ItemId.RussetPotato, remainingFreshness(state, ItemId.RussetPotato));
+      beltInsert(belt, 0, ItemId.RussetPotato);
       return { state, act: () => stepMany(state, 400) };
     },
   },
   {
     name: 'an arm holding an aged good is torn out of the ground',
     covers: [],
-    doors: ['tick:applyRemoveGrabber:addItemFresh'],
     build() {
       const state = agedBag(12_007, ItemId.RussetPotato, 1);
       const belt = spawnBelt(state, BeltTier.Basic, 2, 4, Direction.East, 4)!;
       const grabber = spawnGrabber(state, GrabberTier.Mk1, 6, 4, Direction.East, 0)!;
-      beltInsert(belt, 0, ItemId.RussetPotato, remainingFreshness(state, ItemId.RussetPotato));
+      beltInsert(belt, 0, ItemId.RussetPotato);
       stepUntil(state, 600, () => grabber.held !== 0);
       standOn(state, 6, 4);
       return { state, act: () => run(state, { type: 'RemoveGrabber', grabberId: grabber.id }) };
@@ -444,7 +377,6 @@ const CHECKS: readonly MoveCheck[] = [
       'commerce:refundContract:stocked',
       'commerce:refundContract:inTransit',
     ],
-    doors: ['commerce:refundContract:addItemFresh'],
     build() {
       const state = agedBag(12_008, ItemId.RussetPotato, 4);
       const depot = spawnMachine(state, MachineKind.TruckDepot, 6, 6)!;
@@ -457,8 +389,7 @@ const CHECKS: readonly MoveCheck[] = [
       });
       const contract = state.contracts[0]!;
       // Straight off the arm, at the clock the bag's own potatoes are carrying.
-      const left = remainingFreshness(state, ItemId.RussetPotato);
-      for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.RussetPotato, left);
+      for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.RussetPotato);
       return {
         state,
         act: () => run(state, { type: 'CancelContract', contractId: contract.id }),
@@ -512,43 +443,6 @@ const CHECKS: readonly MoveCheck[] = [
     },
   },
   {
-    name: 'the goods in a bag turn to compost where they stand',
-    covers: ['tick:advanceSpoilage:count', 'tick:advanceSpoilage:stacks[]'],
-    build() {
-      const state = agedBag(12_011, ItemId.RussetPotato, 5);
-      return { state, act: () => stepMany(state, freshnessTicks(ItemId.RussetPotato) + 10) };
-    },
-  },
-  {
-    name: 'the goods in a container turn where they stand',
-    covers: ['tick:advanceStorageSpoilage:cargoCount'],
-    build() {
-      const state = agedBag(12_012, ItemId.RussetPotato, 5);
-      const cart = spawnMachine(state, MachineKind.HandCart, 6, 6)!;
-      run(state, {
-        type: 'LoadMachine',
-        machineId: cart.id,
-        item: ItemId.RussetPotato,
-        count: 5,
-      });
-      return { state, act: () => stepMany(state, freshnessTicks(ItemId.RussetPotato) + 10) };
-    },
-  },
-  {
-    name: 'an armful turns to compost in a bot’s arms',
-    covers: ['tick:advanceBotSpoilage:carryCount'],
-    build() {
-      const { state, dock } = farmWithHarvester(12_013);
-      const bot = state.bots[0]!;
-      // Jam the shelf so the armful can never be put down, and let its clock run out.
-      dock.cargoItem = ItemId.ChiliPepper;
-      dock.cargoCount = machineSpec(MachineKind.HarvesterDock)!.outputCapacity;
-      dock.cargoFreshTicks = 0;
-      stepUntil(state, 20_000, () => bot.carryCount > 0 && bot.phase === BotPhase.Returning);
-      return { state, act: () => stepMany(state, freshnessTicks(ItemId.RussetPotato) + 10) };
-    },
-  },
-  {
     name: 'a bot pulls a crop out of the ground',
     covers: ['bots:harvestUnderBot:carryCount', 'bots:harvestUnderBot:seedCount'],
     build() {
@@ -588,12 +482,6 @@ const CHECKS: readonly MoveCheck[] = [
     // to see identity rather than looking away, and this scenario is the proof.
     name: 'a burnt chip is unloaded out of a stopped Fryer’s basket',
     covers: ['state:takeOneOutput:outputCount', 'state:takeOneOutput:overcookedCount'],
-    // `#3` is the OUTPUT BASKET, which is the door a Fryer's burnt chips come off. `#1` is a
-    // container's cargo bay and `#2` is a dock's produce shelf; neither exists here.
-    doors: ['tick:applyUnloadMachine:addItemFresh#3'],
-    clockless:
-      'PlainChips and RusticStyleChips are both shelf-stable — which is exactly why door 10 ' +
-      'is an IDENTITY bug and not a clock one, and why no amount of clock-watching found it.',
     build() {
       const state = createWorld(12_017);
       const spec = machineSpec(MachineKind.Fryer)!;
@@ -672,7 +560,7 @@ const CHECKS: readonly MoveCheck[] = [
         quantityPerRun: 4,
         destination: 'Ridgeline Grocers',
       });
-      for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.SixPack, 0);
+      for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.SixPack);
       return { state, act: () => stepUntil(state, 5_000, () => depot.outputCount > 0) };
     },
   },
@@ -689,8 +577,7 @@ const CHECKS: readonly MoveCheck[] = [
         quantityPerRun: 4,
         destination: 'Ridgeline Grocers',
       });
-      const left = remainingFreshness(state, ItemId.RussetPotato);
-      for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.RussetPotato, left);
+      for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.RussetPotato);
       return { state, act: () => stepMany(state, 3_000) };
     },
   },
@@ -707,11 +594,7 @@ const CHECKS: readonly MoveCheck[] = [
     // `field-machines.test.ts`, which can afford to be specific because it is not generic.
     name: 'a sprinkler is dropped on a ripe, composted row and hands the whole tile back',
     covers: [],
-    doors: [
-      'tick:clearFieldTileForMachine:addItem',
-      'tick:clearFieldTileForMachine:addItem#2',
-      'tick:clearFieldTileForMachine:addItem#3',
-    ],
+    doors: ['tick:clearFieldTileForMachine:addItem', 'tick:clearFieldTileForMachine:addItem#2'],
     verdict: MoveVerdict.Source,
     build() {
       const state = createWorld(12_019);
@@ -719,7 +602,6 @@ const CHECKS: readonly MoveCheck[] = [
       const tile = state.field.find((entry) => entry.tileX === 6 && entry.tileY === 6)!;
       plantCrop(state, tile, cropSpec(CropId.RussetPotato)!);
       tile.growth = tile.growthTarget;
-      tile.compost = 2;
       standOn(state, 6, 6);
       return {
         state,
@@ -744,11 +626,7 @@ const CHECKS: readonly MoveCheck[] = [
     // and a tile is none of those. So the total may rise and may never fall.
     name: 'the till sweeps a laden row and hands every tile back',
     covers: [],
-    doors: [
-      'tick:clearFieldTileForMachine:addItem',
-      'tick:clearFieldTileForMachine:addItem#2',
-      'tick:clearFieldTileForMachine:addItem#3',
-    ],
+    doors: ['tick:clearFieldTileForMachine:addItem', 'tick:clearFieldTileForMachine:addItem#2'],
     verdict: MoveVerdict.Source,
     build() {
       const state = createWorld(12_020);
@@ -759,9 +637,6 @@ const CHECKS: readonly MoveCheck[] = [
       const ripe = state.field.find((t) => t.tileX === 6 && t.tileY === 6)!;
       plantCrop(state, ripe, spec);
       ripe.growth = ripe.growthTarget;
-      ripe.compost = 2;
-      const composted = state.field.find((t) => t.tileX === 7 && t.tileY === 6)!;
-      composted.compost = 3;
       standOn(state, 6, 7);
       return {
         state,
@@ -779,13 +654,6 @@ const CHECKS: readonly MoveCheck[] = [
 // --- the tests -------------------------------------------------------------------------------
 
 describe('the move census, executed', () => {
-  it('pins the one constant that makes a grand total a conservation law', () => {
-    // Every "the total held" assertion in this family is only a conservation law while one
-    // spoiled unit makes exactly one Compost. Tune this to 2 and a dozen tests keep passing
-    // while quietly checking nothing, which is strictly worse than deleting them.
-    expect(COMPOST_PER_SPOILED_ITEM).toBe(1);
-  });
-
   for (const check of CHECKS) {
     it(`${check.name}`, () => {
       checkMove(check);
@@ -862,24 +730,6 @@ describe('the move census, executed', () => {
           `${check.name} claims bag door ${door}, which is not on the door list`,
         ).toBeDefined();
       }
-    }
-  });
-
-  it('drives every door that CARRIES a clock back into the bag', () => {
-    // The doors list's own conserving half. A `Carries` door is one that promised to hand the
-    // deadline back with the goods, which is precisely the promise door 8 broke — so every one of
-    // them is either driven above or excused in writing, on the same terms as the census rows.
-    const carries = Object.keys(BAG_DOOR_VERDICTS).filter(
-      (door) => BAG_DOOR_VERDICTS[door] === BagDoorVerdict.Carries,
-    );
-    const driven = new Set(CHECKS.flatMap((check) => check.doors ?? []));
-    const missing = carries.filter(
-      (door) => !driven.has(door) && UNREACHED_DOORS[door] === undefined,
-    );
-    expect(missing, 'carrying doors with neither a live check nor a stated reason').toEqual([]);
-    for (const door of Object.keys(UNREACHED_DOORS)) {
-      expect(BAG_DOOR_VERDICTS[door], `${door} is excused but is not a door`).toBeDefined();
-      expect(driven.has(door), `${door} is excused AND driven — delete the excuse`).toBe(false);
     }
   });
 });
@@ -963,95 +813,6 @@ const UNREACHED: Readonly<Record<string, string>> = {
 
 // --- THE MINT DEFENCE, FALSIFIED ---------------------------------------------------------------
 
-describe('the doors that mint a fresh window', () => {
-  it('lists which defence each one is making', () => {
-    // Three defences, and only one of them is checkable by machine. `MintsNew` is a judgement —
-    // "these goods did not exist a moment ago" — and no sweep can confirm it. `MintsShelfStable`
-    // is a claim of FACT about the goods, and a fact can be falsified. Door 8 made the second
-    // claim while carrying potatoes.
-    const shelfStable = Object.keys(BAG_DOOR_VERDICTS).filter(
-      (door) => BAG_DOOR_VERDICTS[door] === BagDoorVerdict.MintsShelfStable,
-    );
-    expect(shelfStable).toEqual([
-      'state:createWorld:addItem',
-      'tick:advanceSpoilage:addItem',
-      'tick:applyDeconstructMachine:addItem',
-      'tick:applyDeconstructMachine:addItem#2',
-      'tick:applySwingScythe:addItem#2',
-      'tick:applySwingScythe:addItem#3',
-      'tick:applyUnloadMachine:addItem',
-      'tick:clearFieldTileForMachine:addItem#2',
-      'tick:clearFieldTileForMachine:addItem#3',
-      'tick:harvestOneTile:addItem',
-      'tick:harvestOneTile:addItem#3',
-      'tick:harvestOneTile:addItem#4',
-    ]);
-  });
-
-  it('a new world’s opening stock is shelf-stable, as `createWorld` claims', () => {
-    const state = createWorld(12_100);
-    for (const slot of state.inventory) {
-      expect(
-        freshnessTicks(slot.item),
-        `createWorld mints ${slot.item} through addItem, and it RUNS A CLOCK`,
-      ).toBe(0);
-    }
-  });
-
-  it('what spoilage mints is Compost, and Compost keeps no clock', () => {
-    expect(freshnessTicks(ItemId.Compost)).toBe(0);
-  });
-
-  it('**BOXING A DOCK MINTS ONLY SEEDS — THIS IS DOOR 8’S DEFENCE, CHECKED**', () => {
-    // The armful used to come back through this door. It now comes back through `addItemFresh`,
-    // and what is left on the minting line is the bot's seed pocket and the dock's seed shelf.
-    // Both are shelf-stable, which is the whole reason minting them is free — so this asserts
-    // the FACT the defence rests on, against the goods that actually arrive.
-    const { state, dock } = farmWithHarvester(12_101);
-    const bot = state.bots[0]!;
-    dock.cargoItem = ItemId.ChiliPepper;
-    dock.cargoCount = machineSpec(MachineKind.HarvesterDock)!.outputCapacity;
-    dock.cargoFreshTicks = 0;
-    stepUntil(state, 20_000, () => bot.carryCount > 0 && bot.seedCount > 0);
-    dock.seedShelfItem = ItemId.PotatoSeed;
-    dock.seedShelfCount = 5;
-
-    // **A TEST THAT DOES NOT ASSERT ITS OWN SETUP IS A TEST THAT PASSES WHEN THE SETUP FAILS.**
-    // Found the hard way: with door 8 deliberately re-opened this test stayed green, because the
-    // armful it was supposed to be weighing had a clock one tick off a full window and the mint
-    // was hiding inside the rounding. The armful is aged on purpose now, and the preconditions
-    // say so out loud.
-    expect(bot.carryCount, 'the bot is holding an armful to hand back').toBeGreaterThan(0);
-    stepMany(state, AGE_TICKS);
-    expect(bot.carryFreshTicks, 'and the armful has spent real time').toBeLessThan(
-      freshnessTicks(ItemId.RussetPotato) - AGE_TICKS + 1,
-    );
-    expect(bot.carryFreshTicks).toBeGreaterThan(0);
-
-    const before = goodsLedger(state);
-    expect(
-      ledgerClock(before, ItemId.RussetPotato),
-      'the potatoes on the books are the part-spent ones in its arms',
-    ).toBe(bot.carryFreshTicks);
-    standOn(state, 0, 0);
-    run(state, { type: 'DeconstructMachine', machineId: dock.id });
-    const after = goodsLedger(state);
-
-    // Nothing vanished, and nothing came back with more clock than it had — the whole family's
-    // two sentences, asked of the function all four doors lived in.
-    expect(sumLedger(after), `boxing the dock: ${ledgerDelta(before, after)}`).toBe(
-      sumLedger(before),
-    );
-    for (const item of ledgerItems(before, after)) {
-      if (!perishable(item)) continue;
-      const was = ledgerClock(before, item);
-      const now = ledgerClock(after, item);
-      if (was <= 0 || now <= 0) continue;
-      expect(now, `item ${item} left the box fresher than it went in`).toBeLessThanOrEqual(was);
-    }
-  });
-});
-
 // --- THE THIRD AXIS: SAVE AND LOAD -------------------------------------------------------------
 //
 // **THE EDGE NEITHER SWEEP CAN SEE, AND THE ITEM ASKED FOR IT BY NAME.**
@@ -1072,10 +833,9 @@ describe('the save/load round trip', () => {
   function loadedWorld(seed: number): WorldState {
     const { state, dock } = farmWithHarvester(seed);
     const bot = state.bots[0]!;
-    // Jam the shelf so the bot stalls holding a part-spent armful and a seed pocket.
+    // Jam the shelf so the bot stalls holding an armful and a seed pocket.
     dock.cargoItem = ItemId.ChiliPepper;
     dock.cargoCount = 4;
-    dock.cargoFreshTicks = 5_000;
     dock.seedShelfItem = ItemId.PotatoSeed;
     dock.seedShelfCount = 7;
     stepUntil(state, 20_000, () => bot.carryCount > 0 && bot.seedCount > 0);
@@ -1083,27 +843,18 @@ describe('the save/load round trip', () => {
     const cellar = spawnMachine(state, MachineKind.RootCellar, 8, 8)!;
     cellar.cargoItem = ItemId.RussetPotato;
     cellar.cargoCount = 9;
-    cellar.cargoFreshTicks = 4_321;
 
     const seasoner = spawnMachine(state, MachineKind.Seasoner, 10, 10)!;
     const hoppers = machineHoppers(machineSpec(MachineKind.Seasoner)!);
     if (hoppers.length > 0) {
       seasoner.inputCounts[0] = 3;
-      seasoner.inputFreshTicks[0] = 2_222;
     }
     seasoner.outputItem = ItemId.BaggedChips;
     seasoner.outputCount = 2;
-    seasoner.outputFreshTicks = 0;
 
-    // **THE HOLE ITEM 118'S CLOCK SWEEP FOUND IN THIS VERY FIXTURE.** Every basket above holds a
-    // shelf-stable good, so `machines[].outputFreshTicks` was 0 on all five machines — and a
-    // round trip that compares 0 to 0 proves nothing whatever about the field. That is precisely
-    // why door 11's mutation sweep found this clock "caught by nothing": the assertion existed
-    // and the fixture never gave it anything to be about.
     const washer = spawnMachine(state, MachineKind.Washer, 12, 4)!;
     washer.outputItem = ItemId.WashedPotato;
     washer.outputCount = 2;
-    washer.outputFreshTicks = 1_234;
 
     // **AND DOOR 10 GOES ACROSS THE SAVE TOO.** A basket that is two grades at once is the one
     // container whose contents cannot be read off its own fields, so it is the one most worth
@@ -1114,10 +865,9 @@ describe('the save/load round trip', () => {
     fryer.overcookedCount = 3;
 
     const belt = spawnBelt(state, BeltTier.Basic, 2, 12, Direction.East, 4)!;
-    beltInsert(belt, 0, ItemId.RussetPotato, 3_333);
+    beltInsert(belt, 0, ItemId.RussetPotato);
     const grabber = spawnGrabber(state, GrabberTier.Mk1, 7, 12, Direction.East, 0)!;
     grabber.held = ItemId.RussetPotato;
-    grabber.heldFreshTicks = 1_111;
 
     const depot = spawnMachine(state, MachineKind.TruckDepot, 14, 14)!;
     run(state, {
@@ -1129,9 +879,7 @@ describe('the save/load round trip', () => {
     });
     const contract = state.contracts[0]!;
     contract.stocked = 2;
-    contract.stockedFreshTicks = 6_543;
     contract.inTransit = 3;
-    contract.inTransitFreshTicks = 7_654;
 
     addItem(state, ItemId.RussetPotato, 5);
     return state;
@@ -1166,71 +914,6 @@ describe('the save/load round trip', () => {
     expect(loadedHopper, 'the fixture leaves every machine hopper empty').toBe(true);
   });
 
-  it('**CARRIES EVERY UNIT AND EVERY CLOCK ACROSS A SAVE**', () => {
-    const state = loadedWorld(12_201);
-    const before = goodsLedger(state);
-    expect(sumLedger(before), 'the fixture is holding goods worth counting').toBeGreaterThan(20);
-
-    const restored = deserialize(serialize(state));
-    const after = goodsLedger(restored);
-
-    // Counts first: a field missed by `toPayload` deletes goods, which is plan §4's floor.
-    for (const item of ledgerItems(before, after)) {
-      expect(
-        ledgerCount(after, item),
-        `a save/load lost or minted units of item ${item}: ${ledgerDelta(before, after)}`,
-      ).toBe(ledgerCount(before, item));
-    }
-    // Then the clocks: a freshness field missed by `toPayload` reads back as 0, which the game
-    // spells "no opinion" and every take-door then answers with a brand-new full window. That is
-    // item 110's original bug, reachable by saving and loading rather than by buying a barrow.
-    //
-    // **EVERY CLOCK, NOT THE SOONEST ONE** (item 118). `ledgerClock` is a minimum across holders,
-    // and wave 18's adversary measured what that costs: holders at 4,321 and 1,111, delete the
-    // 4,321 entirely, and this assertion still read 1,111 both sides and passed. The line below
-    // used to be that assertion.
-    for (const item of ledgerItems(before, after)) {
-      expect(
-        ledgerClocks(after, item),
-        `a save/load changed the clocks on item ${item}: ${ledgerDelta(before, after)}`,
-      ).toEqual(ledgerClocks(before, item));
-    }
-  });
-
-  it('the ledger cannot hide a deleted holder behind a sooner one', () => {
-    // **THE MEASUREMENT, REPLAYED.** Two holders of one id at different clocks; delete the later
-    // one; and the old instruments — a per-item count check and a minimum clock — both reported
-    // that nothing had happened. It is worth a test of its own rather than trust in the round
-    // trip above, because the round trip only catches it while somebody remembers to build a
-    // fixture with two holders in it.
-    const state = loadedWorld(12_203);
-    const cellar = state.machines.find((machine) => machine.kind === MachineKind.RootCellar)!;
-    const grabber = state.grabbers[0]!;
-    // Both holders hold RussetPotato; the cellar is running the LATER clock. (Both are a tick
-    // short of the numbers the fixture writes, because creating the contract steps the world.)
-    expect(grabber.heldFreshTicks, 'the sooner clock').toBeLessThan(cellar.cargoFreshTicks);
-
-    const before = goodsLedger(state);
-    // **THE MUTATION A DROPPED SAVE FIELD ACTUALLY MAKES.** Not a deleted holder — a holder whose
-    // clock comes back as 0, which the game reads as "no opinion" and every take-door answers
-    // with a brand-new full window. Nine potatoes still exist; they have simply stopped ageing.
-    cellar.cargoFreshTicks = 0;
-    const after = goodsLedger(state);
-
-    // Both old instruments agree that nothing happened. That is the bug, asserted rather than
-    // described: the count is per item and unchanged, and the clock is a MINIMUM, so the holder
-    // that lost its deadline is standing behind one that did not.
-    expect(ledgerCount(after, ItemId.RussetPotato)).toBe(ledgerCount(before, ItemId.RussetPotato));
-    expect(ledgerClock(after, ItemId.RussetPotato)).toBe(ledgerClock(before, ItemId.RussetPotato));
-
-    // The multiset does not agree, and neither does the delta anybody reads on a failure.
-    expect(ledgerClocks(after, ItemId.RussetPotato)).not.toEqual(
-      ledgerClocks(before, ItemId.RussetPotato),
-    );
-    expect(ledgerDelta(before, after)).not.toBe('(nothing changed)');
-    expect(ledgerDelta(before, after)).toContain(String(ItemId.RussetPotato));
-  });
-
   it('carries the BURNT GRADE across a save, and it is still burnt on the far side', () => {
     // Door 10 over the widest edge in the game. A Fryer's basket is `outputItem` and a count and
     // a second count, and only the third of those says that three of these four chips are a
@@ -1241,8 +924,8 @@ describe('the save/load round trip', () => {
     const fryer = state.machines.find((machine) => machine.kind === MachineKind.Fryer)!;
     const spec = machineSpec(MachineKind.Fryer)!;
     expect(basketGrades(fryer, spec), 'a basket holding two grades at once').toEqual([
-      { item: ItemId.PlainChips, count: 1, freshTicks: 0 },
-      { item: ItemId.RusticStyleChips, count: 3, freshTicks: 0 },
+      { item: ItemId.PlainChips, count: 1 },
+      { item: ItemId.RusticStyleChips, count: 3 },
     ]);
 
     const before = goodsLedger(state);
@@ -1270,25 +953,6 @@ describe('the save/load round trip', () => {
     const cellar = state.machines.find((machine) => machine.kind === MachineKind.RootCellar)!;
     cellar.cargoItem = 0;
     expect(unnamedGoods(state)).toEqual(['machines[].cargoItem: 9 units with no item id']);
-  });
-
-  it('and the reloaded world keeps them: no take-door mints on the far side', () => {
-    // The bug this shape produces does not fire during the load — it fires on the FIRST TAKE
-    // afterwards, when a container whose clock came back as 0 hands out a full window. So the
-    // round trip is followed by a take.
-    const state = loadedWorld(12_202);
-    const restored = deserialize(serialize(state));
-    const cellar = restored.machines.find((machine) => machine.kind === MachineKind.RootCellar)!;
-    const clockIn = cellar.cargoFreshTicks;
-    expect(clockIn, 'the cellar came back with a part-spent clock').toBeGreaterThan(0);
-    expect(clockIn).toBeLessThan(freshnessTicks(ItemId.RussetPotato));
-
-    standOn(restored, 8, 8);
-    run(restored, { type: 'UnloadMachine', machineId: cellar.id, count: 9 });
-    expect(
-      remainingFreshness(restored, ItemId.RussetPotato),
-      'the reloaded cellar handed out more clock than it was holding',
-    ).toBeLessThanOrEqual(clockIn);
   });
 
   // --- THE GENERAL GUARD ------------------------------------------------------------------
@@ -1349,7 +1013,6 @@ describe('the save/load round trip', () => {
       'contracts[].phase',
       'contracts[].runsCompleted',
       'contracts[].ticksRemaining',
-      'field[].compost',
       'field[].lastPouredTick',
       'field[].moisture',
       'field[].moistureAccum',
@@ -1377,7 +1040,6 @@ describe('the save/load round trip', () => {
       'player.moveDir',
       'player.towedCartId',
       'reservoirs[].rechargeAccum',
-      'soilMemory[].fertilityWear',
       'stats.automatedGrossCents',
       'stats.cheatsUsed',
       'stats.dawnsSeen',
@@ -1408,77 +1070,5 @@ describe('the save/load round trip', () => {
       'stats.waterDrawnMl',
       'zones[].replantCooldown',
     ]);
-  });
-
-  it('fills every clock a live world has, so a dropped one has something to differ from', () => {
-    // **THIS TEST FOUND A HOLE IN THE FIXTURE ABOVE THE MOMENT IT WAS WRITTEN.** Every basket in
-    // it held a shelf-stable good, so `machines[].outputFreshTicks` was 0 on all five machines —
-    // exactly the field door 11's sweep reported as caught by nothing. The Washer three screens
-    // up is the fix, and this is what will catch the next one.
-    const state = loadedWorld(12_207);
-    const empty = [...clockFieldCoverage(state).entries()]
-      .filter(([, count]) => count.filled === 0)
-      .map(([path, count]) => `${path} (0 of ${String(count.total)} filled)`)
-      .sort();
-    expect(
-      empty,
-      'clocks this fixture never puts a number in — fill them or they prove nothing',
-    ).toEqual([]);
-  });
-
-  it('has the same clocks in the SAVE as in the world', () => {
-    // The third net, and the one that catches a field `toPayload` never writes at all. A clock
-    // that is only in the world reads back as 0 on the far side, which the game spells "no
-    // opinion" — the quietest possible way to lose a deadline.
-    const state = loadedWorld(12_208);
-    const inWorld = [...clockFieldCoverage(state).keys()].sort();
-    const inSave = [...clockFieldCoverage(toPayload(state)).keys()].sort();
-    expect(inSave, 'a clock the world keeps and the save does not').toEqual(inWorld);
-
-    // And it is the nine the census declares, from the other direction: `GOODS_COUNTS[].clock`
-    // hangs the list off the CONTAINERS, this hangs it off the NAMING CONVENTION, and a clock
-    // that only one net catches is a clock somebody should look at.
-    const declared = new Set(
-      GOODS_COUNTS.map((entry) => entry.clock).filter((clock): clock is string => clock !== null),
-    );
-    expect(inWorld).toEqual([...declared].sort());
-  });
-
-  it('**ZEROING ANY CLOCK IN THE SAVE FAILS THE GUARD — THE SWEEP, RUN**', () => {
-    // Door 11's own experiment, as a test rather than as a measurement in a note. Wave 18's
-    // adversary zeroed each clock field in `toPayload` and ran 648 sim tests per mutant to see
-    // which ones anybody noticed; three of eight were caught. This asks the same question of
-    // every clock in the payload and asserts the answer is all of them — and it asks it of
-    // whatever clocks exist on the day it runs, which is the part that survives a ninth field.
-    const state = loadedWorld(12_209);
-    const payload = toPayload(state);
-    const restore = (mutant: unknown): unknown => fromPayload(mutant, state.trace);
-
-    const byField = new Map<string, ClockSite[]>();
-    for (const site of clockBearingPaths(payload)) {
-      const had = byField.get(site.collapsed);
-      if (had === undefined) byField.set(site.collapsed, [site]);
-      else had.push(site);
-    }
-
-    const unguarded: string[] = [];
-    for (const [field, sites] of byField) {
-      const filled = sites.filter((site) => site.value !== 0);
-      if (filled.length === 0) {
-        unguarded.push(`${field}: the fixture leaves it empty, so the mutant is not a mutant`);
-        continue;
-      }
-      // Every filled occurrence, not one representative: a serializer that carried the first
-      // machine's clock and dropped the rest is a bug this would otherwise walk straight past.
-      for (const site of filled) {
-        if (zeroingIsCaught(payload, site.path, restore, state)) continue;
-        unguarded.push(`${field}: zeroing ${site.path.join('.')} changed nothing anybody checks`);
-      }
-    }
-    expect(unguarded, 'clocks a save could drop without a single test going red').toEqual([]);
-
-    // And the sweep did real work rather than finding nothing to do — the shape of green that
-    // this family has been bitten by twice.
-    expect(byField.size, 'the sweep found no clocks at all, which cannot be right').toBe(9);
   });
 });

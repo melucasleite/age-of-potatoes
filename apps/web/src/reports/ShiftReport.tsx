@@ -2,19 +2,25 @@
 
 // The hourly ledger, as plan §4 specifies it.
 //
-// THE SIX LINES ARE NOT A SUGGESTION. §4 names them: gross, waste %, spoilage %, kit spend,
-// water drawn, rolling best $/hr — and the reason it names them is that this report is how
+// THE LINES ARE NOT A SUGGESTION. §4 named six: gross, waste %, spoilage %, kit spend, water
+// drawn, rolling best $/hr — five now, because [[124]] deleted spoilage as a mechanic and a
+// row measuring nothing is worse than no row. The reason §4 names them is that this report is how
 // the game teaches its sloppiness tax. Same machines, different operators: a well-run hour-6
 // factory nets about $370/hr and a sloppy one about $180, and the difference is invisible
 // unless something itemises it. That is this panel's whole job: not to praise or to nag, but
 // to show where the other $190 went.
 //
-// TWO ROWS SAY "NOT YET MEASURED" AND THAT IS THE CORRECT BEHAVIOUR. Waste % and spoilage %
-// measure systems that arrive with the Entropy release. Work item 033 is explicit that they
-// are shown as labelled stubs rather than hidden, per plan §8's standing rule — a report
-// that grows two new rows three releases from now is worse than one whose shape was stable
-// from its first hour, and a confident "0.0%" for something nobody is counting is a lie with
-// a decimal point on it.
+// ONE ROW SAYS "NOT YET MEASURED" AND THAT IS THE CORRECT BEHAVIOUR. Waste % measures machine
+// wear, which arrives with the Entropy release. Work item 033 is explicit that a pending
+// system is shown as a labelled stub rather than hidden, per plan §8's standing rule — a
+// report that grows a new row three releases from now is worse than one whose shape was
+// stable from its first hour, and a confident "0.0%" for something nobody is counting is a
+// lie with a decimal point on it.
+//
+// ⚠️ THERE WERE TWO SUCH ROWS AND SPOILAGE WAS THE OTHER ([[124]]). A stub is a PROMISE that
+// the number is coming; the owner deleted spoilage outright, so that promise can never be
+// kept and the row is gone rather than stubbed forever. **Waste is not the same case** — the
+// owner has not ruled on machine wear, so its stub stands.
 //
 // The gross and kit-spend rows carry the same treatment for a different reason: the
 // projection currently exposes only their difference. See `sim-contract.ts`.
@@ -58,7 +64,6 @@ export function ShiftReport() {
           tone="money"
         />
         <Ratio label="Waste" ratio={shift.waste} />
-        <Ratio label="Spoilage" ratio={shift.spoilage} />
         <Line
           label="Kit spend"
           value={current.split === 1 ? formatCents(current.spendCents) : null}

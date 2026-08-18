@@ -13,11 +13,10 @@
 // reads as a promise. The count still shows; only the claim about money goes. Whether a
 // thing is sellable is the simulation's call, read through `derivePouch`.
 //
-// AND THE SAME RULE NOW GOVERNS THE CLOCK ([[035]]). Harvested goods age only while the player is
-// carrying them — a stack in a machine, a crate or a Root Cellar has no clock running — so the
-// pouch is not merely *a* place freshness could be shown, it is the surface that corresponds to
-// the object §5 wants the state drawn on. It is also the only one a player sees without opening
-// anything, which is why the warning lives here and the arithmetic lives one file away.
+// THERE IS NO CLOCK ON A STACK ANY MORE ([[124]]). This card used to draw a per-stack
+// countdown in amber and then red, on the argument that carried goods were the one thing
+// ageing where the player could see it. Nothing ages now, so the chip carries a count, a
+// label and a price, and that is the whole of it.
 
 import { Fragment } from 'react';
 
@@ -30,7 +29,6 @@ import { canFrame } from '@/game/render/can-state';
 
 import { ItemIcon } from './ItemIcon';
 import { formatCentsWhole } from './format';
-import { formatFreshness, freshnessBand, isWarning } from './freshness';
 import { paintIcon, resolveFrameIcon } from './item-art';
 import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
@@ -75,7 +73,6 @@ export function Pouch() {
             {item.sellable === 1 ? (
               <span className={s.stackValue}>{formatCentsWhole(item.valueCents)}</span>
             ) : null}
-            <Clock item={item} />
           </span>
         </Fragment>
       ))}
@@ -109,7 +106,7 @@ function CanChip({ pouch, divide }: { pouch: PouchSlice; divide: boolean }) {
     <>
       <span className={cx(s.canChip, empty && s.canChipEmpty)}>
         <CanFace charges={pouch.canCharges} chargesMax={pouch.canChargesMax} />
-        {empty ? <span className={s.stackFreshMark} /> : null}
+        {empty ? <span className={s.stackWarnMark} /> : null}
         <span className={s.stackCount}>
           {pouch.canCharges}/{pouch.canChargesMax}
         </span>
@@ -144,30 +141,4 @@ function CanFace({ charges, chargesMax }: { charges: number; chargesMax: number 
 function emptyLine(shoreHeading: string): string {
   if (shoreHeading === '') return 'can empty — click the water to refill';
   return `can empty — the water is ${shoreHeading}`;
-}
-
-/**
- * The freshness warning, and it is the only thing in the HUD that appears on a chip by itself.
- *
- * SILENT UNTIL IT IS NOT, exactly like the value above it. The pouch is on screen every second of
- * the game and its whole worth is that four short chips can be read without stopping — a clock
- * running on every russet from the moment it is pulled would be four counters ticking in the
- * corner of the eye forever, and the eye stops seeing those in about a day. So nothing is drawn
- * until the stack crosses a display threshold, and then it is a time, in amber, and then red.
- *
- * ONE STACK'S CLOCK, NOT THE CHIP'S. `ticksToSpoil` is the soonest heap in the slot ([[035]]), so
- * "0:40" beside "12 russets" means part of those twelve, not all of them — which is why the bag's
- * pane says "3 of 12" and this does not: a chip has room for a warning, and the panel one keypress
- * away has room for the truth.
- */
-function Clock({ item }: { item: PouchItem }) {
-  const band = freshnessBand(item.ticksToSpoil);
-  if (!isWarning(band)) return null;
-
-  return (
-    <span className={cx(s.stackFresh, band === 'going' && s.stackFreshGoing)}>
-      <span className={s.stackFreshMark} />
-      {formatFreshness(item.ticksToSpoil)}
-    </span>
-  );
 }

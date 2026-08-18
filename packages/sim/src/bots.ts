@@ -63,7 +63,6 @@ import {
   machineAt,
   machineById,
   markCeremony,
-  mergedFreshness,
   plantCrop,
   takeHarvest,
   tileByKey,
@@ -561,8 +560,8 @@ function advancePlanter(state: WorldState, bot: Bot, dock: Machine): void {
  * **NO MANUAL TOUCH AND NO `itemsHarvestedByHand`.** That is the whole feature: plan §6's
  * Hands-Free board exists to reward exactly this, so counting a robot's harvest would make the
  * automation the player bought score as though they had bent down themselves. It goes through
- * `takeHarvest`, which is the same function the player's own pull uses, so the yield, the
- * regrowth rule and the fertility cost are identical — what differs is only where the goods land
+ * `takeHarvest`, which is the same function the player's own pull uses, so the yield and the
+ * regrowth rule are identical — what differs is only where the goods land
  * and what gets counted, which is a two-line difference in plain sight.
  *
  * ONE PRODUCT AT A TIME, like a cart: a bot holding potatoes that reaches a ripe chili takes the
@@ -594,22 +593,27 @@ function harvestUnderBot(state: WorldState, bot: Bot): boolean {
   // after it noticed.
   if (spec.regrowTicks <= 0 && !pocketRoomFor(bot, spec.seedItem)) return true;
 
-  // **AND THE SAME CHECK FOR THE ARMS, FOR THE SAME REASON** (item 117, DOOR 9). One zone can
-  // produce TWO item ids — `harvestItemFor` returns the Day-Old good for a turned tile — so "a
-  // bot only ever holds one product at a time" was a rule about zones that the crop clock breaks
-  // for free, with no keypress and no exploit: a row that turns under a working bot is an
-  // ordinary Tuesday.
+  // **AND THE SAME CHECK FOR THE ARMS, FOR THE SAME REASON** (item 117, DOOR 9).
+  //
+  // **ITEM 124 TOOK ITS ORIGINAL TRIGGER AWAY AND DID NOT MAKE IT DEAD CODE.** The trigger this
+  // guard was written against was the crop clock: a turned tile handed back the Day-Old good, so
+  // one zone produced two item ids for free, with no keypress and no exploit. Nothing wilts now
+  // and `harvestItemFor` is constant per crop — which removes ONE way in, not the property.
+  //
+  // The live trigger is four lines up: this function reads **`tile.crop`**, not `zone.crop`. A
+  // zone is a rectangle, `applyPlantTile` will put any seed in any farm tile inside it, and
+  // `SetZoneCrop` re-points a zone at a different crop while a bot is already out on its round
+  // holding an armful of the last one. Either of those puts a bot over a tile whose produce is
+  // not what it is carrying, and neither involves a clock.
   //
   // The old code pulled first and sorted it out afterwards, which it could not do. It set
   // `phase = Returning` — the right idea, and the comment describing it survives below — and then
   // overwrote `carryItem` and zeroed `carryCount` on the very next line, DELETING the armful it
   // had just decided to send home. Three potatoes, measured, in plain play.
   //
-  // Asking first is the only shape that keeps both: the armful goes home whole and the turned
-  // tile is still standing when the bot comes back with empty arms. That is this function's own
-  // house rule four lines up, applied to the other pocket — and it is what the old comment
-  // claimed was happening all along.
-  if (bot.carryItem !== 0 && bot.carryItem !== harvestItemFor(tile, spec)) return true;
+  // Asking first is the only shape that keeps both: the armful goes home whole and the foreign
+  // tile is still standing when the bot comes back with empty arms.
+  if (bot.carryItem !== 0 && bot.carryItem !== harvestItemFor(spec)) return true;
 
   const result = takeHarvest(state, tile, spec);
   if (result === null) return false;
@@ -619,15 +623,7 @@ function harvestUnderBot(state: WorldState, bot: Bot): boolean {
   if (bot.carryItem === 0) {
     bot.carryItem = result.item;
     bot.carryCount = 0;
-    bot.carryFreshTicks = 0;
   }
-  // **THE CLOCK STARTS AT THE PULL** (item 115), merged at the sooner against whatever is already
-  // in the bot's arms — the same rule every other container in the game follows, and the reason it
-  // is needed here is that a bot working its way down a row picks up its last tile several minutes
-  // after its first. A crop leaving the ground is worth a full window, so 0 is the right "arriving"
-  // opinion and `mergedFreshness` turns it into one. Day-Old produce is its OWN item id with its
-  // own shorter window, so a wilted row is already priced by `takeHarvest` before this line runs.
-  bot.carryFreshTicks = mergedFreshness(bot.carryCount, bot.carryFreshTicks, result.item, 0);
   bot.carryCount += result.count;
 
   // One seed, one one-shot tile — the hand's rule, in the hand's words. Regrowers keep the
@@ -679,21 +675,24 @@ function plantUnderBot(state: WorldState, bot: Bot, dock: Machine): void {
  * anonymous goods can never leave. Cargo carries its own identity, so what the bot put down
  * is what the grabber picks up.
  *
- * **THE SHELF CARRIES NO CLOCK, AND ITEM 110 LOOKED AT THAT AND LEFT IT** — stated here because
- * the absence is a decision. A bot has no freshness on its back (`carryItem`/`carryCount` are a
- * pair of numbers), so there is nothing to hand the shelf, and the shelf keeps item 035's
- * structural freeze: produce waits there indefinitely and is stamped a full window when a hand
- * takes it. That is NOT the laundering item 110 closed, because a player cannot put anything
- * INTO a dock — `applyLoadMachine` refuses it, a dock being neither storage nor a recipe — so
- * there is no round trip to make. What it is, honestly, is a shelf that preserves for free, and
- * pricing that is a question about automation's balance rather than about an exploit.
+ * **~~THE SHELF CARRIES NO CLOCK~~ — TRUE OF EVERYTHING NOW (item 124).** This used to be a
+ * decision worth defending: a bot had no freshness on its back, so it had nothing to hand the
+ * shelf, and produce waited there indefinitely while everything else in the game aged. The
+ * question was whether a shelf that preserves for free was a laundering hole (it was not — a
+ * player cannot put anything INTO a dock; `applyLoadMachine` refuses it, a dock being neither
+ * storage nor a recipe, so there was no round trip to make) or an automation-balance question.
+ * **Freshness is deleted, so the exception stopped being one.** Nothing anywhere carries a clock,
+ * and `carryItem`/`carryCount` being a bare pair of numbers is now the shape of every buffer in
+ * the game rather than this shelf's special case.
  *
  * A FULL DOCK IS A STALL, NOT A LOSS — and so is a MISMATCHED one. The shelf holds one product
  * at a time, like every cargo pair in the game, and a bot arriving with chili while the shelf
  * still holds potatoes stands there holding its armful (the house "look downstream" stall)
- * until the shelf drains. That trip is real, not theoretical: a zone that wilts mid-round sends
- * the same bot home with fresh goods on one trip and Day-Old on the next. Nothing vanishes
- * (plan §4), and the diagnostic is a robot standing at a full shed, visible from ten tiles up.
+ * until the shelf drains. That trip is real, not theoretical, and item 124 did not make it less
+ * so — it only changed which door produces it. The clock is gone, but `SetZoneCrop` re-points a
+ * zone mid-round and `applyPlantTile` will put any seed in any farm tile inside one, so a bot
+ * still comes home with chili to a shelf holding potatoes. Nothing vanishes (plan §4), and the
+ * diagnostic is a robot standing at a full shed, visible from ten tiles up.
  */
 function unloadIntoDock(bot: Bot, dock: Machine): void {
   const spec = machineSpec(dock.kind);
@@ -709,32 +708,12 @@ function unloadIntoDock(bot: Bot, dock: Machine): void {
     const room = effectiveOutputCapacity(spec, dock) - dock.cargoCount;
     if (room > 0) {
       const moved = bot.carryCount < room ? bot.carryCount : room;
-      // **THE SHELF'S CLOCK CONTINUES THE BOT'S** (item 112 for the merge, item 115 for the
-      // number), at the sooner of the two — otherwise a bot topping the shelf up every round would
-      // keep the bottom of the pile alive forever, which is `mergedFreshness`' whole reason for
-      // existing.
-      //
-      // **THIS ARGUMENT PASSED A LITERAL 0 UNTIL ITEM 115**, on item 112's reasoning that a bot's
-      // carry is a one-way transit buffer whose contents are always fresh, so *"a seventh clock
-      // would buy that walk and nothing else"*. The walk was never the case that mattered: a bot
-      // that CANNOT deliver holds its armful for as long as the jam lasts, and 0 restarted the
-      // window every time it finally did. See `Bot.carryFreshTicks`, which owns the whole
-      // argument — including that this makes a jammed dock cost produce.
-      dock.cargoFreshTicks = mergedFreshness(
-        dock.cargoCount,
-        dock.cargoFreshTicks,
-        bot.carryItem,
-        bot.carryFreshTicks,
-      );
       dock.cargoItem = bot.carryItem;
       dock.cargoCount += moved;
       bot.carryCount -= moved;
       // Empty arms are ONE state, not two — a remainder left lying on an empty bot would hash
       // differently from an identical bot that reached empty by another route.
-      if (bot.carryCount <= 0) {
-        bot.carryItem = 0;
-        bot.carryFreshTicks = 0;
-      }
+      if (bot.carryCount <= 0) bot.carryItem = 0;
     }
   }
 

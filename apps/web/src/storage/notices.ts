@@ -50,6 +50,23 @@ export const NoticeId = {
   SaveRejected: 'save-rejected',
   /** The browser declined to make this origin's storage permanent. */
   NotPersistent: 'storage-not-persistent',
+  /**
+   * The list of lots could not be written ([[138]]).
+   *
+   * Separate from `WriteFailed` for the reassuring half, exactly as `SaveRejected` is: the
+   * factory is fine and is still saving, and only the index that points at it is stuck. Those
+   * are very different pieces of news to receive while looking at a working farm, and letting
+   * "your world has stopped saving" overwrite this one would be a needless fright.
+   */
+  RegistryWriteFailed: 'registry-write-failed',
+  /**
+   * Lots whose save was on disk with nothing pointing at it were put back on the list ([[138]]).
+   *
+   * Good news, which is why it is `info` — but it is still news, because these worlds are
+   * about to appear on the front door under names the player has never seen, and a lot that
+   * shows up unannounced looks far more like a bug than like a rescue.
+   */
+  WorldsRescued: 'worlds-rescued',
 } as const;
 
 export type NoticeId = (typeof NoticeId)[keyof typeof NoticeId];

@@ -91,9 +91,27 @@ const SHOP_COPY: Readonly<Record<number, ShopCopy>> = {
     name: 'Push scythe',
     note: 'Cuts the three tiles across your path in one swing. You still walk the row.',
   },
+  // ⚠️ THIS ROW SHOULD NOT EXIST, AND THE FIX IS NOT ON THIS SIDE OF THE SEAM.
+  //
+  // A crate bought 45 minutes of freshness. [[124]] deleted the clock and the `PackCrate`
+  // command with it, so nothing in the game consumes one — but `ItemId.Crate` is still
+  // `purchasable: true` in `packages/sim/src/data.ts`, so the board lists it at $8: a
+  // consumable with no verb. The sim lane's own log says the Crate "follows the `DronePart`
+  // precedent"; `DronePart` is `purchasable: false, sellable: true`, and only the second half
+  // was applied.
+  //
+  // **THE FIX IS `purchasable: false` IN THE SIM**, which is one line and not a HUD change —
+  // and it is left to that lane on purpose, because `balanceDigest` folds `spec.purchasable`
+  // into `BALANCE_HASH`, so flipping it moves `SIM_VERSION` and every golden in the repo. That
+  // is a repin, not a copy edit.
+  //
+  // Until then the note below says what a crate IS and claims nothing about what it DOES,
+  // which is the only honest line available while the row is out of the HUD's hands. The
+  // freshness sentence that used to be here — "holds off the spoiling" — is exactly the copy
+  // outliving its mechanic that this whole item was filed to end.
   [ItemId.Crate]: {
     name: 'Crate',
-    note: 'Packs a stack in the bag and holds off the spoiling. Refused rather than eaten when it would not help.',
+    note: 'A sturdy wooden packing crate. The stand buys them back at what they cost.',
   },
 };
 

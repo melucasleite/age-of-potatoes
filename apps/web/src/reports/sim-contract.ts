@@ -134,7 +134,6 @@ export interface HourBucketView {
   readonly ticks: number;
   /** Permille of production wasted. Entropy release; expect `-1` for "not measured". */
   readonly wastePermille: number;
-  readonly spoilagePermille: number;
 }
 
 /**
@@ -152,7 +151,6 @@ export type ExtendedWorldView = WorldView & {
     readonly salesByItem?: readonly ItemSaleView[];
     readonly hours?: readonly HourBucketView[];
     readonly wastePermille?: number;
-    readonly spoilagePermille?: number;
   };
 };
 
@@ -189,16 +187,13 @@ export function readHourBuckets(view: WorldView): readonly HourBucketView[] | nu
 }
 
 /**
- * Waste and spoilage, in permille, or −1 for "the system that measures this does not exist
- * yet". Two separate reads because they arrive with different work items.
+ * Waste, in permille, or −1 for "the system that measures this does not exist yet".
+ *
+ * There was a `readSpoilagePermille` beside this until [[124]]; spoilage is not a pending
+ * system any more, it is a deleted one, so the read went with the row it fed.
  */
 export function readWastePermille(view: WorldView): number {
   const value = (view as ExtendedWorldView).stats.wastePermille;
-  return typeof value === 'number' ? value : -1;
-}
-
-export function readSpoilagePermille(view: WorldView): number {
-  const value = (view as ExtendedWorldView).stats.spoilagePermille;
   return typeof value === 'number' ? value : -1;
 }
 

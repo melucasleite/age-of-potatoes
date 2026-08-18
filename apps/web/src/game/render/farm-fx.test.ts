@@ -53,11 +53,7 @@ function field(overrides: Partial<FieldView> = {}): FieldView {
     moisturePermille: new Array<number>(COUNT).fill(0),
     ready: new Array<number>(COUNT).fill(0),
     dry: new Array<number>(COUNT).fill(0),
-    fertility: new Array<number>(COUNT).fill(0),
     soil: new Array<number>(COUNT).fill(1),
-    wilt: new Array<number>(COUNT).fill(0),
-    readyAge: new Array<number>(COUNT).fill(0),
-    compost: new Array<number>(COUNT).fill(0),
     zone: new Array<number>(COUNT).fill(0),
     lastPouredTick: new Array<number>(COUNT).fill(0),
     ...overrides,
@@ -198,16 +194,11 @@ describe('harvest pop', () => {
     expect(fx.flying).toBe(2);
   });
 
-  it('does not fire when a crop collapses into compost', () => {
-    const fx = makeFx();
-    fx.observe(field({ crop: [1, 0, 0, 0], ready: [1, 0, 0, 0] }));
-
-    // Same "was ripe, is gone" shape as a harvest — the compost heap that appeared on the
-    // tile is the only thing that tells them apart. Nobody picked this one.
-    fx.observe(field({ crop: [0, 0, 0, 0], ready: [0, 0, 0, 0], compost: [1, 0, 0, 0] }));
-
-    expect(fx.flying).toBe(0);
-  });
+  // ⚠️ A TEST STOOD HERE AND [[124]] DELETED THE CASE IT GUARDED. A ripe crop could collapse
+  // into compost on its own, which from the differ's side looked exactly like a harvest — "was
+  // ripe, is gone" — so `observe` also watched the compost heap and stayed silent when one
+  // appeared. Crops do not collapse now, so "was ripe, is gone" IS a harvest and there is no
+  // second case to tell apart. The pop is fired by the two tests either side of this note.
 
   it('does not fire when a crop is merely growing', () => {
     const fx = makeFx();
@@ -248,11 +239,7 @@ describe('re-keying on a till', () => {
       moisturePermille: new Array<number>(n).fill(0),
       ready: new Array<number>(n).fill(0),
       dry: new Array<number>(n).fill(0),
-      fertility: new Array<number>(n).fill(0),
       soil: new Array<number>(n).fill(1),
-      wilt: new Array<number>(n).fill(0),
-      readyAge: new Array<number>(n).fill(0),
-      compost: new Array<number>(n).fill(0),
       zone: new Array<number>(n).fill(0),
       lastPouredTick: new Array<number>(n).fill(0),
       ...overrides,

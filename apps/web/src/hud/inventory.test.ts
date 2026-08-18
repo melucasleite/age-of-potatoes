@@ -63,8 +63,6 @@ interface FakeSlot {
   sellable: number;
   boxedMachineKind: number;
   boxes: FakeBox[];
-  ticksToSpoil: number;
-  spoilingCount: number;
 }
 
 function slot(item: number, count: number, options: Partial<FakeSlot> = {}): FakeSlot {
@@ -74,10 +72,6 @@ function slot(item: number, count: number, options: Partial<FakeSlot> = {}): Fak
     sellable: 1,
     boxedMachineKind: 0,
     boxes: [],
-    // The projection's "nothing in this stack ever spoils" sentinel, which is the state almost
-    // every row is in — see `InventoryView.ticksToSpoil` for why it is -1 and not a big number.
-    ticksToSpoil: -1,
-    spoilingCount: 0,
     ...options,
   };
 }
@@ -112,21 +106,6 @@ describe('what is in the bag', () => {
 
   it('drops a slot the world has emptied rather than drawing "0 russets"', () => {
     expect(rows([slot(ItemId.RussetPotato, 0)])).toHaveLength(0);
-  });
-
-  // FRESHNESS IS COPIED, NEVER COMPUTED ([[035]]). If this row ever started counting down on its
-  // own it would be a second clock in a game with one, and it would drift by exactly the publish
-  // cadence — invisibly, and only on stacks the player is about to lose.
-  it("carries the sim's countdown across untouched, sentinel and all", () => {
-    const list = rows([
-      slot(ItemId.PotatoSlices, 12, { ticksToSpoil: 640, spoilingCount: 5 }),
-      slot(ItemId.BaggedChips, 3),
-    ]);
-    expect(list[0]?.ticksToSpoil).toBe(640);
-    expect(list[0]?.spoilingCount).toBe(5);
-    // Shelf-stable stays -1 rather than becoming 0, which would read as "spoils right now".
-    expect(list[1]?.ticksToSpoil).toBe(-1);
-    expect(list[1]?.spoilingCount).toBe(0);
   });
 });
 

@@ -324,8 +324,8 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
 
   // The farmland pools, dressed to the projection's collection by `fieldTiles.sync` on the
   // first frame and re-dressed on every till. The long-standing anchor and layer decisions
-  // (wet soil as an alpha ramp, base-anchored crops, compost as ground litter, ready marks
-  // on the world-UI layer) moved into `field-tiles.ts` with the loop that applies them.
+  // (wet soil as an alpha ramp, base-anchored crops, ready marks on the world-UI layer)
+  // moved into `field-tiles.ts` with the loop that applies them.
   const fieldTiles = new FieldTiles(art, {
     ground: (sprite) => {
       contentRoot.addChild(sprite);

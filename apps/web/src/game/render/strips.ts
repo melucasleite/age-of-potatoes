@@ -78,18 +78,3 @@ export const STAND_CELL = 3;
 export function walkStep(moving: boolean, xSub: number, ySub: number, strideSub: number): number {
   return moving ? stridePhase(xSub, ySub, strideSub) + 1 : STAND_CELL;
 }
-
-/**
- * Whether a strip genuinely carries a wilted frame, or only clamps politely.
- *
- * A crop's growth frames are `stageCount - 1` cells (stage 5 is "ready", drawn with the
- * last growth frame plus the ready mark), so a strip with `stageCount` cells has one frame
- * PAST the growth run — the withered plant, generated in the same call as the living one
- * (item 021, §15's one-strip rule). A four-cell strip asked for that frame would clamp to
- * its last growth cell and return the mature plant — a real texture, the wrong picture —
- * which is why the caller must ask this question rather than just requesting the frame.
- */
-export function stripHasWiltCell(cells: number, stageCount: number): boolean {
-  if (stageCount <= 0) return false;
-  return cells >= stageCount;
-}

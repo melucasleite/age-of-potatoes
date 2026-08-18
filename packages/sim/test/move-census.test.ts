@@ -49,8 +49,6 @@ import {
   MachineKind,
   OVERCOOK_BLOCKED_TICKS,
   SUBTILE,
-  WILT_GRACE_TICKS,
-  WILT_WINDOW_TICKS,
   addItem,
   boxedItemForMachine,
   createWorld,
@@ -60,7 +58,6 @@ import {
   machineSpec,
   plantCrop,
   putStorage,
-  remainingFreshness,
   spawnBelt,
   spawnBot,
   spawnGrabber,
@@ -80,14 +77,8 @@ import {
   goodsLedger,
   goodsMoves,
   itemBearingPaths,
-  ledgerClock,
   ledgerCount,
-  perishable,
 } from './goods';
-
-const POTATO_WINDOW = 18_000;
-/** Past the grace and past the droop, and a long way short of collapsing into compost. */
-const WILTED_AGE = WILT_GRACE_TICKS + WILT_WINDOW_TICKS + 1;
 
 function standOn(state: WorldState, tileX: number, tileY: number): void {
   state.player.xSub = tileX * SUBTILE + SUBTILE / 2;
@@ -126,7 +117,6 @@ function farmWithHarvester(seed: number): { state: WorldState; dock: Machine } {
 function jamProduceShelf(state: WorldState, dock: Machine): void {
   dock.cargoItem = ItemId.ChiliPepper;
   dock.cargoCount = machineSpec(MachineKind.HarvesterDock)!.outputCapacity;
-  dock.cargoFreshTicks = 0;
 }
 
 /** Step until the predicate holds, or give up. Returns the tick it happened on, or -1. */
@@ -138,52 +128,37 @@ function stepUntil(state: WorldState, limit: number, done: () => boolean): numbe
   return -1;
 }
 
-/** Turn every standing crop in the world Day-Old, in place, without moving the clock. */
-function wiltEveryRow(state: WorldState): void {
+/**
+ * **TURN EVERY STANDING ROW INTO A CROP THE BOT IS NOT CARRYING**, ripe and waiting.
+ *
+ * **DOOR 9'S NEW TRIGGER** (item 124). This replaces `wiltEveryRow`, which set `readyAge` past
+ * `WILT_GRACE_TICKS + WILT_WINDOW_TICKS` so every tile handed back `spec.dayOldItem` instead of
+ * `spec.yieldItem`. Nothing wilts any more, so that trigger is gone — and **the property door 9
+ * guards is not**, which is exactly the mistake this comment exists to stop somebody making:
+ *
+ *   * `harvestUnderBot` reads **`tile.crop`**, not `zone.crop`;
+ *   * `nextReadyTile` scans a zone on `isTileReady` alone, with no crop-identity filter at all;
+ *   * `applyPlantTile` puts any seed in any farm tile, zone or no zone, and `SetZoneCrop`
+ *     re-points a zone while a bot is already out on its round holding the last crop.
+ *
+ * So a bot with potatoes in its arms still walks onto a tile whose produce is a chili, and still
+ * has to send the armful home whole rather than overwrite it. Same door, same deletion, same
+ * four tests — one keypress instead of half an hour of not looking.
+ */
+function foreignCropEveryRow(state: WorldState): void {
+  const foreign = cropSpec(CropId.ChiliPepper)!;
   for (let i = 0; i < state.field.length; i++) {
     const tile = state.field[i]!;
     if (tile.crop === CropId.None) continue;
-    tile.readyAge = WILTED_AGE;
+    tile.crop = CropId.None;
+    plantCrop(state, tile, foreign);
+    tile.growth = tile.growthTarget;
   }
 }
 
 // --- doors 8, 8b and 8c: boxing a dock with a laden bot inside it --------------------------
 
 describe('boxing a dock that still has a laden bot in it', () => {
-  it('THE MINT (door 8): an armful with a quarter of its window left does not come back full', () => {
-    // The verifier's measurement, replayed: 9 potatoes with 5,999 ticks left came back as 17,938
-    // of an 18,000-tick window — through `addItem`, in the one function whose comments lecture
-    // three times about the clock leaving with the goods.
-    const { state, dock } = farmWithHarvester(11_701);
-    const bot = state.bots[0]!;
-    jamProduceShelf(state, dock);
-
-    const stalled = stepUntil(
-      state,
-      20_000,
-      () => bot.phase === BotPhase.Returning && bot.carryCount >= BOT_CARRY_CAPACITY,
-    );
-    expect(stalled, 'the bot filled its arms and came home to a jam').toBeGreaterThan(0);
-    expect(bot.carryItem).toBe(ItemId.RussetPotato);
-
-    // Two thirds of the window spent standing at the shed. The jam is what makes the armful sit
-    // still; the clock item 115 gave it is what makes the waiting cost something.
-    stepMany(state, 12_000);
-    const held = bot.carryCount;
-    const left = bot.carryFreshTicks;
-    expect(left, 'a third of the window left, give or take a bucket').toBeLessThan(POTATO_WINDOW);
-    expect(left).toBeGreaterThan(0);
-
-    standOn(state, 0, 0);
-    run(state, { type: 'DeconstructMachine', machineId: dock.id });
-
-    expect(itemCount(state, ItemId.RussetPotato), 'nothing vanished').toBe(held);
-    expect(
-      remainingFreshness(state, ItemId.RussetPotato),
-      'a box is not a way to un-wait',
-    ).toBeLessThanOrEqual(left);
-  });
-
   it('THE DELETION (door 8b): the bot’s seed pocket comes back too', () => {
     // The verifier's second measurement, and the plainest bug in the family: the loop that hands
     // an armful back never mentions `seedItem`/`seedCount` at all. Bag went 8 → 8, under a
@@ -249,14 +224,16 @@ describe('boxing a dock that still has a laden bot in it', () => {
   });
 });
 
-// --- door 9: a row that turns Day-Old under a working bot -----------------------------------
+// --- door 9: a row that becomes another crop under a working bot ----------------------------
 
-describe('a bot whose row turns Day-Old under it', () => {
+describe('a bot whose row becomes a crop it is not carrying', () => {
   it('THE DELETION (door 9): the armful it is already holding is not overwritten', () => {
-    // No boxing, no keypress, no exploit — one zone that produces two item ids, which is what a
-    // wilting row IS. `takeHarvest` returns `dayOldItem` for a wilted tile, the switch sets
-    // `phase = Returning`, and then the very next line zeroes the count it was about to send
-    // home. The comment calls the case "impossible by construction" three words after handling it.
+    // One zone holding two item ids, which a hand-planted row or a re-pointed `SetZoneCrop`
+    // produces for free. `takeHarvest` returns the tile's own produce, the switch sets
+    // `phase = Returning`, and then the very next line zeroed the count it was about to send
+    // home. The comment called the case "impossible by construction" three words after handling
+    // it. (Originally triggered by a row turning Day-Old; item 124 deleted that grade and did
+    // not delete this door — see `foreignCropEveryRow`.)
     const { state, dock } = farmWithHarvester(11_705);
     const bot = state.bots[0]!;
 
@@ -264,8 +241,8 @@ describe('a bot whose row turns Day-Old under it', () => {
     expect(picked, 'it pulled a fresh tile first').toBeGreaterThan(0);
     expect(bot.carryItem).toBe(ItemId.RussetPotato);
 
-    // And now the rest of the row turns, which takes half an hour of not looking at it.
-    wiltEveryRow(state);
+    // And now the rest of the row is something else.
+    foreignCropEveryRow(state);
     const held = bot.carryCount;
     expect(held).toBeGreaterThan(0);
 
@@ -275,64 +252,45 @@ describe('a bot whose row turns Day-Old under it', () => {
     expect(delivered, 'it reached the shed').toBeGreaterThan(0);
 
     // Wherever they are — still in its arms or already on the shelf — the count is the count.
-    // Under the old rule the shelf took DAY-OLD potatoes and the fresh ones were simply gone.
+    // Under the old rule the shelf took the OTHER crop and the potatoes were simply gone.
     expect(dock.cargoItem, 'the shelf took the wrong product entirely').toBe(ItemId.RussetPotato);
     const russets = dock.cargoCount + (bot.carryItem === ItemId.RussetPotato ? bot.carryCount : 0);
     expect(russets, 'three potatoes stopped existing').toBeGreaterThanOrEqual(held);
   });
 
-  it('leaves the turned tile standing rather than pulling what it cannot carry', () => {
+  it('leaves the foreign tile standing rather than pulling what it cannot carry', () => {
     // The fix's shape, and it is the shape the seed-pocket check four lines above already uses:
-    // ASK BEFORE THE PULL. A bot holding potatoes that walks onto a Day-Old tile takes nothing
-    // and goes home — the tile is still there next round, which is a stall a player can see.
+    // ASK BEFORE THE PULL. A bot holding potatoes that walks onto a chili tile takes nothing and
+    // goes home — the tile is still there next round, which is a stall a player can see.
     const { state } = farmWithHarvester(11_706);
     const bot = state.bots[0]!;
 
     stepUntil(state, 5_000, () => bot.carryCount > 0);
     expect(bot.carryItem).toBe(ItemId.RussetPotato);
-    wiltEveryRow(state);
+    foreignCropEveryRow(state);
 
     const standing = state.field.filter((tile) => tile.crop !== CropId.None).length;
-    expect(standing, 'a field of turned rows').toBeGreaterThan(0);
+    expect(standing, 'a field of foreign rows').toBeGreaterThan(0);
 
-    // It walks to a turned tile, refuses it, and heads home. Nothing is pulled that has nowhere
+    // It walks to a foreign tile, refuses it, and heads home. Nothing is pulled that has nowhere
     // to go, so the count of standing crops cannot fall while the bot's arms hold the other id.
     stepUntil(state, 3_000, () => bot.phase === BotPhase.Returning);
     expect(state.field.filter((tile) => tile.crop !== CropId.None).length).toBe(standing);
     expect(bot.carryItem, 'still holding what it walked out with').toBe(ItemId.RussetPotato);
   });
 
-  it('picks the Day-Old row up on the next round, once its arms are empty', () => {
-    // A refusal must not be a stall forever: the point of going home is that it comes back. Once
-    // the fresh potatoes are off its hands the same bot pulls the turned tiles as Day-Old goods.
-    //
-    // It stops at the ARMS rather than at the shelf on purpose. The dock's shelf holds one
-    // product at a time — `unloadIntoDock`'s documented stall — so a wilted zone genuinely does
-    // back its own shed up, and that is a jam the player can see, not a hole.
-    const { state } = farmWithHarvester(11_707);
-    const bot = state.bots[0]!;
-
-    stepUntil(state, 5_000, () => bot.carryCount > 0);
-    wiltEveryRow(state);
-
-    const gotThere = stepUntil(state, 20_000, () => bot.carryItem === ItemId.DayOldPotato);
-    expect(gotThere, 'the turned row never got picked up at all').toBeGreaterThan(0);
-    expect(bot.carryCount).toBeGreaterThan(0);
-  });
-
-  it('conserves every unit across a shift on a row that turns mid-round', () => {
-    // The same story with the books open: harvest a while, turn the row, run a few thousand
+  it('conserves every unit across a shift on a row that changes crop mid-round', () => {
+    // The same story with the books open: harvest a while, switch the row, run a few thousand
     // ticks, and count everything the world holds. Crops leave the ground and goods arrive.
     //
-    // The window is deliberately shorter than both clocks that would legitimately eat the
-    // evidence — a turned tile collapses to compost 12,000 ticks after it turns, and a potato in
-    // the bag has 18,000 — because this test is about DELETION, and a test that let spoilage in
-    // would be asserting the sweep works rather than that the transfers do.
+    // It used to need a window short enough to keep two spoilage clocks out of the evidence.
+    // Item 124 deleted both, so the count is now unconditional: nothing in this world can turn
+    // into anything, and a unit that is missing was deleted.
     const { state, dock } = farmWithHarvester(11_708);
     const bot = state.bots[0]!;
 
     stepUntil(state, 5_000, () => bot.carryCount > 0);
-    wiltEveryRow(state);
+    foreignCropEveryRow(state);
     const pulled = () => bot.carryCount + dock.cargoCount;
 
     const before = pulled();
@@ -341,8 +299,8 @@ describe('a bot whose row turns Day-Old under it', () => {
     const standingAfter = state.field.filter((tile) => tile.crop !== CropId.None).length;
 
     // Every tile that left the ground is a unit or more in somebody's hands, and no tile that
-    // left the ground is nowhere. `fertility + bonus` is at least one per tile, so this is a
-    // floor rather than an equality — which is the direction that catches a deletion.
+    // left the ground is nowhere. `HARVEST_BASE_COUNT + bonus` is at least one per tile, so this
+    // is a floor rather than an equality — the direction that catches a deletion.
     expect(standingAfter).toBeLessThanOrEqual(standingBefore);
     expect(pulled(), 'goods went missing over the shift').toBeGreaterThanOrEqual(
       before + (standingBefore - standingAfter),
@@ -355,12 +313,14 @@ describe('a bot whose row turns Day-Old under it', () => {
 describe('the seed pocket across a product switch', () => {
   it('keeps its seeds when the bot changes product mid-round', () => {
     // The pocket is a second armful with a second edge, and the switch above is where a fix that
-    // reset "the bot" rather than "the bot's arms" would quietly empty it.
+    // reset "the bot" rather than "the bot's arms" would quietly empty it. Note the pocket keeps
+    // POTATO seeds while the row is chili: the two pockets switch product independently, which
+    // is the whole reason this edge is its own test.
     const { state } = farmWithHarvester(11_709);
     const bot = state.bots[0]!;
 
     stepUntil(state, 5_000, () => bot.seedCount > 0);
-    wiltEveryRow(state);
+    foreignCropEveryRow(state);
     // Read AFTER the row turns, so this is what the pocket held walking into the switch.
     const pocketed = bot.seedCount;
     expect(pocketed).toBeGreaterThan(0);
@@ -493,38 +453,6 @@ describe('the move census', () => {
     );
     expect(relabels).toEqual(['MACHINE_SPECS[].overcookOutputItem']);
   });
-
-  it('gives every container a clock or a reason it has none', () => {
-    // The fourth column's own half of the argument. Whether the named clock is a REAL field, and
-    // whether every real field is named, is asked in `move-census-live.test.ts` against the
-    // save fixture — that file owns the world rich enough to have one of everything in it.
-    //
-    // A `null` clock with no reason beside it is the sentence three items in this family shipped
-    // a bug inside of, so the reason is the assertion here rather than a convention.
-    for (const entry of GOODS_COUNTS) {
-      if (entry.clock !== null) continue;
-      expect(
-        entry.clockless,
-        `${entry.node}/${entry.quantity} has no clock and no reason why not`,
-      ).toBeTruthy();
-    }
-    // Nine clocks, and door 11's own table listed eight — the bag's `spoilAtTick` is the ninth,
-    // and it is on the census here for the same reason the other eight are.
-    const clocks = new Set(
-      GOODS_COUNTS.map((entry) => entry.clock).filter((clock): clock is string => clock !== null),
-    );
-    expect([...clocks].sort()).toEqual([
-      'belts[].items[].freshTicks',
-      'bots[].carryFreshTicks',
-      'contracts[].inTransitFreshTicks',
-      'contracts[].stockedFreshTicks',
-      'grabbers[].heldFreshTicks',
-      'inventory[].stacks[].spoilAtTick',
-      'machines[].cargoFreshTicks',
-      'machines[].inputFreshTicks[]',
-      'machines[].outputFreshTicks',
-    ]);
-  });
 });
 
 // --- the ledger: the census, run against a live world ----------------------------------------
@@ -547,135 +475,6 @@ describe('the goods ledger', () => {
     expect(ledgerCount(ledger, ItemId.PotatoSeed), 'bag plus pocket').toBe(
       itemCount(state, ItemId.PotatoSeed) + bot.seedCount,
     );
-    expect(ledgerClock(ledger, ItemId.RussetPotato), 'and the clock came with it').toBe(
-      bot.carryFreshTicks,
-    );
-  });
-
-  it('BOXING ANY LADEN CONTAINER CONSERVES THE COUNT AND NEVER ADDS CLOCK', () => {
-    // **THE GENERAL FORM OF DOORS 8, 8b, 8c AND OF ITEM 110's ORIGINAL BUG**, asked of every
-    // machine kind the game will let you box, with goods put in through the machine's own front
-    // door. Every one of those doors was a container handing its load back through the wrong
-    // function; this asks the whole question of the whole set at once.
-    //
-    // The kinds are derived — every spec with a boxed item — rather than listed, so a new
-    // container arrives inside this test instead of beside it, and every one of them is driven
-    // through the PLAYER'S OWN front door rather than a helper: `LoadMachine` fills a container
-    // or a hopper, and `DeconstructMachine` boxes it, in one step so the machine never gets a
-    // tick in between to turn its ingredients into something else.
-    const boxable = MACHINE_SPECS.filter((spec) => boxedItemForMachine(spec.kind) !== null);
-    expect(boxable.length, 'the build menu is not empty').toBeGreaterThan(10);
-
-    const boxedWithGoods: string[] = [];
-    const unreached: string[] = [];
-    for (const spec of boxable) {
-      const state = createWorld(11_712 + spec.kind);
-      const machine = spawnMachine(state, spec.kind, 6, 6);
-      if (machine === null) {
-        unreached.push(`${spec.slug}: will not stand on open ground`);
-        continue;
-      }
-      const hoppers = machineHoppers(spec);
-      const item = hoppers.length > 0 ? hoppers[0]!.item : ItemId.RussetPotato;
-
-      // **AGED IN THE BAG BEFORE IT GOES IN**, which is the whole design of this test. A mint on
-      // the way out is only visible against goods that had already lost time on the way in — box
-      // something brand new and a stamped full window looks exactly like a preserved one.
-      addItem(state, item, 4);
-      stepMany(state, 6_000);
-      const clockIn = remainingFreshness(state, item);
-      standOn(state, 6, 6);
-
-      const before = goodsLedger(state);
-      run(state, { type: 'LoadMachine', machineId: machine.id, item, count: 4 });
-      const holding =
-        machine.cargoCount + machine.inputCounts.reduce((sum, count) => sum + count, 0);
-      if (holding <= 0) {
-        unreached.push(`${spec.slug}: has no door a hand can put that good through`);
-        continue;
-      }
-      run(state, { type: 'DeconstructMachine', machineId: machine.id });
-      if (state.machines.some((entry) => entry.id === machine.id)) {
-        unreached.push(`${spec.slug}: loaded, then refused the box (mid-batch, by design)`);
-        continue;
-      }
-      boxedWithGoods.push(spec.slug);
-
-      const after = goodsLedger(state);
-      expect(ledgerCount(after, item), `boxing a ${spec.slug} changed how many units exist`).toBe(
-        ledgerCount(before, item),
-      );
-      if (perishable(item)) {
-        expect(
-          ledgerClock(after, item),
-          `boxing a ${spec.slug} handed back more clock than went in`,
-        ).toBeLessThanOrEqual(clockIn);
-      }
-    }
-
-    // **THE REACH, WRITTEN DOWN, BECAUSE A CENSUS THAT HIDES ITS REACH IS A LIST AGAIN.**
-    //
-    // Everything this test could actually load and then box is checked above. Everything it could
-    // not is below WITH ITS REASON, pinned rather than mentioned — so the day a machine becomes
-    // loadable or boxable in a state it was not, this line goes red and somebody decides whether
-    // that is a feature. The big group is the production line, and its reason is a rule rather
-    // than a gap: a machine with ingredients and room IS mid-batch, and `applyDeconstructMachine`
-    // refuses to box one. `freshness-doors.test.ts` drives those two rooms — hopper and basket —
-    // by stopping the machine first, which is the supported way to box a loaded Washer.
-    expect(unreached).toEqual([
-      // **THE PRODUCTION LINE, AND ITS REASON IS A RULE RATHER THAN A GAP.** A machine with
-      // ingredients and room IS mid-batch, and `applyDeconstructMachine` refuses to box one —
-      // "stop it first" is the supported way, and `freshness-doors.test.ts` does exactly that to
-      // drive the hopper and the basket. Loading these and finding the box refused is therefore
-      // this test confirming a design rule, not skipping a door.
-      'chip-kitchen: loaded, then refused the box (mid-batch, by design)',
-      'sprinkler: has no door a hand can put that good through',
-      'washer: loaded, then refused the box (mid-batch, by design)',
-      'slicer: loaded, then refused the box (mid-batch, by design)',
-      'fryer: loaded, then refused the box (mid-batch, by design)',
-      'seasoner: loaded, then refused the box (mid-batch, by design)',
-      'bagger: loaded, then refused the box (mid-batch, by design)',
-      // The liquid layer holds millilitres, and there is no item id for a millilitre — stated in
-      // `applyDeconstructMachine`'s own header, where a tank's contents go on the ground.
-      'pump: has no door a hand can put that good through',
-      // The Artesian Well ([[130]]) holds nothing at all — not even millilitres. It is a hole in
-      // the ground with a price, and the only thing it changes is a rate in `rechargeReservoir`.
-      'artesian-well: has no door a hand can put that good through',
-      'tank: has no door a hand can put that good through',
-      'piped-sprinkler: has no door a hand can put that good through',
-      'irrigation-hub: has no door a hand can put that good through',
-      'recirculator: has no door a hand can put that good through',
-      'juicer: loaded, then refused the box (mid-batch, by design)',
-      'kettle: has no door a hand can put that good through',
-      'grinder: loaded, then refused the box (mid-batch, by design)',
-      'carbonator: has no door a hand can put that good through',
-      // **THE FIVE WORTH READING TWICE.** Each of these DOES hold goods and each refuses a hand,
-      // because its door is a belt, an arm, a bot or a contract instead. They are exactly the
-      // machines this family's bugs lived in, so none of them is left to this general sweep:
-      // the depot is item 115's `freshness-depot-and-bot.test.ts`, and the harvester dock's
-      // three rooms — shelf, seed shelf and the bot standing in it — are doors 8, 8b and 8c at
-      // the top of this file.
-      'delivery-cart: has no door a hand can put that good through',
-      'truck-depot: has no door a hand can put that good through',
-      'belt-junction: has no door a hand can put that good through',
-      'composter: loaded, then refused the box (mid-batch, by design)',
-      'orange-tree: has no door a hand can put that good through',
-      'lemon-tree: has no door a hand can put that good through',
-      'kola-tree: has no door a hand can put that good through',
-      'harvester-dock: has no door a hand can put that good through',
-      'planter-dock: has no door a hand can put that good through',
-      'drone-bay: has no door a hand can put that good through',
-    ]);
-    expect(boxedWithGoods, 'the containers this test actually loaded and boxed').toEqual([
-      'syrup-mixer',
-      'bottler',
-      'six-packer',
-      'combo-packer',
-      'root-cellar',
-      'hand-cart',
-      'maintenance-station',
-      'parts-bench',
-    ]);
   });
 
   it('BOXING A PART-BURNT BASKET HANDS BACK BOTH GRADES, NOT TWO OF THE BETTER ONE', () => {
@@ -734,19 +533,10 @@ describe('the goods ledger', () => {
     const held = ledgerCount(start, ItemId.RussetPotato);
     expect(held, 'ten potatoes went in').toBe(10);
 
-    let clock = ledgerClock(start, ItemId.RussetPotato);
     for (let i = 0; i < 60; i++) {
       stepMany(state, 200);
-      const now = goodsLedger(state);
-      const potatoes = ledgerCount(now, ItemId.RussetPotato);
-      const compost = ledgerCount(now, ItemId.Compost);
-      expect(potatoes + compost, `a unit appeared or vanished at tick ${state.tick}`).toBe(held);
-      if (potatoes === 0) break;
-      const nowClock = ledgerClock(now, ItemId.RussetPotato);
-      expect(nowClock, `the clock went UP at tick ${state.tick}`).toBeLessThanOrEqual(clock);
-      clock = nowClock;
+      const potatoes = ledgerCount(goodsLedger(state), ItemId.RussetPotato);
+      expect(potatoes, `a unit appeared or vanished at tick ${state.tick}`).toBe(held);
     }
-    // And the run was long enough to be worth something: the load actually moved.
-    expect(ledgerCount(goodsLedger(state), ItemId.RussetPotato)).toBeLessThanOrEqual(held);
   });
 });

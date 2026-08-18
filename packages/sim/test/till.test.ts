@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  HARVEST_BASE_COUNT,
   type TileRect,
   type WorldState,
   CropId,
@@ -95,18 +96,13 @@ describe('the till tool', () => {
     expect(tillOne(state, GRASS_X, GRASS_Y, TillMode.Untill)).toBe(false);
   });
 
-  it('un-tills an EMPTY farm tile back to grass, and refuses planted or compost tiles gently', () => {
+  it('un-tills an EMPTY farm tile back to grass, and refuses a planted one gently', () => {
     const state = world();
     // A planted tile refuses.
     const planted = tileAt(state, 4, 4)!;
     plantCrop(state, planted, cropSpec(CropId.RussetPotato)!);
     expect(tillOne(state, 4, 4, TillMode.Untill)).toBe(false);
     expect(tileAt(state, 4, 4)).not.toBeNull();
-
-    // A compost-bearing tile refuses — the till never destroys what a hand must pick up.
-    const composted = tileAt(state, 5, 4)!;
-    composted.compost = 2;
-    expect(tillOne(state, 5, 4, TillMode.Untill)).toBe(false);
 
     // An empty one goes, and the world genuinely loses the tile.
     expect(tillOne(state, 6, 4, TillMode.Untill)).toBe(true);
@@ -119,7 +115,6 @@ describe('the till tool', () => {
     expect(tillOne(state, GRASS_X, GRASS_Y)).toBe(true);
     const born = tileAt(state, GRASS_X, GRASS_Y)!;
     const soil = born.soil;
-    const fertility = born.fertility;
 
     // Ten till–untill cycles; the ground never changes. One cycle proves the mechanism;
     // ten prove nobody is advancing a hidden stream.
@@ -128,7 +123,6 @@ describe('the till tool', () => {
       expect(tillOne(state, GRASS_X, GRASS_Y)).toBe(true);
       const back = tileAt(state, GRASS_X, GRASS_Y)!;
       expect(back.soil).toBe(soil);
-      expect(back.fertility).toBe(fertility);
     }
   });
 
@@ -136,13 +130,11 @@ describe('the till tool', () => {
     const state = world();
     const born = tileAt(state, 7, 7)!;
     const soil = born.soil;
-    const fertility = born.fertility;
     expect(tillOne(state, 7, 7, TillMode.Untill)).toBe(true);
     expect(tillOne(state, 7, 7)).toBe(true);
     const back = tileAt(state, 7, 7)!;
     // The sequential birth roll, not a fresh position-keyed one — the ledger remembers.
     expect(back.soil).toBe(soil);
-    expect(back.fertility).toBe(fertility);
   });
 
   it('is order-independent: two worlds tilling the same tiles in opposite order agree', () => {
@@ -154,30 +146,9 @@ describe('the till tool', () => {
     expect(tillOne(b, 5, 2)).toBe(true);
     expect(tileAt(a, 5, 2)!.soil).toBe(tileAt(b, 5, 2)!.soil);
     expect(tileAt(a, 9, 2)!.soil).toBe(tileAt(b, 9, 2)!.soil);
-    expect(tileAt(a, 5, 2)!.fertility).toBe(tileAt(b, 5, 2)!.fertility);
     // The WHOLE worlds agree, not just the two tiles: same tick, same touches, same field,
     // same ledger — the order of the drags survives only in the trace, which is not state.
     expect(hashState(a)).toBe(hashState(b));
-  });
-
-  it('remembers worn fertility across the cycle — no laundering worn dirt through grass', () => {
-    const state = world();
-    expect(tillOne(state, GRASS_X, GRASS_Y)).toBe(true);
-    const tile = tileAt(state, GRASS_X, GRASS_Y)!;
-    const spec = cropSpec(CropId.RussetPotato)!;
-
-    // Harvest it once: `fertilityWear` advances (and fertility may step down at the wrap).
-    plantCrop(state, tile, spec);
-    tile.growth = tile.growthTarget;
-    expect(takeHarvest(state, tile, spec)).not.toBeNull();
-    const wornFertility = tile.fertility;
-    const wear = tile.fertilityWear;
-
-    expect(tillOne(state, GRASS_X, GRASS_Y, TillMode.Untill)).toBe(true);
-    expect(tillOne(state, GRASS_X, GRASS_Y)).toBe(true);
-    const back = tileAt(state, GRASS_X, GRASS_Y)!;
-    expect(back.fertility).toBe(wornFertility);
-    expect(back.fertilityWear).toBe(wear);
   });
 
   it('keeps the field sorted by world key, whatever order the player tills in', () => {
@@ -231,7 +202,6 @@ describe('the till tool', () => {
     expect(till(state, { x: 4, y: 2, w: 4, h: 1 })).toBe(true);
     expect(state.moneyCents).toBe(money);
     expect(state.stats.touches.handCarry).toBe(touches + 1);
-    expect(itemCount(state, ItemId.Compost)).toBe(0);
 
     const traceBefore = state.trace.length;
     // The same drag again converts nothing, so it is refused and leaves no trace entry.
@@ -309,42 +279,19 @@ describe('the till un-plants before it un-tills', () => {
     const tile = tileAt(state, 6, 6)!;
     plantCrop(state, tile, spec);
     tile.growth = tile.growthTarget;
-    tile.compost = 3;
-    const fertility = tile.fertility;
     const seeds = itemCount(state, ItemId.PotatoSeed);
 
     expect(tillOne(state, 6, 6, TillMode.Unplant), 'the ripe tile turned the till away').toBe(true);
-    // The yield is `fertility + a 0-or-1 roll`, so this brackets it rather than pinning the roll
-    // — the same bracket `field-machines.test.ts` puts around the placement's payout.
+    // The yield is `HARVEST_BASE_COUNT + a 0-or-1 roll`, so this brackets it rather than pinning
+    // the roll — the same bracket `field-machines.test.ts` puts around the placement's payout.
     const picked = itemCount(state, ItemId.RussetPotato);
     expect(picked, 'the ripe crop was destroyed instead of handed back').toBeGreaterThanOrEqual(
-      fertility,
+      HARVEST_BASE_COUNT,
     );
-    expect(picked).toBeLessThanOrEqual(fertility + 1);
-    expect(itemCount(state, ItemId.Compost), 'the compost stayed in the ground').toBe(3);
+    expect(picked).toBeLessThanOrEqual(HARVEST_BASE_COUNT + 1);
     expect(itemCount(state, ItemId.PotatoSeed), 'a one-shot crop owes a seed back').toBe(seeds + 1);
     expect(tileAt(state, 6, 6)!.crop).toBe(CropId.None);
     expect(isFieldTile(state, 6, 6), 'a ripe un-plant took the ground too').toBe(true);
-  });
-
-  it('a BARE COMPOSTED tile is the middle rung’s, so no farm tile is a dead end', () => {
-    // Before item 127 this tile had no answer: `Till` passed it over as already-farm and
-    // `Untill` refused it for the heap, and the only way on was to go and harvest the compost by
-    // hand. `Unplant` and `Untill` now partition the farm tiles — laden and bare — so every one
-    // of them has exactly one rung waiting for it.
-    const state = world(1273);
-    tileAt(state, 5, 4)!.compost = 2;
-
-    expect(tillOne(state, 5, 4, TillMode.Untill), 'the heap should still block an un-till').toBe(
-      false,
-    );
-    expect(tillOne(state, 5, 4, TillMode.Unplant), 'the heap blocked the un-plant too').toBe(true);
-    expect(itemCount(state, ItemId.Compost), 'the compost was left in the ground').toBe(2);
-    expect(tileAt(state, 5, 4)!.compost).toBe(0);
-    expect(isFieldTile(state, 5, 4)).toBe(true);
-    // And now the bare tile un-tills, which is the dead end gone.
-    expect(tillOne(state, 5, 4, TillMode.Untill)).toBe(true);
-    expect(tileAt(state, 5, 4)).toBeNull();
   });
 
   it('skips a BARE farm tile and a patch of GRASS, which is what makes the anchor safe', () => {
@@ -369,8 +316,6 @@ describe('the till un-plants before it un-tills', () => {
     const ripe = tileAt(state, 5, 5)!;
     plantCrop(state, ripe, spec);
     ripe.growth = ripe.growthTarget;
-    const composted = tileAt(state, 6, 5)!;
-    composted.compost = 1;
     // (7,5) is left bare, and y=3 is grass above the field.
     const seeds = itemCount(state, ItemId.PotatoSeed);
     const touches = state.stats.touches.handCarry;
@@ -381,10 +326,8 @@ describe('the till un-plants before it un-tills', () => {
     expect(till(state, { x: 4, y: 3, w: 5, h: 3 }, TillMode.Unplant)).toBe(true);
 
     expect(itemCount(state, ItemId.PotatoSeed), 'both laden crops owed a seed').toBe(seeds + 2);
-    expect(itemCount(state, ItemId.Compost)).toBe(1);
     expect(growing.crop).toBe(CropId.None);
     expect(ripe.crop).toBe(CropId.None);
-    expect(composted.compost).toBe(0);
     // The bare tile and the grass are untouched — not converted, not destroyed, not charged for.
     expect(isFieldTile(state, 7, 5), 'a bare tile inside the rect was un-tilled').toBe(true);
     expect(isFieldTile(state, 5, 3), 'grass inside an Unplant rect became farmland').toBe(false);
@@ -448,13 +391,15 @@ describe('the till un-plants before it un-tills', () => {
     const state = world(1280);
     state.moneyCents = 1_000_000;
     expect(spawnMachine(state, MachineKind.Sprinkler, 7, 7)).not.toBeNull();
-    tileAt(state, 7, 7)!.compost = 2;
+    const under = tileAt(state, 7, 7)!;
+    plantCrop(state, under, cropSpec(CropId.RussetPotato)!);
+    const seeds = itemCount(state, ItemId.PotatoSeed);
 
     expect(tillOne(state, 7, 7, TillMode.Unplant), 'the till reached under the machine').toBe(
       false,
     );
-    expect(itemCount(state, ItemId.Compost)).toBe(0);
-    expect(tileAt(state, 7, 7)!.compost).toBe(2);
+    expect(itemCount(state, ItemId.PotatoSeed)).toBe(seeds);
+    expect(under.crop).toBe(CropId.RussetPotato);
   });
 
   it('refuses a mode it has never heard of, rather than guessing at one', () => {

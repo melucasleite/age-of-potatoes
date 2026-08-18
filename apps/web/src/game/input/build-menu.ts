@@ -76,7 +76,6 @@ const TECH_LABELS: Readonly<Record<string, string>> = {
   // sends the player hunting for a node that, under that name, is nowhere.
   'agronomy-seed-hopper': 'Auto-Replant',
   'agronomy-gold-potato': 'Gold Potato',
-  'agronomy-composting': 'Composting',
   'agronomy-root-cellar': 'Root Cellar',
   'agronomy-orchard': 'The Orchard',
   'agronomy-kola-tree': 'The Kola Tree',
@@ -250,7 +249,6 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   machineEntry('Field', ToolMode.PlaceSprinkler),
   machineEntry('Field', ToolMode.PlacePipedSprinkler),
   machineEntry('Field', ToolMode.PlaceIrrigationHub),
-  machineEntry('Field', ToolMode.PlaceComposter),
   // The two docks are Field rows rather than Logistics ones, and that is a claim about what the
   // player is shopping for: a bot is not a way of moving goods across the lot, it is a way of
   // not walking the rows. It belongs next to the sprinkler, which is the other machine on this

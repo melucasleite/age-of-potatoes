@@ -3,9 +3,10 @@
 // Item 066 made farmland player-made: `FieldView` publishes `count`/`tileX[]`/`tileY[]` as
 // the addressing scheme, the old `originX + i % tilesWide` arithmetic is wrong the moment
 // anyone tills, and the bounding-box fields survive for framing only. This class is the
-// renderer's half of that contract: one wet-soil sprite, one crop sprite, one compost heap
-// and one ready mark PER FARM TILE, parallel to the projection's current indexing, moved
-// whenever the collection changes shape.
+// renderer's half of that contract: one wet-soil sprite, one crop sprite and one ready mark
+// PER FARM TILE, parallel to the projection's current indexing, moved whenever the
+// collection changes shape. (There was a fourth — a compost heap — until [[124]] deleted the
+// good it drew.)
 //
 // ── WHY A SYNC AND NOT A REBUILD ─────────────────────────────────────────────────────
 // Tilling is a hand gesture — it happens on the frame a drag lands and then not again for
@@ -28,9 +29,9 @@ import type { FieldView } from '@snack/sim';
 import { ART } from './textures';
 import type { ArtSet } from './textures';
 
-/** Where each of the four per-tile sprites is attached. Ground under crops under marks. */
+/** Where each of the three per-tile sprites is attached. Ground under crops under marks. */
 export interface FieldTileAttach {
-  /** Wet-soil overlays and compost litter: the ground-entity layer. */
+  /** Wet-soil overlays: the ground-entity layer. */
   ground(sprite: Sprite): void;
   /** Crop plants: the same layer, added after the ground pieces so they draw over them. */
   crop(sprite: Sprite): void;
@@ -42,7 +43,6 @@ export class FieldTiles {
   /** Parallel to the projection's CURRENT indexing. Valid until the next till, like it. */
   readonly soil: Sprite[] = [];
   readonly crops: Sprite[] = [];
-  readonly compost: Sprite[] = [];
   readonly readyMarks: Sprite[] = [];
 
   /** Last frame's collection, for the change test. World tile keys, projection order. */
@@ -121,10 +121,6 @@ export class FieldTiles {
       crop.scale.set(1, 1);
       crop.tint = 0xffffff;
 
-      const heap = this.compost[i]!;
-      heap.position.set(left, top);
-      heap.visible = false;
-
       const mark = this.readyMarks[i]!;
       mark.position.set(left + TILE_PX / 2, top);
       mark.visible = false;
@@ -136,7 +132,6 @@ export class FieldTiles {
     for (let i = count; i < this.soil.length; i++) {
       this.soil[i]!.alpha = 0;
       this.crops[i]!.visible = false;
-      this.compost[i]!.visible = false;
       this.readyMarks[i]!.visible = false;
     }
     this.keys.length = count;
@@ -145,15 +140,13 @@ export class FieldTiles {
   }
 
   destroy(): void {
-    // `destroy()` with no argument leaves the TEXTURES alone — all four point at the shared
+    // `destroy()` with no argument leaves the TEXTURES alone — all three point at the shared
     // atlas, which is not this pool's to free. Same rule as every other layer.
     for (const sprite of this.soil) sprite.destroy();
     for (const sprite of this.crops) sprite.destroy();
-    for (const sprite of this.compost) sprite.destroy();
     for (const sprite of this.readyMarks) sprite.destroy();
     this.soil.length = 0;
     this.crops.length = 0;
-    this.compost.length = 0;
     this.readyMarks.length = 0;
     this.keys.length = 0;
     this.active = 0;
@@ -169,12 +162,6 @@ export class FieldTiles {
     wet.alpha = 0;
     this.attach.ground(wet);
     this.soil[i] = wet;
-
-    // Compost sits UNDER the crop and over the soil: litter on the ground, not a plant.
-    const heap = new Sprite(this.art.get(ART.uiCompost));
-    heap.visible = false;
-    this.attach.ground(heap);
-    this.compost[i] = heap;
 
     // ANCHORED AT ITS BASE — the drink-bounce squashes the plant into the soil rather than
     // sliding it out of its tile. See the long anchor note this inherits from `world.ts`.

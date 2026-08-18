@@ -50,7 +50,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 21;
+export const CURRENT_FORMAT_VERSION = 22;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -1467,6 +1467,517 @@ const migrateFormat20To21: SaveMigration = (payload) => {
   return { ...p, contracts, bots };
 };
 
+// --- format 21 → 22: nothing rots, and everything it touched is paid for (item 124) -----
+//
+// Frozen ids, because a migration describes the world it is READING rather than the table this
+// build ships. Every one of these was true when format 21 was current; four of them no longer
+// exist in `data.ts` at all, which is exactly why they have to be written down here.
+const FORMAT_22_COMPOST = 9;
+const FORMAT_22_FERTILIZER = 55;
+const FORMAT_22_BOXED_COMPOSTER = 59;
+const FORMAT_22_COMPOSTER_KIND = 26;
+/** The Composter's recipe, in line order: line 0 was Compost. Its basket held Fertilizer. */
+const FORMAT_22_COMPOSTER_RECIPE: readonly number[] = [FORMAT_22_COMPOST];
+/** `TechId.Composting` as format 21 spelled it. */
+const FORMAT_22_COMPOSTING_TECH = 'agronomy-composting';
+/** `IntentAction.Fertilize`. A saved errand can be holding it. */
+const FORMAT_22_FERTILIZE_ACTION = 12;
+
+/**
+ * **WHAT A VANISHED GOOD IS WORTH, IN CENTS**, at the list price format 21 posted for it.
+ *
+ * Frozen numbers rather than a call into `listPriceCents`, for format 17's reason and one more
+ * of this item's own: these ids are GONE from `ITEM_SPECS`, so there is nothing left to ask.
+ */
+const FORMAT_22_PAYOUT_CENTS: Readonly<Record<number, number>> = {
+  [FORMAT_22_COMPOST]: 20,
+  [FORMAT_22_FERTILIZER]: 120,
+  [FORMAT_22_BOXED_COMPOSTER]: 12_000,
+};
+
+/** What a Composter cost new. The floor a refund may never fall below. */
+const FORMAT_22_COMPOSTER_PRICE_CENTS = 12_000;
+/** What the Composting node cost. Refunded, because a node with no machine behind it is a hole. */
+const FORMAT_22_COMPOSTING_PRICE_CENTS = 12_000;
+
+/**
+ * **EVERY DAY-OLD GRADE, AND THE FRESH GOOD IT BECOMES.** One for one, at no loss: a player who
+ * was holding twenty Day-Old Potatoes worth 100¢ each is holding twenty Russets worth 200¢.
+ */
+const FORMAT_22_FRESH_FOR_DAY_OLD: Readonly<Record<number, number>> = {
+  8: 2, // DayOldPotato    -> RussetPotato
+  12: 11, // DayOldCane     -> SugarCane
+  15: 14, // DayOldCorn     -> Corn
+  18: 17, // DayOldChili    -> ChiliPepper
+  52: 51, // DayOldGoldPotato -> GoldPotato
+};
+
+function format22Int(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) ? value : 0;
+}
+
+/** The id this good becomes, or 0 for one that has no successor and is paid out instead. */
+function format22Successor(item: number): number {
+  const fresh = FORMAT_22_FRESH_FOR_DAY_OLD[item];
+  if (fresh !== undefined) return fresh;
+  if (FORMAT_22_PAYOUT_CENTS[item] !== undefined) return 0;
+  return item;
+}
+
+/** True for an id this step deletes outright. */
+function format22Doomed(item: number): boolean {
+  return format22Successor(item) !== item;
+}
+
+/** A running wallet, so every payout in this step is one addition at the end. */
+interface Format22Purse {
+  cents: number;
+}
+
+/** Pay a doomed good out at list. Silently ignores a good that has a successor. */
+function format22PayOut(purse: Format22Purse, item: number, count: number): void {
+  if (count <= 0) return;
+  const cents = FORMAT_22_PAYOUT_CENTS[item];
+  if (cents !== undefined) purse.cents += cents * count;
+}
+
+/** The slot for an item, created in canonical (ascending-id) position. `format17Slot`, restated. */
+function format22Slot(slots: Record<string, unknown>[], item: number): Record<string, unknown> {
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i]!;
+    if (format22Int(slot['item']) === item) return slot;
+  }
+  const created: Record<string, unknown> = { boxes: [], count: 0, item };
+  let insertAt = slots.length;
+  for (let i = 0; i < slots.length; i++) {
+    if (format22Int(slots[i]!['item']) > item) {
+      insertAt = i;
+      break;
+    }
+  }
+  slots.splice(insertAt, 0, created);
+  return created;
+}
+
+/** Put goods in the bag, converting or paying out on the way. Never writes a doomed id. */
+function format22Give(
+  slots: Record<string, unknown>[],
+  purse: Format22Purse,
+  item: number,
+  count: number,
+): void {
+  if (count <= 0 || item === 0) return;
+  const successor = format22Successor(item);
+  if (successor === 0) {
+    format22PayOut(purse, item, count);
+    return;
+  }
+  const slot = format22Slot(slots, successor);
+  slot['count'] = format22Int(slot['count']) + count;
+}
+
+/**
+ * Format 21 → 22: **nothing rots, and the six things that stops existing are all paid for**
+ * (item 124; owner ruling 2026-08-17: *"I want fertility to not be a feature at all, and I want
+ * wasting to not be a feature at all, like these old day potatoes and the compost. I want all of
+ * that gone."*).
+ *
+ * **THIS IS THE LARGEST DELETION THE SAVE CHAIN HAS EVER CARRIED, AND ITS ONLY JOB IS THAT NO
+ * PLAYER IS WORSE OFF FOR HAVING SAVED.** Every field it drops is one of two kinds: a CLOCK,
+ * which described a countdown that no longer runs and which nobody paid for, or a GOOD, which
+ * somebody did. Clocks are dropped in silence. Goods are converted or bought.
+ *
+ * **THE CLOCKS DROPPED, WITH NOTHING OWED FOR ANY OF THEM.** `inventory[].stacks`,
+ * `machines[].cargoFreshTicks` / `inputFreshTicks` / `outputFreshTicks`,
+ * `belts[].items[].freshTicks`, `grabbers[].heldFreshTicks`, `bots[].carryFreshTicks`,
+ * `contracts[].stockedFreshTicks` / `inTransitFreshTicks`, and on every field tile `readyAge`.
+ * Not one of them was a quantity: the COUNTS beside them are untouched, which is the whole of
+ * plan §4's *"nothing vanishes"* and the reason that invariant's census survives this item
+ * intact. A stack list summing to `count` is dropped while `count` stays, so the bag holds
+ * exactly what it held.
+ *
+ * **THE GOODS, AND WHAT EACH ONE BECOMES.** Each is applied wherever a good can sit — the bag, a
+ * belt, a claw, a hopper, a basket, a container's cargo, a dock shelf, a bot's arms and a depot
+ * route — because a rule that only ran on the inventory would be a rule that robs anyone whose
+ * potatoes were on a belt when they saved:
+ *
+ *   * **Day-Old produce → its fresh grade, one for one.** Strictly better: a Day-Old Potato was
+ *     100¢ and a Russet is 200¢. There is no fresh/turned distinction to preserve, and the
+ *     generous direction is the only one that cannot make a save worse.
+ *   * **Compost → 20¢ a unit, into the wallet.** It has no successor — it was the *product* of
+ *     rot — so there is nothing to convert it into and deleting it silently is the one thing
+ *     plan §4 rules out flat. Compost lying on a FIELD TILE is paid the same way.
+ *   * **Fertilizer → 120¢ a unit.** Same argument, same shape.
+ *   * **A built Composter → its invoice, in cash**, plus its hopper's compost and its basket's
+ *     fertilizer at list. `investedCents` rather than the $120 list price, because that is what
+ *     the player actually put in — a machine with three dials on it cost more than one without,
+ *     and `boxedMachineScrapCents` already treats the invoice as the truth. Floored at list, so
+ *     a corrupt or absent invoice cannot pay less than the machine cost new.
+ *   * **A boxed Composter in the bag → the same**, per box, off each box's own invoice.
+ *   * **The Composting tech node → 120¢... refunded at its $120 price**, and taken out of
+ *     `unlocked`. A node whose machine no longer exists is money spent on nothing.
+ *
+ * **DEPLETED SOIL BECOMES BEST-QUALITY GROUND, WHICH IS A FIELD-WIDE PAY RISE AND NOT A LINE IN
+ * THIS FUNCTION.** `fertility` and `fertilityWear` are simply dropped from every tile and every
+ * `soilMemory` entry; `takeHarvest` then pays `HARVEST_BASE_COUNT`, which is the old
+ * `FERTILITY_MAX`. So a player who had ground themselves down to 1★ opens the game to triple
+ * yields, and nobody's field pays less than it did. **SOIL ITSELF IS UNTOUCHED** — loam, sand
+ * and clay, the roll-once ledger, and the growth and drain rates they scale, all survive exactly
+ * as they were. This step takes the STARS off the dirt, not the dirt.
+ *
+ * **A CROP MID-WILT COMES BACK WHOLE.** `readyAge` is dropped, so a tile that was two minutes
+ * from turning is a tile with a ripe crop on it, forever, and it harvests as the fresh good at
+ * full price. There is no case to handle: deleting the clock IS the mercy.
+ *
+ * **A SAVED `Fertilize` ERRAND IS CANCELLED** rather than left pointing at a verb that no longer
+ * exists — `INTENT_ACTIONS` no longer lists action 12, so the loader would refuse the file
+ * outright. The player stops walking; nothing is spent, because an errand had not spent it yet.
+ *
+ * **A ROUTE FOR A DELETED PRODUCT IS PAID OUT AND TORN UP.** A Day-Old route simply re-points at
+ * the fresh good and keeps running. A Compost or Fertilizer route cannot: `contracts[].item` has
+ * to name a live id or the loader refuses the save. So its floor and its rolling load are paid
+ * at list and the route is removed, which is `refundContract`'s own behaviour written in payload
+ * terms.
+ *
+ * **A GRABBER FILTERED TO A DELETED GOOD IS SET TO "ANYTHING"** (filter 0). A filter is a
+ * setting rather than property — nothing was paid for it — and 0 is the value that means the arm
+ * keeps working instead of standing still forever waiting for compost.
+ *
+ * **LIFETIME SALES OF A DELETED GOOD FOLD INTO ITS SUCCESSOR OR ARE DROPPED.** `salesByItem` is
+ * history rather than property: a Day-Old row merges into the fresh row it became, and a Compost
+ * row goes, because the alternative is a save the loader refuses over a number in a report.
+ *
+ * `payload.version` is NOT rewritten, for the reason format 14 → 15 spells out: it is hashed
+ * world state, and stamping the format number onto it would make a migrated world hash
+ * differently from an identical fresh one.
+ */
+const migrateFormat21To22: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-21 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+  const purse: Format22Purse = { cents: 0 };
+
+  // --- the bag ------------------------------------------------------------------------
+  //
+  // Rebuilt rather than edited in place, because a Day-Old row MERGES into a fresh row that may
+  // already exist, and a merge done by mutation while iterating is how a sorted collection loses
+  // its order. `stacks` is dropped by omission: every key but that one is copied forward.
+  const inventory: Record<string, unknown>[] = [];
+  const oldInventory = rows(p, 'inventory');
+  for (let i = 0; i < oldInventory.length; i++) {
+    const slot = oldInventory[i]!;
+    const item = format22Int(slot['item']);
+    const count = format22Int(slot['count']);
+    const boxes = Array.isArray(slot['boxes']) ? (slot['boxes'] as Record<string, unknown>[]) : [];
+
+    if (item === FORMAT_22_BOXED_COMPOSTER) {
+      // Per BOX, off each box's own invoice — two boxed Composters with different dials on them
+      // are worth different money, and paying a flat list price would rob the upgraded one.
+      for (let b = 0; b < boxes.length; b++) {
+        const invoice = format22Int(boxes[b]!['investedCents']);
+        purse.cents +=
+          invoice > FORMAT_22_COMPOSTER_PRICE_CENTS ? invoice : FORMAT_22_COMPOSTER_PRICE_CENTS;
+      }
+      // A payload whose `boxes` list is short of `count` — which the writer never produces —
+      // still pays for every unit, at list.
+      const unboxed = count - boxes.length;
+      if (unboxed > 0) purse.cents += FORMAT_22_COMPOSTER_PRICE_CENTS * unboxed;
+      continue;
+    }
+    if (format22Successor(item) === 0) {
+      format22PayOut(purse, item, count);
+      continue;
+    }
+    if (format22Doomed(item)) {
+      // A Day-Old grade. It never had boxes, and `format22Give` merges it into the fresh row —
+      // which, because `inventory` is sorted ascending and every fresh id is LOWER than its
+      // Day-Old id (2 < 8, 11 < 12, 14 < 15, 17 < 18, 51 < 52), has already been seen.
+      format22Give(inventory, purse, item, count);
+      continue;
+    }
+    // An ordinary row, carried across with everything but `stacks`. The slot may already exist,
+    // because nothing stops a payload naming the same id twice; adding into it keeps one slot
+    // per id, which is the invariant the loader and the hash both rest on.
+    const carried = format22Slot(inventory, item);
+    carried['count'] = format22Int(carried['count']) + count;
+    if (boxes.length > 0) {
+      const had = Array.isArray(carried['boxes']) ? (carried['boxes'] as unknown[]) : [];
+      carried['boxes'] = [...had, ...boxes];
+    }
+  }
+  // A row that ended at zero held nothing, and an empty slot is a state the writer never
+  // produces — so it must not be introduced here either.
+  for (let i = inventory.length - 1; i >= 0; i--) {
+    if (format22Int(inventory[i]!['count']) <= 0) inventory.splice(i, 1);
+  }
+
+  // --- the field ----------------------------------------------------------------------
+  //
+  // `fertility`, `fertilityWear` and `readyAge` are dropped in silence — a star and a clock, and
+  // nobody bought either. `compost` is a GOOD lying on the ground and is paid for.
+  const field = rows(p, 'field').map((tile) => {
+    format22PayOut(purse, FORMAT_22_COMPOST, format22Int(tile['compost']));
+    const next = { ...tile };
+    delete next['fertility'];
+    delete next['fertilityWear'];
+    delete next['readyAge'];
+    delete next['compost'];
+    return next;
+  });
+
+  const soilMemory = rows(p, 'soilMemory').map((entry) => {
+    const next = { ...entry };
+    delete next['fertility'];
+    delete next['fertilityWear'];
+    return next;
+  });
+
+  // --- machines -----------------------------------------------------------------------
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    const machine = oldMachines[i]!;
+    const kind = format22Int(machine['kind']);
+
+    if (kind === FORMAT_22_COMPOSTER_KIND) {
+      // The DECONSTRUCT PATH, as format 16 → 17 ran it for the Parts Bench — except that there is
+      // no box to hand back, because there is no machine to put in one. So the invoice is paid in
+      // cash and the contents come out through the same door everything else does.
+      const invoice = format22Int(machine['investedCents']);
+      purse.cents +=
+        invoice > FORMAT_22_COMPOSTER_PRICE_CENTS ? invoice : FORMAT_22_COMPOSTER_PRICE_CENTS;
+      format22PayOut(purse, FORMAT_22_FERTILIZER, format22Int(machine['outputCount']));
+      const inputCounts = machine['inputCounts'];
+      if (Array.isArray(inputCounts)) {
+        for (let line = 0; line < FORMAT_22_COMPOSTER_RECIPE.length; line++) {
+          format22Give(
+            inventory,
+            purse,
+            FORMAT_22_COMPOSTER_RECIPE[line]!,
+            format22Int(inputCounts[line]),
+          );
+        }
+      }
+      // A converter never had cargo, but a payload that carries some keeps it — format 17's
+      // "its own identity wins" principle.
+      format22Give(
+        inventory,
+        purse,
+        format22Int(machine['cargoItem']),
+        format22Int(machine['cargoCount']),
+      );
+      continue;
+    }
+
+    const next = { ...machine };
+    delete next['cargoFreshTicks'];
+    delete next['inputFreshTicks'];
+    delete next['outputFreshTicks'];
+
+    // Cargo, basket and seed shelf: a doomed good in any of them is converted where it stands,
+    // or emptied and paid for. A hopper LINE has no id of its own — its identity is the spec's,
+    // and no surviving machine has a hopper for a deleted good — so `inputCounts` needs nothing.
+    const cargoItem = format22Int(next['cargoItem']);
+    if (format22Doomed(cargoItem)) {
+      const successor = format22Successor(cargoItem);
+      const cargoCount = format22Int(next['cargoCount']);
+      if (successor === 0) {
+        format22PayOut(purse, cargoItem, cargoCount);
+        next['cargoItem'] = 0;
+        next['cargoCount'] = 0;
+      } else {
+        next['cargoItem'] = successor;
+      }
+    }
+    const outputItem = format22Int(next['outputItem']);
+    if (format22Doomed(outputItem)) {
+      const successor = format22Successor(outputItem);
+      if (successor === 0) {
+        format22PayOut(purse, outputItem, format22Int(next['outputCount']));
+        next['outputItem'] = 0;
+        next['outputCount'] = 0;
+      } else {
+        next['outputItem'] = successor;
+      }
+    }
+    const seedShelfItem = format22Int(next['seedShelfItem']);
+    if (format22Doomed(seedShelfItem)) {
+      // Not reachable — a seed shelf holds seeds — and handled anyway, for the reason every
+      // other branch here is: a hand-edited payload must not be able to write a dead id back.
+      const successor = format22Successor(seedShelfItem);
+      if (successor === 0) {
+        format22PayOut(purse, seedShelfItem, format22Int(next['seedShelfCount']));
+        next['seedShelfItem'] = 0;
+        next['seedShelfCount'] = 0;
+      } else {
+        next['seedShelfItem'] = successor;
+      }
+    }
+    machines.push(next);
+  }
+
+  // --- belts, claws and robots ---------------------------------------------------------
+  //
+  // A belt item that was compost comes OFF the belt and into the wallet rather than being left
+  // as a hole in the run: `items` is a sorted list with legal spacing, and a placeholder id would
+  // be a good nobody can name riding past the player forever.
+  const belts = rows(p, 'belts').map((belt) => {
+    const items = belt['items'];
+    if (!Array.isArray(items)) return belt;
+    const kept: Record<string, unknown>[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const raw = items[i];
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue;
+      const entry = { ...(raw as Record<string, unknown>) };
+      delete entry['freshTicks'];
+      const item = format22Int(entry['item']);
+      const successor = format22Successor(item);
+      if (successor === 0) {
+        format22PayOut(purse, item, 1);
+        continue;
+      }
+      entry['item'] = successor;
+      kept.push(entry);
+    }
+    return { ...belt, items: kept };
+  });
+
+  const grabbers = rows(p, 'grabbers').map((grabber) => {
+    const next = { ...grabber };
+    delete next['heldFreshTicks'];
+    const held = format22Int(next['held']);
+    if (format22Doomed(held)) {
+      const successor = format22Successor(held);
+      if (successor === 0) {
+        format22PayOut(purse, held, 1);
+        next['held'] = 0;
+      } else {
+        next['held'] = successor;
+      }
+    }
+    // A filter is a setting, not property: an arm told to move only compost is told to move
+    // anything instead, which is the value that keeps it working.
+    if (format22Doomed(format22Int(next['filter']))) next['filter'] = 0;
+    return next;
+  });
+
+  const bots = rows(p, 'bots').map((bot) => {
+    const next = { ...bot };
+    delete next['carryFreshTicks'];
+    const carryItem = format22Int(next['carryItem']);
+    if (format22Doomed(carryItem)) {
+      const successor = format22Successor(carryItem);
+      if (successor === 0) {
+        format22PayOut(purse, carryItem, format22Int(next['carryCount']));
+        next['carryItem'] = 0;
+        next['carryCount'] = 0;
+      } else {
+        next['carryItem'] = successor;
+      }
+    }
+    return next;
+  });
+
+  // --- routes --------------------------------------------------------------------------
+  const contracts: Record<string, unknown>[] = [];
+  const oldContracts = rows(p, 'contracts');
+  for (let i = 0; i < oldContracts.length; i++) {
+    const contract = oldContracts[i]!;
+    const next = { ...contract };
+    delete next['stockedFreshTicks'];
+    delete next['inTransitFreshTicks'];
+    const item = format22Int(next['item']);
+    const successor = format22Successor(item);
+    if (successor === 0) {
+      format22PayOut(purse, item, format22Int(next['stocked']));
+      format22PayOut(purse, item, format22Int(next['inTransit']));
+      continue;
+    }
+    next['item'] = successor;
+    contracts.push(next);
+  }
+
+  // --- the errand, the tech list, and the wallet ----------------------------------------
+  const playerRaw = p['player'];
+  let player = playerRaw;
+  if (typeof playerRaw === 'object' && playerRaw !== null && !Array.isArray(playerRaw)) {
+    const intent = (playerRaw as Record<string, unknown>)['intent'];
+    if (
+      typeof intent === 'object' &&
+      intent !== null &&
+      !Array.isArray(intent) &&
+      format22Int((intent as Record<string, unknown>)['action']) === FORMAT_22_FERTILIZE_ACTION
+    ) {
+      player = { ...(playerRaw as Record<string, unknown>), intent: null };
+    }
+  }
+
+  const unlockedRaw = p['unlocked'];
+  let unlocked = unlockedRaw;
+  if (Array.isArray(unlockedRaw)) {
+    const kept: unknown[] = [];
+    for (let i = 0; i < unlockedRaw.length; i++) {
+      if (unlockedRaw[i] === FORMAT_22_COMPOSTING_TECH) {
+        purse.cents += FORMAT_22_COMPOSTING_PRICE_CENTS;
+        continue;
+      }
+      kept.push(unlockedRaw[i]);
+    }
+    unlocked = kept;
+  }
+
+  // Lifetime sales: a Day-Old row folds into the fresh row it became, a paid-out good's row goes.
+  let stats = p['stats'];
+  if (typeof stats === 'object' && stats !== null && !Array.isArray(stats)) {
+    const statsRecord = stats as Record<string, unknown>;
+    const salesRaw = statsRecord['salesByItem'];
+    if (Array.isArray(salesRaw)) {
+      const sales: Record<string, unknown>[] = [];
+      for (let i = 0; i < salesRaw.length; i++) {
+        const raw = salesRaw[i];
+        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue;
+        const row = raw as Record<string, unknown>;
+        const successor = format22Successor(format22Int(row['item']));
+        if (successor === 0) continue;
+        let merged = false;
+        for (let j = 0; j < sales.length; j++) {
+          if (format22Int(sales[j]!['item']) !== successor) continue;
+          const into = sales[j]!;
+          for (const key of ['lifetimeCount', 'lifetimeCents', 'dawnCount', 'dawnCents']) {
+            if (row[key] !== undefined || into[key] !== undefined) {
+              into[key] = format22Int(into[key]) + format22Int(row[key]);
+            }
+          }
+          merged = true;
+          break;
+        }
+        if (!merged) sales.push({ ...row, item: successor });
+      }
+      sales.sort((a, b) => format22Int(a['item']) - format22Int(b['item']));
+      stats = { ...statsRecord, salesByItem: sales };
+    }
+  }
+
+  const moneyCents = format22Int(p['moneyCents']) + purse.cents;
+
+  return {
+    ...p,
+    belts,
+    bots,
+    contracts,
+    field,
+    grabbers,
+    inventory,
+    machines,
+    moneyCents,
+    player,
+    soilMemory,
+    stats,
+    unlocked,
+  };
+};
+
 /**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
@@ -1493,6 +2004,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   18: migrateFormat18To19,
   19: migrateFormat19To20,
   20: migrateFormat20To21,
+  21: migrateFormat21To22,
 };
 
 export interface MigrationOutcome {

@@ -41,7 +41,7 @@ import {
 } from '@snack/sim';
 import type { Command, WorldState, WorldView } from '@snack/sim';
 
-import { createLotFields, deriveLot, RiskWatch } from './derive-lot';
+import { createLotFields, deriveLot } from './derive-lot';
 import {
   focusZone,
   openZonePanel,
@@ -79,7 +79,7 @@ function project(state: WorldState): WorldView {
 }
 
 function lotOf(state: WorldState) {
-  return deriveLot(project(state), new RiskWatch(), createLotFields());
+  return deriveLot(project(state), createLotFields());
 }
 
 describe('the three fields the HUD used to drop', () => {

@@ -45,9 +45,7 @@
         "ySub": 960
       }
     ],
-    "ceremonies": [
-      "repair-drone-first-launch"
-    ],
+    "ceremonies": ["repair-drone-first-launch"],
     "contracts": [],
     "field": [
       {
@@ -1140,9 +1138,7 @@
     "nextPipeId": 1,
     "nextReservoirId": 2,
     "nextZoneId": 2,
-    "ownedParcels": [
-      0
-    ],
+    "ownedParcels": [0],
     "pipes": [],
     "reservoirs": [
       {
@@ -1576,9 +1572,7 @@
       "longestHandsFreeTicks": 18,
       "longestUntouchedMachineTicks": 0,
       "netWorthCents": 10005400,
-      "netWorthSamples": [
-        10005400
-      ],
+      "netWorthSamples": [10005400],
       "nextNetWorthSampleTick": 1200,
       "peakNetWorthCents": 10005400,
       "repairKitSpendCents": 0,

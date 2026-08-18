@@ -166,7 +166,6 @@ describe('the hour ledger', () => {
     expect(hours[0]!.ticks).toBe(DAWN_TICK_IN_DAY);
     expect(hours[1]!.ticks).toBe(state.tick - DAWN_TICK_IN_DAY);
     expect(hours[1]!.grossCents).toBe(200);
-    expect(hours[1]!.spoilagePermille).toBe(-1);
   });
 
   it('caps retained hours like the Shift Report strip does', () => {

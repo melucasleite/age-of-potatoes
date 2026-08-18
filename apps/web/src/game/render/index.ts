@@ -19,7 +19,6 @@ import {
   MachineKind,
   SUBTILE,
   TICKS_PER_SECOND,
-  WiltStage,
   itemSpec,
   machineSpec,
   worldTileKey,
@@ -369,11 +368,6 @@ function updateField(
     const wet = tiles.soil[i]!;
     wet.alpha = (moisture / 1000) * 0.72;
 
-    // Compost is litter, not a plant: it shows whether or not anything is growing here,
-    // because the tile it is lying on is usually the tile whose crop just collapsed.
-    const heap = tiles.compost[i]!;
-    heap.visible = (field.compost[i] ?? 0) > 0;
-
     const crop = tiles.crops[i]!;
     const cropId = field.crop[i] ?? 0;
     if (cropId === 0) {
@@ -385,42 +379,20 @@ function updateField(
     const stage = Math.max(1, field.stage[i] ?? 1);
     crop.visible = true;
 
-    // A TURNED crop wears the strip's own wilted frame when the art pipeline has generated
-    // one — the fifth cell of the same strip the growth stages came from (§15's one-call
-    // rule, item 021), so the dying plant is unmistakably the living plant. `cropWiltFrame`
-    // answers `null` for a four-cell strip rather than clamping to the mature frame, and
-    // then the tint-and-sag fallback below carries the state exactly as before.
-    const wilt = field.wilt[i] ?? WiltStage.Fresh;
-    const wiltFrame = wilt === WiltStage.Wilted ? scene.art.cropWiltFrame(cropId) : null;
-    crop.texture = wiltFrame ?? scene.art.get(ART.cropStage(cropId, stage));
-
-    // Wilt reads as COLOUR AND POSTURE, not as a badge. The DROOP WINDOW is always tint-and-
-    // sag — a drooping crop yellows and sags a pixel on its mature frame, which is the §5
-    // telegraph that warns before the turn and must stay readable whatever the atlas holds.
-    // A turned crop goes grey-brown and sags two ONLY while faking it; once the real wilted
-    // frame draws, the art speaks for itself and is left untinted and unshoved. Per-sprite
-    // tint is a batched vertex attribute in v8 — this costs nothing and breaks nothing,
-    // unlike the day/night pass, which is one filter on the root for exactly the opposite
-    // reason.
+    // ⚠️ A CROP HAS ONE LOOK PER GROWTH STAGE AND NOTHING ELSE ([[124]]). There used to be
+    // three more states layered on top of this line: a fifth "wilted" strip cell, a
+    // yellow-then-grey-brown tint ramp, and a one-or-two-pixel sag, all keyed off a wilt
+    // stage the crop no longer has. A ripe plant now looks the same on tick 200 as on tick
+    // 200,000, which is the whole of the owner's ruling stated as a texture assignment.
     const tileTop = (field.tileY[i] ?? 0) * TILE_PX;
-    crop.tint =
-      wiltFrame !== null
-        ? 0xffffff
-        : wilt === WiltStage.Wilted
-          ? 0x9a8c6a
-          : wilt === WiltStage.Wilting
-            ? 0xd8cf7a
-            : 0xffffff;
+    crop.texture = scene.art.get(ART.cropStage(cropId, stage));
     // `+ TILE_PX` because the crop sprite is anchored at its BASE (see `world.ts`): its y is
     // where the stem meets the soil, not where the leaves start.
-    crop.y =
-      tileTop +
-      TILE_PX +
-      (wiltFrame !== null ? 0 : wilt === WiltStage.Wilted ? 4 : wilt === WiltStage.Wilting ? 2 : 0);
+    crop.y = tileTop + TILE_PX;
 
     // The drink-bounce. A flat transform when the tile is not bouncing, so this is an
     // unconditional two-number write rather than a branch — and the crop's scale is owned
-    // here and only here, which is what keeps it from fighting the wilt sag above.
+    // here and only here.
     const bounce = scene.farmFx.bounceAt(i);
     crop.scale.set(bounce.scaleX, bounce.scaleY);
 
@@ -431,12 +403,11 @@ function updateField(
       // A small bob, offset per tile so a ripe field shimmers rather than pulsing in
       // lockstep. Purely decorative and purely local.
       mark.y = tileTop + Math.round(Math.sin(now / 260 + i * 0.7) * 1.5) - 1;
-      // The same star in three shades: art's own colour when ripe, amber going, brown once
-      // it is Day-Old. One glance across the field sorts "harvest now" from "harvest first"
-      // without a single number — and the fresh case tints by white, so whatever the art
-      // pipeline eventually ships is left exactly as drawn.
-      mark.tint =
-        wilt === WiltStage.Wilted ? 0xa88a5a : wilt === WiltStage.Wilting ? 0xe8c86a : 0xffffff;
+      // ONE SHADE. The star used to carry three — art's own colour when ripe, amber while
+      // drooping, brown once Day-Old — so a glance across the field sorted "harvest now"
+      // from "harvest first". There is no "first" any more: every ripe tile is equally ripe
+      // and stays that way, so the mark tints by white and the art ships as drawn.
+      mark.tint = 0xffffff;
     }
   }
 
@@ -1352,9 +1323,8 @@ function vehicleStatus(view: WorldView, m: MachineView): string | null {
     const depot = view.commerce.depots.find((d) => d.id === m.id);
     if (depot === undefined) return null;
     // In `machine-tell.ts` since item 116, for the reason the lamp's two branches and the dock's
-    // shelves are: this file cannot be imported by a test, and the floor line now carries a
-    // freshness clock — a number that can be wrong in a way "40/60" never could.
-    return depotStatus('truck depot', depot, view.commerce.contracts);
+    // shelves are: this file cannot be imported by a test.
+    return depotStatus('truck depot', depot);
   }
 
   return null;
@@ -1392,8 +1362,7 @@ function machineStatus(view: WorldView, m: MachineView): string {
   // and were never going to pick a second shelf up on their own.
   //
   // BOTH SENTENCES LIVE IN `machine-tell.ts` SINCE ITEM 114, for the reason the two lamp branches
-  // below do: this file cannot be imported by a test, and the shelf line now carries a freshness
-  // clock — a number that can be wrong in a way "12 potatoes" never could.
+  // below do: this file cannot be imported by a test.
   if (m.kind === MachineKind.HarvesterDock) {
     const shelves = dockShelfStatus(name, m);
     if (shelves !== null) return shelves;

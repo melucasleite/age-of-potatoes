@@ -45,17 +45,15 @@ import {
   machineSpec,
 } from './data';
 import {
-  type Contract,
-  ContractPhase,
-  type Machine,
+  addItem,
   CeremonyId,
-  type WorldState,
-  addItemFresh,
+  ContractPhase,
   heldOutputItem,
   machineById,
   markCeremony,
-  mergedFreshness,
-  spoilTickFromRemaining,
+  type Contract,
+  type Machine,
+  type WorldState,
 } from './state';
 import { recordSale } from './stats';
 import { effectiveOutputCapacity } from './upgrades';
@@ -163,28 +161,10 @@ export function depotRouteFor(state: WorldState, depotId: number, item: ItemId):
  * would have no way to see it happen. One route per product per depot (`applyCreateContract`
  * enforces it), so there is never a question of *which* route an item goes to.
  *
- * **`freshTicks` IS THE CLOCK THE ARRIVAL BRINGS WITH IT** (item 115), and 0 means "no opinion"
- * rather than "no clock" — the same word every other door in the game speaks, from `putStorage` to
- * `putHopper` to `beltInsert`. This parameter did not exist until item 115, and its absence WAS the
- * sixth fridge: an arm carrying a potato with two minutes left handed the floor a potato, and the
- * floor wrote down a count. Merged at the SOONER against whatever is already stocked, because a
- * floor topped up with one fresh crate every quarter hour would otherwise keep the pile underneath
- * alive forever — `mergedFreshness`' entire reason for existing.
  */
-export function depotAccept(
-  state: WorldState,
-  depot: Machine,
-  item: ItemId,
-  freshTicks: number,
-): boolean {
+export function depotAccept(state: WorldState, depot: Machine, item: ItemId): boolean {
   const contract = depotCanAcceptRoute(state, depot, item);
   if (contract === null) return false;
-  contract.stockedFreshTicks = mergedFreshness(
-    contract.stocked,
-    contract.stockedFreshTicks,
-    item,
-    freshTicks,
-  );
   contract.stocked += 1;
   return true;
 }
@@ -257,8 +237,10 @@ export function sellAtBin(state: WorldState, item: ItemId, count: number): numbe
  * matched none of `grabberPlace`'s doors and the arm stood there holding a bag of chips
  * forever, which read as a bug because it was one.
  *
- * ONE PRICE PATH, so freshness needs no special case: Day-Old goods are their own `ItemId`
- * with their own list price, and `sellAtBin` prices whatever it is handed. A belt sale and a
+ * ONE PRICE PATH, so a good's grade needs no special case: `sellAtBin` prices whatever it is
+ * handed, off that item's own list price. (This earned its keep against the Day-Old grades, which
+ * were their own `ItemId`s with their own prices; item 124 deleted them, and one price path is now
+ * simply the only path there is.) A belt sale and a
  * hand sale of the same bag at the same tick fetch the same cents by construction, because
  * they are the same multiplication.
  *
@@ -342,9 +324,7 @@ export function advanceCommerce(state: WorldState): void {
  *
  * A SOURCE, not a transfer. The bottles left the lot inside the soda and were paid for at the
  * till; what this mints is the glass coming back off a lorry from a town that is not simulated —
- * `runTicksFor`' fiction, seen from the other end. So there is no clock to carry: an empty is
- * shelf-stable (it is absent from `FRESHNESS_TICKS_BY_ITEM`, exactly as the bottle it used to be
- * is), and the basket's clock is written to 0 out loud rather than left correct by accident.
+ * `runTicksFor`' fiction, seen from the other end.
  *
  * WHICH PRODUCTS COME BACK AS WHAT IS `EMPTIES_PER_DELIVERY`, and it is data because it is
  * balance: a Six-Pack returning four bottles instead of six is a repricing of the whole soda
@@ -376,10 +356,6 @@ function landEmpties(machine: Machine, item: ItemId, count: number): void {
   const landed = back.count < room ? back.count : room;
   machine.outputItem = back.item;
   machine.outputCount += landed;
-  // Shelf-stable, so this is "no opinion" rather than a window — the reading every door in the
-  // game gives a 0. Stated rather than assumed, because a vehicle's basket having been 0 forever
-  // is exactly the kind of luck that stops being true one item later.
-  machine.outputFreshTicks = 0;
 }
 
 /**
@@ -402,9 +378,6 @@ function advanceCart(state: WorldState, machine: Machine): void {
   const count = machine.cargoCount;
   machine.cargoItem = 0;
   machine.cargoCount = 0;
-  // The load is sold, so its clock goes with it (item 110). Cleared beside the pair it belongs to
-  // rather than left to decay to nothing on its own, so "empty cart" is one state and not two.
-  machine.cargoFreshTicks = 0;
   if (item === 0 || count <= 0) return;
   payForDelivery(state, item, count);
   landEmpties(machine, item, count);
@@ -428,14 +401,6 @@ function advanceContract(state: WorldState, contract: Contract): void {
     if (contract.stocked < contract.quantityPerRun) return;
     contract.stocked -= contract.quantityPerRun;
     contract.inTransit = contract.quantityPerRun;
-    // **THE CLOCK GOES ON THE LORRY WITH THE CRATES** (item 115). The floor keeps its own number
-    // for whatever is left behind — one pile, one clock, so a partial commit does not have to
-    // divide anything — and an emptied floor drops to 0, because "empty" has to be ONE state and
-    // not two. `advanceCart` clears a cart's clock beside its cargo pair for the same reason: a
-    // container with a remainder and nothing in it hashes differently from an identical one that
-    // reached empty by another route.
-    contract.inTransitFreshTicks = contract.stockedFreshTicks;
-    if (contract.stocked <= 0) contract.stockedFreshTicks = 0;
     contract.phase = ContractPhase.Loading;
     contract.ticksRemaining = DEPOT_LOAD_TICKS;
     return;
@@ -456,8 +421,6 @@ function advanceContract(state: WorldState, contract: Contract): void {
 
   const count = contract.inTransit;
   contract.inTransit = 0;
-  // Sold, so its clock goes with it — `advanceCart`'s line, on the other vehicle.
-  contract.inTransitFreshTicks = 0;
   contract.phase = ContractPhase.Waiting;
   contract.ticksRemaining = 0;
   if (count <= 0) return;
@@ -541,32 +504,10 @@ export function depotHasContractRoom(state: WorldState, depotId: number): boolea
  * waiting, which is the only shape with no strategy in it.
  */
 export function refundContract(state: WorldState, contract: Contract): void {
-  // **AND THE CLOCK COMES BACK WITH THEM** (item 115). These two lines called `addItem`, which
-  // stamps a window from NOW — so tearing up a route was the $80 hand cart of item 110 wearing a
-  // lorry, and the belt-fed version of the loop needed no clicking at all. `addItemFresh` with
-  // `spoilTickFromRemaining` is the same pair `applyDeconstructMachine` hands a boxed cellar's
-  // load back through; a remainder of 0 still means "no opinion" and stamps a fresh window, which
-  // is correct for a shelf-stable good and for a route grandfathered by format 21.
-  if (contract.stocked > 0) {
-    addItemFresh(
-      state,
-      contract.item,
-      contract.stocked,
-      spoilTickFromRemaining(state, contract.stockedFreshTicks),
-    );
-  }
-  if (contract.inTransit > 0) {
-    addItemFresh(
-      state,
-      contract.item,
-      contract.inTransit,
-      spoilTickFromRemaining(state, contract.inTransitFreshTicks),
-    );
-  }
+  if (contract.stocked > 0) addItem(state, contract.item, contract.stocked);
+  if (contract.inTransit > 0) addItem(state, contract.item, contract.inTransit);
   contract.stocked = 0;
-  contract.stockedFreshTicks = 0;
   contract.inTransit = 0;
-  contract.inTransitFreshTicks = 0;
 }
 
 /** Remove a route from the world. Callers refund first; this only unlinks it. */

@@ -481,9 +481,9 @@ function useSidebar(): boolean {
  *
  * IT NEVER LIGHTS FOR "SOMETHING IS WAITING", and that is a decision rather than an omission.
  * A `lit` row means the player has something to collect — research affordable, a box in the bag
- * — and a zone that needs attention already has a louder voice than a sidebar row: the field
- * card's alert, which plan §5 makes the one thing in the HUD allowed to interrupt. Lighting
- * this row for a wilting zone would be that alert said twice, one of them quietly.
+ * — and a zone is not that: it is a place, and a place does not become an errand because a
+ * number in it moved. (The field card's cash-phrased alert used to be the louder voice this
+ * paragraph deferred to; [[124]] deleted it along with the wilt it priced.)
  */
 function ZonesToggle({
   open,

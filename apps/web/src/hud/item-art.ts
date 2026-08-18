@@ -156,18 +156,17 @@ function cropStrip(slug: string): { name: string; frame: AtlasFrame } | null {
 }
 
 /**
- * A seed, a harvest, or a day-old harvest, drawn from its crop's growth strip.
+ * A seed or a harvest, drawn from its crop's growth strip.
  *
  * THIS RUNG IS THE REASON THE FEATURE WORKS ON DAY ONE. The atlas has fourteen item frames and
- * `ITEM_SPECS` has fifty-odd rows; seeds, corn, chili, cane and every Day-Old have no sprite of
- * their own and are not going to get one soon. Without this the FIRST bag a player ever opens —
+ * `ITEM_SPECS` has fifty-odd rows; seeds, corn, chili and cane have no sprite of their own and
+ * are not going to get one soon. Without this the FIRST bag a player ever opens —
  * potato seeds and russets — is half neutral chips, which is precisely the "a list of text with
  * pictures missing" the work item exists to end.
  *
  * A seed takes the strip's first cell and a harvest its last, which is honest twice over: the
  * two are visibly different in the grid, and each one is a picture of the thing itself at the
- * moment the player holds it. A Day-Old shares the ripe cell with its fresh twin — they are the
- * same potato and the pane names which — and that is the one collision on this rung.
+ * moment the player holds it.
  *
  * The link is `CROP_SPECS`, never a table here: a crop added in `data.ts` brings its seed and
  * its yield with it, already pointing at the strip the artist will draw.
@@ -175,7 +174,7 @@ function cropStrip(slug: string): { name: string; frame: AtlasFrame } | null {
 function cropIcon(item: number): IconSource | null {
   for (const crop of CROP_SPECS) {
     const seed = (crop.seedItem as number) === item;
-    const fruit = (crop.yieldItem as number) === item || (crop.dayOldItem as number) === item;
+    const fruit = (crop.yieldItem as number) === item;
     if (!seed && !fruit) continue;
 
     const strip = cropStrip(crop.slug);

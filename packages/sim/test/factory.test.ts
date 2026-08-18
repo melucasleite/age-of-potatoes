@@ -1,4 +1,5 @@
-// The factory half: the production line, belts and arms, zones, withering, and the tree.
+// The factory half: the production line, belts and arms, zones, and the tree. (It covered
+// withering too, until item [[124]] deleted the mechanic and its tests with it.)
 //
 // These are cheap structural checks, in the spirit of the repo's deliberately light
 // verification bar. Each one pins a RULING from the design document rather than an
@@ -7,8 +8,6 @@
 // upgrade dials. If one of these goes red, a decision was reversed, not a function renamed.
 
 import { describe, expect, it } from 'vitest';
-
-import { runClockCrossings } from './clock-crossings';
 
 import {
   type BuildRefusal as BuildRefusalCode,
@@ -24,7 +23,6 @@ import {
   CONDITION_MAX,
   CHILI_PREMIUM_CENTS,
   CROP_SPECS,
-  COMPOST_AFTER_TICKS,
   CropId,
   Direction,
   FIELD_ORIGIN_X,
@@ -48,9 +46,6 @@ import {
   TechId,
   UPGRADE_MAX_LEVEL,
   UpgradeDial,
-  WILT_GRACE_TICKS,
-  WILT_WINDOW_TICKS,
-  WiltStage,
   addBoxedMachine,
   addItem,
   beltInsert,
@@ -59,7 +54,6 @@ import {
   createWorld,
   divFloor,
   createWorldView,
-  dayOldPriceCents,
   effectiveInputCapacity,
   machineHoppers,
   machineRecipes,
@@ -94,7 +88,6 @@ import {
   tileAt,
   upgradeCostCents,
   view,
-  wiltStageForAge,
 } from '../src/index';
 import { type GoldenFixture, loadFixture, replay } from './goldens';
 
@@ -1160,11 +1153,11 @@ describe('belts', () => {
   it('carries items forward and never lets two overlap', () => {
     const state = createWorld(11);
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 4)!;
-    expect(beltInsert(belt, 0, ItemId.RussetPotato, 0)).toBe(true);
-    expect(beltInsert(belt, 64, ItemId.RussetPotato, 0)).toBe(true);
+    expect(beltInsert(belt, 0, ItemId.RussetPotato)).toBe(true);
+    expect(beltInsert(belt, 64, ItemId.RussetPotato)).toBe(true);
     // Too close to the one already at 64 — a belt that accepted this would render as a
     // single smeared item and would silently double a line's throughput.
-    expect(beltInsert(belt, 100, ItemId.RussetPotato, 0)).toBe(false);
+    expect(beltInsert(belt, 100, ItemId.RussetPotato)).toBe(false);
 
     stepMany(state, 40);
     expect(belt.items[0]!.dist).toBeGreaterThan(0);
@@ -1179,7 +1172,7 @@ describe('belts', () => {
     const state = createWorld(12);
     const first = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 2)!;
     const second = spawnBelt(state, BeltTier.Basic, 2, 0, Direction.East, 2)!;
-    beltInsert(first, 0, ItemId.PlainChips, 0);
+    beltInsert(first, 0, ItemId.PlainChips);
 
     stepMany(state, 300);
     expect(first.items).toHaveLength(0);
@@ -1192,9 +1185,9 @@ describe('belts', () => {
     // dropped its head item would be a machine that eats money invisibly.
     const state = createWorld(13);
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 3)!;
-    beltInsert(belt, 0, ItemId.RussetPotato, 0);
-    beltInsert(belt, 64, ItemId.RussetPotato, 0);
-    beltInsert(belt, 128, ItemId.RussetPotato, 0);
+    beltInsert(belt, 0, ItemId.RussetPotato);
+    beltInsert(belt, 64, ItemId.RussetPotato);
+    beltInsert(belt, 128, ItemId.RussetPotato);
 
     stepMany(state, 500);
     expect(belt.items).toHaveLength(3);
@@ -1213,14 +1206,14 @@ describe('belts', () => {
     expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(0);
 
     // One item in four shoulder-to-shoulder slots: a quarter of the tier's 320.
-    beltInsert(belt, 0, ItemId.RussetPotato, 0);
+    beltInsert(belt, 0, ItemId.RussetPotato);
     expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(80);
 
     // Packed solid: exactly the tier speed, never more — a surface outrunning its goods
     // would be a lie told at the zoom where the player reads circulation.
-    beltInsert(belt, 64, ItemId.RussetPotato, 0);
-    beltInsert(belt, 128, ItemId.RussetPotato, 0);
-    beltInsert(belt, 192, ItemId.RussetPotato, 0);
+    beltInsert(belt, 64, ItemId.RussetPotato);
+    beltInsert(belt, 128, ItemId.RussetPotato);
+    beltInsert(belt, 192, ItemId.RussetPotato);
     expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(320);
   });
 
@@ -1228,8 +1221,8 @@ describe('belts', () => {
     const state = createWorld(91);
     const basic = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 1)!;
     const express = spawnBelt(state, BeltTier.Express, 0, 2, Direction.East, 4)!;
-    for (let slot = 0; slot < 4; slot++) beltInsert(basic, slot * 64, ItemId.RussetPotato, 0);
-    beltInsert(express, 0, ItemId.RussetPotato, 0); // One item on sixteen slots.
+    for (let slot = 0; slot < 4; slot++) beltInsert(basic, slot * 64, ItemId.RussetPotato);
+    beltInsert(express, 0, ItemId.RussetPotato); // One item on sixteen slots.
 
     const projected = view(state, createWorldView());
     const full = projected.belts[0]!.throughputSubtilesPer100Ticks;
@@ -1261,7 +1254,7 @@ describe('grabbers', () => {
     const belt = spawnBelt(state, BeltTier.Basic, 0, 0, Direction.East, 1)!;
     const sink = spawnBelt(state, BeltTier.Basic, 2, 0, Direction.East, 1)!;
     spawnGrabber(state, GrabberTier.Mk2, 1, 0, Direction.East, ItemId.PlainChips);
-    beltInsert(belt, 0, ItemId.RussetPotato, 0);
+    beltInsert(belt, 0, ItemId.RussetPotato);
 
     stepMany(state, 200);
     expect(belt.items).toHaveLength(1);
@@ -1301,7 +1294,7 @@ describe('a grabber only takes what its destination will accept', () => {
     // arm would have taken the potato off the belt and held it for the rest of the session.
     const { state, source, arm } = armRig(8501);
     const bagger = spawnMachine(state, MachineKind.Bagger, 2, 0)!;
-    beltInsert(source, 0, ItemId.RussetPotato, 0);
+    beltInsert(source, 0, ItemId.RussetPotato);
 
     stepMany(state, 400);
 
@@ -1320,7 +1313,7 @@ describe('a grabber only takes what its destination will accept', () => {
     // No condition left, so the machine cannot work its way out of a full hopper and the test
     // is genuinely about the door rather than about how fast a Bagger bags.
     bagger.condition = 0;
-    beltInsert(source, 0, ItemId.SeasonedChips, 0);
+    beltInsert(source, 0, ItemId.SeasonedChips);
 
     stepMany(state, 400);
     expect(arm.held).toBe(0);
@@ -1341,9 +1334,9 @@ describe('a grabber only takes what its destination will accept', () => {
     // A one-tile belt that leads nowhere, packed nose to tail against its own end: the goods
     // compact to the far end and the drop point in the middle of the tile has no legal spacing
     // left, permanently. This is what a backed-up line looks like from the arm's side.
-    beltInsert(sink, SUBTILE - 1, ItemId.PlainChips, 0);
-    beltInsert(sink, SUBTILE - 1 - BELT_ITEM_SPACING_SUBTILES, ItemId.PlainChips, 0);
-    beltInsert(source, 0, ItemId.RussetPotato, 0);
+    beltInsert(sink, SUBTILE - 1, ItemId.PlainChips);
+    beltInsert(sink, SUBTILE - 1 - BELT_ITEM_SPACING_SUBTILES, ItemId.PlainChips);
+    beltInsert(source, 0, ItemId.RussetPotato);
 
     stepMany(state, 400);
     expect(arm.held).toBe(0);
@@ -1357,8 +1350,8 @@ describe('a grabber only takes what its destination will accept', () => {
     // different reasons, and the arm distinguishes them without holding either.
     const { state, source, arm } = armRig(8504, ItemId.PlainChips);
     const bagger = spawnMachine(state, MachineKind.Bagger, 2, 0)!;
-    beltInsert(source, 0, ItemId.RussetPotato, 0);
-    beltInsert(source, SUBTILE - 1, ItemId.PlainChips, 0);
+    beltInsert(source, 0, ItemId.RussetPotato);
+    beltInsert(source, SUBTILE - 1, ItemId.PlainChips);
     const before = source.items.length;
 
     stepMany(state, 400);
@@ -1377,7 +1370,7 @@ describe('a grabber only takes what its destination will accept', () => {
     const spec = machineSpec(MachineKind.Bagger)!;
     const line = spec.inputs.findIndex((input) => input.item === ItemId.SeasonedChips);
     bagger.condition = 0;
-    beltInsert(source, 0, ItemId.SeasonedChips, 0);
+    beltInsert(source, 0, ItemId.SeasonedChips);
 
     // One tick is enough: the hopper has room, so the claw closes.
     stepMany(state, 1);
@@ -1410,7 +1403,7 @@ describe('a grabber only takes what its destination will accept', () => {
     stepMany(state, 5);
     expect(lampOf(state, arm.id)).toBe(LampState.Starved);
 
-    beltInsert(source, 0, ItemId.RussetPotato, 0);
+    beltInsert(source, 0, ItemId.RussetPotato);
     stepMany(state, 5);
     expect(lampOf(state, arm.id)).toBe(LampState.Blocked);
 
@@ -1418,7 +1411,7 @@ describe('a grabber only takes what its destination will accept', () => {
     const spec = machineSpec(MachineKind.Bagger)!;
     const line = spec.inputs.findIndex((input) => input.item === ItemId.SeasonedChips);
     source.items.length = 0;
-    beltInsert(source, 0, ItemId.SeasonedChips, 0);
+    beltInsert(source, 0, ItemId.SeasonedChips);
     stepMany(state, 2);
     expect(lampOf(state, arm.id)).toBe(LampState.Running);
     stepMany(state, 60);
@@ -1478,7 +1471,7 @@ describe('a grabber only takes what its destination will accept', () => {
       for (const item of goods) {
         const { state, source, arm } = armRig(8507);
         destination.build(state);
-        beltInsert(source, 0, item, 0);
+        beltInsert(source, 0, item);
 
         const predicted = grabberWouldAccept(state, arm, item);
         stepMany(state, 200);
@@ -1552,7 +1545,7 @@ describe('a container is a destination and a source (item 105)', () => {
       const { state, source, arm, box } = fillRig(9101, kind);
 
       for (let i = 0; i < 5; i++) {
-        beltInsert(source, 0, ItemId.RussetPotato, 0);
+        beltInsert(source, 0, ItemId.RussetPotato);
         stepMany(state, 60);
       }
 
@@ -1581,7 +1574,7 @@ describe('a container is a destination and a source (item 105)', () => {
       const { state, source, arm, box } = fillRig(9103, kind);
       box.cargoItem = ItemId.RussetPotato;
       box.cargoCount = 1;
-      beltInsert(source, 0, ItemId.PlainChips, 0);
+      beltInsert(source, 0, ItemId.PlainChips);
 
       stepMany(state, 400);
 
@@ -1597,7 +1590,7 @@ describe('a container is a destination and a source (item 105)', () => {
       const spec = machineSpec(kind)!;
       box.cargoItem = ItemId.RussetPotato;
       box.cargoCount = spec.inputCapacity;
-      beltInsert(source, 0, ItemId.RussetPotato, 0);
+      beltInsert(source, 0, ItemId.RussetPotato);
 
       stepMany(state, 400);
       expect(arm.held).toBe(0);
@@ -1706,7 +1699,7 @@ describe('a container is a destination and a source (item 105)', () => {
     const { state, source, arm, box } = fillRig(9110, MachineKind.HandCart);
     standOn(state, box.tileX, box.tileY);
     run(state, [{ type: 'HitchCart', cartId: box.id }]);
-    beltInsert(source, 0, ItemId.RussetPotato, 0);
+    beltInsert(source, 0, ItemId.RussetPotato);
 
     stepMany(state, 400);
     expect(box.cargoCount).toBe(0);
@@ -1763,7 +1756,7 @@ describe('the belt junction', () => {
       { tileX: 4, tileY: 5, dir: Direction.East },
       { tileX: 3, tileY: 4, dir: Direction.North },
     ]);
-    for (let i = 0; i < 6; i++) beltInsert(feed, i * 64, ItemId.PlainChips, 0);
+    for (let i = 0; i < 6; i++) beltInsert(feed, i * 64, ItemId.PlainChips);
 
     stepMany(state, 900);
 
@@ -1788,8 +1781,8 @@ describe('the belt junction', () => {
       { tileX: 3, tileY: 4, dir: Direction.North },
     ]);
     for (let i = 0; i < 5; i++) {
-      beltInsert(a.feed, i * 64, ItemId.PlainChips, 0);
-      beltInsert(b.feed, i * 64, ItemId.PlainChips, 0);
+      beltInsert(a.feed, i * 64, ItemId.PlainChips);
+      beltInsert(b.feed, i * 64, ItemId.PlainChips);
     }
 
     stepMany(a.state, 700);
@@ -1809,8 +1802,8 @@ describe('the belt junction', () => {
     const out = spawnBelt(state, BeltTier.Basic, 4, 5, Direction.East, 8)!;
 
     for (let i = 0; i < 4; i++) {
-      beltInsert(west, i * 64, ItemId.RussetPotato, 0);
-      beltInsert(north, i * 64, ItemId.PlainChips, 0);
+      beltInsert(west, i * 64, ItemId.RussetPotato);
+      beltInsert(north, i * 64, ItemId.PlainChips);
     }
 
     stepMany(state, 1200);
@@ -1833,8 +1826,8 @@ describe('the belt junction', () => {
     // can never be chosen as an output. With nowhere else to go the item simply stays put, and
     // the belt behind it backs up — which is the jam plan §5 wants the player to be able to see.
     const { state, feed } = junctionRig(404, []);
-    beltInsert(feed, 0, ItemId.PlainChips, 0);
-    beltInsert(feed, 64, ItemId.PlainChips, 0);
+    beltInsert(feed, 0, ItemId.PlainChips);
+    beltInsert(feed, 64, ItemId.PlainChips);
 
     stepMany(state, 400);
     expect(feed.items).toHaveLength(2);
@@ -1845,7 +1838,7 @@ describe('the belt junction', () => {
     // A junction has no buffer at all: an item crosses inside one tick or it is still on a belt.
     // Count the world's goods before and after a run that jams — none may be inside the tile.
     const { state, feed, out } = junctionRig(505, [{ tileX: 4, tileY: 5, dir: Direction.East }]);
-    for (let i = 0; i < 4; i++) beltInsert(feed, i * 64, ItemId.PlainChips, 0);
+    for (let i = 0; i < 4; i++) beltInsert(feed, i * 64, ItemId.PlainChips);
 
     stepMany(state, 2000);
     expect(feed.items.length + out[0]!.items.length).toBe(4);
@@ -1859,86 +1852,6 @@ describe('the belt junction', () => {
     expect(spec.workPerOperation).toBe(0);
     expect(spec.wearPerOperation).toBe(0);
     expect(acceptsUpgrades(spec)).toBe(false);
-  });
-});
-
-// --- withering ----------------------------------------------------------------------
-
-describe('withering', () => {
-  it('walks a crop from mature through drooping to Day-Old, then to compost', () => {
-    const state = createWorld(21);
-    const tileX = FIELD_ORIGIN_X;
-    const tileY = FIELD_ORIGIN_Y;
-    standOn(state, tileX, tileY);
-
-    run(state, [
-      { type: 'PlantTile', tileX, tileY, crop: CropId.RussetPotato },
-      { type: 'WaterTile', tileX, tileY },
-      { type: 'PlantTile', tileX: tileX + 1, tileY, crop: CropId.RussetPotato },
-      { type: 'WaterTile', tileX: tileX + 1, tileY },
-    ]);
-
-    // One watering carries a potato all the way to ready: 3,600 moisture outlasts the
-    // ~2,000 ticks of growth it needs.
-    stepMany(state, 2_500);
-    const tile = tileAt(state, tileX, tileY)!;
-    expect(tile.growth).toBeGreaterThanOrEqual(tile.growthTarget);
-    expect(wiltStageForAge(tile.readyAge)).toBe(WiltStage.Fresh);
-
-    // Thirty active minutes of grace, chosen so a maturing field cannot yank the player out
-    // of a build project. Do not shorten it to "make it feel like a game".
-    stepMany(state, WILT_GRACE_TICKS);
-    expect(wiltStageForAge(tile.readyAge)).toBe(WiltStage.Wilting);
-
-    stepMany(state, WILT_WINDOW_TICKS);
-    expect(wiltStageForAge(tile.readyAge)).toBe(WiltStage.Wilted);
-
-    // Harvested wilted: the Day-Old good, not the fresh one, and not nothing.
-    const before = itemCount(state, ItemId.DayOldPotato);
-    run(state, [{ type: 'HarvestTile', tileX, tileY }]);
-    expect(itemCount(state, ItemId.DayOldPotato)).toBeGreaterThan(before);
-    expect(itemCount(state, ItemId.RussetPotato)).toBe(0);
-
-    // The neighbour was never picked. It becomes compost on the tile, and the tile is
-    // immediately replantable — there is no path here that pays zero.
-    stepMany(state, COMPOST_AFTER_TICKS + 10);
-    const neighbour = tileAt(state, tileX + 1, tileY)!;
-    expect(neighbour.crop).toBe(CropId.None);
-    expect(neighbour.compost).toBeGreaterThan(0);
-
-    run(state, [{ type: 'HarvestTile', tileX: tileX + 1, tileY }]);
-    expect(itemCount(state, ItemId.Compost)).toBeGreaterThan(0);
-    expect(tileAt(state, tileX + 1, tileY)!.compost).toBe(0);
-  });
-
-  it('prices every Day-Old good at exactly half its fresh one, floored', () => {
-    // Plan §4's 50%, with the rounding policy stated once in `dayOldPriceCents` and the
-    // item table required to agree with it.
-    for (const crop of CROP_SPECS) {
-      expect(listPriceCents(crop.dayOldItem)).toBe(dayOldPriceCents(crop.yieldItem));
-    }
-  });
-
-  it('advances the withering clock only while the world is ticking', () => {
-    // Freshness counts active factory minutes and nothing else (plan §4, §6). There is no
-    // wall clock in this package, so a world that is not stepped cannot age — which is the
-    // whole "your factory is exactly where you left it" promise, held structurally.
-    const state = createWorld(22);
-    standOn(state, FIELD_ORIGIN_X, FIELD_ORIGIN_Y);
-    run(state, [
-      {
-        type: 'PlantTile',
-        tileX: FIELD_ORIGIN_X,
-        tileY: FIELD_ORIGIN_Y,
-        crop: CropId.RussetPotato,
-      },
-      { type: 'WaterTile', tileX: FIELD_ORIGIN_X, tileY: FIELD_ORIGIN_Y },
-    ]);
-    stepMany(state, 3_000);
-
-    const parked = hashState(state);
-    expect(hashState(state)).toBe(parked);
-    expect(tileAt(state, FIELD_ORIGIN_X, FIELD_ORIGIN_Y)!.readyAge).toBeGreaterThan(0);
   });
 });
 
@@ -2275,8 +2188,8 @@ describe('the anti-softlock floor', () => {
       },
     ]);
     const belt = state.belts[0]!;
-    beltInsert(belt, 0, ItemId.PlainChips, 0);
-    beltInsert(belt, 128, ItemId.PlainChips, 0);
+    beltInsert(belt, 0, ItemId.PlainChips);
+    beltInsert(belt, 128, ItemId.PlainChips);
 
     const money = state.moneyCents;
     run(state, [{ type: 'RemoveBelt', beltId: belt.id }]);
@@ -2646,16 +2559,4 @@ describe('a slot full of boxes', () => {
     expect(seeds.boxedMachineKind).toBe(0);
     expect(seeds.boxes).toEqual([]);
   });
-});
-
-// --- the clock crossings this file owns (item 119) --------------------------------------------
-//
-// The scenarios live in `clock-crossings.ts` and the ones run here are the ones that named this
-// file. That split is deliberate: item 119 measured every clock catch in the suite coming from a
-// single file, so the guard was one `rm` away from silently disappearing. `clock-doors.test.ts`
-// sweeps the test directory and fails if a file named by a crossing does not exist or does not
-// call `runClockCrossings` with its own name.
-
-describe('clock crossings: factory', () => {
-  runClockCrossings('factory');
 });

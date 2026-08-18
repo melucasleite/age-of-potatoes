@@ -9,9 +9,9 @@
 // SO IT LEADS WITH WHAT IS SAFE. That is `storage/notices.ts`'s rule for save failures and it
 // is the right rule here for the same reason — the honest first question after a long absence
 // is "is my factory still there?", and the answer is not only yes but *nothing happened to
-// it*: §6's ticks accrue only while the player is present, so a month away aged nothing,
-// wilted nothing, and spent nothing. That is a genuinely delightful fact about this game's
-// architecture and the card gets to say it out loud before it says anything else.
+// it*: §6's ticks accrue only while the player is present, so a month away grew nothing and
+// spent nothing. That is a genuinely delightful fact about this game's architecture and the
+// card gets to say it out loud before it says anything else.
 //
 // IT DOES NOT BLOCK, PAUSE, OR DEMAND DISMISSAL. §2's Dawn Report is non-blocking, sim-speed
 // controls are cut forever (§6), and §5's doctrine is that the factory is its own UI. There
@@ -23,7 +23,7 @@
 // while being read is describing the present, not the return — and the first thing the player
 // does is move, which would make the card's own figures wrong as they read them.
 
-import { formatCents, formatCentsWhole } from './format';
+import { formatCents } from './format';
 import { cx, s } from './styles';
 import { useHudSlice } from './use-hud';
 import { useWelcomeBack } from './use-welcome';
@@ -34,9 +34,6 @@ interface Frozen {
   readonly machines: number;
   readonly running: number;
   readonly stopped: number;
-  readonly wilting: number;
-  readonly wilted: number;
-  readonly atRiskCents: number;
   readonly netWorthCents: number;
   readonly pouchCents: number;
   readonly pouchItems: number;
@@ -67,9 +64,6 @@ export function WelcomeBack() {
       // are standing in front of the machine; on a card summarising a month, "two machines
       // have stopped" is the whole of what a returning player needs to know.
       stopped: lot.halted + lot.jammed,
-      wilting: lot.wilting,
-      wilted: lot.wilted,
-      atRiskCents: lot.atRiskCents,
       netWorthCents: economy.netWorthCents,
       pouchCents,
       pouchItems,
@@ -97,8 +91,8 @@ export function WelcomeBack() {
         it with (§6). Most games with crops cannot say this.
       */}
       <div className={s.welcomeSafe}>
-        Your lot is exactly as you left it. Nothing grew, nothing wilted, and nothing was spent
-        while you were away — the clock here only runs when you do.
+        Your lot is exactly as you left it. Nothing grew and nothing was spent while you were away —
+        the clock here only runs when you do.
       </div>
 
       <div className={s.rule} />
@@ -123,13 +117,6 @@ export function WelcomeBack() {
           <Stat
             label="in your pockets"
             value={`${summary.pouchItems} ${summary.pouchItems === 1 ? 'thing' : 'things'}, ${formatCents(summary.pouchCents)}`}
-          />
-        ) : null}
-        {summary.wilting + summary.wilted > 0 ? (
-          <Stat
-            label="in the ground"
-            value={`${summary.wilting + summary.wilted} past their best — ${formatCentsWhole(summary.atRiskCents)} at risk`}
-            warn
           />
         ) : null}
       </ul>

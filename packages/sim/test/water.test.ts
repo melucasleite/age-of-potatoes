@@ -361,7 +361,6 @@ describe('the watering can', () => {
     expect(readout.exists).toBe(1);
     expect(readout.moisture).toBeGreaterThanOrEqual(MOISTURE_MAX - 1);
     expect(readout.crop).toBe(1);
-    expect(readout.fertility).toBe(tileAt(state, 6, 6)!.fertility);
     expect(readout.dry).toBe(0);
 
     // Off the field it answers rather than throwing.

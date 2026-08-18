@@ -29,7 +29,16 @@ export interface RngState {
  * stream derivation, so their *string values* are load-bearing and must not change.
  */
 export const SystemId = {
-  /** One-time field generation: soil fertility. */
+  /**
+   * **SPENT AND RESERVED — item 124.** It rolled each tile's soil fertility once at world
+   * creation; fertility is not a feature any more and the draw site is gone, so no world created
+   * from format 22 onward ever opens this stream.
+   *
+   * **IT MAY NOT BE REUSED AND MAY NOT BE DELETED.** Streams are opened lazily by `streamFor` and
+   * hashed by `Object.keys(state.streams).sort()`, and the 21 → 22 migration does not strip them:
+   * a world saved before this change still carries a `field-init` stream and still digests it. A
+   * future system handed this same string would silently inherit that world's generator state.
+   */
   FieldInit: 'field-init',
   /** Per-tile growth-duration variance, rolled when a crop is planted. */
   CropGrowth: 'crop-growth',
@@ -41,7 +50,8 @@ export const SystemId = {
    * One-time field generation: which soil each tile is made of.
    *
    * **A NEW STREAM RATHER THAN A SECOND DRAW FROM `FieldInit`, AND PLAN §12 REQUIRES IT.**
-   * Fertility is rolled from `FieldInit` in `createWorld`, tile by tile; taking soil from the
+   * Fertility WAS rolled from `FieldInit` in `createWorld`, tile by tile (item 124 deleted it,
+   * and the argument below is why deleting it cost nothing); taking soil from the
    * same generator would interleave a second draw between every existing one and give every
    * world that has ever been seeded a different field. Derivation goes through the id's
    * *string*, so adding this leaves `field-init` bit-identical — that is the whole reason the

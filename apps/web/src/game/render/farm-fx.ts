@@ -34,7 +34,7 @@ import { TILE_PX } from './pixel';
 
 import { Sprite } from 'pixi.js';
 
-import { ItemId, WiltStage, worldTileKey } from '@snack/sim';
+import { ItemId, worldTileKey } from '@snack/sim';
 import type { FieldView } from '@snack/sim';
 
 import type { ItemPage } from './belt-items';
@@ -82,7 +82,7 @@ interface Pop {
  * One frame of bounce for a tile, as a transform to apply to that tile's crop sprite.
  *
  * Returned rather than applied so this class never touches sprites it does not own — the
- * crop sprites belong to the scene and are positioned by the wilt/stage logic in
+ * crop sprites belong to the scene and are positioned by the growth-stage logic in
  * `index.ts`, which would silently fight a second writer.
  */
 export interface BounceTransform {
@@ -103,8 +103,6 @@ export class FarmFx {
   /** Last frame's field, for the harvest and pour diffs. Owned here, not on the scene. */
   private readonly prevReady: number[] = [];
   private readonly prevCrop: number[] = [];
-  private readonly prevCompost: number[] = [];
-  private readonly prevWilt: number[] = [];
   private readonly prevPoured: number[] = [];
   /**
    * The world tile key each index held last frame ([[066]]). Farmland is a collection now
@@ -127,8 +125,6 @@ export class FarmFx {
       this.bounceTotal.push(BOUNCE_MS);
       this.prevReady.push(0);
       this.prevCrop.push(0);
-      this.prevCompost.push(0);
-      this.prevWilt.push(0);
       this.prevPoured.push(0);
     }
 
@@ -177,7 +173,6 @@ export class FarmFx {
     for (let i = 0; i < count; i++) {
       const ready = field.ready[i] ?? 0;
       const crop = field.crop[i] ?? 0;
-      const compost = field.compost[i] ?? 0;
 
       // Water landed here since last frame — INCLUDING on a tile already at full moisture,
       // which the old moisture-rise diff could not see and item 064 exists to fix.
@@ -187,17 +182,15 @@ export class FarmFx {
         if (onPour !== undefined) onPour(i);
       }
 
-      // A ready crop that vanished. The sim clears the tile outright on harvest, so "was
-      // ripe, is gone" is unambiguous — EXCEPT for the one case where the crop collapsed
-      // into compost on its own, which looks identical from here and is emphatically not a
-      // harvest. The compost heap that appeared on the same tile is what tells them apart,
-      // and skipping that check would fire a potato out of a rotting plant nobody touched.
+      // A ready crop that vanished — which is a harvest, full stop. This used to need a
+      // second test: a crop could collapse into compost on its own, which looked identical
+      // from here and was emphatically not a harvest, so the diff also watched the compost
+      // heap to tell the two apart. Nothing collapses now ([[124]]), so the only way a ripe
+      // crop leaves a tile is that somebody picked it.
       const wasReady = this.prevReady[i] ?? 0;
       const wasCrop = this.prevCrop[i] ?? 0;
-      const grewCompost = compost > (this.prevCompost[i] ?? 0);
-      if (wasReady === 1 && ready === 0 && wasCrop !== 0 && crop === 0 && !grewCompost) {
-        const wilt = this.prevWilt[i] ?? WiltStage.Fresh;
-        this.spawnPop(field, i, wilt);
+      if (wasReady === 1 && ready === 0 && wasCrop !== 0 && crop === 0) {
+        this.spawnPop(field, i);
       }
     }
 
@@ -340,8 +333,6 @@ export class FarmFx {
     interface Held {
       ready: number;
       crop: number;
-      compost: number;
-      wilt: number;
       poured: number;
       bounceLife: number;
       bounceTotal: number;
@@ -351,8 +342,6 @@ export class FarmFx {
       remembered.set(this.keys[i]!, {
         ready: this.prevReady[i] ?? 0,
         crop: this.prevCrop[i] ?? 0,
-        compost: this.prevCompost[i] ?? 0,
-        wilt: this.prevWilt[i] ?? WiltStage.Fresh,
         poured: this.prevPoured[i] ?? 0,
         bounceLife: this.bounceLife[i] ?? 0,
         bounceTotal: this.bounceTotal[i] ?? BOUNCE_MS,
@@ -366,16 +355,12 @@ export class FarmFx {
         // Fresh dirt: primed exactly as the first frame primes, so the till emits nothing.
         this.prevReady[i] = field.ready[i] ?? 0;
         this.prevCrop[i] = field.crop[i] ?? 0;
-        this.prevCompost[i] = field.compost[i] ?? 0;
-        this.prevWilt[i] = field.wilt[i] ?? WiltStage.Fresh;
         this.prevPoured[i] = field.lastPouredTick[i] ?? 0;
         this.bounceLife[i] = 0;
         this.bounceTotal[i] = BOUNCE_MS;
       } else {
         this.prevReady[i] = held.ready;
         this.prevCrop[i] = held.crop;
-        this.prevCompost[i] = held.compost;
-        this.prevWilt[i] = held.wilt;
         this.prevPoured[i] = held.poured;
         this.bounceLife[i] = held.bounceLife;
         this.bounceTotal[i] = held.bounceTotal;
@@ -386,14 +371,12 @@ export class FarmFx {
     this.keys.length = count;
     this.prevReady.length = count;
     this.prevCrop.length = count;
-    this.prevCompost.length = count;
-    this.prevWilt.length = count;
     this.prevPoured.length = count;
     this.bounceLife.length = count;
     this.bounceTotal.length = count;
   }
 
-  private spawnPop(field: FieldView, index: number, wilt: number): void {
+  private spawnPop(field: FieldView, index: number): void {
     // Per-entry coordinates ARE the addressing scheme ([[066]]); the bounding-box
     // arithmetic this replaces is wrong the moment the field is non-rectangular.
     const tileX = field.tileX[index] ?? 0;
@@ -402,10 +385,7 @@ export class FarmFx {
     for (const pop of this.pops) {
       if (pop.life > 0) continue;
 
-      // What flies is what you actually got. A Day-Old harvest yields the Day-Old item, and
-      // a potato that looks wrong on the way to your pocket is a small lie about the sim.
-      const item = wilt === WiltStage.Wilted ? ItemId.DayOldPotato : ItemId.RussetPotato;
-      pop.sprite.texture = this.page.texture(item);
+      pop.sprite.texture = this.page.texture(ItemId.RussetPotato);
 
       pop.total = POP_MS * (0.9 + Math.random() * 0.2);
       pop.life = pop.total;
@@ -427,8 +407,6 @@ export class FarmFx {
     for (let i = 0; i < count; i++) {
       this.prevReady[i] = field.ready[i] ?? 0;
       this.prevCrop[i] = field.crop[i] ?? 0;
-      this.prevCompost[i] = field.compost[i] ?? 0;
-      this.prevWilt[i] = field.wilt[i] ?? WiltStage.Fresh;
       this.prevPoured[i] = field.lastPouredTick[i] ?? 0;
       this.keys[i] = worldTileKey(field.tileX[i] ?? 0, field.tileY[i] ?? 0);
     }

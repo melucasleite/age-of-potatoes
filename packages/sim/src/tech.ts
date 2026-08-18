@@ -42,8 +42,10 @@ export const TechId = {
   AutoReplant: 'agronomy-seed-hopper',
   /** §5's "Gold Potato (premium, thirsty)" — the roster's fifth and last sown crop. */
   GoldPotato: 'agronomy-gold-potato',
-  /** The Composter: spoiled goods become Fertilizer, and Fertilizer goes back in the ground. */
-  Composting: 'agronomy-composting',
+  // `'agronomy-composting'` was the Composter node — spoiled goods became Fertilizer, and
+  // Fertilizer went back in the ground. All three of those are gone (item 124). **THE STRING IS
+  // NOT REUSED**: it can be sitting in a saved `unlocked` list, and the 21 → 22 migration takes
+  // it out and refunds what it cost.
   /** The Root Cellar. The one place in the game where a clock stops (plan §4). */
   RootCellar: 'agronomy-root-cellar',
   /** The Orange and Lemon trees — 2×2, permanent, fruiting on a cycle (§5). */
@@ -525,7 +527,10 @@ export const TECH_NODES: readonly TechNode[] = [
   // --- the rest of Agronomy ---------------------------------------------------------------
   //
   // The branch that shipped with three crops and a hopper now carries the roster's last crop, the
-  // spoilage loop's two answers, the orchard, and the bots. It is declared after the Charters
+  // orchard, the Root Cellar and the bots. (It carried the spoilage loop's two answers too — the
+  // cellar's freeze and the Composting node — until item 124: the node is gone and refunded, and
+  // the cellar was re-purposed as bulk storage rather than deleted.) It is declared after the
+  // Charters
   // because two of its nodes hang off them, and `TECH_NODES` is in panel order.
   {
     // $150 against a $250 gold potato: one harvest of one 3★ tile pays it back twice over, which
@@ -534,17 +539,6 @@ export const TECH_NODES: readonly TechNode[] = [
     branch: TechBranch.Agronomy,
     priceCents: 15_000,
     requires: [TechId.WorkshopCharter],
-    milestone: MilestoneKind.None,
-    milestoneAmount: 0,
-  },
-  {
-    // Cheap and early, because it is the node that makes spoilage a LOOP rather than a LEAK. Plan
-    // §4's whole spoilage argument ends "nothing vanishes: spoiled goods → Compost → Fertilizer",
-    // and until this exists the second arrow is missing and rot really is a hole.
-    id: TechId.Composting,
-    branch: TechBranch.Agronomy,
-    priceCents: 12_000,
-    requires: [],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },

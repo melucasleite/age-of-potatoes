@@ -241,7 +241,7 @@ describe('the truck depot', () => {
     ]);
     const contract = state.contracts[0]!;
     // Five bags arrive off a belt, through the one door a grabber uses.
-    for (let i = 0; i < 5; i++) expect(depotAccept(state, depot, ItemId.BaggedChips, 0)).toBe(true);
+    for (let i = 0; i < 5; i++) expect(depotAccept(state, depot, ItemId.BaggedChips)).toBe(true);
     expect(depotStockedCount(state, depot.id)).toBe(5);
 
     const before = state.moneyCents;
@@ -266,7 +266,7 @@ describe('the truck depot', () => {
         destination: 'Halvorsen & Sons',
       },
     ]);
-    for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.BaggedChips, 0);
+    for (let i = 0; i < 4; i++) depotAccept(state, depot, ItemId.BaggedChips);
 
     const stocked = computeNetWorthCents(state);
     // Across the commit, the loading beat, the whole road, and the payout: never once below.
@@ -294,11 +294,11 @@ describe('the truck depot', () => {
     expect(contract.phase).toBe(ContractPhase.Waiting);
     expect(state.ceremonies).not.toContain(CeremonyId.FirstTruck);
 
-    depotAccept(state, depot, ItemId.BaggedChips, 0);
+    depotAccept(state, depot, ItemId.BaggedChips);
     stepMany(state, 1);
     expect(contract.phase).toBe(ContractPhase.Waiting);
 
-    depotAccept(state, depot, ItemId.BaggedChips, 0);
+    depotAccept(state, depot, ItemId.BaggedChips);
     stepMany(state, 1);
     expect(contract.phase).toBe(ContractPhase.Loading);
     expect(contract.inTransit).toBe(2);
@@ -314,8 +314,8 @@ describe('the truck depot', () => {
     const ceremonies = state.ceremonies.length;
     stepMany(state, depotRunTicks(depot) + 1);
     expect(contract.runsCompleted).toBe(1);
-    depotAccept(state, depot, ItemId.BaggedChips, 0);
-    depotAccept(state, depot, ItemId.BaggedChips, 0);
+    depotAccept(state, depot, ItemId.BaggedChips);
+    depotAccept(state, depot, ItemId.BaggedChips);
     stepMany(state, DEPOT_LOAD_TICKS + depotRunTicks(depot) + 4);
     expect(contract.runsCompleted).toBe(2);
     expect(state.ceremonies).toHaveLength(ceremonies);
@@ -323,7 +323,7 @@ describe('the truck depot', () => {
 
   it('refuses goods it has no route for, so a mis-aimed arm never picks them up', () => {
     const { state, depot } = worldWithDepot(9203);
-    expect(depotAccept(state, depot, ItemId.BaggedChips, 0)).toBe(false);
+    expect(depotAccept(state, depot, ItemId.BaggedChips)).toBe(false);
     run(state, [
       {
         type: 'CreateContract',
@@ -333,8 +333,8 @@ describe('the truck depot', () => {
         destination: 'Comfort Foods Depot',
       },
     ]);
-    expect(depotAccept(state, depot, ItemId.RussetPotato, 0)).toBe(false);
-    expect(depotAccept(state, depot, ItemId.BaggedChips, 0)).toBe(true);
+    expect(depotAccept(state, depot, ItemId.RussetPotato)).toBe(false);
+    expect(depotAccept(state, depot, ItemId.BaggedChips)).toBe(true);
   });
 
   it('fills to its floor and then refuses, which is what backs a belt up', () => {
@@ -351,7 +351,7 @@ describe('the truck depot', () => {
     ]);
     let accepted = 0;
     for (let i = 0; i < DEPOT_STOCK_CAPACITY + 25; i++) {
-      if (depotAccept(state, depot, ItemId.BaggedChips, 0)) accepted += 1;
+      if (depotAccept(state, depot, ItemId.BaggedChips)) accepted += 1;
     }
     expect(accepted).toBe(DEPOT_STOCK_CAPACITY);
   });
@@ -368,7 +368,7 @@ describe('the truck depot', () => {
     // the depot where the arm actually reaches.
     depot.tileX = 4;
     depot.tileY = 5;
-    belt.items.push({ dist: 0, item: ItemId.BaggedChips, freshTicks: 0 });
+    belt.items.push({ dist: 0, item: ItemId.BaggedChips });
 
     stepMany(state, 400);
     expect(arm.held).toBe(0);
@@ -523,7 +523,7 @@ describe('a standing contract', () => {
       },
     ]);
     const contract = state.contracts[0]!;
-    for (let i = 0; i < 7; i++) depotAccept(state, depot, ItemId.BaggedChips, 0);
+    for (let i = 0; i < 7; i++) depotAccept(state, depot, ItemId.BaggedChips);
     stepMany(state, 1);
     expect(contract.inTransit).toBe(4);
     expect(contract.stocked).toBe(3);
@@ -550,7 +550,7 @@ describe('a standing contract', () => {
         destination: 'Ridgeline Grocers',
       },
     ]);
-    for (let i = 0; i < 6; i++) depotAccept(state, depot, ItemId.BaggedChips, 0);
+    for (let i = 0; i < 6; i++) depotAccept(state, depot, ItemId.BaggedChips);
     standOn(state, depot.tileX, depot.tileY);
 
     run(state, [{ type: 'DeconstructMachine', machineId: depot.id }]);
@@ -602,7 +602,7 @@ describe('the commerce projection', () => {
         destination: 'Ridgeline Grocers',
       },
     ]);
-    depotAccept(state, depot, ItemId.BaggedChips, 0);
+    depotAccept(state, depot, ItemId.BaggedChips);
 
     const projected = view(state, createWorldView());
     expect(projected.commerce.carts).toHaveLength(1);
@@ -739,24 +739,25 @@ describe('a grabber pointed into the sell bin', () => {
     expect(state.stats.lifetimeEarnedCents).toBe(state.moneyCents - purse);
   });
 
-  it('pays a Day-Old bag exactly what a hand sale would pay for it, at the same tick', () => {
-    // ONE PRICE PATH. Day-Old goods are their own item id with their own list price, so the
-    // belt sale and the hand sale are literally the same multiplication — this pins that they
-    // stay so, rather than a freshness rule quietly forking.
+  it('pays a belt sale exactly what a hand sale would pay, at the same tick', () => {
+    // ONE PRICE PATH. The belt sale and the hand sale are literally the same multiplication over
+    // the item's list price, and this pins that they stay so. It was written against the Day-Old
+    // grade, which had its own id and its own price and was the sharpest case; item 124 deleted
+    // that grade, and the invariant it was measuring is not about grades at all.
     const { state, belt } = chipLineToBin(8703, 0);
-    belt.items.push({ dist: 0, item: ItemId.DayOldPotato, freshTicks: 0 });
+    belt.items.push({ dist: 0, item: ItemId.RussetPotato });
     const before = state.moneyCents;
     stepMany(state, 600);
 
     const beltGross = state.moneyCents - before;
-    expect(beltGross).toBe(listPriceCents(ItemId.DayOldPotato));
+    expect(beltGross).toBe(listPriceCents(ItemId.RussetPotato));
 
     // The same bag, sold by hand from the same world.
     const hand = createWorld(8703);
-    addItem(hand, ItemId.DayOldPotato, 1);
+    addItem(hand, ItemId.RussetPotato, 1);
     standOn(hand, FIELD_ORIGIN_X - 2, FIELD_ORIGIN_Y + 8);
     const handBefore = hand.moneyCents;
-    run(hand, [{ type: 'SellItem', item: ItemId.DayOldPotato, count: 1 }]);
+    run(hand, [{ type: 'SellItem', item: ItemId.RussetPotato, count: 1 }]);
     expect(hand.moneyCents - handBefore).toBe(beltGross);
     // And the hand's sale DID cost a touch, which is the only thing the two doors disagree on.
     expect(totalManualTouches(hand.stats.touches)).toBe(1);
@@ -774,7 +775,7 @@ describe('a grabber pointed into the sell bin', () => {
     // leaves the seed on the belt. Same refusal, one swing earlier, and the goods stay where
     // the player put them instead of being held hostage to make the point.
     const { state, teller, belt } = chipLineToBin(8704, 0);
-    belt.items.push({ dist: 0, item: ItemId.PotatoSeed, freshTicks: 0 });
+    belt.items.push({ dist: 0, item: ItemId.PotatoSeed });
     const moneyBefore = state.moneyCents;
 
     stepMany(state, 1_000);

@@ -48,7 +48,6 @@ import {
   type Bot,
   type BoxedMachine,
   type Contract,
-  type FreshStack,
   type CropTile,
   type Grabber,
   type Machine,
@@ -114,36 +113,20 @@ export interface SaveBoxedMachine {
   speedLevel: number;
 }
 
-/** One heap of a perishable good and the tick it turns on. */
-export interface SaveFreshStack {
-  count: number;
-  spoilAtTick: number;
-}
-
 export interface SaveInventorySlot {
   /** Sorted least-invested-first, and always either empty or `count` long. */
   boxes: SaveBoxedMachine[];
   count: number;
   item: number;
-  /**
-   * Freshness, soonest-expiring first. Empty for every shelf-stable good, and summing to `count`
-   * for a perishable one — the same "either empty or exactly `count`" invariant `boxes` holds.
-   */
-  stacks: SaveFreshStack[];
 }
 
 export interface SaveCropTile {
-  compost: number;
   crop: number;
-  fertility: number;
-  /** Harvests since this tile last lost a star. Decay is a counter, never a roll. */
-  fertilityWear: number;
   growth: number;
   growthTarget: number;
   moisture: number;
   /** Moisture-drain remainder in thousandths, so clay and sand stay exact. */
   moistureAccum: number;
-  readyAge: number;
   /** `SoilType`. Rolled once per position, ever — see `SoilMemory` in state.ts. */
   soil: number;
   /** World tile coordinate — the collection key since format 13 (the till tool). */
@@ -157,8 +140,6 @@ export interface SaveCropTile {
  * after the tile is un-tilled so re-tilling can never re-roll it.
  */
 export interface SaveSoilMemory {
-  fertility: number;
-  fertilityWear: number;
   soil: number;
   /** Row-major world tile key. Sorted ascending. */
   tile: number;
@@ -181,12 +162,6 @@ export interface SaveMachine {
   cargoCount: number;
   /** The `ItemId` on a delivery cart, or 0. One product per run. */
   cargoItem: number;
-  /**
-   * Freshness the cargo has left, in loose-equivalent ticks; 0 when it has none to lose (item
-   * 110). Format 18 gave every machine a 0 here, which reads as "no clock" and is deliberately
-   * the generous direction — an existing cellar's contents are not aged retroactively.
-   */
-  cargoFreshTicks: number;
   condition: number;
   cooldown: number;
   efficiencyLevel: number;
@@ -194,12 +169,6 @@ export interface SaveMachine {
   id: number;
   /** One count per line of the machine's recipe, in recipe order. */
   inputCounts: number[];
-  /**
-   * Freshness each hopper line has left, in ticks, parallel to `inputCounts`; 0 on a line with
-   * nothing to lose (item 112). Format 20 gave every line a 0, which reads as "no clock" and
-   * heals on the next armful — the same generous direction format 18 took for cargo.
-   */
-  inputFreshTicks: number[];
   investedCents: number;
   jammed: boolean;
   /** A junction's round-robin cursors, 0..3. Zero on every machine that is not one. */
@@ -209,11 +178,6 @@ export interface SaveMachine {
   network: number;
   opCount: number;
   outputCount: number;
-  /**
-   * Freshness the output basket has left, in ticks; 0 for a basket holding something
-   * shelf-stable, which after the Fryer is all of them (item 112).
-   */
-  outputFreshTicks: number;
   /**
    * What the output buffer is holding, or 0 when it is empty (item 111). Format 19 wrote it for
    * the first time; the 18 → 19 migration reads a non-empty buffer's identity back off the
@@ -282,8 +246,6 @@ export interface SavePipeNetwork {
 /** One item on a belt: how far along it is, what it is, and how long it has left. */
 export interface SaveBeltItem {
   dist: number;
-  /** Ticks of freshness remaining; 0 for a shelf-stable good and for anything grandfathered. */
-  freshTicks: number;
   item: number;
 }
 
@@ -304,8 +266,6 @@ export interface SaveGrabber {
   dir: number;
   filter: number;
   held: number;
-  /** Ticks of freshness the held unit has left; 0 for an empty claw or a shelf-stable good. */
-  heldFreshTicks: number;
   id: number;
   opCount: number;
   tier: number;
@@ -336,15 +296,11 @@ export interface SaveContract {
   grossCents: number;
   id: number;
   inTransit: number;
-  /** The lorry's clock (item 115). Frozen for the length of a run; 0 when nothing is rolling. */
-  inTransitFreshTicks: number;
   item: number;
   phase: number;
   quantityPerRun: number;
   runsCompleted: number;
   stocked: number;
-  /** The floor's clock (item 115), a REMAINDER rather than a deadline — `ticksRemaining`'s rule. */
-  stockedFreshTicks: number;
   ticksRemaining: number;
 }
 
@@ -359,8 +315,6 @@ export interface SaveContract {
  */
 export interface SaveBot {
   carryCount: number;
-  /** The armful's clock (item 115). 0 on empty arms and on anything shelf-stable. */
-  carryFreshTicks: number;
   carryItem: number;
   condition: number;
   dockId: number;
@@ -519,15 +473,11 @@ export function toPayload(state: WorldState): SavePayload {
   for (let i = 0; i < state.field.length; i++) {
     const tile = state.field[i]!;
     field.push({
-      compost: tile.compost,
       crop: tile.crop,
-      fertility: tile.fertility,
-      fertilityWear: tile.fertilityWear,
       growth: tile.growth,
       growthTarget: tile.growthTarget,
       moisture: tile.moisture,
       moistureAccum: tile.moistureAccum,
-      readyAge: tile.readyAge,
       soil: tile.soil,
       tileX: tile.tileX,
       tileY: tile.tileY,
@@ -539,8 +489,6 @@ export function toPayload(state: WorldState): SavePayload {
   for (let i = 0; i < state.soilMemory.length; i++) {
     const entry = state.soilMemory[i]!;
     soilMemory.push({
-      fertility: entry.fertility,
-      fertilityWear: entry.fertilityWear,
       soil: entry.soil,
       tile: entry.tile,
     });
@@ -560,12 +508,7 @@ export function toPayload(state: WorldState): SavePayload {
         speedLevel: box.speedLevel,
       });
     }
-    const stacks: SaveFreshStack[] = [];
-    for (let j = 0; j < slot.stacks.length; j++) {
-      const stack = slot.stacks[j]!;
-      stacks.push({ count: stack.count, spoilAtTick: stack.spoilAtTick });
-    }
-    inventory.push({ boxes, count: slot.count, item: slot.item, stacks });
+    inventory.push({ boxes, count: slot.count, item: slot.item });
   }
 
   const machines: SaveMachine[] = [];
@@ -576,7 +519,6 @@ export function toPayload(state: WorldState): SavePayload {
       boundZone: machine.boundZone,
       capacityLevel: machine.capacityLevel,
       cargoCount: machine.cargoCount,
-      cargoFreshTicks: machine.cargoFreshTicks,
       cargoItem: machine.cargoItem,
       condition: machine.condition,
       cooldown: machine.cooldown,
@@ -584,7 +526,6 @@ export function toPayload(state: WorldState): SavePayload {
       flowMlPerMinute: machine.flowMlPerMinute,
       id: machine.id,
       inputCounts: machine.inputCounts.slice(),
-      inputFreshTicks: machine.inputFreshTicks.slice(),
       investedCents: machine.investedCents,
       jammed: machine.jammed,
       junctionInCursor: machine.junctionInCursor,
@@ -593,7 +534,6 @@ export function toPayload(state: WorldState): SavePayload {
       network: machine.network,
       opCount: machine.opCount,
       outputCount: machine.outputCount,
-      outputFreshTicks: machine.outputFreshTicks,
       outputItem: machine.outputItem,
       overcookedCount: machine.overcookedCount,
       ports: machine.ports.map((port) => ({
@@ -624,7 +564,7 @@ export function toPayload(state: WorldState): SavePayload {
     const items: SaveBeltItem[] = [];
     for (let j = 0; j < belt.items.length; j++) {
       const entry = belt.items[j]!;
-      items.push({ dist: entry.dist, freshTicks: entry.freshTicks, item: entry.item });
+      items.push({ dist: entry.dist, item: entry.item });
     }
     belts.push({
       dir: belt.dir,
@@ -646,7 +586,6 @@ export function toPayload(state: WorldState): SavePayload {
       dir: grabber.dir,
       filter: grabber.filter,
       held: grabber.held,
-      heldFreshTicks: grabber.heldFreshTicks,
       id: grabber.id,
       opCount: grabber.opCount,
       tier: grabber.tier,
@@ -718,13 +657,11 @@ export function toPayload(state: WorldState): SavePayload {
       grossCents: contract.grossCents,
       id: contract.id,
       inTransit: contract.inTransit,
-      inTransitFreshTicks: contract.inTransitFreshTicks,
       item: contract.item,
       phase: contract.phase,
       quantityPerRun: contract.quantityPerRun,
       runsCompleted: contract.runsCompleted,
       stocked: contract.stocked,
-      stockedFreshTicks: contract.stockedFreshTicks,
       ticksRemaining: contract.ticksRemaining,
     });
   }
@@ -734,7 +671,6 @@ export function toPayload(state: WorldState): SavePayload {
     const bot = state.bots[i]!;
     bots.push({
       carryCount: bot.carryCount,
-      carryFreshTicks: bot.carryFreshTicks,
       carryItem: bot.carryItem,
       condition: bot.condition,
       dockId: bot.dockId,
@@ -992,19 +928,6 @@ function readInputCounts(
   return readHopperArray(source, 'inputCounts', path, kind);
 }
 
-/**
- * The clocks those buffers are running (item 112), sized from today's spec by the same rule and
- * for the same reason — a line that appears out of a rebalance starts at 0, which reads as "no
- * clock" and heals the next time anything is put in it.
- */
-function readInputFreshTicks(
-  source: Record<string, unknown>,
-  path: string,
-  kind: MachineKind,
-): number[] {
-  return readHopperArray(source, 'inputFreshTicks', path, kind);
-}
-
 /** One array of per-hopper integers, resized to today's spec. Both readers above are this. */
 function readHopperArray(
   source: Record<string, unknown>,
@@ -1110,7 +1033,6 @@ const MACHINE_KINDS: readonly number[] = [
   MachineKind.TruckDepot,
   MachineKind.BeltJunction,
   MachineKind.RootCellar,
-  MachineKind.Composter,
   MachineKind.HandCart,
   MachineKind.OrangeTree,
   MachineKind.LemonTree,
@@ -1173,7 +1095,6 @@ const ERRAND_ACTIONS: readonly number[] = [
   IntentAction.Sell,
   IntentAction.Deconstruct,
   IntentAction.Buy,
-  IntentAction.Fertilize,
   IntentAction.Scythe,
   IntentAction.HitchCart,
   IntentAction.RefillCan,
@@ -1240,26 +1161,10 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
         investedCents: int(box, 'investedCents', boxPath),
       });
     }
-    const stacksRaw = list(slot, 'stacks', path);
-    const stacks: FreshStack[] = [];
-    for (let j = 0; j < stacksRaw.length; j++) {
-      const stackPath = `${path}.stacks[${String(j)}]`;
-      const stack = record(stacksRaw[j], stackPath);
-      stacks.push({
-        spoilAtTick: int(stack, 'spoilAtTick', stackPath),
-        count: int(stack, 'count', stackPath),
-      });
-    }
-    // SORTED HERE RATHER THAN TRUSTED, exactly as `ownedParcels` and `ceremonies` are: the order
-    // is a hashed invariant and a file that lost it would restore a world that hashes differently
-    // from the one that was saved while holding the same potatoes. Ascending by deadline, which
-    // is also the order removals eat them in.
-    stacks.sort((a, b) => a.spoilAtTick - b.spoilAtTick);
     inventory.push({
       item: idInt(slot, 'item', path, ITEM_IDS) as ItemId,
       count: int(slot, 'count', path),
       boxes,
-      stacks,
     });
   }
 
@@ -1277,10 +1182,6 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       moisture: int(tile, 'moisture', path),
       moistureAccum: int(tile, 'moistureAccum', path),
       soil: idInt(tile, 'soil', path, SOIL_TYPES) as SoilType,
-      fertility: int(tile, 'fertility', path),
-      fertilityWear: int(tile, 'fertilityWear', path),
-      readyAge: int(tile, 'readyAge', path),
-      compost: int(tile, 'compost', path),
       zone: int(tile, 'zone', path),
       // Presentation data, never saved and never read (see `CropTile.lastPouredTick`). Every
       // loaded world starts at "never poured", which is correct: a pour that happened before
@@ -1297,8 +1198,6 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     soilMemory.push({
       tile: int(entry, 'tile', path),
       soil: idInt(entry, 'soil', path, SOIL_TYPES) as SoilType,
-      fertility: int(entry, 'fertility', path),
-      fertilityWear: int(entry, 'fertilityWear', path),
     });
   }
 
@@ -1316,13 +1215,10 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       progress: int(machine, 'progress', path),
       cargoItem: idInt(machine, 'cargoItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
       cargoCount: int(machine, 'cargoCount', path),
-      cargoFreshTicks: int(machine, 'cargoFreshTicks', path),
       runTicksRemaining: int(machine, 'runTicksRemaining', path),
       inputCounts: readInputCounts(machine, path, kind),
-      inputFreshTicks: readInputFreshTicks(machine, path, kind),
       ports: readPorts(machine, path, kind),
       outputCount: int(machine, 'outputCount', path),
-      outputFreshTicks: int(machine, 'outputFreshTicks', path),
       outputItem: idInt(machine, 'outputItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
       tankMl: int(machine, 'tankMl', path),
       condition: int(machine, 'condition', path),
@@ -1378,7 +1274,6 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       seedCount: int(bot, 'seedCount', path),
       carryItem: idInt(bot, 'carryItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
       carryCount: int(bot, 'carryCount', path),
-      carryFreshTicks: int(bot, 'carryFreshTicks', path),
       condition: int(bot, 'condition', path),
       opCount: int(bot, 'opCount', path),
     });
@@ -1451,9 +1346,7 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       // one stored string that is not hashed — see `hash.ts`.
       destination: clipDestination(str(contract, 'destination', path)),
       stocked: int(contract, 'stocked', path),
-      stockedFreshTicks: int(contract, 'stockedFreshTicks', path),
       inTransit: int(contract, 'inTransit', path),
-      inTransitFreshTicks: int(contract, 'inTransitFreshTicks', path),
       phase: idInt(contract, 'phase', path, CONTRACT_PHASES) as ContractPhase,
       ticksRemaining: int(contract, 'ticksRemaining', path),
       runsCompleted: int(contract, 'runsCompleted', path),
@@ -1489,7 +1382,6 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       items.push({
         dist: int(entry, 'dist', itemPath),
         item: idInt(entry, 'item', itemPath, ITEM_IDS) as ItemId,
-        freshTicks: int(entry, 'freshTicks', itemPath),
       });
     }
     belts.push({
@@ -1517,7 +1409,6 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       tier: idInt(grabber, 'tier', path, GRABBER_TIERS) as GrabberTier,
       filter: idInt(grabber, 'filter', path, ITEM_IDS_OR_NONE),
       held: idInt(grabber, 'held', path, ITEM_IDS_OR_NONE),
-      heldFreshTicks: int(grabber, 'heldFreshTicks', path),
       cooldown: int(grabber, 'cooldown', path),
       opCount: int(grabber, 'opCount', path),
     });
@@ -1636,7 +1527,8 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       centsAtDawn: int(row, 'centsAtDawn', path),
     });
   }
-  // Sorted here rather than trusted, exactly as `ceremonies` and freshness stacks are: the
+  // Sorted here rather than trusted, exactly as `ceremonies` is (and as freshness stacks were,
+  // until item 124 deleted them): the
   // ascending item order is a hashed invariant of the ledger.
   salesByItem.sort((a, b) => a.item - b.item);
 

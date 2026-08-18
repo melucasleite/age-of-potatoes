@@ -184,7 +184,7 @@ describe('the Maintenance Station', () => {
     // potatoes arrive through, because the kit hopper IS a recipe line.
     const belt = spawnBelt(state, BeltTier.Basic, 6, 10, Direction.East, 3)!; // tiles (6..8,10)
     spawnGrabber(state, GrabberTier.Mk1, 9, 10, Direction.East, 0)!;
-    belt.items.push({ dist: 700, item: ItemId.RepairKit, freshTicks: 0 });
+    belt.items.push({ dist: 700, item: ItemId.RepairKit });
 
     const touchesBefore = totalManualTouches(state.stats.touches);
     stepMany(state, 100);
@@ -398,16 +398,16 @@ describe('the parts line, retired (item 090)', () => {
     // liquids, boxed machines excluded (nothing eats one, nothing makes one).
     // 35 until item 111 spent nine of the remaining ten on the flavour tier, and 44 until item
     // 131 spent **THE LAST ONE** on `ItemId.UsedBottle`. The two assertions below now meet:
-    // 45 + 5 is 50, the ceiling is 50, and the cap has stopped being a headroom note. The next
-    // feature that wants a node buys a raise from the owner — which is precisely why the exact
-    // number is pinned beside the ceiling rather than only the ceiling.
+    // 45 + 5 was exactly 50 and the cap had stopped being a headroom note.
     //
-    // Item 131 got that node for one item instead of two by putting the recipe on the WASHER
-    // rather than building a Recycling Centre (owner's ruling, 2026-08-17). The alternative
-    // would have read 46 + 5 here and been over.
+    // **AND THEN ITEM 124 HANDED SEVEN BACK.** Deleting the waste loop deleted seven graph
+    // nodes with it — the five Day-Old grades, `Compost` and `Fertilizer` — so the count is 38,
+    // the graph stands at 43 of ~50, and there is real room again for the first time since item
+    // 111. That is a side effect rather than an aim, and it is pinned here precisely because it
+    // is the kind of headroom somebody spends without noticing where it came from.
     const graphItems = ITEM_SPECS.filter((spec) => !isBoxedMachineItem(spec.id)).length;
-    expect(graphItems).toBe(45);
-    expect(graphItems + LIQUID_SPECS.length).toBe(50);
+    expect(graphItems).toBe(38);
+    expect(graphItems + LIQUID_SPECS.length).toBe(43);
     expect(graphItems + LIQUID_SPECS.length).toBeLessThanOrEqual(50);
   });
 });
@@ -626,9 +626,7 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
       quantityPerRun: 10,
       destination: 'Diagnostics Row',
       stocked: 0,
-      stockedFreshTicks: 0,
       inTransit: 0,
-      inTransitFreshTicks: 0,
       phase: ContractPhase.Waiting,
       ticksRemaining: 0,
       runsCompleted: 0,
@@ -725,6 +723,6 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
     // reproduces ab8ef078 exactly — meaning every other hashed field is byte-identical, so item
     // 115 changed no behaviour here even though it changed behaviour elsewhere. The wrench came
     // due, the drone answered, and the factory ended the watch healthy.
-    expect(hashState(state)).toBe('68f7accb');
+    expect(hashState(state)).toBe('2b433a69');
   });
 });

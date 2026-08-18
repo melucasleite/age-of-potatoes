@@ -171,7 +171,6 @@ describe('the shift ledger', () => {
         itemsSold: 40,
         ticks: TICKS_PER_ACTIVE_HOUR,
         wastePermille: -1,
-        spoilagePermille: -1,
       },
       {
         hour: 1,
@@ -181,7 +180,6 @@ describe('the shift ledger', () => {
         itemsSold: 3,
         ticks: 500,
         wastePermille: -1,
-        spoilagePermille: -1,
       },
     ];
 

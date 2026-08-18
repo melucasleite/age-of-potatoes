@@ -125,19 +125,13 @@ export function pruneEmptyZones(state: WorldState): void {
 export interface ZoneCounts {
   tiles: number;
   planted: number;
-  /** Mature and inside its grace — harvest these and nothing was lost. */
+  /** Ready to pull. It stays ready forever — nothing wilts (item 124). */
   mature: number;
-  /** Mature, past grace, drooping. Still the fresh good if you hurry. */
-  wilting: number;
-  /** Turned. Harvests as Day-Old, or collapses to compost if left. */
-  wilted: number;
   dry: number;
-  /** Compost sitting on the ground waiting to be picked up. */
-  compost: number;
 }
 
 export function createZoneCounts(): ZoneCounts {
-  return { tiles: 0, planted: 0, mature: 0, wilting: 0, wilted: 0, dry: 0, compost: 0 };
+  return { tiles: 0, planted: 0, mature: 0, dry: 0 };
 }
 
 // --- auto-replant -----------------------------------------------------------------

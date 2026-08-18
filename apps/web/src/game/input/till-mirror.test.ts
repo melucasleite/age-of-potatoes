@@ -70,7 +70,7 @@ const MODES: readonly TillMode[] = [TillMode.Till, TillMode.Unplant, TillMode.Un
 function world(): WorldState {
   const state = createWorld(4271);
   state.moneyCents = 100_000_000;
-  state.unlocked = [TechId.Belts, TechId.Pumps, TechId.PipedSprinklers, TechId.Composting];
+  state.unlocked = [TechId.Belts, TechId.Pumps, TechId.PipedSprinklers];
   return state;
 }
 
@@ -161,19 +161,11 @@ function furnished(): { state: WorldState; piped: { x: number; y: number } } {
     );
   }
 
-  // COMPOST IS SET ON THE TILE RATHER THAN COMMANDED ONTO IT, and that is not laziness.
-  // There is no player verb that puts compost on the ground: the sim's only path is a ripe crop
-  // left standing for `COMPOST_AT_AGE` ticks, which is tens of thousands of ticks of maintained
-  // moisture away. The field this test needs is a plain integer on a `CropTile`, and the
-  // reducer reads it back through its own `tileAt`; building the world by command and then
-  // setting one number the world has no verb for is the honest version of this fixture.
-  const composted = field[10]!;
-  tileAt(state, composted.x, composted.y)!.compost = 2;
-  const both = planted[0]!;
-  tileAt(state, both.x, both.y)!.compost = 1;
-  expect(tileAt(state, both.x, both.y)!.crop, 'the both-tile still has its crop').not.toBe(
-    CropId.None,
-  );
+  // ⚠️ TWO TILES USED TO BE BUILT HERE AND [[124]] REMOVED BOTH: one carrying compost with no
+  // crop, and one carrying a crop AND compost. They existed because "laden" was
+  // `crop !== None || compost > 0`, so the predicate had three interesting states rather than
+  // two. It is now just `crop !== None` — the sim's own line in `applyTillTile` — and those two
+  // tiles collapse into the plain bare and plain planted cases the sweep already walks.
 
   // A sprinkler on farmland ([[067]]). The reducer clears the tile on the way in, so this ends
   // up BARE and OCCUPIED — the pair that keeps `Untill` honest about a machine's floor.

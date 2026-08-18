@@ -115,7 +115,7 @@ describe('determinism', () => {
     // EXACTLY. So nothing any of them does was altered — no fixture runs long enough for a
     // clock to expire, and every remaining hashed byte, `stacks[].spoilAtTick` included, is
     // identical. The hash moved because the digest did.
-    expect(hashState(runScript(1234, 1000))).toBe('401ffb95');
+    expect(hashState(runScript(1234, 1000))).toBe('0709cd8a');
   });
 
   it('gives different seeds different worlds', () => {
@@ -474,7 +474,7 @@ describe('the view seam', () => {
     arm.held = 0;
     arm.cooldown = 0;
     const feed = spawnBelt(state, BeltTier.Basic, 4, 5, Direction.East, 1)!;
-    beltInsert(feed, 0, ItemId.PlainChips, 0);
+    beltInsert(feed, 0, ItemId.PlainChips);
     stepMany(state, 1);
     expect(view(state, createWorldView()).grabbers[0]!.lamp).toBe(LampState.Blocked);
     expect(arm.held).toBe(0);

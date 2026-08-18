@@ -21,18 +21,10 @@ import {
   CropId,
   type CropSpec,
   DESTINATION_MAX_LENGTH,
-  FERTILITY_MAX,
-  FERTILITY_MIN,
-  FERTILITY_PER_FERTILIZER,
-  FRESHNESS_BUCKET_TICKS,
-  FRESHNESS_MAX_STACKS,
-  HARVESTS_PER_FERTILITY_STEP,
+  HARVEST_BASE_COUNT,
   SOIL_ROLL_TABLE,
   SoilType,
-  WiltStage,
-  freshnessTicks,
   soilSpec,
-  wiltStageForAge,
   FIELD_ORIGIN_X,
   FIELD_ORIGIN_Y,
   FIELD_TILES_HIGH,
@@ -112,7 +104,8 @@ import { SUBTILE, clampInt, divFloor, tileCentreSubtiles } from './units';
  *     fact rather than an approximation.
  * 11 — the farm release: harvested goods have a clock, the roster reaches eight, the assisted tier
  *     arrives, and the Agri-Bots do. An inventory slot carries its stacks and their spoil ticks; a
- *     field tile carries its soil, its moisture accumulator and its fertility wear; a machine
+ *     field tile carries its soil, its moisture accumulator and its fertility wear (both of those
+ *     were deleted again by item 124, but format 11 is what it was); a machine
  *     carries the zone a dock is bound to; the player carries the cart they are towing; and the
  *     world carries a sorted list of bots. Four items in one format bump because they land in one
  *     release — the chain's rule is one migration per RELEASED version, and 11 is not released
@@ -129,7 +122,8 @@ import { SUBTILE, clampInt, divFloor, tileCentreSubtiles } from './units';
  *     roll-once-per-position-ever ledger of what ground has been under every tile ever tilled,
  *     and a field bot's `targetTile` becomes a world tile key rather than an index into an
  *     array that tilling can now reorder. The legacy rect migrates into the collection with
- *     identical soil, moisture, crops, and fertility — same dirt, new bookkeeping.
+ *     identical soil, moisture, crops, and fertility — same dirt, new bookkeeping. (Fertility
+ *     is gone as of item 124; format 13 is described here as it was.)
  */
 export const WORLD_STATE_VERSION = 13;
 
@@ -228,8 +222,11 @@ export const IntentAction = {
    * shop panel could otherwise only tell the player to go and stand somewhere.
    */
   Buy: 11,
-  /** Walk over and work a bag of Fertilizer into the tile. Wired exactly as `Water` is. */
-  Fertilize: 12,
+  // 12 was `Fertilize` — walk over and work a bag of Fertilizer into a tile. Fertility is not
+  // a feature (item 124), so there is nothing to work in. **THE NUMBER IS BURNED, NOT REUSED**:
+  // a `PlayerIntent` is saved mid-errand, so an old world can be holding a 12 and the loader
+  // must be able to say what it meant. `INTENT_ACTIONS` no longer lists it, which is what makes
+  // the loader refuse one rather than silently walk somewhere.
   /** Walk over and swing the scythe at a tile, cutting the three across your path. */
   Scythe: 13,
   /** Walk over and take hold of a hand cart's handles. */
@@ -269,7 +266,6 @@ export const INTENT_ACTIONS: readonly IntentAction[] = [
   IntentAction.Sell,
   IntentAction.Deconstruct,
   IntentAction.Buy,
-  IntentAction.Fertilize,
   IntentAction.Scythe,
   IntentAction.HitchCart,
   IntentAction.RefillCan,
@@ -387,72 +383,9 @@ export interface BoxedMachine {
   investedCents: number;
 }
 
-/**
- * One heap of a perishable good that all turns at the same moment.
- *
- * **FRESHNESS BREAKS THE MERGE RULE THE INVENTORY HAS ALWAYS HAD, AND THIS IS THE CHEAPEST
- * HONEST REPAIR.** Two potatoes picked ten minutes apart are not interchangeable, so a slot can
- * no longer be one count — but it must stay ONE SLOT PER ITEM ID, because `inventory` is sorted
- * by item id and `itemCount` stops scanning the moment it passes the id it wants, so a second
- * slot for the same item would simply be invisible. The answer is the same one `boxes` reached
- * for the same reason: a parallel list inside the slot.
- *
- * Sorted ascending by `spoilAtTick`, so the stack about to turn is always `stacks[0]` — which is
- * what makes the sweep O(1) per slot on almost every tick and what settles, once, which stack a
- * removal eats first. **Soonest-expiring goes first**, the same "burnt chips come out of the
- * basket first" rule the Fryer follows: a player who sells twenty potatoes should be selling the
- * twenty that were about to turn, not leaving them behind to become compost.
- *
- * The counts sum to `slot.count` for a perishable item, and the list is EMPTY for a shelf-stable
- * one — exactly the invariant `boxes.length` is either 0 or `count`.
- */
-export interface FreshStack {
-  /**
-   * The tick this heap turns to Compost, or `SPOIL_NEVER`.
-   *
-   * **AN ABSOLUTE TICK RATHER THAN A COUNTDOWN, AND ITEM 035 ASKS FOR IT IN THOSE WORDS.** A
-   * countdown has to be decremented by somebody every tick, on every stack, forever — which is
-   * work proportional to the bag on a tick that has nothing to do, and it is a number that drifts
-   * the first time two code paths both think they own the decrement. An absolute tick is written
-   * once when the goods enter the bag and compared once when the sweep runs. It also makes hopper
-   * freeze free: see `machineHoldFreezesSpoilage`.
-   *
-   * Rounded down to a multiple of `FRESHNESS_BUCKET_TICKS`, which is what lets two harvests in
-   * the same minute merge into one stack instead of growing the save.
-   */
-  spoilAtTick: number;
-  count: number;
-}
-
 export interface InventorySlot {
   item: ItemId;
   count: number;
-  /**
-   * Per-stack freshness, soonest-expiring first. Empty for every shelf-stable good.
-   *
-   * **THE LIST OF PAIRS LIVES HERE AND NOWHERE ELSE, AND THAT IS STILL ITEM 035'S ANSWER.** A
-   * container — a cellar, a cart, a hopper, a belt item — keeps ONE integer of remaining clock
-   * rather than a stack list, because the alternative is a list of pairs on every machine in the
-   * game, in the hash, in the save, in the migration, in the loader, in `consumeRecipe` and in
-   * every grabber hand-off. That cost is real and item 035 was right to refuse it. Only the bag,
-   * which genuinely mixes ten harvests, pays it.
-   *
-   * **WHAT ITEM 035 GOT WRONG WAS THE CONCLUSION IT DREW FROM THAT**, and items 110 and 112 are
-   * the two halves of correcting it. The reasoning ran: hoppers hold bare counts, counts do not
-   * age, so freeze is structural and *"a stack handed back OUT of a machine is stamped fresh from
-   * that tick, and that is not a laundering exploit worth closing — it costs two hand-verbs and a
-   * walk to gain what running the machine for one operation would have gained anyway."* Both
-   * clauses failed in play. A container that stamps fresh on the way out does not freeze a clock,
-   * it MINTS one, and the price was not two hand-verbs: item 110's verifier ran ten potatoes for
-   * three and a half lifetimes through an $80 cart, and item 112's ran twenty peppers through a
-   * starved Seasoner that could never turn a batch at all. §4's *"processing IS preservation"* is
-   * a statement about machines that PROCESS; a machine standing still is a shed.
-   *
-   * So every place a good can sit now carries one integer of clock and spends it: `cargoFreshTicks`
-   * on a container, `inputFreshTicks` on a hopper line, `outputFreshTicks` on a basket, and
-   * `BeltItem.freshTicks` on a belt. Zero of them is a list of pairs.
-   */
-  stacks: FreshStack[];
   /**
    * One entry per boxed machine in this slot, or EMPTY for every ordinary good — which is all
    * of them but the twenty boxed-machine rows. `boxes.length` is always either 0 or `count`.
@@ -510,26 +443,6 @@ export interface CropTile {
    * `WorldState.soilMemory` after the tile itself is gone.
    */
   soil: SoilType;
-  /** 1..3 stars. Decides yield. Falls a star every `HARVESTS_PER_FERTILITY_STEP` harvests. */
-  fertility: number;
-  /**
-   * Harvests taken since this tile last lost a star. **THE DECAY IS A COUNTER, NOT A ROLL** —
-   * item 030's constraint, and plan §7 ruling 5's house style: a field that got poorer on a die
-   * roll would teach a player nothing they could act on, whereas "five harvests a star" is a
-   * number you can plan a rotation around.
-   *
-   * `ApplyFertilizer` puts a star back and resets this to zero, which is the loop §4 promised
-   * closing on the one tile field that was already there.
-   */
-  fertilityWear: number;
-  /**
-   * Ticks this tile has stood mature and unharvested. THE ONLY CLOCK WITHERING HAS. It
-   * advances inside `step()`, so it counts active factory minutes and nothing else — a
-   * closed tab ages no crop, because time does not pass (plan §4, §6).
-   */
-  readyAge: number;
-  /** Compost left by a crop that was never picked. Nothing vanishes (plan §4). */
-  compost: number;
   /** The zone that claims this tile, or 0. A tile belongs to at most one zone. */
   zone: number;
   /**
@@ -585,55 +498,7 @@ export interface Machine {
    * Seasoner holds four things and eats at most two of them in any one operation.
    */
   inputCounts: number[];
-  /**
-   * **HOW MUCH CLOCK EACH HOPPER'S CONTENTS HAVE LEFT**, in ticks, parallel to `inputCounts` and
-   * 0 on every line holding something shelf-stable — which is most of them.
-   *
-   * ITEM 035'S RULING, OVERTURNED BY ITEM 112, and the comment on `InventorySlot.stacks` is the
-   * ruling being overturned. It read: *"freeze is STRUCTURAL: there is no clock inside a hopper
-   * to run, because a hopper holds counts and counts do not age... that is not a laundering
-   * exploit worth closing — it costs two hand-verbs and a walk."* Item 111 made the Seasoner's
-   * pepper hopper hand-loadable, and a Seasoner with no chips in it can NEVER run, so it is
-   * boxable forever: *"20 chili peppers with 2,400 ticks left sat in a Seasoner for an hour of
-   * world time and came back with 17,998 of an 18,000-tick window."* It cost one hand-verb, and
-   * §4's thesis that processing IS preservation does not extend to a machine that never processes.
-   *
-   * ONE CLOCK PER LINE, NOT PER UNIT — `cargoFreshTicks`' shape, for `cargoFreshTicks`' reason. A
-   * hopper holds one product with one history, arrivals merge at the SOONER of the two clocks
-   * (`mergedFreshness`), and a partial take gives every unit the same remainder. The alternative
-   * is a stack list per line on every machine in the game, which is the cost item 035 refused to
-   * pay and was right to.
-   *
-   * **IT NEVER REACHES 0 WHILE GOODS ARE HELD; IT CLAMPS AT 1.** A hopper line cannot turn to
-   * Compost where it stands the way a cellar's load or a belt item can, because the line's
-   * identity comes from `machineHoppers(spec)[i]` and there is nowhere to write a different item
-   * id. So an exhausted line holds goods at 1 tick, which `spoilTickFromRemaining` turns into a
-   * deadline in the past — and the sweep that turns them is the ordinary inventory sweep, one
-   * tick after the player boxes the machine and takes them back. Nothing vanishes, nothing
-   * teleports, and the value the player recovers is exactly what they would have recovered had
-   * the goods rotted on the ground: compost.
-   */
-  inputFreshTicks: number[];
   outputCount: number;
-  /**
-   * **HOW MUCH CLOCK THE OUTPUT BASKET'S CONTENTS HAVE LEFT**, in ticks, or 0 for a basket
-   * holding something shelf-stable — which is every basket after the Fryer (§4).
-   *
-   * THE THIRD DOOR, AND THE ONE THAT NEEDED NO BOXING AT ALL (item 112). `applyUnloadMachine`
-   * stamped a fresh window on whatever came off the basket, so a Washer whose belt was missing
-   * held forty washed potatoes for an hour and handed the player a brand-new six-minute window on
-   * every one of them. That is the same laundering item 110 closed on a cart, reachable with one
-   * keypress instead of two, and against a `WashedPotato` window of 7,200 ticks it is worth more.
-   *
-   * Stamped when the unit is MADE (`finishOperation`) rather than when it is taken, which is the
-   * whole point: a product is a new good and starts a full window, and then the window runs while
-   * the basket waits. §4's lesson — *get the slices to the Fryer inside six minutes* — is this
-   * field being true rather than being prose.
-   *
-   * Always 0 when `outputCount` is 0, exactly as `outputItem` is, so an empty basket has one
-   * spelling in the hash. Clamps at 1 rather than reaching 0, for `inputFreshTicks`' reason.
-   */
-  outputFreshTicks: number;
   /**
    * **WHAT IS ACTUALLY IN THE OUTPUT BUFFER**, or 0 when it is empty. The only state item 111
    * added, and the reason a machine can know more than one recipe.
@@ -763,34 +628,6 @@ export interface Machine {
   cargoItem: ItemId | 0;
   /** Goods aboard. Never above `CART_CAPACITY`. */
   cargoCount: number;
-  /**
-   * **THE CLOCK THE CARGO CAME IN WITH**, in loose-equivalent ticks still to run, or 0 for a
-   * container holding nothing, holding something shelf-stable, or grandfathered by format 18.
-   *
-   * A REMAINDER, NOT A DEADLINE, and that is the whole design (item 110). An absolute spoil tick
-   * — which is what `FreshStack` carries and what a bag wants — cannot describe a Root Cellar,
-   * because the answer there is *never*; a remainder describes both, and the difference between
-   * the cellar and everything else becomes one question asked of `storageAgeTicksPerTick`: does
-   * this box's clock run? The cellar's does not. Nothing else in the game stops it.
-   *
-   * **WHY THIS FIELD EXISTS AT ALL.** Storage used to stamp freshness on the way OUT, from the
-   * tick the goods came back into the player's arms — sound reasoning (nothing inside a machine
-   * ages, so goods handed back are loose again) that became an exploit the moment item 105 made
-   * the round trip cheap: *"a round trip through an eighty dollar hand cart resets the freshness
-   * clock, so I kept ten potatoes alive for three and a half times their natural lifespan by
-   * clicking twice. Rot is now opt-in."* One integer per container buys back the invariant that
-   * a box can PRESERVE time and can never MINT it.
-   *
-   * ONE CLOCK FOR THE WHOLE BOX, because a box holds one product (`storageRoomFor`) and a list of
-   * stacks per machine would put `FreshStack[]` on every Fryer in the game to model a number that
-   * is almost always zero. A top-up takes the SOONER of the two deadlines — `addStack`'s cap rule
-   * exactly, and for the same reason: merging the other way would let a player keep an armful
-   * alive forever by dropping one fresh potato on top of it.
-   *
-   * Zero on every machine that is not holding perishables, counted in the hash anyway, for the
-   * reason the cart's three fields are: an absent field and a zero one must not encode differently.
-   */
-  cargoFreshTicks: number;
   /**
    * Ticks until the cart is back, or 0 when it is standing in the yard.
    *
@@ -989,37 +826,6 @@ export interface Bot {
   carryItem: ItemId | 0;
   carryCount: number;
   /**
-   * **THE CLOCK IN THE ROBOT'S ARMS**, in ticks left, or 0 when they are empty or holding
-   * something shelf-stable (item 115). The seventh and last of the containers item 110 started on.
-   *
-   * **ITEM 112 LOOKED STRAIGHT AT THIS AND DECIDED AGAINST IT**, in writing, and the reasoning is
-   * worth keeping because every clause of it is true: *"goods only ever enter it by being harvested
-   * from a tile, which is the moment a full window is correct, and nothing in the game can put an
-   * old good into a bot. So the arrival is fresh to within the length of one walk home, and a
-   * seventh clock would buy that walk and nothing else."*
-   *
-   * What it missed is that goods do not have to ENTER a bot old to BE old in one. A bot that
-   * harvests and then cannot deliver — a full produce shelf, a shelf holding another crop, a pond
-   * between it and home — stands there holding its armful for as long as the jam lasts, and under
-   * the old rule the clock had not started. That is not a player laundering anything. It is a
-   * fridge that appears whenever a dock backs up, which is an ordinary factory state and one the
-   * game's own docs describe as the house "look downstream" stall.
-   *
-   * **A BOT'S ARMFUL TURNS IN PLACE, LIKE A BELT ITEM AND UNLIKE A HOPPER LINE** — `carryItem` is a
-   * real item id, so there is somewhere to write that it turned, and the count is preserved
-   * (`COMPOST_PER_SPOILED_ITEM` is 1). The player then sees a robot carrying compost to a shed,
-   * which is the diagnostic: it says both that the goods were lost and where the jam is.
-   *
-   * **THIS MAKES A JAMMED DOCK COST PRODUCE, WHICH IS A REAL DIFFICULTY CHANGE** and is flagged as
-   * one — see item 115's log and item 046's balance pile. It is not smuggled in as a bug fix: the
-   * BUG is that the freeze existed, and the CONSEQUENCE is that automation now needs its
-   * downstream kept clear. Whether that consequence is priced right is somebody else's call.
-   *
-   * The SEED POCKET below keeps no clock and never will: seeds are shelf-stable, so a clock on
-   * them would count down to a number that means nothing.
-   */
-  carryFreshTicks: number;
-  /**
    * THE SEED POCKET (item 088), and it is a POCKET rather than a second pair of arms.
    *
    * A hand harvest of a one-shot crop returns a seed — plan §4's anti-softlock floor, the rule
@@ -1118,25 +924,6 @@ export interface BeltItem {
   /** Subtiles from the belt's start. Strictly ascending within a belt. */
   dist: number;
   item: ItemId;
-  /**
-   * **HOW MUCH CLOCK THIS UNIT HAS LEFT**, in ticks, or 0 for a shelf-stable good — which is
-   * most of what rides a belt, so most belt items still hash as a zero.
-   *
-   * ITEM 035'S RULING ON BELTS, OVERTURNED BY ITEM 112. It stood as *"a belt is a place goods
-   * pass through rather than sit in, and carries no clock at all"*, and every word of that is
-   * true of a belt that is MOVING. The trouble is that it made `cellar → arm → belt → arm →
-   * cellar` mint a full window with no clicking whatsoever — the exploit's automated form, found
-   * by item 110's verifier at `cargoFreshTicks` 18,000 on goods that had 2,400 left — and that a
-   * backed-up belt is precisely a place goods sit in, nose to tail, for as long as the jam lasts.
-   * A belt now spends the clock at the loose rate, which is the only rate an open conveyor could
-   * honestly run at.
-   *
-   * **AN EXPIRED BELT ITEM TURNS INTO COMPOST WHERE IT STANDS**, unlike a hopper line, and the
-   * asymmetry is a representation fact rather than a ruling: a belt item HAS an item id, so it
-   * can become a different good in place exactly as a cellar's load does. The player watches the
-   * compost ride down into whatever the belt feeds, which is the diagnostic plan §5 asks for.
-   */
-  freshTicks: number;
 }
 
 export interface Belt {
@@ -1166,20 +953,6 @@ export interface Grabber {
   filter: number;
   /** What the hand is holding, or 0. */
   held: number;
-  /**
-   * **HOW MUCH CLOCK THE HELD UNIT HAS LEFT**, in ticks, or 0 for a shelf-stable good and for an
-   * empty claw.
-   *
-   * A CLAW IS A PLACE GOODS SIT, briefly and sometimes not briefly — an arm whose destination is
-   * full stands there holding its item for as long as the jam lasts (item 085's one remaining
-   * stall). Without this field the whole of item 112's belt work would leak straight back out
-   * through the arm: goods came off a half-spent cellar, spent a swing in a claw that remembered
-   * nothing but an item id, and went onto the belt with no opinion — which a belt reads as a full
-   * window. Every clock in this game is only as good as the shortest gap it has to cross.
-   *
-   * It runs down while held, at the loose rate, like everything else that is not a Root Cellar.
-   */
-  heldFreshTicks: number;
   /** Ticks left in the current swing. */
   cooldown: number;
   /** Items delivered, lifetime. A diagnostic, and a trophy stat. */
@@ -1263,31 +1036,6 @@ export interface Contract {
   /** Goods accumulated toward the next run. Counted at list by `computeNetWorthCents`. */
   stocked: number;
   /**
-   * **THE CLOCK THE FLOOR IS SPENDING**, in ticks left, or 0 when `stocked` is empty or
-   * shelf-stable (item 115). A REMAINDER, NOT A DEADLINE, for `Machine.cargoFreshTicks`' reason.
-   *
-   * **THE DEPOT FLOOR WAS THE SIXTH FRIDGE.** Item 110 closed a container's cargo, item 112 closed
-   * the hopper, the basket, the belt, the claw and the dock shelf — and a standing route was still
-   * a warehouse with no clock in it. Its verifier measured all four ways in: goods put on the floor
-   * with 1,200 ticks left came back from a `CancelContract` with 17,999 of an 18,000-tick window
-   * after 72,000 ticks of world time, and the belt-fed version of that loop needed no clicking at
-   * all. Merged at the SOONER on arrival (`mergedFreshness`), spent by `advanceContractSpoilage`,
-   * and handed back by `refundContract` as a remainder rather than a fresh stamp.
-   *
-   * **IT CLAMPS AT 1 RATHER THAN TURNING, EXACTLY AS A HOPPER LINE DOES** — and for exactly the
-   * hopper's reason, which is a representation fact rather than a mercy. A route's product is
-   * `contract.item`, chosen once and never renegotiated, so there is nowhere to write "this is
-   * Compost now" without inventing a second item field on a contract. So the goods sit on the floor
-   * out of time, and the sweep that turns them is the ordinary inventory one, a tick after the
-   * player cancels the route and takes them back. Nothing vanishes and nothing teleports.
-   *
-   * A ROUTE WHOSE FLOOR HAS RUN OUT OF CLOCK STILL SHIPS, AT LIST. That is not new and it is not
-   * this item's to change — every route in the game has always shipped whatever was on its floor —
-   * but it is now a *visible* asymmetry rather than an invisible one, and pricing spoiled cargo is
-   * a balance question. Flagged to item 046 rather than decided here.
-   */
-  stockedFreshTicks: number;
-  /**
    * Goods on the truck right now, or 0.
    *
    * **THIS FIELD IS WHY LOADING A TRUCK DOES NOT DIP NET WORTH** (plan §6). Stock leaves
@@ -1296,26 +1044,6 @@ export interface Contract {
    * something actually happened.
    */
   inTransit: number;
-  /**
-   * The clock the LORRY's load is holding, in ticks left, or 0 when it is empty or shelf-stable.
-   *
-   * **A SECOND FIELD RATHER THAN ONE SHARED WITH THE FLOOR, AND THE REASON IS THE OVERLAP**: a
-   * truck can be rolling while the floor fills up behind it, so a route holds two piles at once and
-   * one number cannot describe both. Sharing it fails in both directions — fresh arrivals on the
-   * floor would launder the load already on the road, and a floor topped up with something older
-   * would age a load that had already left.
-   *
-   * **THE LOAD DOES NOT AGE WHILE THE TRUCK IS AWAY**, which is the Delivery Cart's rule, already
-   * taken: `advanceStorageSpoilage` names the cart in writing as the one container it skips,
-   * because *"a Delivery Cart's load is on the road"*. Two things make that safe here where it
-   * would not be on the floor. A run is BOUNDED — `DEPOT_RUN_BASE_TICKS` plus distance, a thousand
-   * ticks or so against a window of seven to eighteen thousand — whereas a Waiting floor is
-   * unbounded and is where the fridge actually was. And the exploit the verifier measured was the
-   * MINT, not the freeze: 1,200 ticks in, cancelled 301 ticks later, 17,998 back. This field kills
-   * the mint. Whether vehicles in transit should age at all is the same open question the cart
-   * already carries, and it belongs to item 046 with the cart's.
-   */
-  inTransitFreshTicks: number;
   phase: ContractPhase;
   /** Ticks left in the current phase. Zero while `Waiting`, which has no clock. */
   ticksRemaining: number;
@@ -1339,12 +1067,7 @@ export interface Contract {
  * is ever determined and read on every till after, so re-rolling is impossible by construction
  * rather than merely discouraged.
  *
- * WHY IT ALSO CARRIES FERTILITY: fertility wears with harvests and is restored by Fertilizer,
- * so a memory that dropped it would make till–untill–retill a free alternative to the
- * Composter loop. Un-tilling writes the tile's *current* fertility and wear back into its
- * entry; re-tilling hands them back. The ground remembers being farmed.
- *
- * Entries are `{ tile, soil, fertility, fertilityWear }` with `tile` the row-major world tile
+ * Entries are `{ tile, soil }` with `tile` the row-major world tile
  * key, kept sorted ascending by `tile` — hashed and saved like every other collection here,
  * and bounded by the number of positions ever tilled, which is bounded by the lot.
  */
@@ -1352,9 +1075,6 @@ export interface SoilMemory {
   /** Row-major world tile key: `worldTileKey(tileX, tileY)`. The collection key. */
   tile: number;
   soil: SoilType;
-  /** Fertility as it stood when the position was last un-tilled (or first rolled). */
-  fertility: number;
-  fertilityWear: number;
 }
 
 /** One entry of the append-only input trace. */
@@ -1559,11 +1279,11 @@ export function createWorld(seed: number): WorldState {
     trace: [],
   };
 
-  // TWO STREAMS, TWO LOOPS, AND THE ORDER OF THE DRAWS INSIDE `FieldInit` IS UNCHANGED. Soil is
-  // rolled from its own generator in a second pass rather than interleaved with fertility in the
-  // first, so `field-init` produces exactly the sequence it always has and every world that has
-  // ever been seeded keeps the fertility it was born with (plan §12, and see `SystemId.SoilInit`).
-  const fieldRng = streamFor(state, SystemIds.FieldInit);
+  // **ONE STREAM AND ONE DRAW SITE, WHICH IS ONE FEWER THAN IT WAS** (item 124). The starting
+  // field used to roll fertility from `SystemId.FieldInit` here and soil from `SystemId.SoilInit`
+  // in the second loop below — two streams, so that the soil roll could be added without moving
+  // the fertility sequence. Fertility is gone and `FieldInit` went with it; `SoilInit` is
+  // untouched, still drawn in its own pass, still producing exactly the sequence it always has.
   for (let i = 0; i < FIELD_TILE_COUNT; i++) {
     state.field.push({
       // Row-major over the starting rect, which is also ascending world-key order — so the
@@ -1576,10 +1296,6 @@ export function createWorld(seed: number): WorldState {
       moisture: 0,
       moistureAccum: 0,
       soil: SoilType.Loam,
-      fertility: nextRange(fieldRng, FERTILITY_MIN, FERTILITY_MAX),
-      fertilityWear: 0,
-      readyAge: 0,
-      compost: 0,
       zone: 0,
       lastPouredTick: 0,
     });
@@ -1597,12 +1313,7 @@ export function createWorld(seed: number): WorldState {
   // ascending key order, so the ledger is born sorted too.
   for (let i = 0; i < state.field.length; i++) {
     const tile = state.field[i]!;
-    state.soilMemory.push({
-      tile: worldTileKey(tile.tileX, tile.tileY),
-      soil: tile.soil,
-      fertility: tile.fertility,
-      fertilityWear: 0,
-    });
+    state.soilMemory.push({ tile: worldTileKey(tile.tileX, tile.tileY), soil: tile.soil });
   }
 
   // The roadside stand is a gift, not a purchase — selling by hand is the manual tier of
@@ -1658,11 +1369,9 @@ export function spawnMachine(
     tileY,
     progress: 0,
     inputCounts: emptyInputCounts(spec),
-    inputFreshTicks: emptyInputCounts(spec),
     ports: emptyPorts(spec),
     outputCount: 0,
     outputItem: 0,
-    outputFreshTicks: 0,
     tankMl: 0,
     condition: CONDITION_MAX,
     opCount: 0,
@@ -1682,7 +1391,6 @@ export function spawnMachine(
     skippedCount: 0,
     cargoItem: 0,
     cargoCount: 0,
-    cargoFreshTicks: 0,
     runTicksRemaining: 0,
     seedShelfItem: 0,
     seedShelfCount: 0,
@@ -1841,7 +1549,6 @@ export function spawnGrabber(
     tier,
     filter,
     held: 0,
-    heldFreshTicks: 0,
     cooldown: 0,
     opCount: 0,
   };
@@ -1898,7 +1605,6 @@ export function spawnBot(state: WorldState, kind: BotKind, dock: Machine): Bot {
     workTicks: 0,
     carryItem: 0,
     carryCount: 0,
-    carryFreshTicks: 0,
     seedItem: 0,
     seedCount: 0,
     condition: CONDITION_MAX,
@@ -2063,14 +1769,17 @@ export function soilMemoryAt(state: WorldState, key: number): SoilMemory | null 
  * `spawnMachine` leaves money to command handling. This refuses only what it must: a tile
  * that is already farm.
  *
- * THE SOIL IS ROLLED ONCE PER POSITION, EVER. First-ever till of a position draws soil and
- * fertility from `deriveKeyedStream(worldSeed, SoilInit, key)` — a pure function of seed and
- * position, so till order cannot move anybody's ground — and writes the ledger. Every till
- * after (including re-tilling ground that started as the gift field) reads the ledger and
- * rolls nothing. Draw order within the keyed stream: soil first, then fertility.
+ * THE SOIL IS ROLLED ONCE PER POSITION, EVER. First-ever till of a position draws it from
+ * `deriveKeyedStream(worldSeed, SoilInit, key)` — a pure function of seed and position, so till
+ * order cannot move anybody's ground — and writes the ledger. Every till after (including
+ * re-tilling ground that started as the gift field) reads the ledger and rolls nothing.
  *
- * The new tile is DRY, BARE, AND UNZONED: moisture, crop, compost, and zone all start at
- * zero. Only the ground itself — soil, fertility, wear — comes out of the ledger.
+ * **ONE DRAW, WHERE THERE USED TO BE TWO** (item 124), and it is the FIRST of the two: the
+ * keyed stream rolled soil and then fertility, so deleting fertility takes the trailing draw
+ * and every position's soil comes up exactly as it always did. No player-tilled tile moves.
+ *
+ * The new tile is DRY, BARE, AND UNZONED: moisture, crop and zone all start at zero. Only the
+ * ground itself comes out of the ledger.
  */
 export function tillTile(state: WorldState, tileX: number, tileY: number): CropTile | null {
   const key = worldTileKey(tileX, tileY);
@@ -2080,12 +1789,7 @@ export function tillTile(state: WorldState, tileX: number, tileY: number): CropT
   if (memory === null) {
     const rng = deriveKeyedStream(state.worldSeed, SystemIds.SoilInit, key);
     const roll = nextBelow(rng, SOIL_ROLL_TABLE.length);
-    memory = {
-      tile: key,
-      soil: SOIL_ROLL_TABLE[roll] ?? SoilType.Loam,
-      fertility: nextRange(rng, FERTILITY_MIN, FERTILITY_MAX),
-      fertilityWear: 0,
-    };
+    memory = { tile: key, soil: SOIL_ROLL_TABLE[roll] ?? SoilType.Loam };
     rememberSoil(state, memory);
   }
 
@@ -2098,10 +1802,6 @@ export function tillTile(state: WorldState, tileX: number, tileY: number): CropT
     moisture: 0,
     moistureAccum: 0,
     soil: memory.soil,
-    fertility: memory.fertility,
-    fertilityWear: memory.fertilityWear,
-    readyAge: 0,
-    compost: 0,
     zone: 0,
     lastPouredTick: 0,
   };
@@ -2121,14 +1821,14 @@ export function tillTile(state: WorldState, tileX: number, tileY: number): CropT
 
 /**
  * The mechanics of turning an EMPTY farm tile back to grass. Refuses — gently, costing
- * nothing — a tile that is planted or has compost lying on it: the till never destroys
- * anything a hand would have to pick up first (plan §4: nothing vanishes).
+ * nothing — a PLANTED tile: the till never destroys anything a hand would have to pick up
+ * first (plan §4: nothing vanishes). It used to refuse a tile with compost on it too; since
+ * item 124 nothing is ever left lying on the ground, so the crop check is the whole gate.
  *
- * The tile's current fertility and wear are written back into the ledger on the way out, so
- * what re-tilling restores is the ground as it was left, not as it was born — worn ground
- * stays worn, fertilized ground stays fertilized, and the till-untill cycle moves nothing.
- * Moisture is deliberately NOT remembered: water soaks away when the dirt is turned over,
- * and remembering it would make un-till a free crate for water.
+ * The tile's soil is written back into the ledger on the way out. There is nothing else on a
+ * tile worth remembering now that fertility is gone — moisture is deliberately NOT remembered,
+ * because water soaks away when the dirt is turned over and remembering it would make un-till a
+ * free crate for water.
  */
 export function untillTile(state: WorldState, tileX: number, tileY: number): boolean {
   const key = worldTileKey(tileX, tileY);
@@ -2136,21 +1836,14 @@ export function untillTile(state: WorldState, tileX: number, tileY: number): boo
   if (index < 0) return false;
 
   const tile = state.field[index]!;
-  if (tile.crop !== CropId.None || tile.compost > 0) return false;
+  if (tile.crop !== CropId.None) return false;
 
   const memory = soilMemoryAt(state, key);
   if (memory === null) {
     // A migrated world whose ledger predates this position — remember it now, as it stands.
-    rememberSoil(state, {
-      tile: key,
-      soil: tile.soil,
-      fertility: tile.fertility,
-      fertilityWear: tile.fertilityWear,
-    });
+    rememberSoil(state, { tile: key, soil: tile.soil });
   } else {
     memory.soil = tile.soil;
-    memory.fertility = tile.fertility;
-    memory.fertilityWear = tile.fertilityWear;
   }
 
   state.field.splice(index, 1);
@@ -2281,34 +1974,18 @@ export interface HarvestResult {
 }
 
 /**
- * **WHICH OF A CROP'S TWO ITEM IDS A PULL OF THIS TILE WOULD PRODUCE**, without pulling it.
+ * **WHAT THIS TILE WILL HAND BACK**, asked before the harvest that answers it.
  *
- * One zone can produce two goods — that is what a wilting row IS — and every caller that has to
- * decide *before* the pull whether it can accept the answer needs to ask the same question
- * `takeHarvest` answers, in the same words. It is a function rather than a repeated ternary for
- * the reason `takeHarvest` itself is one: two copies of "is this tile turned yet" would drift,
- * and the drift would be a bot that refuses a tile it could have carried, or takes one it cannot.
- *
- * ASK IT BEFORE THE MUTATION. `takeHarvest` clears `readyAge`, so this is only meaningful on a
- * tile that has not been pulled yet — which is exactly the moment anyone wants it.
+ * IT IS A CONSTANT NOW, AND THE FUNCTION IS KEPT ANYWAY (item 124). It used to read the tile's
+ * wilt stage and return `spec.dayOldItem` for a turned crop; nothing wilts, so a crop is what it
+ * grew as, forever. What survives is the SINGLE PLACE that question is answered — item 117's
+ * rule, and the thing that keeps a bot from reserving a shelf for one item and arriving with
+ * another. A caller writing `spec.yieldItem` inline instead would be the second opinion this
+ * function exists to prevent, and the day a crop grade comes back it would be the one that
+ * disagrees.
  */
-export function harvestItemFor(tile: CropTile, spec: CropSpec): ItemId {
-  return harvestItemForWilt(wiltStageForAge(tile.readyAge), spec);
-}
-
-/**
- * **THE SAME QUESTION ASKED WITH A NUMBER INSTEAD OF A TILE** — for the renderer (item 121).
- *
- * `FieldView` carries `wilt` per tile and nothing else the answer depends on, so a ghost that has
- * to say *"this hands you back a Day-Old Potato"* can ask the sim's own function rather than
- * writing `wilt === 2 ? dayOld : yield` a second time in the input layer. A mirrored ternary is a
- * mirrored ternary: it agrees today and disagrees the day a third wilt stage exists.
- *
- * §12-safe on purpose — it takes two plain values and reads no state, so the renderer calling it
- * is a pure read and nothing flows back.
- */
-export function harvestItemForWilt(wilt: WiltStage, spec: CropSpec): ItemId {
-  return wilt === WiltStage.Wilted ? spec.dayOldItem : spec.yieldItem;
+export function harvestItemFor(spec: CropSpec): ItemId {
+  return spec.yieldItem;
 }
 
 /**
@@ -2317,14 +1994,10 @@ export function harvestItemForWilt(wilt: WiltStage, spec: CropSpec): ItemId {
  * **ONE HARVEST, TWO HANDS.** The player's `HarvestTile`, the scythe's three-tile swing and the
  * Agri-Bot all come through here, for the reason `takeWater()` is the only draw path and
  * `takeOneOutput()` is the only way output leaves a machine: three code paths that each decided
- * how much a tile yields, whether it regrows, and what a harvest costs its fertility would
- * eventually disagree, and the disagreement would be silent. What differs between the three is
+ * how much a tile yields and whether it regrows would eventually disagree, and the disagreement
+ * would be silent. What differs between the three is
  * **where the goods go and what gets counted** — a hand harvest counts a touch and a bot's does
  * not — so that stays at the call sites, where it is a visible one-line difference.
- *
- * It does NOT pick up the compost lying on the tile. That is a separate stoop with its own rules
- * (it works on a tile with no crop at all), and folding it in here would have the scythe sweeping
- * up compost from three tiles it never bent down to.
  *
  * Returns `null` for a tile that was not ready — callers may ask cheaply rather than checking.
  */
@@ -2335,54 +2008,26 @@ export function takeHarvest(
 ): HarvestResult | null {
   if (!isTileReady(tile)) return null;
 
+  // **EVERY TILE PAYS BEST CASE** (item 124). This was `tile.fertility + bonus`, with fertility a
+  // 1–3 star roll that fell with use; `HARVEST_BASE_COUNT` is the old ceiling, so no save's field
+  // got worse when fertility was deleted and a worn-out one got three times better. The coin is
+  // untouched — one draw from `SystemId.Harvest` per harvest, in the same place in the sequence,
+  // which is why a replay's Harvest stream is the one stream this item did not disturb.
   const bonus = nextBelow(streamFor(state, SystemIds.Harvest), 2);
-  const count = tile.fertility + bonus;
-  // Read before the mutation below clears `readyAge`, and read through the same function every
-  // caller that has to decide in advance uses (item 117).
-  const item = harvestItemFor(tile, spec);
+  const count = HARVEST_BASE_COUNT + bonus;
+  const item = harvestItemFor(spec);
 
   if (spec.regrowTicks > 0) {
     // A regrowing crop keeps its plant and returns no seed — you already own the plant.
     const regrown = tile.growthTarget - spec.regrowTicks;
     tile.growth = regrown < 0 ? 0 : regrown;
-    tile.readyAge = 0;
   } else {
     tile.crop = CropId.None;
     tile.growth = 0;
     tile.growthTarget = 0;
-    tile.readyAge = 0;
-  }
-
-  // FERTILITY DECAY, AND IT IS A COUNTER RATHER THAN A ROLL (item 030's constraint). Every
-  // harvest — by hand, by scythe, by bot — takes something out of the ground, and every fifth one
-  // takes a star. Floored at `FERTILITY_MIN`, which is 1 and not 0: there is no path in this game
-  // to a tile that pays nothing, and exhausted ground still feeds you while you go and fetch
-  // fertilizer. `ApplyFertilizer` is what puts the star back and resets this counter.
-  tile.fertilityWear += 1;
-  if (tile.fertilityWear >= HARVESTS_PER_FERTILITY_STEP) {
-    tile.fertilityWear = 0;
-    if (tile.fertility > FERTILITY_MIN) tile.fertility -= 1;
   }
 
   return { item, count };
-}
-
-/**
- * Work a bag of Fertilizer into a tile. Returns false when the tile is already at full stars.
- *
- * **REFUSED RATHER THAN CONSUMED** when it would do nothing, the same rule `UseRepairKit`
- * follows: misplacement is never a fine (plan §4), and a misclick that silently ate a bag would
- * teach the player to distrust the tool. Spending the item is the caller's job.
- */
-export function fertilizeTile(tile: CropTile): boolean {
-  if (tile.fertility >= FERTILITY_MAX) return false;
-  tile.fertility = clampInt(
-    tile.fertility + FERTILITY_PER_FERTILIZER,
-    FERTILITY_MIN,
-    FERTILITY_MAX,
-  );
-  tile.fertilityWear = 0;
-  return true;
 }
 
 /**
@@ -2409,7 +2054,6 @@ export function plantCrop(state: WorldState, tile: CropTile, spec: CropSpec): vo
   tile.crop = spec.id;
   tile.growth = 0;
   tile.growthTarget = target + jitter;
-  tile.readyAge = 0;
 }
 
 // --- machines ---------------------------------------------------------------------
@@ -2512,8 +2156,10 @@ function recipeSatisfied(spec: MachineSpec, recipe: MachineRecipe, machine: Mach
  * A MIXED BASKET WAS THE OTHER WAY TO CLOSE THIS AND IT WAS REJECTED. Letting a machine hold two
  * products at once would make the fallback literal, at the cost of `outputItem` becoming a list,
  * `takeOneOutput` growing an order, and — the line that settled it — item 112's single
- * `outputFreshTicks` clock having to become one clock per product, which is a freshness
- * laundering hole of exactly the kind that item closed the same week. One product per basket
+ * `outputFreshTicks` clock having to become one clock per product, which was a freshness
+ * laundering hole of exactly the kind that item closed the same week. (Item 124 has since deleted
+ * `outputFreshTicks` and freshness altogether — the argument is kept because the OTHER two costs
+ * are still real and still decide it.) One product per basket
  * stays; the lamp learns to describe it.
  *
  * Solids only, like `runnableRecipe`. A converter blocked at an outlet PORT is answered by the
@@ -2599,10 +2245,11 @@ export function nextOutputItem(machine: Machine, spec: MachineSpec): ItemId | nu
  *
  * Any pull resets the overcook clock. A basket that moved is a basket out of the oil.
  *
- * **THE CLOCK LEAVES WITH THE UNIT** (item 112): `outputFreshTicks` is what the basket has left,
- * and every caller that puts the unit somewhere a clock can be recorded reads it BEFORE calling —
- * `machineOutputFreshness` below is that read, and it exists so no caller has to remember that an
- * emptied basket zeroes the field.
+ * **~~THE CLOCK LEAVES WITH THE UNIT~~ (item 112) — DELETED BY ITEM 124.** A unit taken out of a
+ * basket used to carry `outputFreshTicks` with it, and every caller read `machineOutputFreshness`
+ * before calling, so that an emptied basket zeroing the field could not swallow the remainder.
+ * There is no clock on a unit any more and no such read: `takeOneOutput` hands back an id, and
+ * that is the whole of what leaves.
  */
 export function takeOneOutput(machine: Machine, spec: MachineSpec): ItemId | null {
   const item = nextOutputItem(machine, spec);
@@ -2616,25 +2263,9 @@ export function takeOneOutput(machine: Machine, spec: MachineSpec): ItemId | nul
   // The clock goes with the name, for the same reason and into the same hash.
   if (machine.outputCount <= 0) {
     machine.outputItem = 0;
-    machine.outputFreshTicks = 0;
   }
   machine.blockedTicks = 0;
   return item;
-}
-
-/**
- * **HOW MUCH CLOCK THE NEXT UNIT OFF THIS BASKET CARRIES**, in ticks, or 0 for none.
- *
- * Read before `takeOneOutput`, never after — the basket forgets on the last unit. A BURNT UNIT
- * CARRIES NOTHING, and that is not an oversight: `overcookOutputItem` is Burnt Chips, which is
- * shelf-stable, and asking the basket's clock about a good that has no window would hand a
- * meaningless number to `spoilTickFromRemaining`. `addItemFresh` ignores a clock on a
- * shelf-stable good anyway; this makes the two agree out loud rather than by luck.
- */
-export function machineOutputFreshness(machine: Machine, spec: MachineSpec): number {
-  const item = nextOutputItem(machine, spec);
-  if (item === null || freshnessTicks(item) <= 0) return 0;
-  return machine.outputFreshTicks;
 }
 
 /**
@@ -2651,30 +2282,19 @@ export function machineOutputFreshness(machine: Machine, spec: MachineSpec): num
  * cannot be misaimed. (The drone bay's parts were the second incoming pile until [[090]] made
  * drone service free; its cargo pair is empty forever, and this gate is unchanged by that.)
  *
- * **THE SHELF RUNS A CLOCK LIKE ANY OTHER CONTAINER** (item 112), on the same `cargoFreshTicks`
- * a cellar uses — the shelf IS the cargo pair, so it costs no new state. It had to: everything on
- * it is field produce, it is drained by an arm onto a belt with nobody clicking anything, and a
- * dock that froze its shelf and then handed out a fresh window would be the $250 Root Cellar's job
- * done for free by a machine bought to do something else.
  */
 export function takeDockShelf(
   dock: Machine,
   count: number,
-): { item: ItemId; taken: number; freshTicks: number } | null {
+): { item: ItemId; taken: number } | null {
   if (dock.kind !== MachineKind.HarvesterDock) return null;
   if (dock.cargoItem === 0 || dock.cargoCount <= 0 || count <= 0) return null;
 
   const item = dock.cargoItem;
-  if (dock.cargoFreshTicks <= 0) dock.cargoFreshTicks = freshnessTicks(item);
-
   const taken = count < dock.cargoCount ? count : dock.cargoCount;
-  const freshTicks = dock.cargoFreshTicks;
   dock.cargoCount -= taken;
-  if (dock.cargoCount === 0) {
-    dock.cargoItem = 0;
-    dock.cargoFreshTicks = 0;
-  }
-  return { item, taken, freshTicks };
+  if (dock.cargoCount === 0) dock.cargoItem = 0;
+  return { item, taken };
 }
 
 /**
@@ -2738,118 +2358,51 @@ export function storageRoomFor(machine: Machine, spec: MachineSpec, item: ItemId
  * about the mixing rule, and the disagreement would show up as a box holding two things with one
  * name for them.
  *
- * **`freshTicks` IS HOW MUCH CLOCK THE ARRIVALS BRING WITH THEM** (item 110), and passing 0 means
- * "no opinion" rather than "no clock": the box starts a full window. That is what a belt hands it,
- * because a belt is a place goods pass through rather than sit in and carries no clock at all —
- * see `grabberDeliver`. The hand always has an opinion, and `remainingFreshness` is where it
- * comes from.
  */
 export function putStorage(
   machine: Machine,
   spec: MachineSpec,
   item: ItemId,
   count: number,
-  freshTicks: number,
 ): number {
   const room = storageRoomFor(machine, spec, item);
   const moved = count < room ? count : room;
   if (moved <= 0) return 0;
 
-  const had = machine.cargoCount;
   machine.cargoItem = item;
   machine.cargoCount += moved;
-  machine.cargoFreshTicks = mergedFreshness(had, machine.cargoFreshTicks, item, freshTicks);
   return moved;
-}
-
-/**
- * The one clock a CONTAINER OF ANY KIND keeps after an armful joins whatever was already in it —
- * a cellar's shelf, a cart's hold, and since item 112 a machine hopper too.
- *
- * **THE SOONER OF THE TWO, ALWAYS** — `addStack`'s cap rule, moved to a container. Merging the
- * other way is the exploit written down: a player could keep a cellar of month-old potatoes alive
- * forever by dropping one fresh potato in every quarter of an hour, or keep a Seasoner's peppers
- * alive by topping the hopper up.
- *
- * An EMPTY container takes the arrivals' clock outright, and so does one whose contents have no
- * clock at all. The second case is format 18's grandfathering — an old save's cargo arrives with
- * no remainder recorded, because the format that wrote it had nowhere to record one — and it heals
- * the moment anybody loads that container again, in the pessimistic direction.
- */
-export function mergedFreshness(
-  hadCount: number,
-  hadTicks: number,
-  item: ItemId,
-  freshTicks: number,
-): number {
-  if (freshnessTicks(item) <= 0) return 0;
-  const arriving = freshTicks > 0 ? freshTicks : freshnessTicks(item);
-  if (hadCount <= 0 || hadTicks <= 0) return arriving;
-  return arriving < hadTicks ? arriving : hadTicks;
 }
 
 /**
  * **THE ONE DOOR INTO A MACHINE HOPPER** (item 112), for the hand and for an arm alike —
  * `putStorage`'s shape, applied to `inputCounts[line]`.
  *
- * It exists for exactly the reason `putStorage` does: two code paths that both incremented a
- * hopper would eventually disagree about the clock, and the disagreement would show up as a
- * Seasoner whose peppers never turn. The hand's `applyLoadMachine` moves a stack and the arm's
- * `grabberDeliver` moves one unit, so the arithmetic of *how much fits* stays with each caller;
- * what is shared is the increment and the merge, which is the part that was wrong.
- *
- * `freshTicks` of 0 means "no opinion" and starts a full window, exactly as it does for a box.
- * That is what a belt hands over for a good it picked up clockless, and what a shelf-stable good
- * hands over always.
+ * It exists for exactly the reason `putStorage` does: the hand's `applyLoadMachine` moves a
+ * stack and the arm's `grabberDeliver` moves one unit, so the arithmetic of *how much fits*
+ * stays with each caller and the increment itself is shared. `item` is unused by the increment
+ * and kept in the signature deliberately — every caller already knows which good it is putting
+ * where, and a door into a typed hopper that does not name the good is a door that will be
+ * miswired the first time hoppers learn to refuse one.
  */
-export function putHopper(
-  machine: Machine,
-  line: number,
-  item: ItemId,
-  count: number,
-  freshTicks: number,
-): number {
+export function putHopper(machine: Machine, line: number, _item: ItemId, count: number): number {
   if (count <= 0 || line < 0) return 0;
-  const had = machine.inputCounts[line] ?? 0;
-  machine.inputCounts[line] = had + count;
-  machine.inputFreshTicks[line] = mergedFreshness(
-    had,
-    machine.inputFreshTicks[line] ?? 0,
-    item,
-    freshTicks,
-  );
+  machine.inputCounts[line] = (machine.inputCounts[line] ?? 0) + count;
   return count;
 }
 
 /**
- * **THE ONE DOOR OUT OF A MACHINE HOPPER**: take `count` off a line and say how much clock came
- * with it. `takeStorage`'s partner, and `putHopper`'s.
- *
- * A partial take gives every unit the same remainder — the one answer available to a line that
- * keeps one clock, and the one a player would guess, since a hopper holds one product with one
- * history. An emptied line forgets its clock so that "empty" has one spelling in the hash.
- *
- * **THE RECIPE EXECUTOR COMES THROUGH HERE TOO AND THROWS THE CLOCK AWAY**, which is correct and
- * worth saying out loud: consuming an ingredient turns it into a product, and a product is a new
- * good whose window starts at the basket (see `Machine.outputFreshTicks`). §4 — *"processing IS
- * preservation"* — is that sentence. What the executor needs from this door is not the number but
- * the guarantee that an emptied line forgets its clock; a second spelling of the decrement would
- * eventually forget to.
+ * **THE ONE DOOR OUT OF A MACHINE HOPPER**: take `count` off a line and say how many came.
+ * `takeStorage`'s partner, and `putHopper`'s. The recipe executor comes through here too, so a
+ * second spelling of the decrement is the thing this prevents.
  */
-export function takeHopper(
-  machine: Machine,
-  line: number,
-  count: number,
-): { taken: number; freshTicks: number } | null {
-  if (count <= 0 || line < 0) return null;
+export function takeHopper(machine: Machine, line: number, count: number): number {
+  if (count <= 0 || line < 0) return 0;
   const held = machine.inputCounts[line] ?? 0;
   const taken = count < held ? count : held;
-  if (taken <= 0) return null;
-
-  const freshTicks = machine.inputFreshTicks[line] ?? 0;
+  if (taken <= 0) return 0;
   machine.inputCounts[line] = held - taken;
-  if (machine.inputCounts[line] === 0) machine.inputFreshTicks[line] = 0;
-  return { taken, freshTicks };
+  return taken;
 }
 
 /**
@@ -2876,44 +2429,18 @@ export function nextStorageItem(machine: Machine): ItemId | 0 {
  * construction rather than by agreement. `takeDockShelf`'s shape, its gate moved from kind to
  * role, its `null` meaning the same thing — nothing to take, nothing changed.
  *
- * **FRESHNESS IS THIS FUNCTION'S BUSINESS SINCE ITEM 110, AND THE OLD COMMENT HERE IS WHY THE BUG
- * EXISTED.** It read: *"freshness is not this function's business and deliberately so — nothing
- * inside any machine ages, and the window is stamped by whoever puts the goods somewhere that
- * does."* Every clause of that is true and the conclusion was still wrong, because the thing doing
- * the stamping was `addItem`, and `addItem` stamps a window from NOW. So the door out of a box
- * minted freshness rather than returning it, and a $80 hand cart became a way to opt out of rot.
- *
- * The clock the goods came in with rides back out with them. A partial take gives every unit the
- * same remainder, which is the one answer available to a box that keeps one clock — and the one a
- * player would guess, since the box holds one product with one history.
- *
- * **A CLOCKLESS BOX STARTS ITS CLOCK HERE, ONCE** (item 112). Format 18 grandfathers an old save's
- * cargo at `cargoFreshTicks: 0` — deliberately, because stamping a window during a migration would
- * hand a returning player an armful of compost — and 0 means "no opinion", so every take was
- * answered with a brand-new window measured from the tick of THAT take. Two takes ten thousand
- * ticks apart were both stamped 18,000, which is a perpetual-motion machine served one armful at a
- * time. The heal is one line and it keeps both promises: the FIRST armful out of a grandfathered
- * box gets the full window format 17 would have given it, and the box now holds a real clock that
- * `advanceStorageSpoilage` runs down, so the second armful gets what is left of it. One window in
- * total, which is what the grandfathering was always supposed to mean.
  */
 export function takeStorage(
   machine: Machine,
   count: number,
-): { item: ItemId; taken: number; freshTicks: number } | null {
+): { item: ItemId; taken: number } | null {
   const item = nextStorageItem(machine);
   if (item === 0 || count <= 0) return null;
 
-  if (machine.cargoFreshTicks <= 0) machine.cargoFreshTicks = freshnessTicks(item);
-
   const taken = count < machine.cargoCount ? count : machine.cargoCount;
-  const freshTicks = machine.cargoFreshTicks;
   machine.cargoCount -= taken;
-  if (machine.cargoCount === 0) {
-    machine.cargoItem = 0;
-    machine.cargoFreshTicks = 0;
-  }
-  return { item, taken, freshTicks };
+  if (machine.cargoCount === 0) machine.cargoItem = 0;
+  return { item, taken };
 }
 
 export function machineCoversTile(machine: Machine, tileX: number, tileY: number): boolean {
@@ -3041,19 +2568,11 @@ export function beltCanInsert(belt: Belt, dist: number): boolean {
  * belt looks like from the outside, and the reason a belt that cannot take one more thing
  * backs up where the player can see it rather than swallowing goods.
  *
- * **`freshTicks` IS THE CLOCK THE ITEM ARRIVES CARRYING** (item 112), and 0 means "no opinion",
- * which for a perishable starts a full window and for everything else means nothing at all. Every
- * caller that KNOWS the clock passes it; the two that cannot — a junction shuffling an item
- * between belts, and a hand-off from the belt behind — pass the item's own remainder along
- * instead, so a run of belt spliced out of three segments is one clock, not three.
  */
-export function beltInsert(belt: Belt, dist: number, item: ItemId, freshTicks: number): boolean {
+export function beltInsert(belt: Belt, dist: number, item: ItemId): boolean {
   const insertAt = beltInsertIndex(belt, dist);
   if (insertAt < 0) return false;
-
-  const window = freshnessTicks(item);
-  const clock = window <= 0 ? 0 : freshTicks > 0 ? freshTicks : window;
-  belt.items.splice(insertAt, 0, { dist, item, freshTicks: clock });
+  belt.items.splice(insertAt, 0, { dist, item });
   return true;
 }
 
@@ -3110,18 +2629,10 @@ export function splitBeltAtTile(
   for (let i = 0; i < belt.items.length; i++) {
     const entry = belt.items[i]!;
     const tile = beltTileIndexForDist(belt, entry.dist);
-    // The clock rides with the item across the cut (item 112). Cutting a belt in half must not
-    // reset what is on it, or `RemoveBeltTile` would be a freshness button.
-    const clock = entry.freshTicks;
-    if (tile < index) beforeItems.push({ dist: entry.dist, item: entry.item, freshTicks: clock });
+    if (tile < index) beforeItems.push({ dist: entry.dist, item: entry.item });
     else if (tile === index)
-      midItems.push({ dist: entry.dist - index * SUBTILE, item: entry.item, freshTicks: clock });
-    else
-      afterItems.push({
-        dist: entry.dist - (index + 1) * SUBTILE,
-        item: entry.item,
-        freshTicks: clock,
-      });
+      midItems.push({ dist: entry.dist - index * SUBTILE, item: entry.item });
+    else afterItems.push({ dist: entry.dist - (index + 1) * SUBTILE, item: entry.item });
   }
 
   // The original leaves before any part arrives, so no two belts ever cover one tile.
@@ -3315,120 +2826,33 @@ function ensureSlot(state: WorldState, item: ItemId): InventorySlot {
     const slot = state.inventory[i]!;
     if (slot.item === item) return slot;
     if (slot.item > item) {
-      const created: InventorySlot = { item, count: 0, boxes: [], stacks: [] };
+      const created: InventorySlot = { item, count: 0, boxes: [] };
       state.inventory.splice(i, 0, created);
       return created;
     }
   }
-  const created: InventorySlot = { item, count: 0, boxes: [], stacks: [] };
+  const created: InventorySlot = { item, count: 0, boxes: [] };
   state.inventory.push(created);
   return created;
 }
 
-// --- freshness --------------------------------------------------------------------
-//
-// A perishable good in the bag carries the tick it turns. Everything below keeps three
-// invariants, and every one of them is load-bearing for the hash:
-//
-//   1. `stacks` is sorted strictly ascending by `spoilAtTick` — no two stacks share a tick,
-//      because two that did would be one stack written two ways and two worlds that reached
-//      the same bag by different routes would hash differently.
-//   2. The counts sum to `slot.count` for a perishable item, and `stacks` is EMPTY for a
-//      shelf-stable one. Same shape as `boxes.length` being 0 or `count`.
-//   3. `stacks.length <= FRESHNESS_MAX_STACKS`, always, by merging on insert.
-
 /**
- * The bucketed tick a good put in the bag now will turn on.
- *
- * **FLOORED, SO THE ROUNDING IS NEVER IN THE PLAYER'S FAVOUR** and two builds can never disagree
- * about a half. Bucketing is what makes stacks merge — everything picked inside the same fifteen
- * seconds shares a deadline and therefore shares a stack — and the floor costs at most one bucket
- * of a window whose shortest value is 7,200 ticks.
- */
-export function spoilTickFor(state: WorldState, item: ItemId): number {
-  const window = freshnessTicks(item);
-  if (window <= 0) return 0;
-  const deadline = state.tick + window;
-  return divFloor(deadline, FRESHNESS_BUCKET_TICKS) * FRESHNESS_BUCKET_TICKS;
-}
-
-/**
- * Put `count` units into a slot's stack list at `spoilAtTick`, merging and capping.
- *
- * The cap is enforced by merging the two SOONEST-EXPIRING stacks and keeping the sooner tick —
- * the pessimistic direction, deliberately. Merging fresh goods down into an old stack can only
- * cost the player freshness on goods that were already the next to go; merging the other way
- * would let a player top a stack up forever and never spoil anything, which is a cap that pays.
- */
-function addStack(slot: InventorySlot, spoilAtTick: number, count: number): void {
-  let insertAt = slot.stacks.length;
-  for (let i = 0; i < slot.stacks.length; i++) {
-    const stack = slot.stacks[i]!;
-    if (stack.spoilAtTick === spoilAtTick) {
-      stack.count += count;
-      return;
-    }
-    if (stack.spoilAtTick > spoilAtTick) {
-      insertAt = i;
-      break;
-    }
-  }
-  slot.stacks.splice(insertAt, 0, { spoilAtTick, count });
-
-  while (slot.stacks.length > FRESHNESS_MAX_STACKS) {
-    const first = slot.stacks[0]!;
-    const second = slot.stacks[1]!;
-    first.count += second.count;
-    slot.stacks.splice(1, 1);
-  }
-}
-
-/** Take `count` units off a slot's stacks, soonest-expiring first. */
-function takeFromStacks(slot: InventorySlot, count: number): void {
-  let left = count;
-  while (left > 0 && slot.stacks.length > 0) {
-    const stack = slot.stacks[0]!;
-    if (stack.count > left) {
-      stack.count -= left;
-      return;
-    }
-    left -= stack.count;
-    slot.stacks.shift();
-  }
-}
-
-/**
- * Add items, keeping the inventory sorted ascending by item id and stamping freshness.
+ * Add items, keeping the inventory sorted ascending by item id.
  *
  * UNBOUNDED, TWICE OVER. Half the callers of this function are handing goods BACK (a belt
  * taken up, a machine boxed with a full hopper, a cancelled contract), and §4's floor is that
  * nothing vanishes — so no cap could ever live here. And since item 068 struck the armful cap
  * there is no cap anywhere else either: the voluntary verbs that used to ask for room now
  * simply take what they take.
+ *
+ * **ONE DOOR AGAIN** (item 124). It had a twin, `addItemFresh`, which took the spoil tick goods
+ * arrived carrying so that a stack coming out of a container kept the clock it went in with.
+ * Nothing has a clock, so the twin is gone and every caller is back to naming an item and a
+ * count — which is what they all wanted to say in the first place.
  */
 export function addItem(state: WorldState, item: ItemId, count: number): void {
   if (count <= 0) return;
-  addItemFresh(state, item, count, spoilTickFor(state, item));
-}
-
-/**
- * The same, with the spoil tick supplied — for goods coming back out of a machine, which is the
- * one place freshness is stamped from something other than "now plus the window".
- *
- * A `spoilAtTick` of 0 on a perishable item means "stamp it now", which is what every caller
- * that has no opinion wants and what `addItem` passes.
- */
-export function addItemFresh(
-  state: WorldState,
-  item: ItemId,
-  count: number,
-  spoilAtTick: number,
-): void {
-  if (count <= 0) return;
-  const slot = ensureSlot(state, item);
-  slot.count += count;
-  if (freshnessTicks(item) <= 0) return;
-  addStack(slot, spoilAtTick > 0 ? spoilAtTick : spoilTickFor(state, item), count);
+  ensureSlot(state, item).count += count;
 }
 
 /**
@@ -3437,9 +2861,7 @@ export function addItemFresh(
  * A slot with boxes in it gives them up FROM THE FRONT, so `boxes.length === count` survives
  * any caller — including one written years from now that has never heard of a boxed machine.
  * Keeping that invariant here rather than at the call sites is the difference between a rule
- * and a convention, and a convention is what a hash notices first. Stacks follow the same rule
- * for the same reason, and give up their SOONEST-EXPIRING units first: a player selling twenty
- * potatoes should be selling the twenty that were about to turn.
+ * and a convention, and a convention is what a hash notices first.
  */
 export function removeItem(state: WorldState, item: ItemId, count: number): boolean {
   if (count <= 0) return true;
@@ -3449,63 +2871,10 @@ export function removeItem(state: WorldState, item: ItemId, count: number): bool
     if (slot.count < count) return false;
     slot.count -= count;
     if (slot.boxes.length > 0) slot.boxes.splice(0, count);
-    if (slot.stacks.length > 0) takeFromStacks(slot, count);
     if (slot.count === 0) state.inventory.splice(i, 1);
     return true;
   }
   return false;
-}
-
-/**
- * The soonest tick anything in this slot turns, or 0 when nothing in it can.
- *
- * `stacks` is sorted, so this is the head. The projection publishes it so the HUD can put a
- * countdown on the object rather than in a menu (§5).
- */
-export function soonestSpoilTick(slot: InventorySlot): number {
-  const head = slot.stacks[0];
-  return head === undefined ? 0 : head.spoilAtTick;
-}
-
-/**
- * **HOW MUCH CLOCK THE GOODS LEAVING THE BAG STILL HAVE**, in ticks, or 0 for anything
- * shelf-stable or absent. The other half of `spoilTickFromRemaining` below; between them they are
- * the whole of item 110.
- *
- * IT READS THE SOONEST STACK BECAUSE `removeItem` EATS THE SOONEST STACK. The two agree by
- * construction rather than by comment: the units a player hands to a box are the units that were
- * about to turn, so the number that goes into the box is the number those units carried. An
- * armful that spans several stacks therefore hands over the WORST of them, which is the same
- * pessimistic direction every other rounding in this feature takes.
- *
- * Never 0 for a perishable that is present, even if its deadline has already passed — 0 means "no
- * clock" everywhere downstream, and a stack one tick from compost must not be laundered into a
- * clockless one by arithmetic.
- */
-export function remainingFreshness(state: WorldState, item: ItemId): number {
-  const slot = slotFor(state, item);
-  if (slot === null) return 0;
-  const deadline = soonestSpoilTick(slot);
-  if (deadline <= 0) return 0;
-  const left = deadline - state.tick;
-  return left > 0 ? left : 1;
-}
-
-/**
- * The bucketed deadline for goods coming back into the bag with `ticks` of clock left, or 0 when
- * they have none — which is `addItemFresh`'s "stamp it fresh" and is what a shelf-stable good and
- * a container grandfathered by format 18 both want.
- *
- * FLOORED TO THE BUCKET, exactly like `spoilTickFor`, so a round trip can cost the player up to
- * one bucket and can never pay them one. That is the direction that matters: an unbucketed
- * deadline would also work, but it would make a stack that merges with nothing, forever.
- */
-export function spoilTickFromRemaining(state: WorldState, ticks: number): number {
-  if (ticks <= 0) return 0;
-  const bucketed = divFloor(state.tick + ticks, FRESHNESS_BUCKET_TICKS) * FRESHNESS_BUCKET_TICKS;
-  // A deadline of 0 would read as "no opinion" and hand back a full window. Only reachable in the
-  // first bucket of a world's life; 1 is a deadline in the past, which is the honest answer.
-  return bucketed > 0 ? bucketed : 1;
 }
 
 // --- the armful -------------------------------------------------------------------
