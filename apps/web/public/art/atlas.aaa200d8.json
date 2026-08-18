@@ -3,8 +3,8 @@
     "avatar1_walk_down": {
       "frame": {
         "x": 0,
-        "y": 467,
-        "w": 96,
+        "y": 500,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -12,11 +12,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -24,9 +24,9 @@
     },
     "avatar1_walk_side": {
       "frame": {
-        "x": 97,
-        "y": 467,
-        "w": 96,
+        "x": 145,
+        "y": 500,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -34,11 +34,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -46,9 +46,9 @@
     },
     "avatar1_walk_up": {
       "frame": {
-        "x": 194,
-        "y": 467,
-        "w": 96,
+        "x": 290,
+        "y": 500,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -56,11 +56,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -68,9 +68,9 @@
     },
     "avatar2_walk_down": {
       "frame": {
-        "x": 291,
-        "y": 467,
-        "w": 96,
+        "x": 435,
+        "y": 500,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -78,11 +78,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -90,9 +90,9 @@
     },
     "avatar2_walk_side": {
       "frame": {
-        "x": 388,
-        "y": 467,
-        "w": 96,
+        "x": 580,
+        "y": 500,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -100,11 +100,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -112,9 +112,9 @@
     },
     "avatar2_walk_up": {
       "frame": {
-        "x": 485,
-        "y": 467,
-        "w": 96,
+        "x": 725,
+        "y": 500,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -122,11 +122,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -134,9 +134,9 @@
     },
     "avatar3_walk_down": {
       "frame": {
-        "x": 582,
-        "y": 467,
-        "w": 96,
+        "x": 870,
+        "y": 500,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -144,11 +144,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -156,9 +156,9 @@
     },
     "avatar3_walk_side": {
       "frame": {
-        "x": 679,
-        "y": 467,
-        "w": 96,
+        "x": 0,
+        "y": 549,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -166,11 +166,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -178,9 +178,9 @@
     },
     "avatar3_walk_up": {
       "frame": {
-        "x": 776,
-        "y": 467,
-        "w": 96,
+        "x": 145,
+        "y": 549,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -188,11 +188,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -200,9 +200,9 @@
     },
     "avatar4_walk_down": {
       "frame": {
-        "x": 873,
-        "y": 467,
-        "w": 96,
+        "x": 290,
+        "y": 549,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -210,11 +210,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -222,9 +222,9 @@
     },
     "avatar4_walk_side": {
       "frame": {
-        "x": 0,
-        "y": 516,
-        "w": 96,
+        "x": 435,
+        "y": 549,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -232,11 +232,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -244,9 +244,9 @@
     },
     "avatar4_walk_up": {
       "frame": {
-        "x": 97,
-        "y": 516,
-        "w": 96,
+        "x": 580,
+        "y": 549,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -254,11 +254,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -266,9 +266,9 @@
     },
     "avatar5_walk_down": {
       "frame": {
-        "x": 194,
-        "y": 516,
-        "w": 96,
+        "x": 725,
+        "y": 549,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -276,11 +276,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -288,9 +288,9 @@
     },
     "avatar5_walk_side": {
       "frame": {
-        "x": 291,
-        "y": 516,
-        "w": 96,
+        "x": 870,
+        "y": 549,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -298,11 +298,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -310,9 +310,9 @@
     },
     "avatar5_walk_up": {
       "frame": {
-        "x": 388,
-        "y": 516,
-        "w": 96,
+        "x": 0,
+        "y": 598,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -320,11 +320,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -1873,7 +1873,7 @@
     "lamp_blocked": {
       "frame": {
         "x": 0,
-        "y": 565,
+        "y": 647,
         "w": 14,
         "h": 14
       },
@@ -1895,7 +1895,7 @@
     "lamp_halted": {
       "frame": {
         "x": 15,
-        "y": 565,
+        "y": 647,
         "w": 14,
         "h": 14
       },
@@ -1917,7 +1917,7 @@
     "lamp_jammed": {
       "frame": {
         "x": 30,
-        "y": 565,
+        "y": 647,
         "w": 14,
         "h": 14
       },
@@ -1939,7 +1939,7 @@
     "lamp_off": {
       "frame": {
         "x": 45,
-        "y": 565,
+        "y": 647,
         "w": 14,
         "h": 14
       },
@@ -1961,7 +1961,7 @@
     "lamp_running": {
       "frame": {
         "x": 60,
-        "y": 565,
+        "y": 647,
         "w": 14,
         "h": 14
       },
@@ -1983,7 +1983,7 @@
     "lamp_starved": {
       "frame": {
         "x": 75,
-        "y": 565,
+        "y": 647,
         "w": 14,
         "h": 14
       },
@@ -2005,7 +2005,7 @@
     "lamp_utility": {
       "frame": {
         "x": 90,
-        "y": 565,
+        "y": 647,
         "w": 14,
         "h": 14
       },
@@ -2709,7 +2709,7 @@
     "pipe_cap": {
       "frame": {
         "x": 0,
-        "y": 434,
+        "y": 467,
         "w": 32,
         "h": 32
       },
@@ -2731,7 +2731,7 @@
     "pipe_corner": {
       "frame": {
         "x": 33,
-        "y": 434,
+        "y": 467,
         "w": 32,
         "h": 32
       },
@@ -2753,7 +2753,7 @@
     "pipe_cross": {
       "frame": {
         "x": 66,
-        "y": 434,
+        "y": 467,
         "w": 32,
         "h": 32
       },
@@ -2775,7 +2775,7 @@
     "pipe_straight": {
       "frame": {
         "x": 99,
-        "y": 434,
+        "y": 467,
         "w": 32,
         "h": 32
       },
@@ -2797,7 +2797,7 @@
     "pipe_stub": {
       "frame": {
         "x": 132,
-        "y": 434,
+        "y": 467,
         "w": 32,
         "h": 32
       },
@@ -2819,7 +2819,7 @@
     "pipe_tee": {
       "frame": {
         "x": 165,
-        "y": 434,
+        "y": 467,
         "w": 32,
         "h": 32
       },
@@ -2840,9 +2840,9 @@
     },
     "player_walk_down": {
       "frame": {
-        "x": 485,
-        "y": 516,
-        "w": 96,
+        "x": 145,
+        "y": 598,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -2850,11 +2850,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -2862,9 +2862,9 @@
     },
     "player_walk_side": {
       "frame": {
-        "x": 582,
-        "y": 516,
-        "w": 96,
+        "x": 290,
+        "y": 598,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -2872,11 +2872,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -2884,9 +2884,9 @@
     },
     "player_walk_up": {
       "frame": {
-        "x": 679,
-        "y": 516,
-        "w": 96,
+        "x": 435,
+        "y": 598,
+        "w": 144,
         "h": 48
       },
       "rotated": false,
@@ -2894,11 +2894,11 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "sourceSize": {
-        "w": 96,
+        "w": 144,
         "h": 48
       },
       "anchorMode": "top-left",
@@ -2907,7 +2907,7 @@
     "tech_agronomy_cane": {
       "frame": {
         "x": 0,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -2929,7 +2929,7 @@
     "tech_agronomy_chili": {
       "frame": {
         "x": 65,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -2951,7 +2951,7 @@
     "tech_agronomy_corn": {
       "frame": {
         "x": 130,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -2973,7 +2973,7 @@
     "tech_agronomy_seed_hopper": {
       "frame": {
         "x": 195,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -2995,7 +2995,7 @@
     "tech_charter_assembly": {
       "frame": {
         "x": 260,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3017,7 +3017,7 @@
     "tech_charter_workshop": {
       "frame": {
         "x": 325,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3039,7 +3039,7 @@
     "tech_commerce_upgrade_bench": {
       "frame": {
         "x": 390,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3061,7 +3061,7 @@
     "tech_fabrication_finishing": {
       "frame": {
         "x": 455,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3083,7 +3083,7 @@
     "tech_fabrication_fryer": {
       "frame": {
         "x": 520,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3105,7 +3105,7 @@
     "tech_fabrication_wash_and_slice": {
       "frame": {
         "x": 585,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3127,7 +3127,7 @@
     "tech_hydraulics_irrigation_hub": {
       "frame": {
         "x": 650,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3149,7 +3149,7 @@
     "tech_hydraulics_piped_sprinklers": {
       "frame": {
         "x": 715,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3171,7 +3171,7 @@
     "tech_hydraulics_pumps": {
       "frame": {
         "x": 780,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3193,7 +3193,7 @@
     "tech_hydraulics_recirculator": {
       "frame": {
         "x": 845,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3215,7 +3215,7 @@
     "tech_logistics_belts": {
       "frame": {
         "x": 910,
-        "y": 580,
+        "y": 662,
         "w": 64,
         "h": 64
       },
@@ -3237,7 +3237,7 @@
     "tech_logistics_belts_express": {
       "frame": {
         "x": 0,
-        "y": 645,
+        "y": 727,
         "w": 64,
         "h": 64
       },
@@ -3259,7 +3259,7 @@
     "tech_logistics_belts_fast": {
       "frame": {
         "x": 65,
-        "y": 645,
+        "y": 727,
         "w": 64,
         "h": 64
       },
@@ -3281,7 +3281,7 @@
     "terrain_grass": {
       "frame": {
         "x": 0,
-        "y": 710,
+        "y": 792,
         "w": 32,
         "h": 32
       },
@@ -3303,7 +3303,7 @@
     "terrain_shore_edge": {
       "frame": {
         "x": 33,
-        "y": 710,
+        "y": 792,
         "w": 32,
         "h": 32
       },
@@ -3325,7 +3325,7 @@
     "terrain_shore_inner": {
       "frame": {
         "x": 66,
-        "y": 710,
+        "y": 792,
         "w": 32,
         "h": 32
       },
@@ -3347,7 +3347,7 @@
     "terrain_shore_outer": {
       "frame": {
         "x": 99,
-        "y": 710,
+        "y": 792,
         "w": 32,
         "h": 32
       },
@@ -3369,7 +3369,7 @@
     "terrain_soil": {
       "frame": {
         "x": 132,
-        "y": 710,
+        "y": 792,
         "w": 32,
         "h": 32
       },
@@ -3391,7 +3391,7 @@
     "terrain_soil_tilled": {
       "frame": {
         "x": 165,
-        "y": 710,
+        "y": 792,
         "w": 32,
         "h": 32
       },
@@ -3413,7 +3413,7 @@
     "terrain_water": {
       "frame": {
         "x": 198,
-        "y": 710,
+        "y": 792,
         "w": 32,
         "h": 32
       },
@@ -3608,6 +3608,72 @@
       "anchorMode": "center",
       "group": "items"
     },
+    "truck_down": {
+      "frame": {
+        "x": 912,
+        "y": 336,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "truck_side": {
+      "frame": {
+        "x": 945,
+        "y": 336,
+        "w": 64,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
+    "truck_up": {
+      "frame": {
+        "x": 0,
+        "y": 401,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
     "ui_font": {
       "frame": {
         "x": 0,
@@ -3633,7 +3699,7 @@
     "ui_pipe_nub": {
       "frame": {
         "x": 198,
-        "y": 434,
+        "y": 467,
         "w": 12,
         "h": 12
       },
@@ -3655,7 +3721,7 @@
     "zone_overlay": {
       "frame": {
         "x": 0,
-        "y": 401,
+        "y": 434,
         "w": 32,
         "h": 32
       },
@@ -3677,7 +3743,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.2bb5dba5.png",
+    "image": "atlas.aaa200d8.png",
     "format": "RGBA8888",
     "size": {
       "w": 1024,
@@ -3737,14 +3803,14 @@
         "group": "machines",
         "x": 0,
         "y": 271,
-        "width": 1006,
-        "height": 129,
-        "count": 31
+        "width": 1009,
+        "height": 162,
+        "count": 34
       },
       {
         "group": "overlay",
         "x": 0,
-        "y": 401,
+        "y": 434,
         "width": 32,
         "height": 32,
         "count": 1
@@ -3752,7 +3818,7 @@
       {
         "group": "pipes",
         "x": 0,
-        "y": 434,
+        "y": 467,
         "width": 210,
         "height": 32,
         "count": 7
@@ -3760,15 +3826,15 @@
       {
         "group": "player",
         "x": 0,
-        "y": 467,
-        "width": 969,
-        "height": 97,
+        "y": 500,
+        "width": 1014,
+        "height": 146,
         "count": 18
       },
       {
         "group": "status",
         "x": 0,
-        "y": 565,
+        "y": 647,
         "width": 104,
         "height": 14,
         "count": 7
@@ -3776,7 +3842,7 @@
       {
         "group": "tech",
         "x": 0,
-        "y": 580,
+        "y": 662,
         "width": 974,
         "height": 129,
         "count": 17
@@ -3784,7 +3850,7 @@
       {
         "group": "terrain",
         "x": 0,
-        "y": 710,
+        "y": 792,
         "width": 230,
         "height": 32,
         "count": 7

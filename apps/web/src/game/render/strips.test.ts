@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { stridePhase, stripCells, stripHasWiltCell, walkStep } from './strips';
+import { STAND_CELL, stridePhase, stripCells, stripHasWiltCell, walkStep } from './strips';
 
 describe('stripCells', () => {
   it('reads four cells off a 64×16 strip — every committed crop strip today', () => {
@@ -96,10 +96,36 @@ describe('walkStep', () => {
     expect(walkStep(true, 64, 0, STRIDE)).toBe(2);
   });
 
-  it('freezes on the stand cell when still, whatever foot the walk stopped on', () => {
-    // Standing at a position whose stride phase is 1 still shows cell 1: a pawn parked
-    // mid-stride reads as broken, and `moving` is the sim's own flag, not an inference.
-    expect(walkStep(false, 64, 0, STRIDE)).toBe(1);
-    expect(walkStep(false, 96, 32, STRIDE)).toBe(1);
+  it('never selects the stand cell while moving, at any distance', () => {
+    // The walk must not flicker through the neutral pose. Every stride phase either side of
+    // a boundary, and a long diagonal, all have to land inside the two contact cells.
+    for (let d = 0; d < 512; d++) {
+      const step = walkStep(true, d, d * 3, STRIDE);
+      expect(step === 1 || step === 2).toBe(true);
+      expect(step).not.toBe(STAND_CELL);
+    }
+  });
+
+  it('takes the NEUTRAL cell when still, whatever foot the walk stopped on ([[134]])', () => {
+    // The bug, stated as a test: standing used to answer cell 1, and cell 1 is a CONTACT
+    // pose — one foot four source pixels off the ground. Both positions below have a stride
+    // phase that would have produced a stride cell; neither may.
+    expect(walkStep(false, 64, 0, STRIDE)).toBe(STAND_CELL);
+    expect(walkStep(false, 96, 32, STRIDE)).toBe(STAND_CELL);
+    expect(walkStep(false, 0, 0, STRIDE)).toBe(STAND_CELL);
+  });
+
+  it('pins the stand cell to the strip the atlas actually ships', () => {
+    // `STAND_CELL` and the manifest have to agree or the farmer stands in a contact pose
+    // again, silently. The committed human strips are 144×48 — three 48px cells, harvested
+    // as contact, contact, PASSING — so the neutral cell is the LAST one.
+    expect(STAND_CELL).toBe(stripCells(144, 48));
+  });
+
+  it('degrades rather than breaks on a two-cell strip', () => {
+    // A stale atlas (or a bot strip, which is deliberately still two cells) clamps in
+    // `fromStrip`. The stand cell must stay inside the clamp's reach rather than resolving
+    // to a magenta square — wrong picture, real texture.
+    expect(STAND_CELL).toBeGreaterThan(stripCells(96, 48));
   });
 });

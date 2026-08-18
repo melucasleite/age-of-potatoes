@@ -99,6 +99,21 @@ export const GRIP_FRACTION = 1 / 4;
  * The pieces are cut at full tile HEIGHT deliberately: row 16 is then the vertical centre of
  * each slice, which is also the arm's own midline in the authored art, so an anchor at 0.5
  * puts the hinge exactly on the bar rather than a pixel above it.
+ *
+ * ── IT SURVIVED THE [[135]] REDRAW UNCHANGED, AND THAT WAS CHECKED RATHER THAN ASSUMED ──
+ *
+ * Item 135 redrew all three tiers at native 32px. This table did NOT move, which is the whole
+ * reason item 094's arc is untouched: `armPose` reads `clawW` and nothing else from here, so
+ * an unchanged partition is an unchanged swing — same angles, same tuck, same endpoints, same
+ * hand point on the same two tile centres. Counted off the new PNGs before trusting it:
+ * opaque columns 0–13 span rows 8–23, columns 14–21 span rows 12–19, columns 22–31 span rows
+ * 8–23, in every one of the three tiers. Exactly the spans this comment already claimed.
+ *
+ * The one thing that DID change is invisible from here and deliberately so: the shaft's eight
+ * columns are now byte-identical to each other. `grabbers.ts` stretches that slice with
+ * `Sprite.width`, and stretching a column-uniform texture is pixel-identical to tiling it —
+ * which is why the `TilingSprite` this item was expected to need is a no-op and was not
+ * written.
  */
 export const ARM_SLICE = {
   mountX: 0,

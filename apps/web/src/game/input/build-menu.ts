@@ -65,7 +65,16 @@ const TECH_LABELS: Readonly<Record<string, string>> = {
   'agronomy-cane': 'Sugar Cane',
   'agronomy-corn': 'Corn',
   'agronomy-chili': 'Chili',
-  'agronomy-seed-hopper': 'Seed Hopper',
+  // [[133]]. THE SLUG SAYS HOPPER AND THERE IS NO HOPPER. `agronomy-seed-hopper` is
+  // `TechId.AutoReplant`, and everything it buys is the legality of one toggle on a Grow
+  // Zone's panel — no machine anywhere in `data.ts` requires it, so a player who reads
+  // "Seed Hopper" and goes looking for a thing to build is looking for something this game
+  // does not contain. The slug is the sim's and stays; the words are ours, and they now say
+  // what the node does. Renamed on ALL THREE surfaces at once (here, `hud/tech-copy.ts`'s
+  // card title, and `hud/ZonePanel.tsx`'s locked line) for the reason the note below this
+  // table already gives about `commerce-trucking`: a name that appears on only one of them
+  // sends the player hunting for a node that, under that name, is nowhere.
+  'agronomy-seed-hopper': 'Auto-Replant',
   'agronomy-gold-potato': 'Gold Potato',
   'agronomy-composting': 'Composting',
   'agronomy-root-cellar': 'Root Cellar',

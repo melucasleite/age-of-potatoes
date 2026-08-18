@@ -40,14 +40,43 @@ export function stridePhase(xSub: number, ySub: number, strideSub: number): numb
 }
 
 /**
+ * The cell a character standing still shows — the NEUTRAL pose, not half a stride ([[134]]).
+ *
+ * ── WHY CELL 3 IS A FACT ABOUT THE ART, NOT A PREFERENCE ────────────────────────────────
+ *
+ * Every character sheet is a 4×4 grid of 48px cells and the manifest harvests three of each
+ * row: columns 0 and 2 are the CONTACT poses (one foot forward, the other trailing) and
+ * column 1 is the PASSING pose — legs together, both feet flat on the ground. The harvest
+ * lists the passing cell LAST, so a walk strip is `contact, contact, standing` and the
+ * neutral frame is cell 3.
+ *
+ * The old answer was cell 1, and cell 1 is a contact pose: measured across all 36 harvested
+ * cells, a character parked on one has a foot hanging four source pixels off the ground.
+ * That is the whole of the complaint this fixes — the farmer was not frozen mid-walk by
+ * accident, he was pinned to a frame in which he is mid-step by construction.
+ *
+ * A STALE ATLAS DEGRADES RATHER THAN BREAKS: `fromStrip` clamps, so a two-cell strip asked
+ * for cell 3 returns its last cell. Wrong picture, real texture, no magenta.
+ */
+export const STAND_CELL = 3;
+
+/**
  * The 1-based strip cell a walking (or standing) character shows.
  *
- * Standing pins to cell 1 rather than freezing on whichever foot the walk stopped on: a
- * pawn parked mid-stride reads as broken, which is a sentence this game's visual grammar
- * reserves for machines that actually are.
+ * Standing selects the strip's neutral cell rather than freezing on whichever foot the walk
+ * stopped on: a pawn parked mid-stride reads as broken, which is a sentence this game's
+ * visual grammar reserves for machines that actually are.
+ *
+ * THE SWITCH IS INSTANT, BY RULING. Snapping from stride to stand is what the genre does,
+ * and the alternative — finishing the current step first — costs renderer-side state that
+ * has to be reset on a load, a teleport and a facing change, to hide a transition that is
+ * one frame long. The one measured artefact is a 1px rise: the passing pose stands a single
+ * source pixel taller than the contact poses in every character and every direction, which
+ * is 2 CSS px at default zoom, and is anatomically what standing up out of a step looks
+ * like.
  */
 export function walkStep(moving: boolean, xSub: number, ySub: number, strideSub: number): number {
-  return moving ? stridePhase(xSub, ySub, strideSub) + 1 : 1;
+  return moving ? stridePhase(xSub, ySub, strideSub) + 1 : STAND_CELL;
 }
 
 /**

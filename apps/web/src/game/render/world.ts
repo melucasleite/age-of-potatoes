@@ -21,6 +21,7 @@ import type { ItemPage } from './belt-items';
 import { ArtSheet, artSheetRequested } from './artsheet';
 import { BeltStructureLayer } from './belt-structure';
 import { BotLayer } from './bots';
+import { TruckLayer } from './trucks';
 import type { Camera } from './camera';
 import { Ceremony } from './ceremony';
 import { FarmFx } from './farm-fx';
@@ -183,6 +184,8 @@ export interface WorldScene {
   readonly grabbers: GrabberLayer;
   /** The Agri-Bots. Empty on a lot that has never bought a dock — it costs one empty Map. */
   readonly bots: BotLayer;
+  /** The delivery trucks ([[132]]). Empty until a route is signed — one empty Map. */
+  readonly trucks: TruckLayer;
   readonly zoneOverlay: ZoneOverlay;
   /** Unowned parcels: the wash and the fence line, baked with the ground (§5's land deeds). */
   readonly landOverlay: LandOverlay;
@@ -479,6 +482,17 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     layers.worldUi.attach(visual.tool);
   });
 
+  // The truck rides `player` beside the bots ([[132]]) — the slot the z-order table reserves
+  // for "the player and, later, other pawns", which is where a thing that drives across the
+  // lot belongs: over the ground and the belts it crosses, under the status lights. Its load
+  // goes on `worldUi` with the bots' cargo and every other readout, so a crate being carried
+  // passes IN FRONT of whatever the truck is driving past rather than behind it.
+  const trucks = new TruckLayer(art, itemPage, (visual) => {
+    contentRoot.addChild(visual.body, visual.cargo);
+    layers.player.attach(visual.body);
+    layers.worldUi.attach(visual.cargo);
+  });
+
   // BEFORE anything that draws text. `BitmapText` resolves its font lazily, so a plaque built
   // first would still come out right — but it would come out right by accident, and the one
   // that does not is the ceremony firing in the same frame the scene is built.
@@ -538,6 +552,7 @@ export function createWorldScene(app: Application, art: ArtSet, camera: Camera):
     beltItems,
     grabbers,
     bots,
+    trucks,
     zoneOverlay,
     landOverlay,
     pipes,
@@ -636,6 +651,7 @@ export function destroyWorldScene(scene: WorldScene): void {
   scene.pipes.destroy();
   scene.grabbers.destroy();
   scene.bots.destroy();
+  scene.trucks.destroy();
   scene.itemPage.destroy();
   scene.terrain.destroy();
   // `true`: the shore bakes own their sources, unlike the atlas windows the art set holds.

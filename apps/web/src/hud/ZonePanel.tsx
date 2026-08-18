@@ -466,7 +466,14 @@ function Hopper({
 
   return (
     <div className={s.zoneSection}>
-      <div className={s.zoneSectionHead}>Seed hopper</div>
+      {/*
+        [[133]]. "Seed hopper" everywhere in this section, down to the prose, and the player
+        who read it went looking for a hopper to build. There is not one — the node buys this
+        toggle and nothing else. Renamed here in the same breath as `TECH_LABELS` and the
+        tech card's title, because the locked line below is a SIGNPOST to that node and a
+        signpost that uses a different name than the destination is worse than no signpost.
+      */}
+      <div className={s.zoneSectionHead}>Auto-replant</div>
 
       {owned ? (
         <>
@@ -484,14 +491,14 @@ function Hopper({
 
           {/*
             WHAT IT WILL ACTUALLY DO NEXT, in three cases, because "armed" alone is a claim the
-            player cannot check. Fallow and out-of-seed are both states where an armed hopper
+            player cannot check. Fallow and out-of-seed are both states where an armed zone
             does nothing at all, and both are invisible in the field.
           */}
           <div className={cx(s.zoneNote, on && (fallow || zone.seeds === 0) && s.zoneNoteWarn)}>
             {!on
               ? 'Cleared tiles stay bare until you sow them yourself.'
               : fallow
-                ? 'Nothing to sow — give this zone a crop and the hopper starts filling it.'
+                ? 'Nothing to sow — give this zone a crop and it starts filling itself.'
                 : zone.seeds === 0
                   ? `Armed, but there is no ${zone.cropName} seed in your bag. It sows from your own stock, so it will sit idle until you buy some.`
                   : `Sows a cleared tile from your own stock — ${zone.seeds} ${zone.cropName} ${zone.seeds === 1 ? 'seed' : 'seeds'} in the bag.`}
@@ -501,8 +508,9 @@ function Hopper({
         // The locked case, and the first time in the game that $1,200 gets to say what it buys.
         // A fact about what is not owned yet, never a refusal of the click — the bench's rule.
         <div className={s.benchLocked}>
-          Locked. The Seed Hopper (research, Agronomy) arms a zone to replant itself: it sows a tile
-          from your own seed stock the moment one is cleared.
+          Locked. Auto-Replant (research, Agronomy) arms a zone to replant itself: it sows a tile
+          from your own seed stock the moment one is cleared. There is nothing to build — the
+          research unlocks this switch.
         </div>
       )}
     </div>

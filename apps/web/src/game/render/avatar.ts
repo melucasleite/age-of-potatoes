@@ -16,9 +16,16 @@
 //
 // ── THE FRAME CONTRACT, FROM THE ART LANE VERBATIM ──────────────────────────────────────
 //
-// `avatar<N>_walk_{up,side,down}` for N in 1..5: 32×16 two-cell strips, the exact shape of
+// `avatar<N>_walk_{up,side,down}` for N in 1..5: 144×48 THREE-cell strips, the exact shape of
 // `player_walk_*`, side authored FACING EAST (west mirrors — the player convention). The
 // legacy farmer stays `player_walk_*`, untouched, as avatar 0.
+//
+// The shape has moved twice and both moves were free, because the cells are read off the
+// picture (`stripCells`) rather than declared anywhere: 32×16 two-cell at v0.1, 96×48 at the
+// resolution bump (commit `9359be8`, characters ~1.5 tiles tall), and 144×48 three-cell at
+// [[134]], which widened the harvest to take the sheet's PASSING pose as well as its two
+// contact poses. The third cell is the neutral one a standing character shows — see
+// `STAND_CELL` in `./strips` for why it is cell 3 and not cell 1.
 
 /** How many generated avatars the art contract ships. Ids run 1..AVATAR_COUNT. */
 export const AVATAR_COUNT = 5;

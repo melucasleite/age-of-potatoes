@@ -216,7 +216,10 @@ export function render(
   // THE WALK CYCLE ([[065]]), on the bots' own cadence: which foot is forward is derived
   // from distance walked — `walkStep` in `strips.ts` — off the SIM'S published position and
   // `moving` flag, never off raw input, so a replayed world walks identically. Standing
-  // pins to cell 1. The side strip is authored FACING EAST (the player's convention — the
+  // selects the strip's NEUTRAL cell — cell 3 since [[134]], the pose with both feet on the
+  // ground, rather than cell 1, which is a contact pose with a foot four pixels in the air
+  // and was the whole of "the farmer stands there mid-step". The side strip is authored
+  // FACING EAST (the player's convention — the
   // bots' is the opposite; see `ART.playerWalk`), so WEST is the mirrored facing, flipped
   // about the base anchor's centre line.
   const step = walkStep(
@@ -295,6 +298,11 @@ export function render(
   // objects that happen to walk: same `alpha`, same cull rect, same pooled-visual shape —
   // and the same `nowMs`, so the drone's hover bob breathes with the lamps beside it.
   scene.bots.update(view, alpha, rect, nowMs);
+  // And the trucks with them ([[132]]), for the same reasons plus one of their own: a truck
+  // has no `recordTick` because its position is arithmetic on a published countdown rather
+  // than an interpolation between two known places, so `alpha` here is the whole of its
+  // smoothing and it has to be the SAME alpha the bots got or the lot would run two clocks.
+  scene.trucks.update(view, alpha, rect, nowMs);
 
   // 7. Machines, and then the vehicles among them: a cart's own readouts are in the commerce
   //    projection rather than on its `MachineView`, so they are applied as a second pass over

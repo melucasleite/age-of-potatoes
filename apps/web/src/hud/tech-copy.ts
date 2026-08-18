@@ -62,11 +62,15 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
     detail:
       'Regrows like cane, and it is the half of seasoning you cannot buy in. Salt alone has never sold a bag.',
   },
+  // [[133]]. The `verb` and `detail` here were always right — this node's card is the one
+  // surface that never lied about it. Only the TITLE did: "Seed Hopper" names a machine, and
+  // this node unlocks a toggle. See `game/input/build-menu.ts`'s note for why the rename had
+  // to happen on every surface in the same breath.
   [TechId.AutoReplant]: {
-    title: 'Seed Hopper',
+    title: 'Auto-Replant',
     verb: 'Arm a zone to replant itself',
     detail:
-      'A Grow Zone with the hopper armed sows a tile the moment it is cleared. The field stops waiting for you to walk back.',
+      'A Grow Zone with auto-replant armed sows a tile the moment it is cleared. The field stops waiting for you to walk back.',
   },
   [TechId.GoldPotato]: {
     title: 'Gold Potato',

@@ -487,64 +487,147 @@ const GRABBER_16 = [
 
 const GRABBER = upscaleRows(GRABBER_16);
 
-// --- the grabber redesign (work item 082) ---------------------------------------------
+// --- the grabber redesign (work item 082, redrawn at native 32px by work item 135) -----
 //
-// Owner ruling 2026-08-15: "also reskin the grabbers. I don't like how they look." The new
-// body keeps the two guarantees the old one carried — authored pointing EAST, centred, and
-// mirror-symmetric about the horizontal midline (asserted below), so the renderer's
-// quarter-turns stay wobble-free — and adds what the old one lacked: an open two-finger
-// claw that visibly grips eastward, a mounting plate with an inner housing, a pivot cap in
-// the tier's hue, and the tier's TICK COUNT on the arm (1 / 2 / 3, the belts' chevron rule
-// in grabber vocabulary, so colour is never the only signal). The Long arm additionally
-// hooks its finger tips inward, marking the two-tile reach; Mk1 and Mk2 share the
-// short-claw silhouette and differ by hue and tick count.
+// Owner ruling 2026-08-15: "also reskin the grabbers. I don't like how they look." Owner
+// ruling 2026-08-17: "the arms are looking a little low-res, even though the animation is
+// perfect. I just want them to look higher resolution." The first ruling built the body
+// below; the second is why it is now drawn at 32px instead of at 16px and doubled.
+//
+// ANSWERING THE SECOND ONE NEEDED A FACT ABOUT THE RENDERER, NOT ABOUT THE ART.
+//
+// `grabbers.ts` draws the shaft by assigning `visual.upper.width = pose.upperLength` to a
+// plain Sprite, and uses the same 8px `link` slice for both the upper arm and the forearm.
+// The shaft is therefore STRETCHED along its length — roughly 2x for Mk1 and Mk2 and 4x for
+// the Long arm, on top of whatever the zoom is doing. Its other axis is only ever multiplied
+// by `heft`, which is an exact integer.
+//
+// So detail authored across the shaft's COLUMNS is destroyed downstream of this file, and
+// detail authored down its ROWS survives pixel-crisp. That is the whole design rule for the
+// bar, and it is why "draw it richer" was the wrong instinct: a busier shaft would have been
+// smeared exactly as hard as a plain one. The shaft is instead COLUMN-UNIFORM — all eight of
+// its columns are identical, asserted at the foot of this file — so the stretch has no
+// information left to destroy, and the bar reads as a machined tube at any extension rather
+// than as a stripe. Every pixel of its budget is spent on a rounded cross-section: ink edge,
+// tier piping, mid body, pale crown, four tones where there were two.
+//
+// THE TIER SIGNAL MOVED, AND FIXING IT FIXED A BUG.
+//
+// [[082]] put the tier's TICK COUNT on the shaft (1 / 2 / 3 — the belts' chevron rule in
+// grabber vocabulary, so that colour is never the only signal, per [[042]]). Two things were
+// wrong with that. The stretch smeared the ticks into stripes, which is what made the Long
+// arm read as a ruler. And the Long's third tick was authored at 16px x=11, which lands in
+// columns 22-23 — inside the CLAW slice, not the shaft — where the wrist was then drawn over
+// the top of it. Counted in the shipped PNGs rather than inferred: Mk1 showed 1 tick, Mk2
+// showed 2, and Long showed 2. The colourblind-safe signal could not separate the top two
+// tiers at all.
+//
+// The count is now a stack of 1 / 2 / 3 studs on the housing rim, which is drawn 1:1 and
+// never stretched, and the tier's hue additionally runs the FULL LENGTH of the bar as piping
+// — a stronger colour signal than a tick was, and a count that survives to the screen.
+//
+// The two original guarantees are untouched: authored pointing EAST, centred, and mirror-
+// symmetric about the horizontal midline, so the renderer's quarter-turns stay wobble-free.
+// Symmetry is now structural rather than a property to be checked afterwards — `sym` draws
+// every shape together with its own reflection — and the assertion still runs regardless.
+//
+// The partition `grabber-swing.ts` cuts is preserved exactly, and asserted below: housing in
+// columns 0-13 spanning rows 8-23, shaft in 14-21 spanning rows 12-19, claw in 22-31
+// spanning rows 8-23. `ARM_SLICE` is a partition of the tile, so a redraw that let a shape
+// wander one column into its neighbour would slice the arm apart rather than fail loudly.
 
-function grabberGrid(accent, accentDark, ticks, hooks) {
+function grabberGrid(accent, accentDark, tierCount, hooks) {
   const grid = blankGrid();
-  // Coordinates below are the authored 16px ones; `rect` multiplies them up. Keeping the
-  // drawing in its original vocabulary is what lets the mirror-symmetry assertion carry over
-  // unchanged: a shape symmetric about the 16px midline is symmetric about the 32px one.
-  const rect = (x, y, w, h, glyph) => {
-    for (let yy = y * SCALE; yy < (y + h) * SCALE; yy++) {
-      for (let xx = x * SCALE; xx < (x + w) * SCALE; xx++) grid[yy][xx] = glyph;
+  // NATIVE 32px coordinates, unlike everything above. The belts stay in the 16px vocabulary
+  // because their seam proofs were derived there and scaling the inputs carries the proofs
+  // along; the grabber's only proof is the mirror symmetry, and `sym` makes that structural
+  // at any resolution. So this shape is free to spend the full 32px grid, which is the whole
+  // point of the redraw: `SCALE`-multiplied art cannot contain a detail finer than SCALE.
+  const px = (x, y, w, h, glyph) => {
+    for (let yy = y; yy < y + h; yy++) {
+      for (let xx = x; xx < x + w; xx++) grid[yy][xx] = glyph;
     }
   };
-  const dot = (x, y, glyph) => rect(x, y, 1, 1, glyph);
-  // The mounting plate, chamfered so the silhouette reads round-ish rather than boxy.
-  rect(0, 4, 7, 8, 'D');
-  rect(1, 5, 5, 6, 'M');
-  dot(0, 4, '.');
-  dot(0, 11, '.');
-  dot(6, 4, '.');
-  dot(6, 11, '.');
-  // The pivot cap: tier-hue ring with a bright core, dead centre on the plate.
-  rect(2, 6, 3, 4, accentDark);
-  rect(3, 7, 1, 2, accent);
-  // Shoulder, then the arm: dark outline rows, pale shaft, tier ticks riding the shaft.
-  rect(6, 6, 2, 4, 'D');
-  rect(7, 6, 5, 1, 'D');
-  rect(7, 9, 5, 1, 'D');
-  rect(7, 7, 5, 2, 'P');
-  for (const x of ticks) rect(x, 7, 1, 2, accentDark);
-  // Wrist, claw back, and the two fingers reaching the east edge — the open jaw between
-  // them is the point: a grabber's sprite must say "reaches into the next tile".
-  rect(11, 5, 2, 6, 'D');
-  rect(12, 5, 2, 6, 'K');
-  rect(13, 4, 3, 2, 'K');
-  rect(13, 10, 3, 2, 'K');
-  rect(13, 6, 1, 4, 'P');
-  if (hooks) {
-    dot(15, 6, 'K');
-    dot(15, 9, 'K');
-  }
+  /** Draw a shape and its reflection in the horizontal midline together, as one act. */
+  const sym = (x, y, w, h, glyph) => {
+    px(x, y, w, h, glyph);
+    px(x, SIZE - y - h, w, h, glyph);
+  };
+
+  // --- housing: columns 0-13, rows 8-23 ------------------------------------------------
+  // A chamfered plate with a bevelled inner lip, a domed pivot boss in the tier's hue, and
+  // the tier count as studs on the outer rim. All of it is drawn 1:1 by the renderer, so
+  // detail spent here arrives on the screen intact.
+  sym(0, 8, 14, 8, 'D'); // plate
+  sym(0, 8, 2, 2, '.'); // chamfer the four corners, so the silhouette reads round-ish
+  sym(12, 8, 2, 2, '.');
+  sym(1, 9, 12, 1, 'L'); // a lit bevel just inside the rim
+  sym(2, 10, 10, 6, 'M'); // plate face
+  sym(3, 11, 8, 5, 'K'); // the boss is seated in an ink ring rather than sitting on paint
+  sym(4, 12, 6, 4, accentDark);
+  sym(5, 13, 4, 3, accent);
+  sym(6, 15, 2, 1, 'P'); // and crowned, so it reads domed rather than flat
+  sym(12, 12, 2, 4, 'D'); // shoulder, meeting the shaft — and stopping at column 13
+
+  // The tier count, as studs on the rim: one centred, two flanking, three being both. Read
+  // at 1:1 in any of the four quarter-turns, and symmetric, so the stack never re-orders.
+  if (tierCount === 1 || tierCount === 3) sym(0, 15, 2, 1, accent);
+  if (tierCount >= 2) sym(0, 11, 2, 2, accent);
+
+  // --- shaft: columns 14-21, rows 12-19 -----------------------------------------------
+  // Eight identical columns. See the header: this slice is stretched along its length, so a
+  // cross-section is the only thing that survives, and it is given the whole budget.
+  // The body is the TIER'S OWN HUE rather than grey, and that is the tier signal doing more
+  // work than it used to, not less: the boom is the longest thing a grabber puts on screen,
+  // so colouring all of it beats one tick that the stretch turned into a smear. The value
+  // still ramps dark -> bright -> pale about the midline, so it reads as a round bar and not
+  // as a flat coloured band. Housing and claw stay metal, so the machine still reads as one.
+  sym(14, 12, 8, 1, 'K'); // ink edge
+  sym(14, 13, 8, 1, accentDark); // shaded flank
+  sym(14, 14, 8, 1, accent); // lit flank
+  sym(14, 15, 8, 1, 'P'); // crown
+
+  // --- claw: columns 22-31, rows 8-23 -------------------------------------------------
+  // Cut in half at row 16 by the renderer into two jaws that open and close, so every shape
+  // here is drawn as a pair either side of that line. Also 1:1, so it pays in full too. The
+  // open gap between the finger tips is the point: a grabber's sprite must say "reaches into
+  // the next tile".
+  sym(22, 10, 4, 6, 'K'); // wrist collar
+  sym(23, 11, 3, 5, 'D');
+  sym(24, 12, 2, 4, 'M');
+  sym(26, 8, 6, 4, 'K'); // jaw: ink outer edge
+  sym(26, 9, 5, 3, 'D'); //      body
+  sym(27, 10, 4, 2, 'M'); //      lit flank
+  sym(26, 12, 2, 4, 'P'); // the gripping faces, meeting on the midline
+  if (hooks) sym(30, 12, 2, 2, 'K'); // the Long arm hooks its tips inward: two tiles of reach
+
   return grid;
 }
 
-const GRABBER_TIERS = {
-  grabber_mk1: grabberGrid('G', 'T', [9], false),
-  grabber_mk2: grabberGrid('R', 'E', [8, 10], false),
-  grabber_long: grabberGrid('B', 'W', [7, 9, 11], true),
+const GRABBER_SPEC = {
+  grabber_mk1: { accent: 'G', accentDark: 'T', ticks: 1, hooks: false },
+  grabber_mk2: { accent: 'R', accentDark: 'E', ticks: 2, hooks: false },
+  grabber_long: { accent: 'B', accentDark: 'W', ticks: 3, hooks: true },
 };
+
+const GRABBER_TIERS = Object.fromEntries(
+  Object.entries(GRABBER_SPEC).map(([name, spec]) => [
+    name,
+    grabberGrid(spec.accent, spec.accentDark, spec.ticks, spec.hooks),
+  ]),
+);
+
+/**
+ * The partition `ARM_SLICE` in `apps/web/src/game/render/grabber-swing.ts` cuts, restated
+ * here as the numbers this file has to keep producing. Widths sum to SIZE by construction;
+ * the row spans are what that module's comment claims when it says the housing is 16 rows
+ * tall, the shaft 8 and the claw 16, and it reads them off the atlas rather than from here.
+ */
+const ARM_SLICES = [
+  { name: 'housing', x: 0, w: 14, top: 8, bottom: 23 },
+  { name: 'shaft', x: 14, w: 8, top: 12, bottom: 19 },
+  { name: 'claw', x: 22, w: 10, top: 8, bottom: 23 },
+];
 
 // --- emit ----------------------------------------------------------------------------
 
@@ -685,6 +768,67 @@ for (const [name, grid] of Object.entries(GRABBER_TIERS)) {
         throw new Error(`${name} is not mirror-symmetric at ${x},${y} — it will wobble.`);
       }
     }
+  }
+}
+
+// The three proofs work item 135 added, all of them things that were quietly untrue before.
+for (const [name, grid] of Object.entries(GRABBER_TIERS)) {
+  const spec = GRABBER_SPEC[name];
+
+  // 1. THE SLICE PARTITION. `ARM_SLICE` cuts this tile into three column bands and each one
+  //    becomes its own Sprite, so a shape that strays a column into its neighbour does not
+  //    look slightly wrong — it is sliced in half and the halves are moved apart by the
+  //    swing. The row spans are asserted too, because `grabber-swing.ts` anchors each piece
+  //    on row 16 and states the heights as fact in its own comment.
+  for (const slice of ARM_SLICES) {
+    let top = SIZE;
+    let bottom = -1;
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = slice.x; x < slice.x + slice.w; x++) {
+        if (grid[y][x] === '.') continue;
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+      }
+    }
+    if (top !== slice.top || bottom !== slice.bottom) {
+      throw new Error(
+        `${name}: the ${slice.name} slice (columns ${slice.x}-${slice.x + slice.w - 1}) covers ` +
+          `rows ${top}-${bottom}, not ${slice.top}-${slice.bottom} — ARM_SLICE would cut it wrong.`,
+      );
+    }
+  }
+
+  // 2. THE SHAFT IS COLUMN-UNIFORM. The renderer stretches this slice along its length, so
+  //    any difference between its columns is smeared across the whole arm — which is exactly
+  //    how the Long arm came to read as a striped ruler. Uniform columns cannot smear.
+  const shaft = ARM_SLICES[1];
+  const column = (x) => Array.from({ length: SIZE }, (_, y) => grid[y][x]).join('');
+  const reference = column(shaft.x);
+  for (let x = shaft.x + 1; x < shaft.x + shaft.w; x++) {
+    if (column(x) !== reference) {
+      throw new Error(
+        `${name}: shaft column ${x} differs from column ${shaft.x} — the renderer stretches ` +
+          `this slice, so the difference would smear along the whole arm.`,
+      );
+    }
+  }
+
+  // 3. THE TIER COUNT IS ACTUALLY VISIBLE. [[082]] made the count the colourblind-safe
+  //    signal and then lost one: the Long arm's third tick was drawn into the claw's columns
+  //    and painted over, so Mk2 and Long both shipped showing two. Counting the studs that
+  //    survive to the PNG is the only version of that promise worth having.
+  let studs = 0;
+  let inside = false;
+  for (let y = 0; y < SIZE; y++) {
+    const lit = grid[y][0] === spec.accent;
+    if (lit && !inside) studs++;
+    inside = lit;
+  }
+  if (studs !== spec.ticks) {
+    throw new Error(
+      `${name}: ${studs} tier stud(s) visible on the rim, expected ${spec.ticks} — the tiers ` +
+        `would not be tellable apart without colour.`,
+    );
   }
 }
 

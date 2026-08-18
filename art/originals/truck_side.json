@@ -1,0 +1,24 @@
+{
+  "id": "truck_side",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 717747450,
+  "prompt": "a bold simple pixel art delivery truck seen from directly at the side facing right, one long red painted cargo box filling the right two thirds of the frame, one short red cab at the left end with one big pale square window, two large solid dark round wheels underneath, one thick pale bumper at the front, warm timber trim along the bottom of the cargo box, very large solid areas of flat colour, thick heavy chunky shapes, wide low silhouette much wider than it is tall, no thin lines, no small details, no spokes, no wires, no antenna, no cables, no exhaust, no smoke, no road, no shadow, no driver, no people, no headlights, no mirrors, no signs, no logo, centred and filling the frame, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 64,
+    "height": 32
+  },
+  "requested": {
+    "width": 128,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "bottom-center",
+  "atlasGroup": "machines",
+  "costUsd": 0.018,
+  "generatedAt": "2026-08-17T22:12:16.641Z"
+}

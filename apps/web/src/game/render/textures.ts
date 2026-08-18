@@ -169,6 +169,19 @@ export const ART = {
    */
   botRepairDrone: 'bot_repair_drone',
   /**
+   * The delivery truck ([[132]]): ONE 64×32 side elevation, two tiles long and one tall.
+   *
+   * AUTHORED FACING WEST, which is the bots' convention and the OPPOSITE of the player's —
+   * both already exist in this codebase, and a vehicle follows the vehicle one. `trucks.ts`
+   * drives it west out of the yard unmirrored and mirrors it for the drive home.
+   *
+   * The atlas also carries `truck_up` and `truck_down`, generated in the same run for a route
+   * that might have turned. This one is due west and back, so they have no caller — they are
+   * three-quarters of a kilobyte of atlas waiting for a route with a bend in it, and they are
+   * deliberately not named here so that "what does this build draw" stays honest.
+   */
+  truckSide: 'truck_side',
+  /**
    * ONE SHAPE PER LAMP STATE, still tinted in code.
    *
    * §13's "one sprite, tinted" bought thirty machines' worth of state animation for the cost
@@ -306,12 +319,24 @@ for (const kind of BOT_KINDS) {
 }
 
 /**
- * The player's walk strips ([[065]]) — the same two-cell shape the bots use, from the frames
- * the atlas has carried unsliced since v0.1. `north` lists `player_walk_up` FIRST: the strip
- * does not exist yet (the art lane's handoff above), so today the side strip answers, and the
- * day the up strip lands in the atlas it wins by candidate order with no edit here.
+ * How many cells a HUMAN walk strip carries: two contact poses and a neutral ([[134]]).
+ *
+ * THE BOTS ARE DELIBERATELY NOT INCLUDED. Their strips are still two cells, because their
+ * originals are a flat 2× oversample with no sheet behind them and there is no third pose to
+ * harvest — so `bots.ts` keeps calling `stridePhase` directly and pinning idle to cell 1,
+ * while every character with a four-angle sheet goes through `walkStep` and gets cell 3.
+ * One number here rather than a literal in three loops, so widening a strip family again is
+ * an edit in one place.
  */
-for (let step = 1; step <= 2; step++) {
+const HUMAN_WALK_CELLS = 3;
+
+/**
+ * The player's walk strips ([[065]]), three cells wide since [[134]] — contact, contact,
+ * standing. `north` lists `player_walk_up` FIRST: the strip does not exist yet (the art
+ * lane's handoff above), so today the side strip answers, and the day the up strip lands in
+ * the atlas it wins by candidate order with no edit here.
+ */
+for (let step = 1; step <= HUMAN_WALK_CELLS; step++) {
   STRIPS[ART.playerWalk('south', step)] = ['player_walk_down'];
   STRIPS[ART.playerWalk('side', step)] = ['player_walk_side'];
   STRIPS[ART.playerWalk('north', step)] = ['player_walk_up', 'player_walk_side'];
@@ -323,9 +348,14 @@ for (let step = 1; step <= 2; step++) {
  * EXISTS for these five (the four-angle sheets shipped whole), so north lists no side
  * fallback: a missing up strip here would mean a truncated atlas, and the renderer's own
  * `isReal` fallback to the legacy farmer is the honest degrade for that.
+ *
+ * THE STAND CELL IS LISTED FOR ALL FIVE, not just the default ([[134]]). The player's own
+ * strips and the avatars' are the same picture shape from the same sheets, and an avatar
+ * that kept the old two-cell table would ask for a cell this loop never registered, fall
+ * through `isReal` and walk the whole game as the legacy farmer.
  */
 for (let avatar = 1; avatar <= AVATAR_COUNT; avatar++) {
-  for (let step = 1; step <= 2; step++) {
+  for (let step = 1; step <= HUMAN_WALK_CELLS; step++) {
     STRIPS[`avatar${avatar}_walk_south_${step}`] = [`avatar${avatar}_walk_down`];
     STRIPS[`avatar${avatar}_walk_side_${step}`] = [`avatar${avatar}_walk_side`];
     STRIPS[`avatar${avatar}_walk_north_${step}`] = [`avatar${avatar}_walk_up`];
@@ -778,12 +808,21 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   // angle beats a procedural pawn among real frames). These grey-box cells keep the walk
   // cycle alive when the atlas itself is missing, back view and alternating feet intact.
   // The side cells face EAST, matching the authored strip's own convention above.
+  //
+  // CELL 3 IS THE STAND POSE ([[134]]), listed here as well as in the atlas: `walkStep` asks
+  // for it every frame the player is still, so a grey-box build without it would answer with
+  // a magenta square for the pose the farmer holds MOST of the time. `pawnWalk` draws both
+  // feet planted for any step that is not 2, which is the same shape the authored passing
+  // cell has — legs together, no foot in the air.
   [ART.playerWalk('south', 1)]: { paint: pawnWalk('south', 1) },
   [ART.playerWalk('south', 2)]: { paint: pawnWalk('south', 2) },
+  [ART.playerWalk('south', 3)]: { paint: pawnWalk('south', 3) },
   [ART.playerWalk('side', 1)]: { paint: pawnWalk('east', 1) },
   [ART.playerWalk('side', 2)]: { paint: pawnWalk('east', 2) },
+  [ART.playerWalk('side', 3)]: { paint: pawnWalk('east', 3) },
   [ART.playerWalk('north', 1)]: { paint: pawnWalk('north', 1) },
   [ART.playerWalk('north', 2)]: { paint: pawnWalk('north', 2) },
+  [ART.playerWalk('north', 3)]: { paint: pawnWalk('north', 3) },
 
   // The bots are registered below with the machines and the crops — two kinds × three facings
   // × two steps is a loop, not twelve hand-written entries. See `registerBotPlaceholders`.
@@ -914,6 +953,35 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   grabber_mk2: { paint: grabberBodyTile(0xd2493f, 2) },
   grabber_long: { paint: grabberBodyTile(0x62d6e0, 3) },
 
+  // The delivery truck ([[132]]), for a build with no atlas. TWO TILES LONG and one tall, so
+  // it declares its own size rather than taking the square default — a truck squeezed into a
+  // 16×16 cell would read as a van and, worse, would put its wheels in the wrong place
+  // relative to the lane it drives down.
+  //
+  // FACING WEST, cab on the left, matching the authored frame's own convention: `trucks.ts`
+  // mirrors for the drive home and a grey-box truck that faced the other way would reverse
+  // out of the yard and drive home forwards.
+  [ART.truckSide]: {
+    width: 32,
+    height: 16,
+    paint: (g) => {
+      // Cargo box first, then the cab in front of it, so the cab's roofline wins the seam.
+      g.rect(9, 2, 22, 10).fill(PALETTE.metal);
+      g.rect(9, 2, 22, 2).fill(PALETTE.metalLight);
+      g.rect(9, 10, 22, 2).fill(PALETTE.metalDark);
+      g.rect(1, 5, 9, 7).fill(PALETTE.shirt);
+      g.rect(1, 5, 9, 1).fill(PALETTE.metalLight);
+      // Windscreen at the leading edge — the one detail that says which end is the front.
+      g.rect(1, 6, 4, 3).fill(PALETTE.water);
+      // Chassis, then wheels sitting on it, feet at y = 15 like every other elevation here.
+      g.rect(1, 12, 30, 1).fill(PALETTE.metalDark);
+      for (const x of [2, 21, 26]) {
+        g.rect(x, 12, 4, 3).fill(PALETTE.black);
+        g.rect(x + 1, 13, 2, 1).fill(PALETTE.metalDark);
+      }
+    },
+  },
+
   [ART.grabberHand]: {
     width: 6,
     height: 6,
@@ -1021,21 +1089,42 @@ function beltTile(bed: number, rail: number, shadow: number): Paint {
  * Move a rectangle across a boundary here and a build with no art gets an arm chopped in the
  * wrong place — which is why `ARM_SLICE` is pinned against this paint in `grabbers.test.ts`.
  *
- * The shaft is drawn UNIFORM along its length apart from the tier ticks, because it is
- * stretched to the arm's reach at draw time and anything with structure across x would smear.
+ * ── THE SHAFT IS FULLY UNIFORM ALONG ITS LENGTH, AND THE TIER COUNT IS NOT ON IT ([[135]])
+ *
+ * `grabbers.ts` assigns `visual.upper.width = pose.upperLength` to a plain Sprite, so this
+ * slice is STRETCHED 2× on a Mk1 and 4× on a Long arm before the zoom gets to it. Detail
+ * authored across its COLUMNS is destroyed downstream; detail down its ROWS survives, because
+ * the other axis is only ever multiplied by `heft`, an exact integer.
+ *
+ * This paint used to carry the tier's count as 1/2/3 ticks ALONG the shaft, which the stretch
+ * smeared into stripes — the Long arm read as a striped ruler. The authored frames moved that
+ * signal onto the housing rim (`art/tools/make-factory-parts.mjs`) and this follows them, for
+ * the reason the header gives: the two builds have to assemble the same arm. So the shaft is
+ * now every column identical and hued by the tier for its whole length, and the count is
+ * studs on the housing, which is drawn 1:1 and never stretched. Colour is still not the only
+ * signal ([[042]]) — it is just carried by a shape that survives to the screen.
  */
 function grabberBodyTile(pivot: number, ticks: number): Paint {
   return (g) => {
-    // Housing: columns 0–6, rows 4–11.
+    // Housing: columns 0–6, rows 4–11. Drawn 1:1 by the renderer, so detail here arrives.
     g.rect(0, 4, 7, 8).fill(PALETTE.metalDark);
+    g.rect(1, 5, 5, 1).fill(PALETTE.metal);
+    g.rect(1, 10, 5, 1).fill(PALETTE.metal);
     g.rect(1, 6, 5, 4).fill(PALETTE.metal);
     g.rect(2, 7, 2, 2).fill(pivot);
-    // Shaft: columns 7–10, rows 6–9. Dark rails top and bottom, bright core along the midline.
-    g.rect(7, 6, 4, 4).fill(PALETTE.metalDark);
-    g.rect(7, 7, 4, 2).fill(PALETTE.metal);
-    for (let i = 0; i < ticks; i++) {
-      g.rect(7 + i, 7, 1, 2).fill(pivot);
+    // The tier count, as studs on the outer rim: one centred pair, two a flanking pair, three
+    // both. Mirrored about row 8 like everything else, so the stack cannot re-order when the
+    // housing takes its quarter-turn toward the pickup side.
+    if (ticks === 1 || ticks >= 3) g.rect(0, 7, 1, 2).fill(pivot);
+    if (ticks >= 2) {
+      g.rect(0, 5, 1, 1).fill(pivot);
+      g.rect(0, 10, 1, 1).fill(pivot);
     }
+    // Shaft: columns 7–10, rows 6–9. FOUR IDENTICAL COLUMNS — dark flank, tier-hued core,
+    // dark flank — so the stretch has no information left to destroy and the bar reads as a
+    // round tube at any extension.
+    g.rect(7, 6, 4, 4).fill(PALETTE.metalDark);
+    g.rect(7, 7, 4, 2).fill(pivot);
     // Claw: columns 11–15, rows 4–11. A C opening east — back bar, then a jaw either side of
     // the midline, so a split at row 8 gives two halves that can close on each other.
     g.rect(11, 4, 2, 8).fill(PALETTE.metalDark);
@@ -2072,7 +2161,11 @@ function registerBotPlaceholders(): void {
  * difference per step, which is all a 16px walk cycle has ever been (see `botChassis`).
  */
 function pawnWalk(facing: 'north' | 'south' | 'east', step: number): Paint {
-  const lead = step === 1 ? 0 : 1;
+  // Cell 2 is the one that lifts a foot. Cells 1 and 3 both plant both feet — cell 1 because
+  // that is the phase the bots' two-cell cycle starts on, cell 3 because it IS the stand pose
+  // ([[134]]). Written as "not 2" rather than "is 1", so the stand cell cannot come out of
+  // this function mid-step the way the atlas's old cell 1 did.
+  const lead = step === 2 ? 1 : 0;
   return (g) => {
     // Legs, feet at y = 15, alternating exactly as the bots' do.
     g.rect(5, 10, 3, 5 - lead).fill(PALETTE.trouser);
