@@ -208,16 +208,37 @@ export class ShiftLedger {
     );
   }
 
-  /** Branch 1: the sim owns the buckets. Nothing in the fallback path runs again. */
+  /**
+   * Branch 1: the sim owns the buckets. Nothing in the fallback path runs again.
+   *
+   * POSITION DECIDES WHICH BUCKET IS STILL OPEN, NOT WIDTH. `view.ts` states the order it
+   * writes — every closed hour first, oldest first, then the hour in progress as the LAST
+   * entry — and this reads it that way. Classifying by `ticks >= TICKS_PER_ACTIVE_HOUR`
+   * instead looks equivalent and is not, because of exactly one hour: hour boundaries are
+   * DAWN-ALIGNED (`stats.ts:hourIndexAt`), so hour 0 is the short stretch between the
+   * world's 09:00 birth and the first 06:00 — 8,400 ticks against a full hour's 72,000.
+   * Read by width, that closed hour was mistaken for the hour in progress; and being not
+   * last, it was then immediately overwritten by the hour that really was in progress. It
+   * did not merely fail to draw a bar. It left no trace anywhere on the panel: not in the
+   * strip, not in the peak the strip scales its bars against, not in "Best hour". In one
+   * measured session it held a third of everything the world had ever earned.
+   *
+   * A short hour is shown as an ordinary bar and that is deliberate. The bars plot a RATE,
+   * already divided by the ticks it took, so a short hour and a full one are directly
+   * comparable in height and the strip needs no special case to stay honest. The one thing
+   * a short hour must not do is quote a rate off a span too narrow to mean anything, and
+   * the floor for that already exists.
+   */
   private adopt(buckets: readonly HourBucketLike[]): boolean {
     this.adopted = true;
     const closed: ShiftBucket[] = [];
     let current = ZERO_BUCKET;
-    let best = 0;
+    const bestBefore = this.best;
 
+    const last = buckets.length - 1;
     for (let i = 0; i < buckets.length; i++) {
       const raw = buckets[i]!;
-      const complete = raw.ticks >= TICKS_PER_ACTIVE_HOUR ? 1 : 0;
+      const open = i === last;
       const bucket: ShiftBucket = Object.freeze({
         hour: raw.hour,
         netCents: raw.grossCents - raw.spendCents,
@@ -226,29 +247,40 @@ export class ShiftLedger {
         split: 1,
         waterMl: raw.waterMl,
         itemsSold: raw.itemsSold,
+        wastePermille: raw.wastePermille,
         ticks: raw.ticks,
-        complete,
+        complete: open ? 0 : 1,
       });
-      if (complete === 1) {
-        closed.push(bucket);
-        const rate = centsPerActiveHour(bucket.netCents, bucket.ticks);
-        if (rate > best) best = rate;
-      } else {
+      if (open) {
         current = bucket;
+        continue;
+      }
+      closed.push(bucket);
+      // The same width floor `close()` applies on the other branch, and it was missing
+      // here — any adopted bucket could set the record off any span at all. That was
+      // harmless only for as long as every bucket this branch admitted was a full hour,
+      // which stopped being true the moment the short birth hour was let in.
+      if (bucket.ticks >= MIN_RATE_SPAN_TICKS) {
+        const rate = centsPerActiveHour(bucket.netCents, bucket.ticks);
+        // Raised, never recomputed. `stats.hours` is capped at 24, so a best rebuilt from
+        // scratch each publish would QUIETLY FALL the hour the record scrolled off the end
+        // — and a personal best that goes down is not a personal best.
+        if (rate > this.best) this.best = rate;
       }
     }
 
-    const changed =
-      current.netCents !== this.currentBucket.netCents ||
-      current.hour !== this.currentBucket.hour ||
-      closed.length !== this.history.length ||
-      best !== this.best;
+    // Hand back the SAME object when nothing in the open hour moved. `rebuild()` on the
+    // other branch documents why: the store's slice guard is a reference check, so a fresh
+    // frozen object every publish re-renders the whole panel 6.7 times a second to redraw
+    // the identical five rows.
+    const previousCurrent = this.currentBucket;
+    if (sameBucket(current, previousCurrent)) current = previousCurrent;
 
-    if (closed.length !== this.history.length) this.revision += 1;
+    const historyChanged = closed.length !== this.history.length;
+    if (historyChanged) this.revision += 1;
     this.history = closed.slice(-SHIFT_HISTORY_LIMIT);
     this.currentBucket = current;
-    this.best = best;
-    return changed;
+    return current !== previousCurrent || historyChanged || this.best !== bestBefore;
   }
 
   private mark(
@@ -337,13 +369,17 @@ export class ShiftLedger {
       split: split ? 1 : 0,
       waterMl: waterMl - this.markWaterMl,
       itemsSold: itemsSold - this.markItemsSold,
+      // The display-side branch has no waste figure to offer and does not invent one. The
+      // sim counts `inputsWastedByMachine` but projects it only inside `stats.hours`, so a
+      // reconstruction that has no buckets to read has no waste either, and the row says so.
+      wastePermille: -1,
       ticks: tick - this.markTick,
       complete,
     });
   }
 }
 
-/** Structural, so `adopt()` does not import a named type it only reads five fields from. */
+/** Structural, so `adopt()` does not import a named type it only reads a few fields from. */
 interface HourBucketLike {
   readonly hour: number;
   readonly grossCents: number;
@@ -351,4 +387,26 @@ interface HourBucketLike {
   readonly waterMl: number;
   readonly itemsSold: number;
   readonly ticks: number;
+  readonly wastePermille: number;
+}
+
+/**
+ * Field equality, so `adopt()` can hand back the object it handed back last time.
+ *
+ * `hour` and `ticks` are compared too, not only the money: an hour that closes with the
+ * same net as the one before it is still a different hour, and a strip that missed the
+ * change would keep labelling the open bar with the old ordinal.
+ */
+function sameBucket(a: ShiftBucket, b: ShiftBucket): boolean {
+  return (
+    a.hour === b.hour &&
+    a.netCents === b.netCents &&
+    a.grossCents === b.grossCents &&
+    a.spendCents === b.spendCents &&
+    a.waterMl === b.waterMl &&
+    a.itemsSold === b.itemsSold &&
+    a.wastePermille === b.wastePermille &&
+    a.ticks === b.ticks &&
+    a.complete === b.complete
+  );
 }

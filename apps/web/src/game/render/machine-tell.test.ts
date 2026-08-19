@@ -20,9 +20,7 @@ import {
   LiquidId,
   MACHINE_SPECS,
   MachineKind,
-  PUMP_RATE_ML_PER_MINUTE,
-  RESERVOIR_CAPACITY_ML,
-  RESERVOIR_LOW_PERMILLE,
+  MachineRole,
   TICKS_PER_SECOND,
   TechId,
   createWorld,
@@ -513,26 +511,29 @@ function plumbedWorld(seed: number): {
   return { state, pump, tank, head };
 }
 
-/** The pond, parked at a chosen permille. Levels are set directly, as `water.test.ts` does. */
-function setPond(state: WorldState, permille: number): void {
-  state.reservoirs[0]!.levelMl = Math.floor((RESERVOIR_CAPACITY_ML * permille) / 1000);
-}
-
 /**
- * Run the lot at a chosen pond level, then re-pin the level before reading.
+ * The same lot with NO PUMP ON IT — pipe, a tank and a head, and nothing feeding them.
  *
- * **THE RE-PIN IS NOT A FAKE AND THE ORDER IS WHY.** The run happens FIRST, at the band being
- * tested, so every rate these tests assert on — a halved pump, a draining tank — was produced
- * by the sim actually throttling itself for `ticks` ticks. What the second `setPond` removes is
- * only the DRIFT: a pump pulling 600 L/min moves the pond a few thousand millilitres over a
- * short run, which is enough to turn "90.0%" into "89.9%" and make an exact-string assertion a
- * coin toss. Re-pinning the level is the same trick `water.test.ts` uses to park a pond in a
- * band; doing it after the run rather than instead of one keeps the throttle honest.
+ * **THIS IS THE REPLACEMENT FOR `setPond(state, 0)`** (item 140). Every dry-line test in this
+ * file used to be written by draining the pond, which is not a thing that can happen any more:
+ * a pond is an unlimited source. What is still finite is the THROUGHPUT, so the way to starve a
+ * line now is to take away the straw rather than the water. That is also a state a player can
+ * actually reach — pipe laid, heads placed, no pump at the end of it — which the old empty pond
+ * never was.
  */
-function settle(state: WorldState, permille: number, ticks: number): void {
-  setPond(state, permille);
-  stepMany(state, ticks);
-  setPond(state, permille);
+function unpumpedWorld(seed: number): { state: WorldState; tank: Machine; head: Machine } {
+  const state = createWorld(seed);
+  state.unlocked = [TechId.Pumps, TechId.PipedSprinklers];
+  state.moneyCents = 10_000_000;
+
+  for (let x = 11; x >= 3; x--) spawnPipe(state, x, 12, LiquidId.Water);
+  for (let y = 11; y >= 4; y--) spawnPipe(state, 3, y, LiquidId.Water);
+
+  const tank = spawnMachine(state, MachineKind.Tank, 1, 10)!;
+  const head = spawnMachine(state, MachineKind.PipedSprinkler, 2, 8)!;
+
+  rebuildNetworks(state);
+  return { state, tank, head };
 }
 
 /** The ribbon's own name for a machine — `index.ts:machineName`, which a test cannot import. */
@@ -558,7 +559,12 @@ function tellFor(state: WorldState, machine: Machine): string | null {
   const projection = view(state, createWorldView());
   const m = projection.machines.find((each) => each.id === machine.id);
   expect(m, 'the machine has to survive projection').toBeDefined();
-  return waterStatus(nameOf(machine.kind as MachineKind), m!, projection.reservoirs);
+  return waterStatus(
+    nameOf(machine.kind as MachineKind),
+    m!,
+    projection.reservoirs,
+    projection.networks,
+  );
 }
 
 function projectedMachine(state: WorldState, machine: Machine): MachineView {
@@ -572,53 +578,92 @@ function projectedPond(state: WorldState): WorldView['reservoirs'][number] {
 }
 
 describe('the pond, hovered', () => {
-  it('says how full it is, and stays quiet about throttling while it is', () => {
+  // **WHAT THIS BLOCK USED TO TEST, AND WHY NONE OF IT IS HERE** (item 140).
+  //
+  // Four tests stood here and all four are DELETED, because the states they described do not
+  // exist rather than because they were awkward to keep:
+  //
+  //   - "says how full it is"            — `ReservoirView.levelPermille` is gone. A pond has no
+  //                                        level; the field was removed, not renamed.
+  //   - "NAMES THE HALVED BAND…"         — `RESERVOIR_LOW_PERMILLE` and `ReservoirThrottle` are
+  //                                        gone. There is no half-rate band and no threshold, so
+  //                                        there is no copy that could outlive a constant.
+  //   - "promises recovery at zero"      — a pond cannot reach zero. There is no recharge rate to
+  //                                        promise recovery AT.
+  //   - "is still in the full band one   — the boundary it guarded is not a boundary any more.
+  //      notch ABOVE the mark"             Both sides of it are now the same side.
+  //
+  // Rewriting any of them against what survived would have produced an assertion with exactly
+  // one possible outcome, which passes forever and proves nothing. What replaced them tests the
+  // thing that DID survive: the pond is an unlimited source and the pumps on its bank are the
+  // finite part, so the straws are what the sentence counts.
+
+  it('counts the pumps on the bank, because that is the only thing about a pond that moves', () => {
     const { state } = plumbedWorld(701);
-    settle(state, 823, 1);
+    stepMany(state, 40);
 
-    expect(projectedPond(state).levelPermille).toBe(823);
-    expect(pondStatus(projectedPond(state))).toBe('pond — 82.3% full');
+    const projection = view(state, createWorldView());
+    const line = pondStatus(projectedPond(state), projection.machines, projection.reservoirs);
+
+    expect(line).toContain('1 pump on the bank');
+    expect(line).toContain('/min');
+    // The deleted vocabulary, pinned as absent: if any of it comes back into this sentence it
+    // is because someone reintroduced a level, and that is a conversation, not a copy edit.
+    expect(line).not.toContain('full');
+    expect(line).not.toContain('%');
   });
 
-  it('**NAMES THE HALVED BAND, AND THE THRESHOLD THAT PUT IT THERE**', () => {
-    // The most important sentence in this item. Below the low mark a pump runs at half its
-    // posted rate, and before this the game said nothing at all — a pump quietly performing at
-    // half speed is indistinguishable from a broken pump, and that is the owner's report.
-    //
-    // **THE LEVEL AND BOTH PERCENTAGES ARE DERIVED FROM `RESERVOIR_LOW_PERMILLE`**, never typed.
-    // A literal 200 here is a bet that the low mark stays above 20%, and a literal "25.0%" in
-    // the expectation is the copy-outlives-its-constant bug this very sentence is guarding
-    // against — written into the guard. Below the mark by construction, whatever the mark is.
-    const { state } = plumbedWorld(702);
-    const low = RESERVOIR_LOW_PERMILLE - 50;
-    settle(state, low, 1);
+  it('says so when there is nothing on the bank to take the water', () => {
+    // The actionable case, and the one a new player is most likely to be looking at: they have
+    // hovered the water because they want some, and the answer is that nothing is taking it.
+    const state = createWorld(706);
+    const projection = view(state, createWorldView());
 
-    expect(projectedPond(state).levelPermille).toBe(low);
-    expect(pondStatus(projectedPond(state))).toBe(
-      `pond low — ${permilleText(low)} full, under ${permilleText(RESERVOIR_LOW_PERMILLE)}, so pumps run at HALF RATE`,
+    // A starting lot is not empty — it ships with a Sell Bin — so the precondition is about
+    // PUMPS, not about machines. Asserted rather than assumed, so this stops being a test of
+    // the empty-bank sentence the day the starting lot gains a pump.
+    const pumps = projection.machines.filter(
+      (m) => machineSpec(m.kind as MachineKind)?.role === MachineRole.Pump,
+    );
+    expect(pumps, 'a fresh lot has no pumps').toHaveLength(0);
+    expect(pondStatus(projectedPond(state), projection.machines, projection.reservoirs)).toBe(
+      'pond — all the water you want, and no pump on the bank to take it',
     );
   });
 
-  it('promises recovery at zero rather than reading as broken', () => {
-    // §4's anti-softlock clause, said out loud: a pump at an empty pond is slow, never dead.
-    const { state } = plumbedWorld(703);
-    settle(state, 0, 1);
+  it('counts a SECOND pump on the same bank, and adds what both of them draw', () => {
+    // The number has to actually move, or it is a constant with extra steps. This is the whole
+    // argument for the rewritten sentence: throughput is the player's to change, and the way
+    // they change it is by putting another straw in.
+    const { state } = plumbedWorld(707);
+    stepMany(state, 40);
 
-    expect(pondStatus(projectedPond(state))).toBe(
-      'pond empty — pumps get only what it refills, so it always recovers',
-    );
+    const projection = view(state, createWorldView());
+    const before = pondStatus(projectedPond(state), projection.machines, projection.reservoirs);
+    expect(before).toContain('1 pump on the bank');
+
+    // East bank: the pond is 3×3 at (12,13), so (15,13) is adjacent along its right edge.
+    spawnMachine(state, MachineKind.Pump, 15, 13);
+    rebuildNetworks(state);
+    stepMany(state, 40);
+
+    const after = view(state, createWorldView());
+    const line = pondStatus(projectedPond(state), after.machines, after.reservoirs);
+    expect(line).toContain('2 pumps on the bank');
   });
 
-  it('is still in the full band one notch ABOVE the mark', () => {
-    // The other side of the boundary, because a threshold nobody tests from above is a
-    // threshold that can quietly drift into an off-by-one. `reservoirThrottle` halves on
-    // `< RESERVOIR_LOW_PERMILLE`, so the mark itself is the last full-rate level.
-    const { state } = plumbedWorld(704);
-    settle(state, RESERVOIR_LOW_PERMILLE, 1);
+  it('does not count a pump that is standing in a field', () => {
+    // `pondFor` is adjacency, and the pond's sentence has to use the same one the pump's own
+    // sentence uses — a pump counted as "on the bank" here while being told it is not one on
+    // its own hover would be the two rect tests disagreeing in public.
+    const { state } = plumbedWorld(708);
+    spawnMachine(state, MachineKind.Pump, 2, 2);
+    rebuildNetworks(state);
+    stepMany(state, 5);
 
-    const line = pondStatus(projectedPond(state));
-    expect(line).not.toContain('HALF RATE');
-    expect(line).toBe(`pond — ${permilleText(RESERVOIR_LOW_PERMILLE)} full`);
+    const projection = view(state, createWorldView());
+    const line = pondStatus(projectedPond(state), projection.machines, projection.reservoirs);
+    expect(line, 'the dry-land pump is not on this bank').toContain('1 pump on the bank');
   });
 
   it('agrees with pointer.ts about where the water is', () => {
@@ -644,44 +689,60 @@ describe('the pond, hovered', () => {
 });
 
 describe('the pump, hovered', () => {
-  it('reports the rate it is actually drawing, with the pond level beside it', () => {
+  it('reports the rate it is actually drawing', () => {
     const { state, pump } = plumbedWorld(710);
-    settle(state, 900, 5);
+    stepMany(state, 40);
 
     const line = tellFor(state, pump)!;
     expect(line).toContain('pump — ');
     expect(line).toContain('/min');
-    expect(line).toContain(`pond at ${permilleText(900)}`);
-    expect(line).not.toContain('HALF');
+    // "pond at 90.0%" used to be the back half of this sentence. There is no level to quote.
+    expect(line).not.toContain('pond');
+    expect(line).not.toContain('%');
   });
 
-  it('**SAYS "HALF RATE" WHEN IT IS RUNNING AT HALF RATE**', () => {
-    // The owner's literal complaint, answered. Before this the ribbon said "pump running" in
-    // exactly the same words at full rate and at half — true, and the whole problem.
-    const { state, pump } = plumbedWorld(711);
-    const low = RESERVOIR_LOW_PERMILLE - 100;
-    settle(state, low, 5);
+  it('**SAYS A PUMP OFF THE BANK IS DRAWING NOTHING**', () => {
+    // The replacement for the deleted half-rate test, and the same lesson one cause over: a
+    // pump that is quietly producing nothing is indistinguishable from a broken pump.
+    // `pumpSupplyMlPerMinute` grants zero off a bank and the rated flow on one, so this is now
+    // the ONLY thing a pond does to a pump — and the only pump-and-pond question left to ask.
+    //
+    // `guardPlacement` refuses this placement, so it takes a hand-edited save to reach; that is
+    // exactly the case `water.ts` says the metered draw exists to refuse, and a sentence that
+    // said nothing about it would leave the player with a silent machine.
+    const { state } = plumbedWorld(713);
+    const stranded = spawnMachine(state, MachineKind.Pump, 2, 2)!;
+    rebuildNetworks(state);
+    stepMany(state, 20);
 
-    // The sim really is halving it: the rate below came out of a run at this band, not out of
-    // this file. `PUMP_RATE_ML_PER_MINUTE` is the posted rate the player is comparing against.
-    const drawn = projectedMachine(state, pump).flowMlPerMinute;
-    expect(drawn).toBeLessThanOrEqual(PUMP_RATE_ML_PER_MINUTE / 2);
-
-    const line = tellFor(state, pump)!;
-    expect(line).toContain('at HALF RATE');
-    expect(line).toContain(`pond down to ${permilleText(low)}`);
+    expect(tellFor(state, stranded)).toBe('pump — not on a bank, so it draws nothing');
   });
 
-  it('never claims a barrel a pump does not have', () => {
-    // `lampFor` gives a pump at a dry pond `LampState.UtilityMissing`, whose branch in the
-    // ribbon reads "barrel dry — click to refill". A pump has no barrel and no click.
+  it('says a pump with nothing plumbed to it is idle, rather than printing a bare zero', () => {
+    const state = createWorld(714);
+    state.unlocked = [TechId.Pumps];
+    const lonely = spawnMachine(state, MachineKind.Pump, 12, 12)!;
+    rebuildNetworks(state);
+    stepMany(state, 20);
+
+    expect(projectedMachine(state, lonely).flowMlPerMinute).toBe(0);
+    expect(tellFor(state, lonely)).toBe('pump idle — nothing on its pipes is asking for water');
+  });
+
+  it('never claims a barrel a pump does not have, in any of its three states', () => {
+    // `lampFor` gives a struggling pump `LampState.UtilityMissing`, whose branch in the ribbon
+    // reads "barrel dry — click to refill". A pump has no barrel and no click. Swept across
+    // every sentence this function can produce rather than the one that happened to be reported.
     const { state, pump } = plumbedWorld(712);
-    settle(state, 0, 5);
+    const stranded = spawnMachine(state, MachineKind.Pump, 2, 2)!;
+    rebuildNetworks(state);
+    stepMany(state, 20);
 
-    const line = tellFor(state, pump)!;
-    expect(line, 'the wild goose chase').not.toContain('barrel');
-    expect(line).not.toContain('click to refill');
-    expect(line).toContain('pond empty');
+    for (const line of [tellFor(state, pump), tellFor(state, stranded)]) {
+      expect(line, 'a pump always gets a sentence of its own').not.toBeNull();
+      expect(line!, 'the wild goose chase').not.toContain('barrel');
+      expect(line!).not.toContain('click to refill');
+    }
   });
 });
 
@@ -690,12 +751,13 @@ describe('the tank, hovered', () => {
     // `data.ts:2591`: the Tank is "the only object in the game that shows a NET RATE and a
     // TIME-TO-EMPTY… it turns 'am I short of water' from a feeling into arithmetic the player
     // can do at a glance". `ticksToEmpty` had never been read by a single line of the app.
-    const { state, tank } = plumbedWorld(720);
-    settle(state, 1000, 40);
-
-    // Fill the buffer, then take the pond away so the tank can only fall.
+    //
+    // The old version of this test filled the buffer and then TOOK THE POND AWAY. It cannot do
+    // that any more, so it takes the PUMP away instead — which is the same shape of pressure and
+    // a state a player can actually build by accident.
+    const { state, tank } = unpumpedWorld(720);
     state.machines.find((m) => m.id === tank.id)!.tankMl = 400_000;
-    settle(state, 0, 30);
+    stepMany(state, 30);
 
     const m = projectedMachine(state, tank);
     expect(m.flowMlPerMinute, 'the tank has to actually be draining').toBeLessThan(0);
@@ -711,24 +773,31 @@ describe('the tank, hovered', () => {
     // `-1` is "not emptying", which is a different fact from "no time left". Nothing divides
     // by zero here and nothing prints a countdown that was never computed.
     const { state, tank } = plumbedWorld(721);
-    settle(state, 1000, 20);
+    stepMany(state, 20);
 
     const m = projectedMachine(state, tank);
     expect(m.ticksToEmpty).toBe(-1);
     expect(tellFor(state, tank)).not.toContain('empty ');
   });
 
-  it('blames the pond when the pond is the reason it is empty', () => {
-    const { state, tank } = plumbedWorld(722);
-    settle(state, 100, 10);
+  it('blames the LINE for an empty tank, because the pond can no longer be the reason', () => {
+    // **THE REWRITE OF "blames the pond when the pond is the reason it is empty".** That test
+    // asserted the halved-band and empty-pond branches of `tankStatus`, both of which are gone
+    // with the model behind them. The surviving branch is the one that was always the honest
+    // answer for a buffer: it is empty because the line is outrunning its supply. Kept as a
+    // test rather than dropped, because the branch still exists and still has to not say
+    // "barrel".
+    const { state, tank } = unpumpedWorld(722);
+    stepMany(state, 60);
 
     const m = projectedMachine(state, tank);
     expect(m.lamp, 'the sim calls an empty tank blue').toBe(LampState.UtilityMissing);
 
     const line = tellFor(state, tank)!;
     expect(line).toContain('EMPTY');
-    expect(line).toContain('half rate');
+    expect(line).toContain('spending water faster than the pump brings it');
     expect(line).not.toContain('barrel');
+    expect(line, 'the pond has nothing to do with it now').not.toContain('pond down');
   });
 });
 
@@ -738,8 +807,8 @@ describe('a piped head, hovered', () => {
     // Barrel Sprinkler does, and the ribbon printed the barrel's sentence at both. A player
     // whose field has gone dry hovers a dead head, is told to click it, clicks it, nothing
     // happens — and concludes the pump is the thing that is wrong. Which is what happened.
-    const { state, head } = plumbedWorld(730);
-    settle(state, 0, 10);
+    const { state, head } = unpumpedWorld(730);
+    stepMany(state, 20);
 
     const m = projectedMachine(state, head);
     expect(m.lamp, 'the head is on the blue lamp — the branch that lied').toBe(
@@ -750,7 +819,61 @@ describe('a piped head, hovered', () => {
     expect(line, 'a non-null answer is what makes index.ts skip the barrel branch').not.toBeNull();
     expect(line!).not.toContain('barrel');
     expect(line!).not.toContain('click to refill');
-    expect(line!).toContain('the pond is empty');
+    // The old expectation here was "the pond is empty", which is now an impossible sentence
+    // about an impossible state. This lot has pipe, heads and no pump, which is the real cause.
+    expect(line!).toContain('no pump is feeding this line');
+  });
+
+  it('**NAMES HOW MANY MACHINES ARE SHARING THE LINE, AND WHAT SHARE THEY GET**', () => {
+    // **THE REPLACEMENT FOR THE HALVED-BAND TEST**, and the load-bearing one in this block.
+    // Before item 140 a short head had three possible causes and the sentence forked on which;
+    // two of those causes are deleted, so the remaining one has to carry a NUMBER or the
+    // sentence degrades into the "not getting enough water" the old code was filed for saying.
+    //
+    // `consumerCount` and `flowPermille` are both computed in `view.ts` and, before this, read
+    // nowhere in the app — the same "instruments never plugged in" the original item was about.
+    const { state, head } = plumbedWorld(733);
+    // Crowd the line until one pump cannot cover it. Both pipe runs get heads hung off them,
+    // clear of the pond at (12,13) and of the tank's 2×2 at (1,10).
+    for (let x = 4; x <= 11; x++) {
+      spawnMachine(state, MachineKind.PipedSprinkler, x, 11);
+      spawnMachine(state, MachineKind.PipedSprinkler, x, 13);
+    }
+    rebuildNetworks(state);
+    stepMany(state, 60);
+
+    const m = projectedMachine(state, head);
+    // The precondition is asserted rather than assumed: if the sim stops throttling this lot,
+    // this test must go RED rather than quietly stop exercising the branch it exists for.
+    expect(
+      m.throttled === 1 || m.lamp === LampState.UtilityMissing,
+      'the line has to actually be short for this to be testing anything',
+    ).toBe(true);
+
+    const line = tellFor(state, head)!;
+    expect(line).toContain('machines on this line');
+    expect(line).toContain('of what they ask for');
+    expect(line).toMatch(/\d+\.\d%/);
+  });
+
+  it('does not tell a DRY head it is getting 100% of what it asks for', () => {
+    // **A CONTRADICTION THE FIRST DRAFT OF THIS SENTENCE ACTUALLY PRINTED**, found by reading
+    // the output rather than the types. A head goes blue whenever its buffer is under one
+    // activation, which includes the whole time it is charging up after being plumbed in — and
+    // on those ticks the pump is meeting demand in full. The oversubscription sentence put
+    // "DRY" and "getting 100.0% of what they ask for" in one line, which argues with itself and
+    // sends the player off to add a pump they do not need.
+    const { state, head } = plumbedWorld(734);
+    stepMany(state, 60);
+
+    const m = projectedMachine(state, head);
+    expect(m.lamp, 'a freshly plumbed head is still blue while it charges').toBe(
+      LampState.UtilityMissing,
+    );
+
+    const line = tellFor(state, head)!;
+    expect(line).toBe('piped sprinkler DRY — still filling, the line is keeping up');
+    expect(line, 'the self-contradiction').not.toContain('100.0%');
   });
 
   it('**LEAVES THE ONE MACHINE THE BARREL SENTENCE IS TRUE OF ALONE**', () => {
@@ -772,13 +895,13 @@ describe('a piped head, hovered', () => {
     //
     // **THE BUFFER IS FILLED DIRECTLY RATHER THAN PUMPED FULL**, which is the same move the
     // thirsty-head test above makes and for a sharper reason than brevity. Written the other
-    // way — run a full pond for four hundred ticks and trust the head to charge — this test
-    // asserts the renderer's contract THROUGH the water layer's balance numbers, and it went
-    // red mid-suite when a sim lane retuned them underneath it. What is being tested here is
+    // way — run a lot for four hundred ticks and trust the head to charge — this test asserts
+    // the renderer's contract THROUGH the water layer's balance numbers, and it went red
+    // mid-suite when a sim lane retuned them underneath it. What is being tested here is
     // "a Running, unthrottled head gets no sentence"; the intake rate a head charges at is
     // the sim's business and no business of this file's.
     const { state, head } = plumbedWorld(732);
-    settle(state, 1000, 20);
+    stepMany(state, 20);
     state.machines.find((m) => m.id === head.id)!.tankMl = 1_000_000;
     stepMany(state, 1);
 

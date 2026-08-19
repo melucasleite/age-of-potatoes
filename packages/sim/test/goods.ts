@@ -29,7 +29,33 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import * as balance from '../src/data';
-import { type WorldState, ItemId, heldOutputItem, machineHoppers, machineSpec } from '../src/index';
+import {
+  type Machine,
+  type WorldState,
+  BeltTier,
+  BotKind,
+  CropId,
+  Direction,
+  FIELD_TILES_WIDE,
+  GrabberTier,
+  ItemId,
+  MachineKind,
+  addItem,
+  beltInsert,
+  createWorld,
+  cropSpec,
+  heldOutputItem,
+  machineHoppers,
+  machineSpec,
+  plantCrop,
+  spawnBelt,
+  spawnBot,
+  spawnGrabber,
+  spawnMachine,
+  spawnZone,
+  step,
+  stepMany,
+} from '../src/index';
 
 // --- the nodes: every place a good can sit ---------------------------------------------------
 
@@ -238,14 +264,26 @@ function enclosingFunctions(lines: string[]): string[] {
 }
 
 /**
- * **EVERY TRANSFER OF GOODS IN THE SIM**, as `file:function:quantity`, sorted.
+ * One line of the sim that writes a goods quantity: the census key it belongs to, and where it
+ * physically is.
  *
- * Read off the source with `GOODS_COUNTS`' patterns, so it is a census rather than a list: it
- * grows the day somebody writes a new one, and there is nowhere to add a transfer that it cannot
- * see short of inventing a container the node sweep has not met either.
+ * **THE `line` COLUMN IS ITEM 123'S WHOLE MECHANISM.** A census key is `file:function:quantity`
+ * and is deliberately coarse — an edge is a verb, not a line. But "did this scenario actually
+ * reach the code it claims to?" is a question about a LINE, and until this column existed the
+ * answer could only be asserted. See `witnessMoves` below.
  */
-export function goodsMoves(): string[] {
-  const found = new Set<string>();
+interface MoveSite {
+  readonly key: string;
+  /** `sourceFiles` label — `state`, `belts`, `save/canonical`. */
+  readonly label: string;
+  /** Absolute path of the file, as a V8 stack frame spells it. */
+  readonly path: string;
+  /** 1-based, as a V8 stack frame spells it. */
+  readonly line: number;
+}
+
+function scanMoves(): MoveSite[] {
+  const out: MoveSite[] = [];
   for (const [label, path] of sourceFiles(SRC)) {
     const lines = readFileSync(path, 'utf8').split('\n');
     const owners = enclosingFunctions(lines);
@@ -254,11 +292,232 @@ export function goodsMoves(): string[] {
       // Comments are prose ABOUT moves. This family has a great deal of prose about moves.
       if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue;
       for (const entry of GOODS_COUNTS) {
-        if (entry.pattern.test(line)) found.add(`${label}:${owners[i]}:${entry.quantity}`);
+        if (entry.pattern.test(line)) {
+          out.push({ key: `${label}:${owners[i]}:${entry.quantity}`, label, path, line: i + 1 });
+        }
       }
     }
   }
-  return [...found].sort();
+  return out;
+}
+
+/**
+ * **EVERY TRANSFER OF GOODS IN THE SIM**, as `file:function:quantity`, sorted.
+ *
+ * Read off the source with `GOODS_COUNTS`' patterns, so it is a census rather than a list: it
+ * grows the day somebody writes a new one, and there is nowhere to add a transfer that it cannot
+ * see short of inventing a container the node sweep has not met either.
+ */
+export function goodsMoves(): string[] {
+  return [...new Set(scanMoves().map((site) => site.key))].sort();
+}
+
+/** Every source line each census row is spelled on, as `absolute path:line`. */
+export function goodsMoveSites(): Map<string, string[]> {
+  const byKey = new Map<string, string[]>();
+  for (const site of scanMoves()) {
+    const at = `${site.path}:${String(site.line)}`;
+    const had = byKey.get(site.key);
+    if (had === undefined) byKey.set(site.key, [at]);
+    else if (!had.includes(at)) had.push(at);
+  }
+  return byKey;
+}
+
+// --- WHICH ROWS A SCENARIO ACTUALLY DROVE, WATCHED RATHER THAN DECLARED (item 123) -----------
+//
+// **THE BUG THIS EXISTS FOR.** `move-census-live.test.ts` scenarios each declare `covers: [...]`,
+// the census rows they drive, and until this function nothing checked the declaration. A scenario
+// could name any row on the census and be believed. One did: `'an arm lifts an aged good off a
+// belt and puts it down again'` claimed `belts:handOffFromHead:items[]` while building a SINGLE
+// belt, and `handOffFromHead` returns at `next === null` when there is no belt at the exit tile —
+// so the line it claimed could not execute, and the coverage test happily counted the row as
+// driven. That is the ninth level of this family's one bug: an instrument made of prose.
+//
+// **AND THE PREVIOUS EIGHT LEVELS SAY WHAT SHAPE THE FIX HAS TO BE.** Every instrument in this
+// family that turned out to be prose was a thing somebody WROTE DOWN; the one that never was —
+// the clock mutation sweep — worked because it ran the suite against a broken world. So this does
+// not ask anybody to declare anything more carefully. It watches.
+//
+// **HOW.** A census row is a set of source LINES (that is what `goodsMoveSites` is for). Every
+// quantity in `GOODS_COUNTS` gets a tripwire on the live world — an accessor on a scalar, a
+// wrapped mutator on an array — and a tripwire that fires reads its own stack. The runner
+// source-maps stack frames back to the original `.ts`, so the frame beneath the tripwire names
+// the exact file and line that did the write, and that line is looked up in the census. What
+// comes back is not what the scenario says it drives. It is what it drove.
+//
+// The tripwires are derived from `GOODS_COUNTS` — the same table `goodsMoves()` reads — so there
+// is no second list here to drift out of step with the first. Add a container to that table and
+// it is watched, in the same commit, without anyone remembering to come here.
+
+/** Array methods that change how many things are in an array. */
+const MUTATORS = ['push', 'pop', 'shift', 'unshift', 'splice'] as const;
+
+/** A quantity spelled as a WRITE to a scalar field: `machine.cargoCount += 3`. */
+const SCALAR_QUANTITIES = new Set(
+  GOODS_COUNTS.filter((entry) => !entry.quantity.endsWith('[]')).map((entry) => entry.quantity),
+);
+/** A quantity spelled as the LENGTH of an array: a belt's riders. */
+const LENGTH_QUANTITIES = new Set(
+  GOODS_COUNTS.filter((entry) => /push\|splice/.test(entry.pattern.source)).map((entry) =>
+    entry.quantity.replace(/\[\]$/, ''),
+  ),
+);
+/** A quantity spelled as a SLOT of an array: `machine.inputCounts[line] -= 1`. */
+const SLOT_QUANTITIES = new Set(
+  GOODS_COUNTS.filter(
+    (entry) => entry.quantity.endsWith('[]') && !/push\|splice/.test(entry.pattern.source),
+  ).map((entry) => entry.quantity.replace(/\[\]$/, '')),
+);
+
+/** What a scenario was SEEN to do, as opposed to what it says it does. */
+export interface MoveWitness {
+  /** `MOVE_VERDICTS` keys whose source line executed. */
+  readonly moves: ReadonlySet<string>;
+  /** `BAG_DOOR_VERDICTS` keys whose call site executed. */
+  readonly doors: ReadonlySet<string>;
+}
+
+/**
+ * **RUN `act` AND REPORT WHICH CENSUS ROWS IT ACTUALLY EXECUTED.**
+ *
+ * The world is left instrumented afterwards — the accessors read and write exactly as the fields
+ * did, so a ledger taken after this is the same ledger — because a scenario is a throwaway world
+ * and un-patching it would be work done for nobody.
+ *
+ * Stack capture is not free, so the frame budget is cut to the three this needs: the `Error`
+ * itself, the tripwire, and the line that tripped it.
+ */
+export function witnessMoves(state: WorldState, act: () => void): MoveWitness {
+  const invert = (byKey: Map<string, string[]>): Map<string, string[]> => {
+    const byLine = new Map<string, string[]>();
+    for (const [key, sites] of byKey) {
+      for (const at of sites) {
+        const had = byLine.get(at);
+        if (had === undefined) byLine.set(at, [key]);
+        else had.push(key);
+      }
+    }
+    return byLine;
+  };
+  const moveLines = invert(goodsMoveSites());
+  const doorLines = invert(bagDoorSites());
+
+  const moves = new Set<string>();
+  const doors = new Set<string>();
+  const seen = new Set<object>();
+  let watching = false;
+
+  const record = (): void => {
+    if (!watching) return;
+    const stack = new Error().stack ?? '';
+    let depth = 0;
+    for (const frame of stack.split('\n').slice(1)) {
+      const at = /\(?(\/[^()\s]+\.ts):(\d+):\d+\)?\s*$/.exec(frame);
+      if (at === null || !at[1]!.startsWith(SRC)) continue;
+      const site = `${at[1]!}:${at[2]!}`;
+      // **THE INNERMOST SIM FRAME IS THE WRITE**, and the one under it is whoever asked for it.
+      // Anything above the first is this file's own tripwire. That second frame is why the bag
+      // doors come out of the same tripwire as the moves: a hand-back into the bag writes no
+      // count at the call site — `bagDoors()`' whole reason for existing — so the only evidence
+      // it ran is that `addItem` wrote the bag's count ON ITS BEHALF, one frame down.
+      const found = depth === 0 ? moveLines.get(site) : doorLines.get(site);
+      if (found !== undefined) for (const key of found) (depth === 0 ? moves : doors).add(key);
+      if (depth === 1) return;
+      depth += 1;
+    }
+  };
+
+  const install = (node: unknown): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (seen.has(node)) return;
+    seen.add(node);
+
+    if (Array.isArray(node)) {
+      watchArray(node, false);
+      for (const entry of node) install(entry);
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (typeof value === 'number' && SCALAR_QUANTITIES.has(key)) {
+        watchScalar(node as Record<string, unknown>, key, value);
+      } else if (Array.isArray(value) && LENGTH_QUANTITIES.has(key)) {
+        seen.add(value);
+        watchArray(value, true);
+        for (const entry of value) install(entry);
+      } else if (Array.isArray(value) && SLOT_QUANTITIES.has(key)) {
+        seen.add(value);
+        watchSlots(value as number[]);
+      } else {
+        install(value);
+      }
+    }
+  };
+
+  function watchScalar(holder: Record<string, unknown>, key: string, initial: number): void {
+    let held = initial;
+    Object.defineProperty(holder, key, {
+      configurable: true,
+      enumerable: true,
+      get: () => held,
+      set: (next: number) => {
+        record();
+        held = next;
+      },
+    });
+  }
+
+  function watchSlots(slots: number[]): void {
+    for (let i = 0; i < slots.length; i++) {
+      let held = slots[i]!;
+      Object.defineProperty(slots, i, {
+        configurable: true,
+        enumerable: true,
+        get: () => held,
+        set: (next: number) => {
+          record();
+          held = next;
+        },
+      });
+    }
+  }
+
+  /**
+   * Wrap the length-changing methods of one array. `recordWrites` is the difference between a
+   * belt's riders — where a `push` IS a census row — and `state.machines`, where a `push` is only
+   * how a new object arrives and therefore how it gets its own tripwires.
+   */
+  function watchArray(array: unknown[], recordWrites: boolean): void {
+    for (const name of MUTATORS) {
+      const original = Array.prototype[name] as (this: unknown[], ...args: unknown[]) => unknown;
+      Object.defineProperty(array, name, {
+        configurable: true,
+        enumerable: false,
+        writable: true,
+        value(this: unknown[], ...args: unknown[]): unknown {
+          if (recordWrites) record();
+          const out = original.apply(this, args);
+          for (const arg of args) install(arg);
+          return out;
+        },
+      });
+    }
+  }
+
+  install(state);
+
+  const limit = Error.stackTraceLimit;
+  // `record`, the tripwire, the line that wrote, and the line that called it. Nothing deeper is
+  // read, and capturing what is not read is the whole cost of this thing.
+  Error.stackTraceLimit = 4;
+  watching = true;
+  try {
+    act();
+  } finally {
+    watching = false;
+    Error.stackTraceLimit = limit;
+  }
+  return { moves, doors };
 }
 
 /**
@@ -292,12 +551,12 @@ export function goodsMoves(): string[] {
  * The first occurrence keeps the bare key so adding a call site never renames its neighbour —
  * `clockDoors()`' rule, for `clockDoors()`' reason.
  */
-export function bagDoors(): string[] {
+function scanDoors(): MoveSite[] {
   const doors: [string, RegExp][] = [
     ['addItem', /(?<![A-Za-z0-9_.])addItem\(/],
     ['removeItem', /(?<![A-Za-z0-9_.])removeItem\(/],
   ];
-  const found: string[] = [];
+  const found: MoveSite[] = [];
   const seen = new Map<string, number>();
   for (const [label, path] of sourceFiles(SRC)) {
     const lines = readFileSync(path, 'utf8').split('\n');
@@ -314,11 +573,61 @@ export function bagDoors(): string[] {
         const key = `${label}:${owners[i]}:${door}`;
         const n = (seen.get(key) ?? 0) + 1;
         seen.set(key, n);
-        found.push(n === 1 ? key : `${key}#${n}`);
+        found.push({ key: n === 1 ? key : `${key}#${n}`, label, path, line: i + 1 });
       }
     }
   }
-  return [...found].sort();
+  return found;
+}
+
+export function bagDoors(): string[] {
+  return scanDoors()
+    .map((site) => site.key)
+    .sort();
+}
+
+/**
+ * **EVERY PLACE THE SIM CALLS A FUNCTION BY NAME**, as `file:line`, declaration excluded.
+ *
+ * **AN EXCUSE THAT CAN BE SETTLED BY LOOKING** (item 123). `UNREACHED` on the move census is free
+ * text, and item 123's headline complaint about its deleted sibling was that 21 rows rested on
+ * free text nothing reads. Most of those reasons are about the HARNESS — "this needs a fixture
+ * rather than a scenario" — and a harness cannot be interrogated about itself. But one reason is
+ * about the SIM, and a claim about the sim is a claim the source can answer: `beltTakeFromTile` is
+ * exported, is on the census, and is called by nothing in the game. The day somebody wires it up,
+ * that excuse becomes false, and this is what makes it go red instead of quietly staying written.
+ */
+export function callSitesInSim(name: string): string[] {
+  const call = new RegExp(`(?<![A-Za-z0-9_.])${name}\\(`);
+  const found: string[] = [];
+  for (const [label, path] of sourceFiles(SRC)) {
+    const lines = readFileSync(path, 'utf8').split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue;
+      // A declaration is not a call, and neither is a re-export.
+      if (new RegExp(`^\\s*(?:export )?(?:async )?function\\*? ${name}\\b`).test(line)) continue;
+      if (call.test(line)) found.push(`${label}:${String(i + 1)}`);
+    }
+  }
+  return found;
+}
+
+/**
+ * Every source line each bag door is spelled on, as `absolute path:line`.
+ *
+ * One entry per key rather than a list, because the numbering already made these one-per-call-site
+ * (item 121): `tick:applyUnloadMachine:addItem#3` IS a line.
+ */
+export function bagDoorSites(): Map<string, string[]> {
+  const byKey = new Map<string, string[]>();
+  for (const site of scanDoors()) {
+    const at = `${site.path}:${String(site.line)}`;
+    const had = byKey.get(site.key);
+    if (had === undefined) byKey.set(site.key, [at]);
+    else if (!had.includes(at)) had.push(at);
+  }
+  return byKey;
 }
 
 // --- the clock doors: DELETED (item 124) -----------------------------------------------------
@@ -1026,4 +1335,206 @@ export function zeroingIsCaught(
   } catch {
     return true;
   }
+}
+
+// --- THE NAME-BLIND GUARDS' FIXTURE, MOVED HERE SO IT CAN BE RUN TWICE (item 123) ------------
+//
+// **THE CONCENTRATION RISK, AND WHY IT IS THE SAME BUG ONE LEVEL OUT.** `worldDiff` and
+// `unfilledNumbers` above are the two guards in this family that name no field, and they are the
+// two that cover the field nobody has thought of yet. Item 119 spread the clock scenarios across
+// five test files precisely so that deleting any one of them lost nothing. These two were never
+// spread: both assertions lived in `move-census-live.test.ts`, so deleting that file took the
+// whole name-blind layer with it — and it would have gone quietly, because the thing it protects
+// is by definition a field nobody has written a test for.
+//
+// The fixture is here rather than in a test file for the same reason `MOVE_VERDICTS` is: two
+// copies of a world with something in every container is two things to keep in step. `save.test.ts`
+// and `move-census-live.test.ts` now run the same two assertions over the same world, and
+// `move-census.test.ts` — a third file — counts the callers and goes red if either drops to one.
+
+/** Step until `done`, or give up. Returns the tick it happened on, or -1. */
+export function stepUntil(state: WorldState, limit: number, done: () => boolean): number {
+  for (let i = 0; i < limit; i++) {
+    stepMany(state, 1);
+    if (done()) return state.tick;
+  }
+  return -1;
+}
+
+/** A bound zone of ripe potatoes with a harvester dock and one bot working it. */
+export function farmWithHarvester(seed: number): { state: WorldState; dock: Machine } {
+  const state = createWorld(seed);
+  const zone = spawnZone(state, CropId.RussetPotato);
+  for (let i = 0; i < FIELD_TILES_WIDE * 2; i++) state.field[i]!.zone = zone.id;
+  const dock = spawnMachine(state, MachineKind.HarvesterDock, 0, 0)!;
+  dock.boundZone = zone.id;
+  spawnBot(state, BotKind.Harvester, dock);
+  const spec = cropSpec(CropId.RussetPotato)!;
+  for (let i = 0; i < state.field.length; i++) {
+    const tile = state.field[i]!;
+    if (tile.zone !== zone.id) continue;
+    plantCrop(state, tile, spec);
+    tile.growth = tile.growthTarget;
+  }
+  return { state, dock };
+}
+
+/** A world with something in every container the node sweep can find. */
+export function containersFilledWorld(seed: number): WorldState {
+  const { state, dock } = farmWithHarvester(seed);
+  const bot = state.bots[0]!;
+  // Jam the shelf so the bot stalls holding an armful and a seed pocket.
+  dock.cargoItem = ItemId.ChiliPepper;
+  dock.cargoCount = 4;
+  dock.seedShelfItem = ItemId.PotatoSeed;
+  dock.seedShelfCount = 7;
+  stepUntil(state, 20_000, () => bot.carryCount > 0 && bot.seedCount > 0);
+
+  const cellar = spawnMachine(state, MachineKind.RootCellar, 8, 8)!;
+  cellar.cargoItem = ItemId.RussetPotato;
+  cellar.cargoCount = 9;
+
+  const seasoner = spawnMachine(state, MachineKind.Seasoner, 10, 10)!;
+  const hoppers = machineHoppers(machineSpec(MachineKind.Seasoner)!);
+  if (hoppers.length > 0) {
+    seasoner.inputCounts[0] = 3;
+  }
+  seasoner.outputItem = ItemId.BaggedChips;
+  seasoner.outputCount = 2;
+
+  const washer = spawnMachine(state, MachineKind.Washer, 12, 4)!;
+  washer.outputItem = ItemId.WashedPotato;
+  washer.outputCount = 2;
+
+  // **AND DOOR 10 GOES ACROSS THE SAVE TOO.** A basket that is two grades at once is the one
+  // container whose contents cannot be read off its own fields, so it is the one most worth
+  // carrying over a serialization boundary on purpose.
+  const fryer = spawnMachine(state, MachineKind.Fryer, 14, 4)!;
+  fryer.outputItem = ItemId.PlainChips;
+  fryer.outputCount = 4;
+  fryer.overcookedCount = 3;
+
+  const belt = spawnBelt(state, BeltTier.Basic, 2, 12, Direction.East, 4)!;
+  beltInsert(belt, 0, ItemId.RussetPotato);
+  const grabber = spawnGrabber(state, GrabberTier.Mk1, 7, 12, Direction.East, 0)!;
+  grabber.held = ItemId.RussetPotato;
+
+  const depot = spawnMachine(state, MachineKind.TruckDepot, 14, 14)!;
+  step(state, {
+    tick: state.tick,
+    commands: [
+      {
+        type: 'CreateContract',
+        depotId: depot.id,
+        item: ItemId.RussetPotato,
+        quantityPerRun: 2,
+        destination: 'Ridgeline Grocers',
+      },
+    ],
+  });
+  const contract = state.contracts[0]!;
+  contract.stocked = 2;
+  contract.inTransit = 3;
+
+  addItem(state, ItemId.RussetPotato, 5);
+  return state;
+}
+
+/**
+ * **EVERY NUMBER `containersFilledWorld` LEAVES AT ZERO, AND THE REASON IT IS ALLOWED TO.**
+ *
+ * Counters, cursors, dials and ledgers that are legitimately zero in a fixture nobody has played:
+ * no machine has completed an operation, no route has run, no money has moved, and every upgrade
+ * is at its opening level. A field arriving on this list is a field the round trip cannot see,
+ * which is the whole point of the check — the only ways off it are to fill it in the fixture or to
+ * come here and say why a permanent zero is right.
+ *
+ * ONE list rather than one per consumer. Two test files assert against it, and a second copy is
+ * how the pair would drift apart on the first field either of them forgot.
+ */
+export const UNFILLED_BY_DESIGN: readonly string[] = [
+  'bots[].workTicks',
+  'contracts[].grossCents',
+  'contracts[].phase',
+  'contracts[].runsCompleted',
+  'contracts[].ticksRemaining',
+  'field[].lastPouredTick',
+  'field[].moisture',
+  'field[].moistureAccum',
+  'grabbers[].cooldown',
+  'grabbers[].filter',
+  'grabbers[].opCount',
+  'machines[].blockedTicks',
+  'machines[].capacityLevel',
+  'machines[].cooldown',
+  'machines[].efficiencyLevel',
+  'machines[].flowMlPerMinute',
+  'machines[].junctionInCursor',
+  'machines[].junctionOutCursor',
+  'machines[].network',
+  'machines[].opCount',
+  'machines[].progress',
+  'machines[].runTicksRemaining',
+  'machines[].scanCursor',
+  'machines[].skippedCount',
+  'machines[].speedLevel',
+  'machines[].tankMl',
+  'machines[].untouchedTicks',
+  'machines[].wateredCount',
+  'player.moveAccum',
+  'player.moveDir',
+  'player.towedCartId',
+  'stats.automatedGrossCents',
+  'stats.cheatsUsed',
+  'stats.dawnsSeen',
+  'stats.hourMark.earnedCents',
+  'stats.hourMark.hour',
+  'stats.hourMark.inputsWasted',
+  'stats.hourMark.itemsProduced',
+  'stats.hourMark.itemsSold',
+  'stats.hourMark.spentCents',
+  'stats.hourMark.tick',
+  'stats.hourMark.waterMl',
+  'stats.inputsWastedByMachine',
+  'stats.itemsHarvestedByHand',
+  'stats.itemsProducedByMachine',
+  'stats.itemsSold',
+  'stats.lifetimeEarnedCents',
+  'stats.lifetimeSpentCents',
+  'stats.longestUntouchedMachineTicks',
+  'stats.repairKitSpendCents',
+  'stats.repairKitsUsed',
+  'stats.touches.handCarry',
+  'stats.touches.handHarvest',
+  'stats.touches.handPlant',
+  'stats.touches.handRepair',
+  'stats.touches.handWater',
+  'stats.touches.hopperRefill',
+  'stats.touches.jamWhack',
+  'stats.waterDrawnMl',
+  'zones[].replantCooldown',
+];
+
+/**
+ * **WHICH TEST FILES CALL A FUNCTION BY NAME** — the loud half of un-concentrating the guards.
+ *
+ * Spreading an assertion across two files only helps if somebody notices when it stops being two.
+ * A count is the cheapest thing that notices, and it executes: delete either home of the
+ * name-blind guards and this returns one file, which is a red test in a THIRD file rather than a
+ * quiet loss of the only net that covers the field nobody has thought of.
+ */
+export function testFilesCalling(name: string): string[] {
+  const call = new RegExp(`(?<![A-Za-z0-9_.])${name}\\(`);
+  const dir = fileURLToPath(new URL('./', import.meta.url));
+  const found: string[] = [];
+  for (const file of readdirSync(dir).sort()) {
+    if (!file.endsWith('.test.ts')) continue;
+    for (const line of readFileSync(dir + file, 'utf8').split('\n')) {
+      if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue;
+      if (!call.test(line)) continue;
+      found.push(file);
+      break;
+    }
+  }
+  return found;
 }

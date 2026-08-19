@@ -74,8 +74,15 @@ import {
   MoveVerdict,
   basketGrades,
   boxLedger,
+  callSitesInSim,
+  containersFilledWorld,
+  farmWithHarvester,
+  stepUntil,
+  testFilesCalling,
+  UNFILLED_BY_DESIGN,
   unfilledNumbers,
   goodsLedger,
+  witnessMoves,
   itemBearingPaths,
   ledgerCount,
   ledgerDelta,
@@ -96,14 +103,6 @@ function standOn(state: WorldState, tileX: number, tileY: number): void {
 
 function run(state: WorldState, command: Parameters<typeof step>[1]['commands'][number]): void {
   step(state, { tick: state.tick, commands: [command] });
-}
-
-function stepUntil(state: WorldState, limit: number, done: () => boolean): number {
-  for (let i = 0; i < limit; i++) {
-    stepMany(state, 1);
-    if (done()) return state.tick;
-  }
-  return -1;
 }
 
 /**
@@ -182,10 +181,38 @@ function combinedVerdict(covers: readonly string[]): MoveVerdict | 'mixed' {
 function checkMove(check: MoveCheck): void {
   const { state, act } = check.build();
   const before = goodsLedger(state);
-  const verdict = check.verdict ?? combinedVerdict(check.covers);
 
-  act();
+  // **THE DECLARATION IS NOW A PREDICTION, AND THIS IS WHERE IT IS SETTLED** (item 123). `covers`
+  // and `doors` used to be believed. `witnessMoves` runs the same `act` behind tripwires on every
+  // quantity in `GOODS_COUNTS` and reports the census rows whose SOURCE LINES actually executed,
+  // so a scenario that names a row it cannot reach is red rather than decorative. That is not a
+  // hypothetical: the arm scenario below claimed `belts:handOffFromHead:items[]` while building a
+  // single belt, and `handOffFromHead` returns at `next === null`. The claim had been on the
+  // census for six items.
+  const witness = witnessMoves(state, act);
+
   const after = goodsLedger(state);
+  weighTheMove(check, before, after);
+
+  expect(
+    check.covers.filter((row) => !witness.moves.has(row)),
+    `${check.name} declares census rows whose code it never reached — it drove ` +
+      `[${[...witness.moves].sort().join(', ')}]`,
+  ).toEqual([]);
+  expect(
+    (check.doors ?? []).filter((door) => !witness.doors.has(door)),
+    `${check.name} declares bag doors it never opened — it opened ` +
+      `[${[...witness.doors].sort().join(', ')}]`,
+  ).toEqual([]);
+}
+
+/** The ledger half: the verdict the row claims, held against what the ledger says happened. */
+function weighTheMove(
+  check: MoveCheck,
+  before: Map<ItemId, GoodsHolding>,
+  after: Map<ItemId, GoodsHolding>,
+): void {
+  const verdict = check.verdict ?? combinedVerdict(check.covers);
   const story = () => `${check.name}: ${ledgerDelta(before, after)}`;
 
   if (verdict === MoveVerdict.Source) {
@@ -228,23 +255,6 @@ function agedBag(seed: number, item: ItemId, count: number, tileX = 6, tileY = 6
   stepMany(state, AGE_TICKS);
   standOn(state, tileX, tileY);
   return state;
-}
-
-function farmWithHarvester(seed: number): { state: WorldState; dock: Machine } {
-  const state = createWorld(seed);
-  const zone = spawnZone(state, CropId.RussetPotato);
-  for (let i = 0; i < FIELD_TILES_WIDE * 2; i++) state.field[i]!.zone = zone.id;
-  const dock = spawnMachine(state, MachineKind.HarvesterDock, 0, 0)!;
-  dock.boundZone = zone.id;
-  spawnBot(state, BotKind.Harvester, dock);
-  const spec = cropSpec(CropId.RussetPotato)!;
-  for (let i = 0; i < state.field.length; i++) {
-    const tile = state.field[i]!;
-    if (tile.zone !== zone.id) continue;
-    plantCrop(state, tile, spec);
-    tile.growth = tile.growthTarget;
-  }
-  return { state, dock };
 }
 
 // --- THE CHECKS ------------------------------------------------------------------------------
@@ -303,22 +313,36 @@ const CHECKS: readonly MoveCheck[] = [
       // `freshness-doors.test.ts`' trick, and the supported way to hold a hopper still.
       const state = agedBag(12_003, ItemId.ChiliPepper, 6);
       const seasoner = spawnMachine(state, MachineKind.Seasoner, 6, 6)!;
-      run(state, {
-        type: 'LoadMachine',
-        machineId: seasoner.id,
-        item: ItemId.ChiliPepper,
-        count: 6,
-      });
       return {
         state,
-        act: () => run(state, { type: 'DeconstructMachine', machineId: seasoner.id }),
+        // **BOTH HALVES INSIDE `act`, AND ITEM 123 IS WHY.** The load used to sit up in `build`,
+        // which made `state:putHopper:inputCounts[]` a row this scenario ran BEFORE the ledger was
+        // opened: the line executed, and nothing weighed it. `witnessMoves` counts what happens
+        // between the two ledger reads, because that is the only span the row's own verdict can
+        // be applied to — the `before` book had the peppers in the hopper already.
+        act: () => {
+          run(state, {
+            type: 'LoadMachine',
+            machineId: seasoner.id,
+            item: ItemId.ChiliPepper,
+            count: 6,
+          });
+          run(state, { type: 'DeconstructMachine', machineId: seasoner.id });
+        },
       };
     },
   },
   {
     name: 'a belt is laid, loaded, and taken up one tile at a time',
-    covers: ['state:beltInsert:items[]', 'belts:beltTakeFromTile:items[]'],
+    // **THIS ROW USED TO SAY SOMETHING ELSE, AND BOTH HALVES OF IT WERE FALSE** (item 123). It
+    // claimed `state:beltInsert:items[]`, which runs in `build` and is therefore inside the
+    // `before` ledger rather than across it; and `belts:beltTakeFromTile:items[]`, which
+    // `applyRemoveBeltTile` does not call — it splits the run and hands the freed riders to
+    // `addItem`. Neither could ever have been reached from here. What the verb DOES drive is the
+    // bag taking the cut's leavings, so that is what it now says, and `witnessMoves` agrees.
+    covers: ['state:addItem:count'],
     // `#2` is the CUT: this belt is three tiles, so the one-tile branch above it never runs.
+    doors: ['tick:applyRemoveBeltTile:addItem#2'],
     build() {
       const state = agedBag(12_004, ItemId.RussetPotato, 1);
       const belt = spawnBelt(state, BeltTier.Basic, 4, 4, Direction.East, 3)!;
@@ -342,19 +366,30 @@ const CHECKS: readonly MoveCheck[] = [
     },
   },
   {
-    name: 'an arm lifts an aged good off a belt and puts it down again',
+    name: 'an aged good crosses a belt seam, is lifted off, and is put down again',
     covers: [
       'belts:advanceGrabber:held',
       'belts:grabberSource:items[]',
       'belts:handOffFromHead:items[]',
+      'state:beltInsert:items[]',
     ],
+    // **THE SECOND BELT IS ITEM 123'S WHOLE STORY.** This scenario built ONE, and claimed
+    // `handOffFromHead` — a function that reads `beltAt(exit tile)` and returns at `next === null`
+    // when there is nothing there. The claim had been on the census since item 117 and could not
+    // have been true for a single tick of it. Nothing checked; `witnessMoves` now does, and the
+    // fix is a real seam rather than a smaller claim: a run laid in two pieces must carry a potato
+    // exactly as one long belt would (item 112), which is the thing the row is for.
+    //
+    // The hand-off goes THROUGH `beltInsert`, so the seam drives that row too — the one the belt
+    // teardown scenario above used to claim from inside its `build`.
     build() {
       const state = agedBag(12_006, ItemId.RussetPotato, 1);
-      const belt = spawnBelt(state, BeltTier.Basic, 2, 4, Direction.East, 4)!;
+      const upstream = spawnBelt(state, BeltTier.Basic, 2, 4, Direction.East, 3)!;
+      spawnBelt(state, BeltTier.Basic, 5, 4, Direction.East, 1);
       spawnGrabber(state, GrabberTier.Mk1, 6, 4, Direction.East, 0);
       spawnMachine(state, MachineKind.RootCellar, 7, 4);
-      beltInsert(belt, 0, ItemId.RussetPotato);
-      return { state, act: () => stepMany(state, 400) };
+      beltInsert(upstream, 0, ItemId.RussetPotato);
+      return { state, act: () => stepMany(state, 800) };
     },
   },
   {
@@ -371,12 +406,12 @@ const CHECKS: readonly MoveCheck[] = [
     },
   },
   {
-    name: 'a depot takes aged stock off an arm, and a torn-up route hands it back',
-    covers: [
-      'commerce:depotAccept:stocked',
-      'commerce:refundContract:stocked',
-      'commerce:refundContract:inTransit',
-    ],
+    // **THE ARM PUTTING IT THERE IS A SEPARATE SCENARIO NOW** (item 123). This one used to claim
+    // `commerce:depotAccept:stocked` as well, and stocked the floor in `build` — so the row ran
+    // before the books opened and the refund was the only thing this ever weighed. The accept has
+    // gone to a scenario with an actual arm in it, below, which is what its own name always said.
+    name: 'a torn-up route hands a depot floor back',
+    covers: ['commerce:refundContract:stocked', 'commerce:refundContract:inTransit'],
     build() {
       const state = agedBag(12_008, ItemId.RussetPotato, 4);
       const depot = spawnMachine(state, MachineKind.TruckDepot, 6, 6)!;
@@ -461,10 +496,50 @@ const CHECKS: readonly MoveCheck[] = [
     verdict: MoveVerdict.Sink,
     build() {
       const state = agedBag(12_015, ItemId.RussetPotato, 5);
+      // **STANDING AT THE BIN, WHICH THIS SCENARIO DID NOT DO FOR SIX ITEMS** (item 123). The bag
+      // helper leaves the player at tile (6, 6) and a fresh world's sell bin is at (2, 12), so
+      // `applySellItem` refused at `nearSellBin`, the command was never even traced, and not one
+      // potato moved. Nothing about that could go red: a SINK promises *"the total may fall, never
+      // rise"*, and a world where nothing happened at all keeps that promise perfectly.
+      //
+      // **THAT IS THE ENTIRE SHAPE OF THIS FAMILY, ONE LEVEL FURTHER OUT.** The label was not
+      // wrong. The scenario under it was empty, and no label can notice that. The bin is found
+      // rather than typed, so a lot that moves it moves this too.
+      const bin = state.machines.find((machine) => machine.kind === MachineKind.SellBin)!;
+      standOn(state, bin.tileX, bin.tileY);
       return {
         state,
         act: () => run(state, { type: 'SellItem', item: ItemId.RussetPotato, count: 5 }),
       };
+    },
+  },
+  {
+    // **THE ACCEPT, OFF AN ACTUAL ARM** (item 123). `depotAccept` has exactly one caller in the
+    // sim — `grabberDeliver`, when the tile in front of a claw is a depot with a route that names
+    // what it is holding — so this is the only shape in which the row is a TRANSFER rather than an
+    // appearance. Driven the old way, by calling the primitive with nothing on the other end, the
+    // goods arrived from nowhere and a conserving verdict could not have been asserted about it;
+    // that is why the call sat in a `build` and the row went six items without being weighed.
+    name: 'an arm puts an aged good on a depot floor',
+    covers: ['commerce:depotAccept:stocked', 'belts:grabberSource:items[]'],
+    build() {
+      const state = agedBag(12_023, ItemId.RussetPotato, 1);
+      const belt = spawnBelt(state, BeltTier.Basic, 2, 4, Direction.East, 4)!;
+      spawnGrabber(state, GrabberTier.Mk1, 6, 4, Direction.East, 0);
+      const depot = spawnMachine(state, MachineKind.TruckDepot, 7, 4)!;
+      run(state, {
+        type: 'CreateContract',
+        depotId: depot.id,
+        item: ItemId.RussetPotato,
+        quantityPerRun: 4,
+        destination: 'Ridgeline Grocers',
+      });
+      beltInsert(belt, 0, ItemId.RussetPotato);
+      const contract = state.contracts[0]!;
+      // Stopped the moment the floor takes it. The route wants four and has one, so no lorry
+      // rolls — which matters, because a run that dispatched would turn this into a Sink and the
+      // conserving half is the half worth measuring.
+      return { state, act: () => stepUntil(state, 3_000, () => contract.stocked > 0) };
     },
   },
   {
@@ -732,6 +807,26 @@ describe('the move census, executed', () => {
       }
     }
   });
+
+  it('settles the one excuse that is a claim about the SIM rather than about this harness', () => {
+    // **AN EXCUSE THAT COSTS SOMETHING.** `belts:beltTakeFromTile:items[]` is excused below on
+    // the grounds that the game never calls the function — the only reason on that list that the
+    // source can be asked about. So it is asked. Wire `beltTakeFromTile` up to anything and this
+    // goes red, and the row has to be driven for real rather than go on being excused by a
+    // sentence that stopped being true.
+    //
+    // It also records a fact worth an owner's attention rather than a silent exemption: an
+    // exported sim function with no callers is either dead or a missing verb (taking one item off
+    // a belt by hand), and the census is the thing that noticed.
+    expect(
+      callSitesInSim('beltTakeFromTile'),
+      'beltTakeFromTile has a caller now — drive the row instead of excusing it',
+    ).toEqual([]);
+    expect(
+      UNREACHED['belts:beltTakeFromTile:items[]'],
+      'and the excuse is still on file',
+    ).toContain('THE SIM NEVER CALLS IT');
+  });
 });
 
 /**
@@ -782,6 +877,13 @@ const UNREACHED_DOORS: Readonly<Record<string, string>> = {
 };
 
 const UNREACHED: Readonly<Record<string, string>> = {
+  'belts:beltTakeFromTile:items[]':
+    'THE SIM NEVER CALLS IT. `beltTakeFromTile` is exported and on the census and has no call ' +
+    'site in src/ — an arm takes off a belt through `grabberSource`, which splices for itself, ' +
+    'and a hand takes a whole tile up through `applyRemoveBeltTile`, which splits the run and ' +
+    'hands the riders to `addItem`. The belt scenario above claimed this row for six items on ' +
+    'the strength of its name. Unlike every other reason here this one is a claim about the SIM ' +
+    'rather than about this harness, so it is CHECKED — see the test below.',
   'belts:advanceJunction:items[]':
     'a junction needs two belts pointing into it and a good arriving on the tick the junction ' +
     'polls; the existing belt-tiles suite drives that geometry and this harness would be a ' +
@@ -829,61 +931,11 @@ const UNREACHED: Readonly<Record<string, string>> = {
 // exact failure mode plan §4 exists to forbid, at the largest scale the game can produce it.
 
 describe('the save/load round trip', () => {
-  /** A world with something in every container the node sweep can find. */
-  function loadedWorld(seed: number): WorldState {
-    const { state, dock } = farmWithHarvester(seed);
-    const bot = state.bots[0]!;
-    // Jam the shelf so the bot stalls holding an armful and a seed pocket.
-    dock.cargoItem = ItemId.ChiliPepper;
-    dock.cargoCount = 4;
-    dock.seedShelfItem = ItemId.PotatoSeed;
-    dock.seedShelfCount = 7;
-    stepUntil(state, 20_000, () => bot.carryCount > 0 && bot.seedCount > 0);
-
-    const cellar = spawnMachine(state, MachineKind.RootCellar, 8, 8)!;
-    cellar.cargoItem = ItemId.RussetPotato;
-    cellar.cargoCount = 9;
-
-    const seasoner = spawnMachine(state, MachineKind.Seasoner, 10, 10)!;
-    const hoppers = machineHoppers(machineSpec(MachineKind.Seasoner)!);
-    if (hoppers.length > 0) {
-      seasoner.inputCounts[0] = 3;
-    }
-    seasoner.outputItem = ItemId.BaggedChips;
-    seasoner.outputCount = 2;
-
-    const washer = spawnMachine(state, MachineKind.Washer, 12, 4)!;
-    washer.outputItem = ItemId.WashedPotato;
-    washer.outputCount = 2;
-
-    // **AND DOOR 10 GOES ACROSS THE SAVE TOO.** A basket that is two grades at once is the one
-    // container whose contents cannot be read off its own fields, so it is the one most worth
-    // carrying over a serialization boundary on purpose.
-    const fryer = spawnMachine(state, MachineKind.Fryer, 14, 4)!;
-    fryer.outputItem = ItemId.PlainChips;
-    fryer.outputCount = 4;
-    fryer.overcookedCount = 3;
-
-    const belt = spawnBelt(state, BeltTier.Basic, 2, 12, Direction.East, 4)!;
-    beltInsert(belt, 0, ItemId.RussetPotato);
-    const grabber = spawnGrabber(state, GrabberTier.Mk1, 7, 12, Direction.East, 0)!;
-    grabber.held = ItemId.RussetPotato;
-
-    const depot = spawnMachine(state, MachineKind.TruckDepot, 14, 14)!;
-    run(state, {
-      type: 'CreateContract',
-      depotId: depot.id,
-      item: ItemId.RussetPotato,
-      quantityPerRun: 2,
-      destination: 'Ridgeline Grocers',
-    });
-    const contract = state.contracts[0]!;
-    contract.stocked = 2;
-    contract.inTransit = 3;
-
-    addItem(state, ItemId.RussetPotato, 5);
-    return state;
-  }
+  // **THE FIXTURE MOVED TO `goods.ts` (item 123)**, so `save.test.ts` can run the same two
+  // name-blind guards over the same world. It used to be declared here, which made this file the
+  // only place either guard existed — see `UNFILLED_BY_DESIGN`'s header for why that was the
+  // concentration risk item 123 was filed about.
+  const loadedWorld = containersFilledWorld;
 
   it('the fixture fills every container the node sweep can find', () => {
     // **DERIVED, NOT LISTED**, and this is what makes the round trip below fail the day somebody
@@ -1003,72 +1055,6 @@ describe('the save/load round trip', () => {
     expect(
       unfilledNumbers(state),
       'a number this fixture never fills — fill it, or add it here with a reason',
-    ).toEqual([
-      // Counters, cursors, dials and ledgers that are legitimately zero in a fixture nobody has
-      // played: no machine has completed an operation, no route has run, no money has moved, and
-      // every upgrade is at its opening level. A clock arriving here would be a clock the round
-      // trip cannot see, which is the whole point of the check.
-      'bots[].workTicks',
-      'contracts[].grossCents',
-      'contracts[].phase',
-      'contracts[].runsCompleted',
-      'contracts[].ticksRemaining',
-      'field[].lastPouredTick',
-      'field[].moisture',
-      'field[].moistureAccum',
-      'grabbers[].cooldown',
-      'grabbers[].filter',
-      'grabbers[].opCount',
-      'machines[].blockedTicks',
-      'machines[].capacityLevel',
-      'machines[].cooldown',
-      'machines[].efficiencyLevel',
-      'machines[].flowMlPerMinute',
-      'machines[].junctionInCursor',
-      'machines[].junctionOutCursor',
-      'machines[].network',
-      'machines[].opCount',
-      'machines[].progress',
-      'machines[].runTicksRemaining',
-      'machines[].scanCursor',
-      'machines[].skippedCount',
-      'machines[].speedLevel',
-      'machines[].tankMl',
-      'machines[].untouchedTicks',
-      'machines[].wateredCount',
-      'player.moveAccum',
-      'player.moveDir',
-      'player.towedCartId',
-      'reservoirs[].rechargeAccum',
-      'stats.automatedGrossCents',
-      'stats.cheatsUsed',
-      'stats.dawnsSeen',
-      'stats.hourMark.earnedCents',
-      'stats.hourMark.hour',
-      'stats.hourMark.inputsWasted',
-      'stats.hourMark.itemsProduced',
-      'stats.hourMark.itemsSold',
-      'stats.hourMark.spentCents',
-      'stats.hourMark.tick',
-      'stats.hourMark.waterMl',
-      'stats.inputsWastedByMachine',
-      'stats.itemsHarvestedByHand',
-      'stats.itemsProducedByMachine',
-      'stats.itemsSold',
-      'stats.lifetimeEarnedCents',
-      'stats.lifetimeSpentCents',
-      'stats.longestUntouchedMachineTicks',
-      'stats.repairKitSpendCents',
-      'stats.repairKitsUsed',
-      'stats.touches.handCarry',
-      'stats.touches.handHarvest',
-      'stats.touches.handPlant',
-      'stats.touches.handRepair',
-      'stats.touches.handWater',
-      'stats.touches.hopperRefill',
-      'stats.touches.jamWhack',
-      'stats.waterDrawnMl',
-      'zones[].replantCooldown',
-    ]);
+    ).toEqual(UNFILLED_BY_DESIGN);
   });
 });

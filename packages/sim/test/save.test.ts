@@ -56,7 +56,9 @@ import {
   step,
   stepMany,
   worldTileIndex,
+  PUMP_RATE_ML_PER_MINUTE,
 } from '../src/index';
+import { UNFILLED_BY_DESIGN, containersFilledWorld, unfilledNumbers, worldDiff } from './goods';
 import fixture from './fixtures/saves/format-1.json';
 import fixture2 from './fixtures/saves/format-2.json';
 import fixture3 from './fixtures/saves/format-3.json';
@@ -80,6 +82,8 @@ import fixture19 from './fixtures/saves/format-19.json';
 import fixture20 from './fixtures/saves/format-20.json';
 import fixture21 from './fixtures/saves/format-21.json';
 import fixture22 from './fixtures/saves/format-22.json';
+import fixture22Well from './fixtures/saves/format-22-well.json';
+import fixture23 from './fixtures/saves/format-23.json';
 
 /** A short session with a machine bought, fed, and left mid-operation. */
 function playedWorld(): WorldState {
@@ -395,6 +399,26 @@ describe('reading a damaged save', () => {
 });
 
 describe('the permanent fixture set', () => {
+  // HASH LEDGER, item 140 (2026-08-18): **EVERY DIGEST IN THIS FILE MOVED AT ONCE, AND ALL OF
+  // THEM FOR ONE SHARED CAUSE.** The pond became an unlimited source, so `Reservoir` lost
+  // `levelMl`, `capacityMl` and `rechargeAccum`, and `hashState` LOST three `d.num` calls per
+  // reservoir. Every world has exactly one pond, so every world hashes three numbers shorter
+  // than it did yesterday — including format-1, which is the tell that this is the digest and
+  // not the dirt.
+  //
+  // Checked rather than argued, the way format 20 checked its own: with those three `d.num`
+  // calls held out of the OLD digest, nineteen of the twenty-one golden fixtures reproduce their
+  // NEW hashes exactly. The two that do not — `flavour-line` and `bottle-return` — replay the
+  // `Cheat` command, which unlocks every node in `TECH_NODES`, and the Artesian Well's node is
+  // gone. No fixture in THIS file cheats, and none of them contains a well, a pond below a
+  // quarter full, or a draw that came up short, so for these twenty-three the digest is the
+  // whole of it: the tick, the seed, the money and every machine came back unchanged.
+  //
+  // NOBODY IS REFUNDED HERE, AND THAT IS CORRECT. The 22 → 23 step pays out every built well,
+  // every boxed one and the research node — but the Artesian Well existed for a single day and
+  // every fixture in this directory predates it, so every `moneyCents` below is untouched. The
+  // refund path is proved by `format-23.json`, which was built to hold one of each.
+  //
   // HASH LEDGER, item 131 (2026-08-17): **FOUR OF THESE DIGESTS MOVED AND THE REST DID NOT, AND
   // WHICH FOUR IS THE MEASUREMENT.** The Washer gained a third recipe — used bottle → clean
   // bottle — and therefore a third HOPPER, and `hashState` writes `inputCounts.length` before it
@@ -457,12 +481,12 @@ describe('the permanent fixture set', () => {
 
     expect(restored.migration.fromVersion).toBe(1);
     expect(restored.migration.steps).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
     ]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(32096);
     expect(restored.state.worldSeed).toBe(20260812);
-    expect(hashState(restored.state)).toBe('079b0129');
+    expect(hashState(restored.state)).toBe('5534983a');
   });
 
   it('gives a migrated v0.1 world the factory fields at their empty defaults', () => {
@@ -477,14 +501,18 @@ describe('the permanent fixture set', () => {
     const kitchen = state.machines.find((machine) => machine.kind === MachineKind.ChipKitchen);
     expect(kitchen?.investedCents).toBe(10_000);
     expect(kitchen?.speedLevel).toBe(0);
-    // And the liquid layer's empty defaults, plus the one thing format 3 does NOT default:
-    // the pond arrives FULL. The water was always notionally there — v0.1 drew from an
-    // infinite supply — so a returning player must not find it drained by an update.
+    // And the liquid layer's empty defaults. Format 3 gave the pond a level and made a point of
+    // starting it FULL, because v0.1 had drawn from an infinite supply and a returning player
+    // must not find it drained by an update; format 23 went back to the infinite supply and took
+    // the level out again, so what a v0.1 world gets now is a pond with nothing in it to be
+    // wrong about.
     expect(state.pipes).toEqual([]);
     expect(state.networks).toEqual([]);
     expect(state.ceremonies).toEqual([]);
     expect(state.reservoirs).toHaveLength(1);
-    expect(state.reservoirs[0]!.levelMl).toBe(state.reservoirs[0]!.capacityMl);
+    expect(Object.keys(state.reservoirs[0]!).sort()).toEqual(
+      ['id', 'tileX', 'tileY', 'tilesHigh', 'tilesWide'].sort(),
+    );
     expect(state.machines.every((machine) => machine.network === 0)).toBe(true);
     expect(state.machines.every((machine) => machine.scanCursor === 0)).toBe(true);
 
@@ -529,11 +557,11 @@ describe('the permanent fixture set', () => {
 
     expect(restored.migration.fromVersion).toBe(2);
     expect(restored.migration.steps).toEqual([
-      2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
     ]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(29_100);
-    expect(hashState(restored.state)).toBe('1b5c04cc');
+    expect(hashState(restored.state)).toBe('f663bb53');
   });
 
   it('brings the factory back exactly as it was left', () => {
@@ -576,20 +604,23 @@ describe('the permanent fixture set', () => {
 
     expect(restored.migration.fromVersion).toBe(3);
     expect(restored.migration.steps).toEqual([
-      3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
     ]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(21_306);
-    expect(hashState(restored.state)).toBe('2ba57d08');
+    expect(hashState(restored.state)).toBe('37496bdb');
   });
 
   it('brings the plumbing back exactly as it was left', () => {
     const state = restoreWorld(fixture3).state;
 
     expect(state.reservoirs).toHaveLength(1);
-    // Drawn down and still recharging. A pond that came back full would mean the level was
-    // recomputed rather than restored, which is the one thing a save must never do.
-    expect(state.reservoirs[0]!.levelMl).toBeLessThan(state.reservoirs[0]!.capacityMl);
+    // This world was saved with its pond DRAWN DOWN AND STILL RECHARGING, and the assertion used
+    // to be that the level came back exactly as low as it was left. Format 23 drops the level
+    // rather than topping it up (item 140) — an unlimited pond has nothing to restore — so what
+    // is checked now is that the footprint survived the deletion unchanged.
+    expect(state.reservoirs[0]!.tilesWide).toBe(3);
+    expect(state.reservoirs[0]!.tilesHigh).toBe(3);
     expect(state.pipes).toHaveLength(17);
     expect(state.networks).toHaveLength(1);
     expect(state.player.intent).toBeNull();
@@ -634,12 +665,12 @@ describe('the permanent fixture set', () => {
 
     expect(restored.migration.fromVersion).toBe(4);
     expect(restored.migration.steps).toEqual([
-      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
     ]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(3300);
     expect(restored.state.worldSeed).toBe(90210);
-    expect(hashState(restored.state)).toBe('2ed50d56');
+    expect(hashState(restored.state)).toBe('02384b6b');
   });
 
   it('brings the errand back exactly as it was left', () => {
@@ -685,12 +716,12 @@ describe('the permanent fixture set', () => {
 
     expect(restored.migration.fromVersion).toBe(5);
     expect(restored.migration.steps).toEqual([
-      5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
     ]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(41_837);
     expect(restored.state.worldSeed).toBe(50505);
-    expect(hashState(restored.state)).toBe('ad7ecedf');
+    expect(hashState(restored.state)).toBe('be3b8e9a');
   });
 
   it('brings the browning basket and the maintenance tallies back as they were', () => {
@@ -737,12 +768,12 @@ describe('the permanent fixture set', () => {
 
     expect(restored.migration.fromVersion).toBe(6);
     expect(restored.migration.steps).toEqual([
-      6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
     ]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(42_400);
     expect(restored.state.worldSeed).toBe(60606);
-    expect(hashState(restored.state)).toBe('2ad81086');
+    expect(hashState(restored.state)).toBe('5e1d9b54');
   });
 
   it('brings every typed port back with its own liquid, level, and amber flag', () => {
@@ -790,12 +821,12 @@ describe('the permanent fixture set', () => {
 
     expect(restored.migration.fromVersion).toBe(7);
     expect(restored.migration.steps).toEqual([
-      7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
     ]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(48_792);
     expect(restored.state.worldSeed).toBe(24_680);
-    expect(hashState(restored.state)).toBe('6a38ff9f');
+    expect(hashState(restored.state)).toBe('ea13018a');
   });
 
   it('brings both boxed machines back with their own dials, condition, and invoice', () => {
@@ -869,12 +900,12 @@ describe('the permanent fixture set', () => {
 
     expect(restored.migration.fromVersion).toBe(8);
     expect(restored.migration.steps).toEqual([
-      8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
     ]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(6_721);
     expect(restored.state.worldSeed).toBe(480_480);
-    expect(hashState(restored.state)).toBe('6e894af9');
+    expect(hashState(restored.state)).toBe('cb773b08');
   });
 
   it('brings back the land, and the factory standing on the half that was bought', () => {
@@ -930,7 +961,9 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture9);
 
     expect(restored.migration.fromVersion).toBe(9);
-    expect(restored.migration.steps).toEqual([9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([
+      9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+    ]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(17_949);
     expect(restored.state.worldSeed).toBe(320_320);
@@ -938,7 +971,7 @@ describe('the permanent fixture set', () => {
     // clocks. This world holds ONE contract and no bots, so migration 20 -> 21 writes it a pair of
     // zeroes and the digest reads them; with the two `d.num` calls held out it reproduces 2fc2daeb
     // exactly, so every other hashed field is byte-identical and no behaviour moved.
-    expect(hashState(restored.state)).toBe('aac3b1d3');
+    expect(hashState(restored.state)).toBe('b3e02bfa');
   });
 
   // The 9 → 10 migration's whole claim is that a format-9 world had no junctions and had never
@@ -1002,13 +1035,13 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture10);
 
     expect(restored.migration.fromVersion).toBe(10);
-    expect(restored.migration.steps).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(22_929);
     expect(restored.state.worldSeed).toBe(320_320);
     // 0dec88c2 -> c5df63a8 (save format 21, item 115): one contract, two new zeroes, for the
     // reason format-9's note above spells out. Held out of the digest, it reproduces 0dec88c2.
-    expect(hashState(restored.state)).toBe('9f6945c7');
+    expect(hashState(restored.state)).toBe('50407528');
   });
 
   // NEVER EDIT THIS EXPECTATION AND NEVER REGENERATE THIS FIXTURE — the same rule as above.
@@ -1024,7 +1057,7 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture11);
 
     expect(restored.migration.fromVersion).toBe(11);
-    expect(restored.migration.steps).toEqual([11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(66_516);
     expect(restored.state.worldSeed).toBe(90_210);
@@ -1035,7 +1068,7 @@ describe('the permanent fixture set', () => {
     // and this world has one bot. Migration 20 -> 21 writes it a 0 — the same "no opinion" the
     // grandfathering everywhere else in this feature uses — and with the `d.num` held out the
     // world reproduces 62f605a5 exactly. The rescue story below is untouched.
-    expect(hashState(restored.state)).toBe('cd3f8e48');
+    expect(hashState(restored.state)).toBe('ad9287eb');
   });
 
   it('rescues the nine anonymous goods stranded on the format-11 dock — the item-083 guess', () => {
@@ -1083,11 +1116,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture12);
 
     expect(restored.migration.fromVersion).toBe(12);
-    expect(restored.migration.steps).toEqual([12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(11_000);
     expect(restored.state.worldSeed).toBe(812_812);
-    expect(hashState(restored.state)).toBe('bf85204e');
+    expect(hashState(restored.state)).toBe('577d4a4d');
   });
 
   it('brings back the empty can, the sales ledger, and the closed birth hour', () => {
@@ -1175,11 +1208,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture13);
 
     expect(restored.migration.fromVersion).toBe(13);
-    expect(restored.migration.steps).toEqual([13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(1_980);
     expect(restored.state.worldSeed).toBe(660_660);
-    expect(hashState(restored.state)).toBe('9c17bb7a');
+    expect(hashState(restored.state)).toBe('1ac28bcd');
   });
 
   it('gives a format-13 world a zero cheat counter — the truth, not a default', () => {
@@ -1207,11 +1240,11 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture14);
 
     expect(restored.migration.fromVersion).toBe(14);
-    expect(restored.migration.steps).toEqual([14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([14, 15, 16, 17, 18, 19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(700);
     expect(restored.state.worldSeed).toBe(750_750);
-    expect(hashState(restored.state)).toBe('780641fd');
+    expect(hashState(restored.state)).toBe('4eac7494');
   });
 
   it('brings back the cheated world exactly: the counter, the unlocks, the conjured money', () => {
@@ -1303,13 +1336,13 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture15);
 
     expect(restored.migration.fromVersion).toBe(15);
-    expect(restored.migration.steps).toEqual([15, 16, 17, 18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([15, 16, 17, 18, 19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(2_814);
     expect(restored.state.worldSeed).toBe(830_083);
     // 9f4e3b19 -> d45801e4 (save format 21, item 115): one bot, one new zero. Held out of the
     // digest it reproduces 9f4e3b19, so this is the field arriving rather than the world changing.
-    expect(hashState(restored.state)).toBe('10abd428');
+    expect(hashState(restored.state)).toBe('ec780ee1');
   });
 
   it('brings the shelf back with its name on it, and no hand in the ledger', () => {
@@ -1344,12 +1377,12 @@ describe('the permanent fixture set', () => {
     // machines and changes nothing — which is the claim worth pinning here, and
     // `format-16-parts.json` below is where the step is made to do actual work. 17 → 18 gives
     // every machine a `cargoFreshTicks` of 0 and changes nothing else, ever, by construction.
-    expect(restored.migration.steps).toEqual([16, 17, 18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([16, 17, 18, 19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(2_814);
     expect(restored.state.worldSeed).toBe(880_088);
     // 79200b5e -> 24430bc7 (save format 21, item 115): one bot, one new zero. Same proof as above.
-    expect(hashState(restored.state)).toBe('bf77fb15');
+    expect(hashState(restored.state)).toBe('4a32568a');
   });
 
   // NEVER EDIT THESE EXPECTATIONS AND NEVER REGENERATE THIS FIXTURE. `format-16-parts.json` is
@@ -1361,7 +1394,7 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture16Parts);
 
     expect(restored.migration.fromVersion).toBe(16);
-    expect(restored.migration.steps).toEqual([16, 17, 18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([16, 17, 18, 19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(4_421);
     expect(restored.state.worldSeed).toBe(160_090);
@@ -1424,14 +1457,14 @@ describe('the permanent fixture set', () => {
     expect(restored.migration.fromVersion).toBe(17);
     // It arrived current and stopped being so the same week: item 110 appended 17 → 18, which
     // gives this world's bay, dock and grinder a `cargoFreshTicks` of 0 apiece and nothing else.
-    expect(restored.migration.steps).toEqual([17, 18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([17, 18, 19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(18);
     expect(restored.state.worldSeed).toBe(170_090);
     // ced46777 -> 9a0358a1 (save format 21, item 115): TWO bots here — a repair drone and its
     // neighbour — so the digest gained two zeroes. Neither carries produce (a drone harvests
     // nothing), which is why the value written is a zero rather than a clock. Held out, ced46777.
-    expect(hashState(restored.state)).toBe('4cf35b94');
+    expect(hashState(restored.state)).toBe('af0d22f1');
   });
 
   it('brings back a drone mid-errand over a bay with nothing in it', () => {
@@ -1475,11 +1508,11 @@ describe('the permanent fixture set', () => {
     // One step now (item 111): 18 → 19 gives every machine a name for what is in its output
     // basket. Every machine in this world gets a 0, which `heldOutputItem` reads as "ask the
     // spec" — the same answer the old code gave — so the two boxes below behave identically.
-    expect(restored.migration.steps).toEqual([18, 19, 20, 21]);
+    expect(restored.migration.steps).toEqual([18, 19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(12_005);
     expect(restored.state.worldSeed).toBe(180_110);
-    expect(hashState(restored.state)).toBe('4b2d0d27');
+    expect(hashState(restored.state)).toBe('2603d642');
   });
 
   // NEVER EDIT THESE EXPECTATIONS AND NEVER REGENERATE THIS FIXTURE. format-19 is the first save
@@ -1496,11 +1529,11 @@ describe('the permanent fixture set', () => {
     // belt item the clock the goods inside them are running. Every one of them gets a 0, which
     // reads as "no clock" — this world is grandfathered exactly as a format-17 cellar was, and
     // heals on the next thing anybody puts in it.
-    expect(restored.migration.steps).toEqual([19, 20, 21]);
+    expect(restored.migration.steps).toEqual([19, 20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(661);
     expect(restored.state.worldSeed).toBe(190_111);
-    expect(hashState(restored.state)).toBe('6f25ed32');
+    expect(hashState(restored.state)).toBe('d782b9cf');
   });
 
   it('brings back two machines of one kind holding two different products', () => {
@@ -1525,7 +1558,7 @@ describe('the permanent fixture set', () => {
     expect(spicy.outputItem).toBe(before);
   });
 
-  // NEVER EDIT THESE EXPECTATIONS AND NEVER REGENERATE THIS FIXTURE. format-20 is the first save
+  // NEVER EDIT THIS FIXTURE, AND NEVER REGENERATE IT. format-20 is the first save
   // in which EVERY PLACE A GOOD CAN SIT KNOWS HOW OLD IT IS (item 112), recorded by
   // `scripts/record-format-20.ts`. Format 18 gave a container the clock its cargo runs on and item
   // 110's own verifier found within the hour that the bug had moved rather than died: a hopper, an
@@ -1538,16 +1571,18 @@ describe('the permanent fixture set', () => {
     const restored = restoreWorld(fixture20);
 
     expect(restored.migration.fromVersion).toBe(20);
-    expect(restored.migration.steps).toEqual([20, 21]);
+    expect(restored.migration.steps).toEqual([20, 21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(1_291);
     expect(restored.state.worldSeed).toBe(200_112);
-    // **THE HASH DOES NOT MOVE, AND THAT IS THE ASSERTION** (item 115). Migration 20 → 21 writes
-    // three new hashed fields — a route's two clocks and a bot's one — onto collections this world
-    // has none of: it holds no contracts and no Agri-Bots, so the digest walks two empty lists and
-    // reads nothing new. A world that gained a format and kept its hash is a migration that added
-    // a field rather than an opinion.
-    expect(hashState(restored.state)).toBe('24d7d3d8');
+    // 24d7d3d8 -> 5466204d (save format 23, item 140), and the loss of a lovely assertion. Until
+    // today this line read **THE HASH DOES NOT MOVE, AND THAT IS THE ASSERTION**: migration
+    // 20 → 21 wrote three new hashed fields onto collections this world has none of — no
+    // contracts, no Agri-Bots — so the digest walked two empty lists and read nothing new. A
+    // world that gained a format and kept its hash was a migration that added a field rather than
+    // an opinion. Format 23 does not have that shape: it takes three numbers OFF the one
+    // collection every world has, so nothing can sit this one out.
+    expect(hashState(restored.state)).toBe('5466204d');
   });
 
   // NEVER EDIT THESE EXPECTATIONS AND NEVER REGENERATE THIS FIXTURE. format-21 is the first save in
@@ -1557,15 +1592,78 @@ describe('the permanent fixture set', () => {
   // receipt; and a bot that cannot deliver, which holds its armful for as long as the jam lasts.
   // Every clock here is caught PART-SPENT except the lorry's, which is caught UNCHANGING, because
   // that is the fact rather than the absence of one.
-  it('loads format-21.json at the current version with no migration', () => {
+  it('migrates format-21.json up to the current version', () => {
     const restored = restoreWorld(fixture21);
 
     expect(restored.migration.fromVersion).toBe(21);
-    expect(restored.migration.steps).toEqual([21]);
+    expect(restored.migration.steps).toEqual([21, 22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.tick).toBe(1_943);
     expect(restored.state.worldSeed).toBe(200_115);
-    expect(hashState(restored.state)).toBe('292b1823');
+    expect(hashState(restored.state)).toBe('4c06772c');
+  });
+
+  // **THE REGRESSION TEST FOR ITEM 141, AND THE REASON IT IS THREE ROWS RATHER THAN TWO.** The
+  // 21 → 22 merge shipped naming four keys — `lifetimeCount`, `lifetimeCents`, `dawnCount`,
+  // `dawnCents` — that belong to the LIVE ledger and appear nowhere in a serialized row, so every
+  // fold added nothing and then dropped the row it had failed to fold in.
+  //
+  // What hid it for a day is the ASYMMETRY, which is why both shapes are driven here at once: a
+  // Day-Old row with NO fresh sibling takes the `push` branch, keeps every field, and has always
+  // been correct — so the case a person would check by hand was the one case that worked. Only a
+  // row WITH a sibling was eaten, and rows sort ascending, so the sibling is always already there.
+  //
+  // Built on the recorded format-21 payload rather than a hand-written one, so that everything
+  // around the ledger is real, and driven through `restoreWorld` rather than `MIGRATIONS[21]` so
+  // that the numbers are asserted where a player would see them: after 21 → 22 → 23, through the
+  // loader's own validation. THE FIXTURE ITSELF IS NOT TOUCHED — its `salesByItem` is empty and
+  // stays empty; this is a copy with a ledger written onto it.
+  it('folds a Day-Old sales row into its fresh sibling instead of eating it', () => {
+    const doctored = {
+      ...fixture21,
+      payload: {
+        ...fixture21.payload,
+        stats: {
+          ...fixture21.payload.stats,
+          salesByItem: [
+            // RussetPotato, the sibling that survives and must grow.
+            { cents: 2_000, centsAtDawn: 500, item: 2, units: 10, unitsAtDawn: 3 },
+            // DayOldPotato → folds into the row above.
+            { cents: 630, centsAtDawn: 90, item: 8, units: 7, unitsAtDawn: 1 },
+            // Compost, which has no successor at all: its row goes, because id 9 is not a good
+            // this build can name and the loader would refuse the save over it.
+            { cents: 400, centsAtDawn: 200, item: 9, units: 20, unitsAtDawn: 10 },
+            // DayOldChili with NO fresh sibling → re-pointed to ChiliPepper, every field intact.
+            { cents: 900, centsAtDawn: 300, item: 18, units: 4, unitsAtDawn: 2 },
+          ],
+        },
+      },
+    };
+
+    const restored = restoreWorld(doctored);
+    expect(restored.migration.steps).toEqual([21, 22]);
+
+    const sales = restored.state.stats.salesByItem;
+
+    // 1. **THE FOLD, TO THE UNIT AND THE CENT.** 10u + 7u and $20.00 + $6.30 — and the dawn pair
+    //    counted too, because a merge that got only the lifetime columns right would still hand
+    //    the player a Shift Report whose "today" line disagrees with its own total.
+    const russet = sales.find((row) => row.item === ItemId.RussetPotato)!;
+    expect(russet.units).toBe(17);
+    expect(russet.cents).toBe(2_630);
+    expect(russet.unitsAtDawn).toBe(4);
+    expect(russet.centsAtDawn).toBe(590);
+
+    // 2. **THE BRANCH THAT ALWAYS WORKED, PINNED SO IT KEEPS WORKING.**
+    const chili = sales.find((row) => row.item === ItemId.ChiliPepper)!;
+    expect(chili.units).toBe(4);
+    expect(chili.cents).toBe(900);
+    expect(chili.unitsAtDawn).toBe(2);
+    expect(chili.centsAtDawn).toBe(300);
+
+    // 3. Compost is gone, nothing else was invented, and the ledger is still sorted ascending —
+    //    the order the hash rests on.
+    expect(sales.map((row) => row.item)).toEqual([ItemId.RussetPotato, ItemId.ChiliPepper]);
   });
 
   // NEVER EDIT THESE EXPECTATIONS AND NEVER REGENERATE THIS FIXTURE. format-22 is the first save
@@ -1576,11 +1674,11 @@ describe('the permanent fixture set', () => {
   // The three beats are the facts a format-21 payload could not express, and every one of them is
   // caught AFTER a simulated day of world time — because a clock that has not been given time to
   // run proves nothing about whether it is gone.
-  it('loads format-22.json at the current version with no migration', () => {
+  it('migrates format-22.json up to the current version — one step, and no refund owed', () => {
     const restored = restoreWorld(fixture22);
 
     expect(restored.migration.fromVersion).toBe(22);
-    expect(restored.migration.steps).toEqual([]);
+    expect(restored.migration.steps).toEqual([22]);
     expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     expect(restored.state.worldSeed).toBe(200_124);
     expect(restored.state.tick).toBe(60_001);
@@ -1604,7 +1702,107 @@ describe('the permanent fixture set', () => {
       4,
     );
 
-    expect(hashState(restored.state)).toBe('9f3318e3');
+    expect(hashState(restored.state)).toBe('b9dc2ee4');
+  });
+
+  // NEVER EDIT THIS FIXTURE, AND NEVER REGENERATE IT — and this one you could not regenerate if
+  // you wanted to, which is the whole reason it exists. **`format-22-well.json` IS THE ONLY SAVE
+  // IN THIS DIRECTORY THAT NO CURRENT BUILD CAN WRITE.** The Artesian Well was released on
+  // 2026-08-17 and retired on 2026-08-18 (items 130 and 140), so it was ownable for one day and
+  // `format-22.json` — recorded during it — happens not to contain one. Rather than hand-write a
+  // format-22 payload and test the migration I imagined, this was recorded by
+  // `scripts/record-format-22-well.ts` running against commit `1fef820`, the last build that had
+  // the machine. That script is kept beside the fixture as provenance and is deliberately not
+  // compiled: it names three ids that no longer exist.
+  //
+  // It holds one of every place a well can hide, and every one of them at a DIFFERENT invoice,
+  // because the thing most likely to go wrong in a refund is paying list for something that cost
+  // more:
+  //
+  //   * a BARE well on the bank, at exactly the $600 it cost new;
+  //   * an UPGRADED well at $915 — the one a flat refund robs;
+  //   * two BOXED wells in one slot at $600 and $780, in canonical least-invested-first order;
+  //   * the `hydraulics-artesian-well` node, researched;
+  //   * and a pond drawn down to 6,040,000 of 20,000,000 ml with 700 in its recharge remainder,
+  //     so "the level is dropped" is visibly different from "the level is topped up".
+  it('migrates format-22-well.json, and buys back every well at what it actually cost', () => {
+    const restored = restoreWorld(fixture22Well);
+
+    expect(restored.migration.fromVersion).toBe(22);
+    expect(restored.migration.steps).toEqual([22]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(restored.state.worldSeed).toBe(200_140);
+    expect(restored.state.tick).toBe(400);
+
+    // 1. **THE MONEY, TO THE CENT.** $600 bare + $915 upgraded + $600 boxed + $780 boxed + $600
+    //    for the node, on top of the $50 the player had. A flat $600 five times would be $3,050
+    //    and would have quietly taken $445 off this player.
+    expect(restored.state.moneyCents).toBe(5_000 + 60_000 + 91_500 + 60_000 + 78_000 + 60_000);
+
+    // 2. **NOTHING NAMING A WELL SURVIVES**, in the world or in the bag or in the tech list —
+    //    and the sell bin that stood beside them is untouched, which is what says this removed
+    //    the wells rather than the machines.
+    expect(restored.state.machines.map((machine) => machine.kind)).toEqual([MachineKind.SellBin]);
+    expect(restored.state.inventory.map((slot) => slot.item)).toEqual([ItemId.PotatoSeed]);
+    expect(restored.state.unlocked).toEqual(['hydraulics-pumps']);
+
+    // 3. **THE POND IS NOT TOPPED UP; IT STOPS HAVING A LEVEL.** A migration that "filled it to
+    //    capacity" would be indistinguishable from this one on a full pond, which is exactly why
+    //    the fixture was recorded with a drawn-down one.
+    expect(restored.state.reservoirs).toHaveLength(1);
+    expect(Object.keys(restored.state.reservoirs[0]!).sort()).toEqual(
+      ['id', 'tileX', 'tileY', 'tilesHigh', 'tilesWide'].sort(),
+    );
+
+    // 4. And it is a world that runs. The pond it now draws on is unlimited, so this is also the
+    //    smallest possible statement of the item: a save that knew about scarcity loads into a
+    //    world that does not.
+    stepMany(restored.state, 200);
+    expect(restored.state.tick).toBe(600);
+  });
+
+  // NEVER EDIT THESE EXPECTATIONS AND NEVER REGENERATE THIS FIXTURE. format-23 is the first save
+  // written after THE POND STOPPED BEING A STOCK (item 140), recorded by
+  // `scripts/record-format-23.ts`. Format 3 gave a reservoir a level, a capacity and a recharge
+  // accumulator and every format for twenty releases carried all three; this one takes them out.
+  //
+  // The beats are the facts a format-22 payload could not express, and the middle one is the item
+  // in a single number: this world has drunk 25,000,000 ml — a quarter more than the entire
+  // capacity of the pond it is standing next to — and the pond is still answering in full.
+  it('loads format-23.json at the current version with no migration', () => {
+    const restored = restoreWorld(fixture23);
+
+    expect(restored.migration.fromVersion).toBe(23);
+    expect(restored.migration.steps).toEqual([]);
+    expect(restored.envelope.formatVersion).toBe(CURRENT_FORMAT_VERSION);
+    expect(restored.state.worldSeed).toBe(200_143);
+    expect(restored.state.tick).toBe(50_000);
+
+    // 1. A POND WITH NOTHING IN IT TO RECORD. The absence is the point — the fields are gone from
+    //    the payload rather than zeroed in it.
+    expect(restored.state.reservoirs).toHaveLength(1);
+    expect(Object.keys(restored.state.reservoirs[0]!).sort()).toEqual(
+      ['id', 'tileX', 'tileY', 'tilesHigh', 'tilesWide'].sort(),
+    );
+
+    // 2. **MORE WATER DRAWN THAN THE OLD POND COULD EVER HAVE HELD.** 20,000,000 ml was a
+    //    format-22 pond, brim to bed. This one has taken 25,000,000 and is still going.
+    expect(restored.state.stats.waterDrawnMl).toBe(25_000_000);
+
+    // 3. THE INSTANT THAT USED TO BE THE GAME'S WORST: a spent tank and an amber head, with the
+    //    pump at its FULL RATING regardless. Under format 22 this world had a drained pond and a
+    //    pump that was halved and then sipping; the tank is empty here because demand outruns
+    //    600,000 ml/min, which is a fact about the pump rather than about the water.
+    const pump = restored.state.machines.find((m) => m.kind === MachineKind.Pump)!;
+    const tank = restored.state.machines.find((m) => m.kind === MachineKind.Tank)!;
+    const head = restored.state.machines.find((m) => m.kind === MachineKind.PipedSprinkler)!;
+    expect(tank.tankMl).toBe(0);
+    expect(head.opCount).toBe(341);
+
+    // And it keeps its word after a round trip: one more tick, and the pump is still flat out.
+    stepMany(restored.state, 1);
+    expect(pump.flowMlPerMinute).toBe(PUMP_RATE_ML_PER_MINUTE);
+    expect(restored.state.stats.waterDrawnMl).toBe(25_000_000 + 500);
   });
 
   it('brings back both shelves, each with its own name on it', () => {
@@ -1752,5 +1950,45 @@ describe('the permanent fixture set', () => {
 
     expect(state.player.intent).toBeNull();
     expect(state.field.filter((tile) => tile.crop === CropId.RussetPotato).length).toBe(before - 1);
+  });
+});
+
+// --- THE NAME-BLIND GUARDS, IN THEIR SECOND HOME (item 123) -----------------------------------
+//
+// **THE TWO GUARDS ABOVE ALL NAME A FIELD. THESE TWO NAME NONE**, and that is the whole of their
+// value: they are what covers the field nobody has thought of yet — a count, a dial, a cursor, a
+// clock — on the day it is added and before anybody has written a test for it.
+//
+// Which is exactly why they must not live in one place. Item 119 spread the clock scenarios across
+// five files so that deleting any one lost nothing; these two were never spread, and until item 123
+// both assertions were in `move-census-live.test.ts` alone. Deleting that file would have taken the
+// entire name-blind layer with it, silently, because a guard against unknown fields cannot be
+// missed by anyone reading a list of known ones.
+//
+// So they run here too, over the same shared fixture and the same shared excused list — one list,
+// two homes — and `move-census.test.ts` counts the homes and goes red the day there is one.
+//
+// It belongs in this file on its own merits, not merely for the redundancy: the widest edge in
+// the game is `toPayload`, and this is the file about `toPayload`.
+
+describe('the save round trip, with no field named', () => {
+  it('is structurally identical, every leaf', () => {
+    const state = containersFilledWorld(12_400);
+    // The trace is handed back rather than excepted: it is stored outside the payload by design,
+    // so passing it makes the claim total instead of nearly total. There is no exception list
+    // here at all, and that is the point.
+    const diff = worldDiff(state, deserialize(serialize(state), state.trace));
+    expect(diff.slice(0, 12), `a save/load changed ${String(diff.length)} fields`).toEqual([]);
+  });
+
+  it('leaves no number unfilled that nobody has excused', () => {
+    // A field left at 0 round-trips as 0 whether it is carried or dropped, so the diff above is
+    // blind to anything the fixture never fills. This is the half that fixes that, and it never
+    // looks at a name: every number whose every occurrence is zero has to be filled in the fixture
+    // or written into `UNFILLED_BY_DESIGN` with a reason.
+    expect(
+      unfilledNumbers(containersFilledWorld(12_401)),
+      'a number this fixture never fills — fill it, or excuse it in goods.ts',
+    ).toEqual(UNFILLED_BY_DESIGN);
   });
 });

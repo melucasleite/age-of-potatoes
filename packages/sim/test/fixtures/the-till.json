@@ -3,7 +3,7 @@
   "description": "The till tool (item 066): a 4×1 strip of grass north of the starting field is broken in one drag, one of the new tiles is planted, watered on the 8-pour can, and harvested exactly as an original field tile would be, an empty neighbour is un-tilled back to grass, and the same position is tilled again — coming back with the identical soil and fertility, because the roll-once ledger remembers every position ever broken. Pins the keyed farmland collection, the position-keyed soil roll, and the TillTile command in both modes.",
   "seed": 660660,
   "ticks": 2203,
-  "expectedHash": "3a2baa09",
+  "expectedHash": "f657f02a",
   "commands": [
     {
       "tick": 0,

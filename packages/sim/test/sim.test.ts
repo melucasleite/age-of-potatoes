@@ -115,7 +115,15 @@ describe('determinism', () => {
     // EXACTLY. So nothing any of them does was altered — no fixture runs long enough for a
     // clock to expire, and every remaining hashed byte, `stacks[].spoilAtTick` included, is
     // identical. The hash moved because the digest did.
-    expect(hashState(runScript(1234, 1000))).toBe('0709cd8a');
+    //
+    // 0709cd8a -> dc4bb515 (save format 23, item 140): the digest LOST three `d.num` calls per
+    // reservoir — `levelMl`, `capacityMl` and `rechargeAccum` — because an unlimited pond has no
+    // level to record. Shape again, and proved the same way: with those three held out of the
+    // OLD digest, this script and nineteen of the twenty-one golden fixtures reproduce their new
+    // hashes exactly. (The two that do not, `flavour-line` and `bottle-return`, replay `Cheat`,
+    // which unlocks every node in `TECH_NODES` — and there is one fewer node.) This script has
+    // no pump, so it never drew a millilitre either way.
+    expect(hashState(runScript(1234, 1000))).toBe('dc4bb515');
   });
 
   it('gives different seeds different worlds', () => {

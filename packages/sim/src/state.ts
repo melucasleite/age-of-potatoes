@@ -42,7 +42,6 @@ import {
   PIPE_PRICE_CENTS_PER_TILE,
   POND_TILES_HIGH,
   POND_TILES_WIDE,
-  RESERVOIR_CAPACITY_ML,
   STARTING_MONEY_CENTS,
   STARTING_PARCEL,
   STARTING_SEEDS,
@@ -429,8 +428,9 @@ export interface CropTile {
    * Russet drains 1 a tick — so clay would drain `divFloor(1 × 700, 1000)` = **zero**, forever,
    * and a clay tile would never dry out at all. The remainder accrues here and whole units are
    * spent, which is the same integer accumulator `PlayerState.moveAccum`, `Belt.moveAccum` and
-   * `Reservoir.rechargeAccum` all use, and for the same reason: a rate that does not divide
-   * evenly is exact in an accumulator and a lie anywhere else.
+   * `PipeNetwork.supplyAccum` all use, and for the same reason: a rate that does not divide
+   * evenly is exact in an accumulator and a lie anywhere else. (`Reservoir.rechargeAccum` was
+   * the fourth until item 140, when a pond stopped having anything to accrue.)
    */
   moistureAccum: number;
   /**
@@ -848,12 +848,14 @@ export interface Bot {
 }
 
 /**
- * A body of water with a countable amount in it.
+ * A body of water. **GEOMETRY AND AN ID, AND NOTHING ELSE** (item 140).
  *
- * Plan §4: "~10,000 units recharging ~20 u/min ... pumps halve below 25% and sip at recharge
- * rate when empty — **reservoirs always recover**." The level is the whole point: it falls
- * when drawn from, rises when left alone, and the shoreline moves with it, so overdraw is
- * telegraphed in the world rather than in a panel.
+ * It used to carry a level, a capacity and a recharge accumulator, and the level was the whole
+ * point: it fell when drawn from, rose when left alone, and the shoreline moved with it. The
+ * owner ruled the pond unlimited, so all three described a quantity that cannot change and are
+ * gone. What a reservoir answers now is *where the water is* — for adjacency, for reach, for the
+ * movement layer's "nobody walks on water", and for the renderer's outline — and how much a pump
+ * may draw is decided entirely by the pump.
  */
 export interface Reservoir {
   id: number;
@@ -862,15 +864,6 @@ export interface Reservoir {
   tileY: number;
   tilesWide: number;
   tilesHigh: number;
-  /** Millilitres in it now. Floors at zero; `water.ts` is the only thing that moves it. */
-  levelMl: number;
-  capacityMl: number;
-  /**
-   * Recharge remainder, in millilitre-ticks. 40,000 ml a minute is 33⅓ ml a tick, so this
-   * accrues and spends whole millilitres — the same integer accumulator the player's movement
-   * uses, and for the same reason: rounding a rate is a float wearing a disguise.
-   */
-  rechargeAccum: number;
 }
 
 /**
@@ -900,7 +893,11 @@ export interface Pipe {
 export interface PipeNetwork {
   id: number;
   liquid: LiquidId;
-  /** The pump-rate remainder, in millilitre-ticks. See `Reservoir.rechargeAccum`. */
+  /**
+   * The pump-rate remainder, in millilitre-ticks. **THE LAST OF THE WATER ACCUMULATORS** —
+   * `Reservoir.rechargeAccum` was the other one until item 140 made the pond unlimited, so this
+   * is now the only place a millilitre-per-minute rate is carried between ticks.
+   */
   supplyAccum: number;
   /** The round-robin rotation. Advances one step every tick the network is over-demanded. */
   rrOffset: number;
@@ -1406,7 +1403,7 @@ export function spawnMachine(
   return machine;
 }
 
-/** Put a body of water on the map. Full to start; the level is a fact from here on. */
+/** Put a body of water on the map. There is nothing to fill: a pond is a footprint. */
 export function spawnReservoir(
   state: WorldState,
   tileX: number,
@@ -1420,9 +1417,6 @@ export function spawnReservoir(
     tileY,
     tilesWide,
     tilesHigh,
-    levelMl: RESERVOIR_CAPACITY_ML,
-    capacityMl: RESERVOIR_CAPACITY_ML,
-    rechargeAccum: 0,
   };
   state.nextReservoirId += 1;
   state.reservoirs.push(reservoir);

@@ -15,6 +15,7 @@
 // would be the one path in this directory that knowingly walks away from unsaved play.
 
 import { releaseWorldLease } from './lease';
+import { stopPersistenceWatch } from './persist';
 
 /**
  * What the exit needs from the running game. Deliberately three closures rather than the
@@ -71,6 +72,10 @@ export async function performExit(deps: ExitDeps, leave: () => void): Promise<bo
   // unsaved play was still in memory would open the door to the exact second writer this
   // whole mechanism exists to keep out.
   releaseWorldLease();
+  // Stop the persistence watch on the way out ([[041]]), for the same reason the lease is
+  // handed back: the front door is not a world, and a timer left running behind it would be
+  // warning nobody about nothing. `bootWorld` starts a fresh one on the way back in.
+  stopPersistenceWatch();
   leave();
   return true;
 }

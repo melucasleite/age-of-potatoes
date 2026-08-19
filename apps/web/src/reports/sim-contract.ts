@@ -132,7 +132,11 @@ export interface HourBucketView {
   readonly waterMl: number;
   readonly itemsSold: number;
   readonly ticks: number;
-  /** Permille of production wasted. Entropy release; expect `-1` for "not measured". */
+  /**
+   * Permille of this hour's machine throughput destroyed, or −1 when the hour had no
+   * throughput at all. Real and landed: `tick.ts` counts `inputsWastedByMachine`, `stats.ts`
+   * telescopes it per hour, and `view.ts` takes the ratio.
+   */
   readonly wastePermille: number;
 }
 
@@ -150,7 +154,13 @@ export type ExtendedWorldView = WorldView & {
     readonly lifetimeSpentCents?: number;
     readonly salesByItem?: readonly ItemSaleView[];
     readonly hours?: readonly HourBucketView[];
-    readonly wastePermille?: number;
+    // There was a `wastePermille?: number` here, read by a `readWastePermille()` that this
+    // file also owned. `StatsView` never had that field, so the read returned `undefined`
+    // forever and the Shift Report's Waste row said "not yet measured" for a system that
+    // had already shipped. WIDENING IS NOT FREE: an optional field costs nothing to declare
+    // and, when the sim never grows it, silently pins a row to its absent state with no
+    // type error and no test to fail. Waste is real and is measured PER HOUR — see
+    // `HourBucketView.wastePermille` above, which is what the row reads now.
   };
 };
 
@@ -184,17 +194,6 @@ export function readSalesByItem(view: WorldView): readonly ItemSaleView[] | null
 export function readHourBuckets(view: WorldView): readonly HourBucketView[] | null {
   const hours = (view as ExtendedWorldView).stats.hours;
   return Array.isArray(hours) ? hours : null;
-}
-
-/**
- * Waste, in permille, or −1 for "the system that measures this does not exist yet".
- *
- * There was a `readSpoilagePermille` beside this until [[124]]; spoilage is not a pending
- * system any more, it is a deleted one, so the read went with the row it fed.
- */
-export function readWastePermille(view: WorldView): number {
-  const value = (view as ExtendedWorldView).stats.wastePermille;
-  return typeof value === 'number' ? value : -1;
 }
 
 // --- the commands this UI will enqueue ----------------------------------------------

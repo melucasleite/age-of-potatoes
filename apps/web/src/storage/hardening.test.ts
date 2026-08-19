@@ -34,6 +34,7 @@ import {
   serverNoticeSnapshot,
   subscribeNotices,
 } from './notices';
+import { persistenceWatchRunning, startPersistenceWatch, stopPersistenceWatch } from './persist';
 import { StorageFullError, isQuotaError, storageFullMessage, withQuotaRetry } from './quota';
 import { describeError, fingerprintRecord } from './quarantine';
 
@@ -305,5 +306,81 @@ describe('quarantine bookkeeping', () => {
     });
     expect(describeError('just a string').name).toBe('UnknownError');
     expect(describeError(undefined).message).toBe('undefined');
+  });
+});
+
+// The persistence revocation watch ([[041]] follow-up).
+//
+// SAME REASON AS EVERYTHING ELSE IN THIS FILE: every way this can be wrong is invisible. A
+// watch that never starts, or one that starts and never fires, looks exactly like a browser
+// that simply never revoked — which is the overwhelmingly common case, so nothing on screen
+// would ever contradict it. The two failures worth pinning are the ones with teeth: a timer
+// that stacks (two boots, two timers, two cards) and a fire that repeats (a card the player
+// dismisses and that comes back every five minutes for the rest of the session).
+describe('the persistence revocation watch', () => {
+  const granted = { supported: true, persisted: true, alreadyGranted: true };
+  const denied = { supported: true, persisted: false, alreadyGranted: false };
+
+  let answer = true;
+  const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 40));
+
+  beforeEach(() => {
+    answer = true;
+    stopPersistenceWatch();
+    // Node has a `navigator`, but no `navigator.storage`. Give it one that lies on command.
+    Object.defineProperty(globalThis.navigator, 'storage', {
+      configurable: true,
+      value: { persisted: () => Promise.resolve(answer) },
+    });
+  });
+
+  it('does not watch a browser that never granted persistence', () => {
+    startPersistenceWatch(denied, () => {}, 5);
+    expect(persistenceWatchRunning()).toBe(false);
+  });
+
+  it('stays quiet for as long as the promise holds', async () => {
+    let fired = 0;
+    startPersistenceWatch(granted, () => void fired++, 5);
+    expect(persistenceWatchRunning()).toBe(true);
+    await settle();
+    expect(fired).toBe(0);
+    expect(persistenceWatchRunning()).toBe(true);
+  });
+
+  it('fires exactly once when the promise is withdrawn, then stops', async () => {
+    let fired = 0;
+    startPersistenceWatch(granted, () => void fired++, 5);
+    answer = false;
+    await settle();
+    expect(fired).toBe(1);
+    expect(persistenceWatchRunning()).toBe(false);
+    // The news does not get truer by being repeated.
+    await settle();
+    expect(fired).toBe(1);
+  });
+
+  it('replaces its timer rather than stacking one per call', async () => {
+    let fired = 0;
+    startPersistenceWatch(granted, () => void fired++, 5);
+    startPersistenceWatch(granted, () => void fired++, 5);
+    startPersistenceWatch(granted, () => void fired++, 5);
+    answer = false;
+    await settle();
+    expect(fired).toBe(1);
+  });
+
+  it('treats a browser that will not answer as one that has not revoked', async () => {
+    let fired = 0;
+    Object.defineProperty(globalThis.navigator, 'storage', {
+      configurable: true,
+      value: {
+        persisted: () => Promise.reject(new Error('the browser declines to say')),
+      },
+    });
+    startPersistenceWatch(granted, () => void fired++, 5);
+    await settle();
+    expect(fired).toBe(0);
+    expect(persistenceWatchRunning()).toBe(true);
   });
 });

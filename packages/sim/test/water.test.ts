@@ -31,19 +31,12 @@ import {
   MachineKind,
   POND_ORIGIN_X,
   POND_ORIGIN_Y,
+  POND_TILES_WIDE,
   PIPE_MAX_PATH_TILES,
   PUMP_RATE_ML_PER_MINUTE,
-  RESERVOIR_CAPACITY_ML,
-  RESERVOIR_LOW_PERMILLE,
-  RESERVOIR_RECHARGE_ML_PER_MINUTE,
-  ReservoirThrottle,
   MachineRole,
   FIELD_ORIGIN_X,
   FIELD_ORIGIN_Y,
-  WELL_MAX_PER_RESERVOIR,
-  WELL_RECHARGE_ML_PER_MINUTE,
-  reservoirRechargeMlPerMinute,
-  wellsOnReservoir,
   SPRINKLER_CHARGES_MAX,
   SPRINKLER_CHARGE_ML,
   SPRINKLER_PATCH_TILES,
@@ -63,7 +56,6 @@ import {
   pipePathRefusal,
   pumpSupplyMlPerMinute,
   rebuildNetworks,
-  reservoirThrottle,
   spawnBelt,
   spawnGrabber,
   spawnMachine,
@@ -158,106 +150,130 @@ function pipedHeadWorld(
 // --- the reservoir ------------------------------------------------------------------
 
 describe('the reservoir', () => {
-  it('starts every world with a full pond', () => {
+  it('starts every world with a pond, and there is nothing in it to count', () => {
+    // A footprint and an id (item 140). `levelMl`, `capacityMl` and `rechargeAccum` are gone
+    // from the record entirely — not pinned at a maximum, which would have been a number with
+    // one possible value sitting in the save file and the hash forever.
     const state = createWorld(1);
     expect(state.reservoirs).toHaveLength(1);
-    expect(pond(state).levelMl).toBe(RESERVOIR_CAPACITY_ML);
-    expect(pond(state).capacityMl).toBe(RESERVOIR_CAPACITY_ML);
+    expect(pond(state).tileX).toBe(POND_ORIGIN_X);
+    expect(pond(state).tileY).toBe(POND_ORIGIN_Y);
+    expect(Object.keys(pond(state)).sort()).toEqual(
+      ['id', 'tileX', 'tileY', 'tilesHigh', 'tilesWide'].sort(),
+    );
   });
 
-  it('recharges at exactly the rated rate over a minute, remainder and all', () => {
-    // 40,000 ml a minute is 33⅓ ml a tick. The accumulator is the whole point: a rate that
-    // was divided instead of accrued would make the pond permanently ~1% wrong.
-    const state = createWorld(2);
-    pond(state).levelMl = 0;
-    stepMany(state, TICKS_PER_MINUTE);
-    expect(pond(state).levelMl).toBe(RESERVOIR_RECHARGE_ML_PER_MINUTE);
-  });
-
-  it('never lets a level go negative, however hard it is drawn from', () => {
+  it('GRANTS ANY DRAW IN FULL, however large, and books every millilitre of it', () => {
+    // The old `takeWater` handed back `min(request, level)`. There is no level, so the only
+    // answer left is the whole request — and the meter still moves by exactly that.
     const state = createWorld(3);
-    pond(state).levelMl = 1_000;
-    const granted = takeWater(state, pond(state), 5_000_000, WaterDraw.Metered);
-    expect(granted).toBe(1_000);
-    expect(pond(state).levelMl).toBe(0);
+    const granted = takeWater(state, pond(state), 5_000_000_000, WaterDraw.Metered);
+    expect(granted).toBe(5_000_000_000);
+    expect(state.stats.waterDrawnMl).toBe(5_000_000_000);
   });
 
-  it('ALWAYS RECOVERS when left alone — verified by ticking, not by reading a constant', () => {
-    // Plan §4's anti-softlock guarantee. Not a balance number.
+  it('CANNOT BE DRAINED: a thousand full draws leave the next one just as full', () => {
+    // The acceptance criterion, stated as an experiment rather than as a field read. Each of
+    // these would have emptied the old pond twice over.
     const state = createWorld(4);
-    pond(state).levelMl = 0;
-    stepMany(state, 10_000);
-    expect(pond(state).levelMl).toBeGreaterThan(0);
-
-    // And all the way back to full, given long enough. 20,000,000 ml at 40,000 a minute is
-    // 500 minutes of active play — so this steps the arithmetic rather than the clock.
-    pond(state).levelMl = RESERVOIR_CAPACITY_ML - 100_000;
-    stepMany(state, 3 * TICKS_PER_MINUTE);
-    expect(pond(state).levelMl).toBe(RESERVOIR_CAPACITY_ML - 100_000 + 120_000 - 20_000);
+    for (let i = 0; i < 1_000; i++) {
+      expect(takeWater(state, pond(state), 40_000_000, WaterDraw.Metered)).toBe(40_000_000);
+    }
+    expect(state.stats.waterDrawnMl).toBe(1_000 * 40_000_000);
   });
 
-  it('never overfills past capacity', () => {
-    const state = createWorld(5);
-    stepMany(state, 5_000);
-    expect(pond(state).levelMl).toBe(RESERVOIR_CAPACITY_ML);
+  it('is the SOURCE that is unlimited and the PUMP that is not — item 140\u2019s ruling', () => {
+    // Infinite source, finite throughput. A pump on a bank draws its rating, every tick,
+    // forever: no 25% band, no half rate, no sip. A pump on dry land draws nothing, which is
+    // the one short answer `takeWater` has left.
+    const reservoir = pond(createWorld(6));
+    expect(pumpSupplyMlPerMinute(reservoir, PUMP_RATE_ML_PER_MINUTE)).toBe(PUMP_RATE_ML_PER_MINUTE);
+    expect(pumpSupplyMlPerMinute(null, PUMP_RATE_ML_PER_MINUTE)).toBe(0);
   });
 
-  it('halves a pump below 25% and sips at the recharge rate when empty', () => {
-    // Plan §4, exactly: "pumps halve below 25% and sip at recharge rate when empty".
-    const state = createWorld(6);
-    const reservoir = pond(state);
+  it('a pump that is not on a bank supplies its network NOTHING, end to end', () => {
+    // ────────────────────────────────────────────────────────────────────────────────────
+    //  THE ONLY SHORT ANSWER LEFT IN THE WHOLE WATER SYSTEM, and therefore the only thing
+    //  still standing between an unlimited pond and a pump that mints water out of dry land.
+    //  Placement refuses this build (`BuildRefusal.NoWaterSource`) and a hand-edited save can
+    //  still present it, which is the same reason `wellsOnReservoir` used to clamp.
+    //
+    //  **THE RULE IS STATED TWICE AND THIS TEST GUARDS THE PAIR**, which was measured rather
+    //  than assumed. `planNetwork` asks `pumpSupplyMlPerMinute`, which answers 0 without a
+    //  reservoir; `runNetwork` then asks `takeWater`, which answers 0 for a metered draw
+    //  without one. Break EITHER on its own and this test still passes — the other one holds
+    //  the line, and the unit test beside it is what catches the break. Break BOTH and this
+    //  tank fills at 500 ml a tick out of dry ground. Verified by doing all three.
+    // ────────────────────────────────────────────────────────────────────────────────────
+    const state = createWorld(10);
+    state.unlocked = [TechId.Pumps];
+    state.moneyCents = 10_000_000;
 
-    reservoir.levelMl = RESERVOIR_CAPACITY_ML;
-    expect(reservoirThrottle(reservoir)).toBe(ReservoirThrottle.Full);
-    expect(
-      pumpSupplyMlPerMinute(reservoir, PUMP_RATE_ML_PER_MINUTE, RESERVOIR_RECHARGE_ML_PER_MINUTE),
-    ).toBe(PUMP_RATE_ML_PER_MINUTE);
+    // North-west corner, as far from the pond as the lot goes.
+    spawnMachine(state, MachineKind.Pump, 1, 1)!;
+    for (let x = 2; x <= 4; x++) spawnPipe(state, x, 1, LiquidId.Water);
+    const tank = spawnMachine(state, MachineKind.Tank, 5, 1)!;
+    rebuildNetworks(state);
+    tank.tankMl = 0;
 
-    // One millilitre below the 25% line.
-    reservoir.levelMl = (RESERVOIR_CAPACITY_ML * RESERVOIR_LOW_PERMILLE) / 1000 - 1;
-    expect(reservoirThrottle(reservoir)).toBe(ReservoirThrottle.Half);
-    expect(
-      pumpSupplyMlPerMinute(reservoir, PUMP_RATE_ML_PER_MINUTE, RESERVOIR_RECHARGE_ML_PER_MINUTE),
-    ).toBe(PUMP_RATE_ML_PER_MINUTE / 2);
-
-    reservoir.levelMl = 0;
-    expect(reservoirThrottle(reservoir)).toBe(ReservoirThrottle.Sip);
-    expect(
-      pumpSupplyMlPerMinute(reservoir, PUMP_RATE_ML_PER_MINUTE, RESERVOIR_RECHARGE_ML_PER_MINUTE),
-    ).toBe(RESERVOIR_RECHARGE_ML_PER_MINUTE);
-  });
-
-  it('holds a dry pond at the sip rather than stopping the pump dead', () => {
-    const { state } = plumbedWorld(7);
-    pond(state).levelMl = 0;
-    const before = state.stats.waterDrawnMl;
     stepMany(state, TICKS_PER_MINUTE);
-
-    // A pump at an empty pond is slow, never dead: over a minute it moves roughly what the
-    // pond made, and the level never goes below zero on the way.
-    expect(state.stats.waterDrawnMl - before).toBeGreaterThan(0);
-    expect(state.stats.waterDrawnMl - before).toBeLessThanOrEqual(RESERVOIR_RECHARGE_ML_PER_MINUTE);
-    expect(pond(state).levelMl).toBeGreaterThanOrEqual(0);
+    expect(tank.tankMl, 'water arrived from dry land').toBe(0);
+    expect(state.stats.waterDrawnMl).toBe(0);
   });
 
-  it('does not recharge while the tab is closed, because time does not pass', () => {
-    // Nothing in this package reads a clock, so "ten minutes away from the keyboard" is
-    // simply zero ticks. This asserts the property rather than the absence of `Date`.
-    const state = createWorld(8);
-    pond(state).levelMl = 500;
-    const before = hashState(state);
-    expect(hashState(state)).toBe(before);
-    expect(pond(state).levelMl).toBe(500);
+  it('gives a METERED draw nothing where there is no pond, and a SHORE draw everything', () => {
+    // All that is left of `WaterDraw`, and it is the deeper half of §4\u2019s anti-softlock
+    // clause: a hose needs a source and a hand does not. A pump that is not on a bank —
+    // refused at placement, still reachable by a hand-edited save — must not mint free water.
+    const state = createWorld(9);
+    expect(takeWater(state, null, 2_000, WaterDraw.Metered)).toBe(0);
+    expect(state.stats.waterDrawnMl).toBe(0);
+    expect(takeWater(state, null, 2_000, WaterDraw.Shore)).toBe(2_000);
+    expect(state.stats.waterDrawnMl).toBe(2_000);
+  });
+
+  it('WATERS A FACTORY INDEFINITELY: the pump runs flat out for twenty minutes', () => {
+    // ────────────────────────────────────────────────────────────────────────────────────
+    //  THE ACCEPTANCE CRITERION, MEASURED (item 140). `plumbedWorld` is three consumers on one
+    //  pump — the build whose header records that it is PERMANENTLY STARVED, so its network
+    //  asks for every millilitre the pump can give on every single tick.
+    //
+    //  Under format 22 this run was capped by the pond: 24,000 ticks is 20 minutes, and a pond
+    //  that made 40,000 ml/min could yield at most 800,000 ml plus its 20,000,000 ml buffer,
+    //  after which every pump on it halved and then sipped. What it draws now is its rating
+    //  times the clock, exactly, with no term for the pond in it at all — which is another way
+    //  of saying the pond is no longer part of the arithmetic.
+    // ────────────────────────────────────────────────────────────────────────────────────
+    const { state, pump } = plumbedWorld(7);
+    for (const machine of state.machines) machine.tankMl = 0;
+    const before = state.stats.waterDrawnMl;
+
+    const ticks = 24_000;
+    stepMany(state, ticks);
+
+    const perTick = PUMP_RATE_ML_PER_MINUTE / TICKS_PER_MINUTE;
+    expect(state.stats.waterDrawnMl - before).toBe(ticks * perTick);
+    // And it is still at full rate on the last tick, not merely on average across the run.
+    expect(pump.flowMlPerMinute).toBe(PUMP_RATE_ML_PER_MINUTE);
+  });
+
+  it('looks exactly the same after being drawn from as it did before', () => {
+    // "Nothing here reads a clock" used to be the interesting half of this; now the pond has
+    // no state at all, so the assertion is the stronger one: a hard-worked world and an idle
+    // one have identical ponds, byte for byte.
+    const { state } = plumbedWorld(8);
+    const fresh = JSON.stringify(pond(createWorld(8)));
+    stepMany(state, 5_000);
+    expect(JSON.stringify(pond(state))).toBe(fresh);
   });
 });
 
 // --- the watering can ---------------------------------------------------------------
 
 describe('the watering can', () => {
-  it('ALWAYS FILLS, at any shore, at any level, including empty', () => {
+  it('ALWAYS FILLS, at any shore — and now there is no "any level" left to qualify it', () => {
     // Plan §4's other anti-softlock guarantee: hand-scale farming can never be water-starved.
     const state = createWorld(11);
-    pond(state).levelMl = 0;
     standOn(state, 6, 6);
 
     run(state, [{ type: 'WaterTile', tileX: 6, tileY: 6 }]);
@@ -266,19 +282,15 @@ describe('the watering can', () => {
     expect(tileAt(state, 6, 6)!.moisture).toBeGreaterThanOrEqual(MOISTURE_MAX - 1);
   });
 
-  it('counts the refill draw in full even when the pond cannot cover it', () => {
-    // Since item 009's ruling the water leaves the pond at the REFILL, not the pour — one
-    // dip of what the can actually takes, through the one accounting path. An empty pond
-    // still fills the can (Shore mode never fails) and the draw is still counted in full.
+  it('counts the refill draw in full, at the dip, through the one accounting path', () => {
+    // Since item 009's ruling the water leaves the pond at the REFILL, not the pour — one dip
+    // of what the can actually takes, and `takeWater` is still the only door it comes through.
     const state = createWorld(12);
-    pond(state).levelMl = 0;
     state.player.canCharges = 0;
     standOn(state, POND_ORIGIN_X, POND_ORIGIN_Y - 1);
     run(state, [{ type: 'RefillCan' }]);
     expect(state.player.canCharges).toBe(CAN_CHARGES_MAX);
     expect(state.stats.waterDrawnMl).toBe(CAN_CHARGES_MAX * HAND_POUR_ML);
-    // The pond gave nothing and owes nothing; what is in it is the tick's own recharge.
-    expect(pond(state).levelMl).toBeLessThan(HAND_POUR_ML);
   });
 
   it('pours without booking water — the canful was already counted at the dip', () => {
@@ -367,18 +379,20 @@ describe('the watering can', () => {
     expect(inspectTile(state, 0, 0).exists).toBe(0);
   });
 
-  it('draws every barrel refill from the pond, and gives what is there when short', () => {
+  it('draws every barrel refill from the pond, in full and through the meter', () => {
+    // This used to be the "gives what is there when short" case. There is no short any more:
+    // a hand refill takes the whole barrel and the meter records the whole barrel.
     const state = createWorld(15);
     state.moneyCents = 100_000;
     const sprinkler = spawnMachine(state, MachineKind.Sprinkler, 0, 0)!;
+    const barrel = machineSpec(MachineKind.Sprinkler)!.tankCapacityMl;
     standOn(state, 0, 0);
 
-    pond(state).levelMl = 4_000;
+    sprinkler.tankMl = 0;
     const drawnBefore = state.stats.waterDrawnMl;
     run(state, [{ type: 'RefillHopper', machineId: sprinkler.id }]);
-    // A partial fill, not a refusal: you get what is there, and it is counted.
-    expect(state.stats.waterDrawnMl - drawnBefore).toBe(4_000);
-    expect(pond(state).levelMl).toBeLessThan(4_000);
+    expect(sprinkler.tankMl).toBe(barrel);
+    expect(state.stats.waterDrawnMl - drawnBefore).toBe(barrel);
   });
 });
 
@@ -831,7 +845,6 @@ describe('the one-ledger flow model', () => {
     // Everything delivered came out of the pond or out of the tank, and the tank's stock came
     // out of the pond earlier — so the pond's total draw bounds the whole ledger.
     expect(delivered).toBeLessThanOrEqual(drawn);
-    expect(pond(state).levelMl).toBeGreaterThanOrEqual(0);
     drawnBefore = 0;
   });
 
@@ -1320,7 +1333,12 @@ describe('the render projection', () => {
     const projected = view(state, buffer);
 
     expect(projected.reservoirs).toHaveLength(1);
-    expect(projected.reservoirs[0]!.levelPermille).toBeLessThanOrEqual(1000);
+    // A footprint and an id, and nothing else (item 140). The six numbers that used to ride
+    // along — level, capacity, permille, throttle band, recharge rate, well count — all had
+    // exactly one possible answer once the pond became unlimited.
+    expect(Object.keys(projected.reservoirs[0]!).sort()).toEqual(
+      ['id', 'tileX', 'tileY', 'tilesHigh', 'tilesWide'].sort(),
+    );
     expect(projected.pipes).toHaveLength(state.pipes.length);
     expect(projected.networks).toHaveLength(1);
     expect(projected.networks[0]!.consumerCount).toBeGreaterThan(0);
@@ -1351,8 +1369,8 @@ describe('the render projection', () => {
   it('aliases nothing in the world', () => {
     const { state } = plumbedWorld(53);
     const projected = view(state, createWorldView());
-    projected.reservoirs[0]!.levelMl = -1;
-    expect(state.reservoirs[0]!.levelMl).toBeGreaterThan(0);
+    projected.reservoirs[0]!.tilesWide = -1;
+    expect(state.reservoirs[0]!.tilesWide).toBe(POND_TILES_WIDE);
   });
 });
 
@@ -1651,16 +1669,19 @@ describe('the one-ledger CENSUS ([[130]])', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('closes the book on a pond drawn to empty and left to recover', () => {
-    // The `Sip` band, which is where a heavily-drawn factory actually lives, and where the
-    // pump's allowance stops being the pump's rating and becomes the pond's recharge.
-    const { state } = plumbedWorld(1_301);
-    pond(state).levelMl = 0;
+  it('closes the book on a factory that draws hard and never gets a short answer', () => {
+    // This case used to drain the pond and land in the `Sip` band, which is where a heavily
+    // drawn factory lived. There is no band now, so what it watches is the regime instead: a
+    // permanently-starved network taking every millilitre its pump can give, for 3,000 ticks,
+    // with the books closing on every one of them.
+    const { state, pump } = plumbedWorld(1_301);
     for (const machine of state.machines) machine.tankMl = 0;
 
     stepMany(state, 3_000);
     expect(heldMl(state) + spentMl(state)).toBe(state.stats.waterDrawnMl);
-    expect(reservoirThrottle(pond(state))).toBe(ReservoirThrottle.Sip);
+    expect(pump.flowMlPerMinute, 'the pump was throttled by something').toBe(
+      PUMP_RATE_ML_PER_MINUTE,
+    );
   });
 });
 
@@ -1713,195 +1734,6 @@ describe('a head pays per activation, and item 130 kept it that way', () => {
   });
 });
 
-// --- the Artesian Well ([[130]]) ---------------------------------------------------------
-//
-// ────────────────────────────────────────────────────────────────────────────────────────
-//  WHY THERE IS A MACHINE THAT MAKES A POND BIGGER, IN ONE PARAGRAPH.
-//
-//  The owner asked twice for a way to boost the water pumps. The pump was innocent: it already
-//  outruns the pond 15×, so no pump number can be the constraint in the steady state. What the
-//  measurement found underneath is worse and much simpler — **the starting pond is too small
-//  for the starting field, at zero waste.** A tile drains `MOISTURE_MAX - MOISTURE_DRY_THRESHOLD`
-//  = 1,800 ticks between full and dry, so holding all 64 field tiles above dry costs 64 pours
-//  every 1,800 ticks = 64,000 ml/min for a PERFECT waterer. The pond makes 40,000. The
-//  Irrigation Hub measures 64,650 ml/min sustained — within 1% of that theoretical floor — and
-//  is still net-negative on the pond. A gap that exists at zero waste cannot be closed by
-//  wasting less, which is why this is a supply-side machine and not a smarter head.
-// ────────────────────────────────────────────────────────────────────────────────────────
-
-/** A well on the pond's north bank. The pond is 3×3 at (12,13); (12,12) is the bank. */
-function wellAt(state: WorldState, tileX: number, tileY: number): Machine {
-  return spawnMachine(state, MachineKind.ArtesianWell, tileX, tileY)!;
-}
-
-describe('the Artesian Well ([[130]])', () => {
-  it('raises what a pond MAKES, measured by ticking rather than by reading a constant', () => {
-    const state = createWorld(1_320);
-    pond(state).levelMl = 0;
-    stepMany(state, TICKS_PER_MINUTE);
-    expect(pond(state).levelMl).toBe(RESERVOIR_RECHARGE_ML_PER_MINUTE);
-
-    const withWell = createWorld(1_321);
-    withWell.moneyCents = 10_000_000;
-    wellAt(withWell, 13, 12);
-    pond(withWell).levelMl = 0;
-    stepMany(withWell, TICKS_PER_MINUTE);
-    expect(pond(withWell).levelMl).toBe(
-      RESERVOIR_RECHARGE_ML_PER_MINUTE + WELL_RECHARGE_ML_PER_MINUTE,
-    );
-    // One well doubles the pond. The number a player can feel, stated as arithmetic.
-    expect(pond(withWell).levelMl).toBe(2 * RESERVOIR_RECHARGE_ML_PER_MINUTE);
-  });
-
-  it('RAISES THE SIP TOO — the band a short factory actually lives in', () => {
-    // THE FAILURE THIS PREVENTS IS THE WHOLE FEATURE MISSING ITS TARGET. A heavily-drawn pond
-    // sits at zero, where `pumpSupplyMlPerMinute` hands the pump the recharge rate and nothing
-    // more. A well that raised only `rechargeReservoir` would refill a pond that never gets to
-    // keep anything, and the player would see no change at all — which is exactly the "I'm still
-    // getting low water" report item 130 was filed on.
-    const state = createWorld(1_322);
-    state.moneyCents = 10_000_000;
-    wellAt(state, 13, 12);
-    const reservoir = pond(state);
-    reservoir.levelMl = 0;
-
-    expect(reservoirThrottle(reservoir)).toBe(ReservoirThrottle.Sip);
-    expect(reservoirRechargeMlPerMinute(state, reservoir)).toBe(
-      RESERVOIR_RECHARGE_ML_PER_MINUTE + WELL_RECHARGE_ML_PER_MINUTE,
-    );
-    expect(
-      pumpSupplyMlPerMinute(
-        reservoir,
-        PUMP_RATE_ML_PER_MINUTE,
-        reservoirRechargeMlPerMinute(state, reservoir),
-      ),
-      'a drained pond sipped at the bare constant and ignored its wells',
-    ).toBe(RESERVOIR_RECHARGE_ML_PER_MINUTE + WELL_RECHARGE_ML_PER_MINUTE);
-  });
-
-  it('delivers the boost all the way to a head on a drained pond', () => {
-    // End to end rather than by unit: two identical starved worlds, one with a well, and the
-    // only thing compared is how much water actually came out of the ground.
-    const bare = pipedHeadWorld(1_323);
-    bare.state.reservoirs[0]!.levelMl = 0;
-    stepMany(bare.state, 10 * TICKS_PER_MINUTE);
-
-    const bored = pipedHeadWorld(1_324);
-    bored.state.reservoirs[0]!.levelMl = 0;
-    wellAt(bored.state, 13, 12);
-    rebuildNetworks(bored.state);
-    stepMany(bored.state, 10 * TICKS_PER_MINUTE);
-
-    expect(bored.state.stats.waterDrawnMl).toBe(2 * bare.state.stats.waterDrawnMl);
-    expect(bored.head.wateredCount).toBeGreaterThan(bare.head.wateredCount);
-  });
-
-  it('THE POND STILL ALWAYS RECOVERS — the anti-softlock clause survives the boost', () => {
-    // Plan §4's guarantee, re-verified with the new machine on the bank rather than assumed to
-    // have survived. A well can only ever make the recharge LARGER, so the sip stays positive
-    // and the level can only go up when demand eases — but that is an argument, and this is a
-    // measurement.
-    const state = createWorld(1_325);
-    state.moneyCents = 10_000_000;
-    for (const [x, y] of [
-      [13, 12],
-      [11, 13],
-      [15, 13],
-    ] as const) {
-      wellAt(state, x, y);
-    }
-    pond(state).levelMl = 0;
-    stepMany(state, 10_000);
-    expect(pond(state).levelMl).toBeGreaterThan(0);
-  });
-
-  it('takes three per pond and refuses the fourth before it exists', () => {
-    const state = createWorld(1_326);
-    state.moneyCents = 10_000_000;
-    expect(liquidPlacementRefusal(state, MachineKind.ArtesianWell, 13, 12)).toBe(BuildRefusal.None);
-    wellAt(state, 13, 12);
-    wellAt(state, 11, 13);
-    wellAt(state, 15, 13);
-    expect(wellsOnReservoir(state, pond(state))).toBe(WELL_MAX_PER_RESERVOIR);
-    expect(
-      liquidPlacementRefusal(state, MachineKind.ArtesianWell, 13, 16),
-      'a fourth well was allowed onto a pond that is already at its cap',
-    ).toBe(BuildRefusal.WellLimit);
-  });
-
-  it('refuses a well that is not on a bank, exactly as a pump is refused', () => {
-    const state = createWorld(1_327);
-    expect(liquidPlacementRefusal(state, MachineKind.ArtesianWell, 1, 1)).toBe(
-      BuildRefusal.NoWaterSource,
-    );
-  });
-
-  it('clamps a hand-edited save at the cap rather than trusting the build rules', () => {
-    // The ledger's honesty must not depend on placement having been obeyed — a payload can
-    // name any number of wells, and `wellsOnReservoir` is the thing that has to hold.
-    const state = createWorld(1_328);
-    state.moneyCents = 10_000_000;
-    for (const [x, y] of [
-      [13, 12],
-      [11, 13],
-      [15, 13],
-      [13, 16],
-      [11, 14],
-    ] as const) {
-      spawnMachine(state, MachineKind.ArtesianWell, x, y);
-    }
-    expect(wellsOnReservoir(state, pond(state))).toBe(WELL_MAX_PER_RESERVOIR);
-    pond(state).levelMl = 0;
-    stepMany(state, TICKS_PER_MINUTE);
-    expect(pond(state).levelMl).toBe(
-      RESERVOIR_RECHARGE_ML_PER_MINUTE + WELL_MAX_PER_RESERVOIR * WELL_RECHARGE_ML_PER_MINUTE,
-    );
-  });
-
-  it('is not on a network, does not draw, and is invisible to the ledger', () => {
-    // A well is not a pump. It has no liquid and no ports, so `attachMachines` leaves it at
-    // network 0 and the one-pump-per-network rule never sees it — which is the reason a well can
-    // sit on the same bank as the pump it feeds.
-    const state = createWorld(1_329);
-    state.moneyCents = 10_000_000;
-    const well = wellAt(state, 13, 12);
-    rebuildNetworks(state);
-    expect(well.network, 'the well joined a network').toBe(0);
-    expect(well.tankMl).toBe(0);
-    // A pump on a bank with a well beside it and no pipe between them: the well must not read
-    // as the network's pump, or a player who sinks a well can never plumb the pond again.
-    expect(
-      liquidPlacementRefusal(state, MachineKind.Pump, 11, 13),
-      'the well was counted as a pump',
-    ).toBe(BuildRefusal.None);
-    // And the pond's own draw is untouched by it: a well adds recharge, never supply.
-    expect(state.stats.waterDrawnMl).toBe(0);
-  });
-
-  it('keeps the census closed with wells on the bank', () => {
-    const { state } = plumbedWorld(1_330);
-    wellAt(state, 13, 12);
-    wellAt(state, 11, 13);
-    rebuildNetworks(state);
-    for (const machine of state.machines) machine.tankMl = 0;
-    stepMany(state, 3_000);
-    expect(heldMl(state) + spentMl(state)).toBe(state.stats.waterDrawnMl);
-  });
-
-  it('publishes the pond rate and the well count to the HUD', () => {
-    // `ReservoirView.rechargeMlPerMinute` exists because it stopped being a constant a renderer
-    // could import. A HUD reading the old constant would under-report every bored pond.
-    const state = createWorld(1_331);
-    state.moneyCents = 10_000_000;
-    wellAt(state, 13, 12);
-    const rv = view(state).reservoirs[0]!;
-    expect(rv.wells).toBe(1);
-    expect(rv.rechargeMlPerMinute).toBe(
-      RESERVOIR_RECHARGE_ML_PER_MINUTE + WELL_RECHARGE_ML_PER_MINUTE,
-    );
-  });
-});
-
 // --- item 122: the surplus, weighed where it is made -------------------------------------
 
 describe('the surplus a pump draws above demand ([[122]])', () => {
@@ -1947,12 +1779,17 @@ describe('the surplus a pump draws above demand ([[122]])', () => {
       }
     };
 
-    // A full pond: the pump out-supplies the head every tick and the difference goes to the tank.
+    // Supplied: the pump out-supplies the head every tick and the difference goes to the tank.
     minute();
-    // Then the pond is drained under it, so the pump drops to the sip band, the head outruns it,
-    // and the tank spends the run giving back what it banked. BOTH DIRECTIONS THROUGH THE SAME
-    // EQUATION — a buffer that is only ever watched while it fills is half-watched.
-    pond(state).levelMl = 0;
+    // **THEN THE PUMP IS TAKEN OFF THE NETWORK**, so supply is zero, the head outruns nothing at
+    // all, and the tank spends the run giving back what it banked. BOTH DIRECTIONS THROUGH THE
+    // SAME EQUATION — a buffer only ever watched while it fills is half-watched.
+    //
+    // This used to drain the pond under it, which was the same regime by a different route: a
+    // sipping pump supplied less than the head wanted. An unlimited pond has no such state
+    // (item 140), so the shortfall now has to come from the supply side being GONE rather than
+    // being small — which is a thing a player does every time they move a pump.
+    state.machines.find((machine) => machine.kind === MachineKind.Pump)!.network = 0;
     minute();
 
     // And the run has to have ACTUALLY BUFFERED, or the equation above was 0 === 0 + 0 for two
@@ -1970,6 +1807,13 @@ describe('the surplus a pump draws above demand ([[122]])', () => {
 });
 
 // --- item 137: two networks, one pond ----------------------------------------------------
+//
+// **WHAT ITEM 140 DID TO THIS SECTION.** Item 137 fixed a real unfairness — on a drained pond the
+// lower-id network took the whole tick's recharge and the other took nothing, forever — by
+// dividing each reservoir among the networks drawing on it. An unlimited pond cannot be divided,
+// so `shareReservoirs` is gone and the tests that measured a contended pond have nothing left to
+// measure. What survives is the build itself, which is still legal and still worth pinning: two
+// networks, one pump each, and BOTH of them now run flat out with nothing to argue over.
 
 /**
  * TWO GENUINELY DISJOINT NETWORKS, ONE PUMP EACH, both standing on the pond's north bank.
@@ -1982,10 +1826,13 @@ describe('the surplus a pump draws above demand ([[122]])', () => {
  * The one-pump-per-network rule is intact and load-bearing here: these are two networks with
  * one pump each, which is the build item 130 told the owner was legal.
  */
-function racingNetworks(
-  seed: number,
-  wells = 0,
-): { state: WorldState; pumpA: Machine; pumpB: Machine; tankA: Machine; tankB: Machine } {
+function racingNetworks(seed: number): {
+  state: WorldState;
+  pumpA: Machine;
+  pumpB: Machine;
+  tankA: Machine;
+  tankB: Machine;
+} {
   const state = createWorld(seed);
   state.unlocked = [TechId.Pumps, TechId.PipedSprinklers];
   state.moneyCents = 10_000_000;
@@ -1998,20 +1845,12 @@ function racingNetworks(
   for (let x = 15; x <= 17; x++) spawnPipe(state, x, 12, LiquidId.Water);
   const tankB = spawnMachine(state, MachineKind.Tank, 18, 12)!;
 
-  const banks = [
-    [13, 12],
-    [11, 13],
-    [11, 15],
-  ];
-  for (let i = 0; i < wells; i++) wellAt(state, banks[i]![0]!, banks[i]![1]!);
-
   rebuildNetworks(state);
   return { state, pumpA, pumpB, tankA, tankB };
 }
 
-/** What each tank gained, and what the pond gave up, over one minute from a drained pond. */
-function drainedMinute(state: WorldState, tankA: Machine, tankB: Machine) {
-  pond(state).levelMl = 0;
+/** What each tank gained, and what the pond gave up, over one minute of both pumps running. */
+function racedMinute(state: WorldState, tankA: Machine, tankB: Machine) {
   tankA.tankMl = 0;
   tankB.tankMl = 0;
   const drawnBefore = state.stats.waterDrawnMl;
@@ -2051,83 +1890,34 @@ describe('two networks racing for one pond ([[137]])', () => {
     ).toBe(BuildRefusal.TwoPumpsOneNetwork);
   });
 
-  it('BOTH DOUBLE THROUGHPUT ON A FULL POND — the second pump is worth what it looks worth', () => {
-    const { state, pumpA, pumpB } = racingNetworks(1_401);
-    for (const machine of state.machines) machine.tankMl = 0;
-    stepMany(state, 100);
+  it('BOTH RUN FLAT OUT, and neither one can take anything from the other', () => {
+    // ────────────────────────────────────────────────────────────────────────────────────
+    //  ITEM 137's BUG, AND WHY IT CANNOT RECUR (item 140). Measured then, on a drained pond:
+    //  the first network by machine id took the entire tick's recharge — 40,000 ml/min — and
+    //  the second was handed 0, every tick, forever. A player who diagnosed a shortage and
+    //  built a second network halved their time-to-collapse and bought no water at all.
+    //
+    //  The sharing phase that fixed it is gone, because the state it arbitrated is gone. This
+    //  is the same measurement pointed at the new rules: both pumps at their full rating, each
+    //  tank taking exactly half the total, and the total being both pumps' ratings rather than
+    //  one pond's recharge.
+    // ────────────────────────────────────────────────────────────────────────────────────
+    const { state, pumpA, pumpB, tankA, tankB } = racingNetworks(1_401);
+    const { gainA, gainB, drawn } = racedMinute(state, tankA, tankB);
 
-    // Nothing here is a change; it is the case that already worked, pinned so that fixing the
-    // drained case cannot quietly pay for itself out of the full one.
     expect(pumpA.flowMlPerMinute).toBe(PUMP_RATE_ML_PER_MINUTE);
     expect(pumpB.flowMlPerMinute).toBe(PUMP_RATE_ML_PER_MINUTE);
-  });
-
-  it('**SHARE A DRAINED POND** rather than handing the whole recharge to the lower machine id', () => {
-    // ────────────────────────────────────────────────────────────────────────────────────
-    //  THE BUG, MEASURED: on a drained pond the first network by machine id took the entire
-    //  tick's recharge — 40,000 ml/min — and the second was handed 0, every tick, forever. A
-    //  player who diagnosed a shortage and built a second network halved their
-    //  time-to-collapse and bought no water at all, and nothing told them.
-    //
-    //  THIS TEST BITES: reverted to the single-phase loop it reads gainB === 0.
-    // ────────────────────────────────────────────────────────────────────────────────────
-    const { state, tankA, tankB } = racingNetworks(1_402);
-    const { gainA, gainB, drawn } = drainedMinute(state, tankA, tankB);
-
-    expect(gainB, 'the second network was starved, which is item 137 exactly').toBeGreaterThan(0);
-    expect(gainA).toBeGreaterThan(0);
-
-    // Fair, not merely non-zero: neither network may be fobbed off with a token trickle. The
-    // tail is one millilitre a tick to the lower id, so the two shares sit within a whisker of
-    // each other rather than exactly on it.
-    const low = gainA < gainB ? gainA : gainB;
-    const high = gainA < gainB ? gainB : gainA;
-    expect(high - low).toBeLessThanOrEqual(TICKS_PER_MINUTE);
-
-    // NOTHING IS INVENTED BY SHARING. The pond gave up exactly what it makes, and both tanks
-    // together hold exactly that — the one-ledger invariant across two networks at once.
+    expect(gainA).toBe(gainB);
     expect(gainA + gainB).toBe(drawn);
-    expect(drawn).toBe(RESERVOIR_RECHARGE_ML_PER_MINUTE);
-  });
-
-  it('shares the WELLS too, so three wells and two networks starve neither', () => {
-    const { state, tankA, tankB } = racingNetworks(1_403, WELL_MAX_PER_RESERVOIR);
-    expect(wellsOnReservoir(state, pond(state))).toBe(WELL_MAX_PER_RESERVOIR);
-
-    const { gainA, gainB, drawn } = drainedMinute(state, tankA, tankB);
-    expect(gainB).toBeGreaterThan(0);
-    expect(gainA).toBeGreaterThan(0);
-    expect(gainA + gainB).toBe(drawn);
-
-    // Item 130's boost reaches BOTH networks rather than deepening the winner's cup: the
-    // minute's total is the bored pond's rate, and each side gets about half of it.
-    const bored =
-      RESERVOIR_RECHARGE_ML_PER_MINUTE + WELL_MAX_PER_RESERVOIR * WELL_RECHARGE_ML_PER_MINUTE;
-    expect(drawn).toBe(bored);
-    const low = gainA < gainB ? gainA : gainB;
-    expect(low).toBeGreaterThan(bored / 3);
-  });
-
-  it('THE POND STILL ALWAYS RECOVERS with two pumps on it, which is the §4 floor', () => {
-    // The anti-softlock clause is not weakened by sharing — two pumps between them can still
-    // take only what the pond makes, so the moment demand eases the level climbs.
-    const { state, tankA, tankB } = racingNetworks(1_404);
-    pond(state).levelMl = 0;
-    stepMany(state, TICKS_PER_MINUTE);
-    expect(reservoirThrottle(pond(state))).toBe(ReservoirThrottle.Sip);
-
-    // Fill both tanks so neither network has anywhere to put water, and leave it alone.
-    tankA.tankMl = machineSpec(tankA.kind)!.tankCapacityMl;
-    tankB.tankMl = machineSpec(tankB.kind)!.tankCapacityMl;
-    stepMany(state, TICKS_PER_MINUTE * 10);
-    expect(pond(state).levelMl).toBeGreaterThan(0);
+    expect(drawn).toBe(2 * PUMP_RATE_ML_PER_MINUTE);
   });
 
   it('keeps the books closed across BOTH networks at once', () => {
-    // The one-ledger invariant, with the division running: every millilitre the pond gave up
-    // is in one tank or the other, tick by tick, with nothing in flight between them.
+    // The one-ledger invariant across two networks: every millilitre the pond gave up is in one
+    // tank or the other, tick by tick, with nothing in flight between them. It used to run on a
+    // drained pond because that was the interesting regime; the interesting regime now is simply
+    // two pumps at full rate, which is what this is.
     const { state, tankA, tankB } = racingNetworks(1_405);
-    pond(state).levelMl = 0;
     for (const machine of state.machines) machine.tankMl = 0;
 
     for (let i = 0; i < 2_000; i++) {

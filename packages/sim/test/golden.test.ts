@@ -21,6 +21,7 @@ import { findNonIntegerFields, hashState } from '../src/index';
 import {
   type GoldenFixture,
   FIXTURE_NAMES,
+  acceptedCommandTypes,
   GOLDEN_COVERAGE_EXEMPT,
   HASH_LINE_PREFIX,
   REQUIRED_COMMAND_COVERAGE,
@@ -110,10 +111,16 @@ describe('replay stability', () => {
 });
 
 describe('fixture set health', () => {
-  it('exercises every Command variant', () => {
+  it('exercises every Command variant, and the sim ACCEPTS every one', () => {
+    // ACCEPTED, NOT ATTEMPTED (item 139). Reading `fixture.commands` here — which is what this
+    // test did for its whole life — asks what the recorded player clicked, and a click the sim
+    // refuses is a silent no-op. Twelve verbs were being reported as covered by fixtures whose
+    // sessions had run out of money before reaching them, `RemovePipe` among them: attempted by
+    // `water-works`, accepted by nobody in the set. The trace is the sim's own record of what
+    // took effect, so replaying and reading it is the only way to ask the live question.
     const seen = new Set<string>();
     for (const fixture of fixtures) {
-      for (const entry of fixture.commands) seen.add(entry.command.type);
+      for (const type of acceptedCommandTypes(fixture)) seen.add(type);
     }
 
     const required = Object.keys(REQUIRED_COMMAND_COVERAGE)
@@ -121,12 +128,33 @@ describe('fixture set health', () => {
       .filter((type) => !GOLDEN_COVERAGE_EXEMPT.has(type as never));
     const missing = required.filter((type) => !seen.has(type));
 
+    // A verb some fixture reaches for and never lands is the *interesting* failure — it means a
+    // recording rotted rather than that nobody ever wrote one — so the message says which
+    // fixtures tried, rather than making the next reader grep for it.
+    const attemptedBy = (type: string): string =>
+      fixtures
+        .filter((fixture) => fixture.commands.some((entry) => entry.command.type === type))
+        .map((fixture) => fixture.name)
+        .join(', ');
+    const detail = missing
+      .map((type) => {
+        const tried = attemptedBy(type);
+        return tried === ''
+          ? `  ${type}: no fixture even attempts it`
+          : `  ${type}: attempted by ${tried}, accepted by none of them`;
+      })
+      .join('\n');
+
     expect(
       missing,
-      `no golden fixture applies ${missing.join(', ')}. A verb no fixture exercises is a verb ` +
-        'the determinism gate does not guard — extend a fixture rather than deleting this test.',
+      `no golden fixture gets ${missing.join(', ')} PAST the sim.\n${detail}\n\n` +
+        'A verb no fixture exercises is a verb the determinism gate does not guard. An attempt ' +
+        'the sim refuses is not coverage — extend a fixture, or move the verb to ' +
+        'GOLDEN_COVERAGE_EXEMPT with an argument, rather than deleting this test.',
     ).toEqual([]);
-  });
+    // A BUDGET, for the same reason `replay stability` has one: this replays the whole set once
+    // more, which is the price of asking the sim instead of the JSON.
+  }, 30_000);
 
   it('keeps every command inside its fixture, in tick order', () => {
     for (const fixture of fixtures) {

@@ -204,12 +204,9 @@ export interface SaveMachine {
   wateredCount: number;
 }
 
-/** A body of water, and how much is actually left in it. */
+/** A body of water: a footprint and an id. There is nothing in it to record ([[140]]). */
 export interface SaveReservoir {
-  capacityMl: number;
   id: number;
-  levelMl: number;
-  rechargeAccum: number;
   tileX: number;
   tileY: number;
   tilesHigh: number;
@@ -611,10 +608,7 @@ export function toPayload(state: WorldState): SavePayload {
   for (let i = 0; i < state.reservoirs.length; i++) {
     const reservoir = state.reservoirs[i]!;
     reservoirs.push({
-      capacityMl: reservoir.capacityMl,
       id: reservoir.id,
-      levelMl: reservoir.levelMl,
-      rechargeAccum: reservoir.rechargeAccum,
       tileX: reservoir.tileX,
       tileY: reservoir.tileY,
       tilesHigh: reservoir.tilesHigh,
@@ -1048,9 +1042,11 @@ const MACHINE_KINDS: readonly number[] = [
   // names one loads into a machine whose spec is still there — inert, unbuildable, and boxable.
   // Refusing it instead would turn a curiosity into a save that will not open.
   MachineKind.PartsBench,
-  /** The Artesian Well ([[130]]). No format bump: a new kind widens the guard, it does not
-   *  change the shape of a machine record. */
-  MachineKind.ArtesianWell,
+  // The Artesian Well ([[130]]) was here for a day and is NOT on this list ([[140]]). The
+  // distinction from the Parts Bench above is the whole reason the list is hand-written: a
+  // retired kind stays loadable because players still hold BOXES of one, and a DELETED kind must
+  // not, because the 22 → 23 migration paid every well and every box out and a payload that still
+  // names kind 36 is one this build cannot honour twice.
 ];
 /** `None` is not a legal liquid for a pipe: a pipe that carries nothing is not a pipe. */
 const LIQUIDS: readonly number[] = [
@@ -1291,9 +1287,6 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       tileY: int(reservoir, 'tileY', path),
       tilesWide: int(reservoir, 'tilesWide', path),
       tilesHigh: int(reservoir, 'tilesHigh', path),
-      levelMl: int(reservoir, 'levelMl', path),
-      capacityMl: int(reservoir, 'capacityMl', path),
-      rechargeAccum: int(reservoir, 'rechargeAccum', path),
     });
   }
 

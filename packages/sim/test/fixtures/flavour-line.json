@@ -3,7 +3,7 @@
   "description": "Item 111's flavour tier: one chip line — Washer → Slicer → Fryer → Seasoner → Bagger with four grabber arms — runs three different products without a single setting being changed on any machine. Russets alone make plain bagged chips; peppers loaded into the Seasoner's second hopper turn the same line into chili chips; gold potatoes loaded into the Washer's second hopper run a premium base down all five machines to a gold bag. All three sell at the bin at three different prices. Pins multi-recipe machines, the first-satisfied-recipe rule, one product per output basket, and the hopper list being wider than the recipe.",
   "seed": 111111,
   "ticks": 9070,
-  "expectedHash": "6208c35c",
+  "expectedHash": "e0e4fab8",
   "commands": [
     {
       "tick": 0,

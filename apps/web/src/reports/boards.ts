@@ -85,6 +85,17 @@ export interface BoardValues {
   centiActiveHours: number;
   /** 1 once the world has passed the ten-hour mark and First Ten is final. */
   firstTenFinal: number;
+  /**
+   * 1 when `firstTenCents` is the reading actually taken at the ten-hour mark.
+   *
+   * 0 means one of two things and the row distinguishes them by `firstTenFinal`: the world
+   * has not reached the mark yet (so the figure shown is a running total, and the row is
+   * already gated), or it passed the mark unobserved (a save restored past ten hours whose
+   * reports record is gone) and the true score can never be recovered. The second case must
+   * NOT set a record — that is precisely how First Ten turns into a board that keeps rising
+   * with lifetime earnings, which §7 ruling 4 exists to forbid.
+   */
+  firstTenKnown: number;
 }
 
 /**
@@ -111,6 +122,7 @@ export function readBoardValues(view: WorldView, firstTenFrozenCents: number): B
 
   return {
     firstTenCents: firstTenFrozenCents >= 0 ? firstTenFrozenCents : stats.lifetimeNetEarningsCents,
+    firstTenKnown: firstTenFrozenCents >= 0 ? 1 : 0,
     peakFlowCentsPerHour: peakFlow,
     dynastyCents: stats.peakNetWorthCents,
     handsFreeTicks: stats.longestHandsFreeTicks,
@@ -142,7 +154,12 @@ export function foldBests(bests: PersonalBests, values: BoardValues): boolean {
     }
   };
 
-  if (values.firstTenFinal === 1) raise('firstTenCents', values.firstTenCents);
+  // Final AND known. A world that passed the mark unobserved carries a running lifetime
+  // figure in `firstTenCents`, and raising the record off that is the inversion this whole
+  // board is built to avoid — it would climb for as long as the player kept earning.
+  if (values.firstTenFinal === 1 && values.firstTenKnown === 1) {
+    raise('firstTenCents', values.firstTenCents);
+  }
   raise('peakFlowCentsPerHour', values.peakFlowCentsPerHour);
   raise('dynastyCents', values.dynastyCents);
   raise('handsFreeTicks', values.handsFreeTicks);
@@ -184,6 +201,7 @@ export function deriveBoards(values: BoardValues, bests: PersonalBests): BoardRo
     });
 
   const tenHoursIn = values.firstTenFinal === 1;
+  const scored = tenHoursIn && values.firstTenKnown === 1;
 
   return [
     row(
@@ -193,8 +211,15 @@ export function deriveBoards(values: BoardValues, bests: PersonalBests): BoardRo
       values.firstTenCents,
       bests.firstTenCents,
       'cents',
-      tenHoursIn,
-      tenHoursIn ? '' : 'running · scored at 10.00 h',
+      scored,
+      // Three states, not two. The third — past the mark with no reading taken — is the one
+      // worth naming out loud rather than dressing as a score: this world's ten-hour figure
+      // is gone and the number beside it is a lifetime total wearing its label.
+      scored
+        ? ''
+        : tenHoursIn
+          ? 'not scored · passed 10.00 h unrecorded'
+          : 'running · scored at 10.00 h',
     ),
     row(
       'peak-flow',

@@ -10,25 +10,33 @@
 // unless something itemises it. That is this panel's whole job: not to praise or to nag, but
 // to show where the other $190 went.
 //
-// ONE ROW SAYS "NOT YET MEASURED" AND THAT IS THE CORRECT BEHAVIOUR. Waste % measures machine
-// wear, which arrives with the Entropy release. Work item 033 is explicit that a pending
-// system is shown as a labelled stub rather than hidden, per plan §8's standing rule — a
-// report that grows a new row three releases from now is worse than one whose shape was
-// stable from its first hour, and a confident "0.0%" for something nobody is counting is a
-// lie with a decimal point on it.
+// THE WASTE ROW IS MEASURED, AND FOR A LONG TIME IT SAID OTHERWISE. This header used to
+// explain that Waste % "arrives with the Entropy release" and that its stub was therefore
+// correct. It had arrived: `tick.ts` counts every input a machine destroys, `stats.ts`
+// telescopes the count per hour, and `view.ts` divides it by that hour's throughput. The row
+// went on printing "not yet measured" because the client read a `stats.wastePermille` that
+// `StatsView` does not have — an optional field on a widened type, so `undefined` forever,
+// no type error, no failing test. A STUB OUTLIVING ITS SYSTEM IS THE EXPENSIVE FAILURE HERE:
+// the panel's whole job is to itemise where the money went, and it was hiding the one line
+// that says a machine ate it.
 //
-// ⚠️ THERE WERE TWO SUCH ROWS AND SPOILAGE WAS THE OTHER ([[124]]). A stub is a PROMISE that
-// the number is coming; the owner deleted spoilage outright, so that promise can never be
-// kept and the row is gone rather than stubbed forever. **Waste is not the same case** — the
-// owner has not ruled on machine wear, so its stub stands.
+// ⚠️ SPOILAGE WAS THE OTHER SUCH ROW AND IT WENT THE OTHER WAY ([[124]]). A stub is a PROMISE
+// that a number is coming; the owner deleted spoilage outright, so that promise could never
+// be kept and the row was removed rather than stubbed forever. Between them the two rows are
+// the whole rule: a stub is only ever a temporary state, and it is wrong in both directions —
+// kept past its release, or kept past its cancellation.
 //
-// The gross and kit-spend rows carry the same treatment for a different reason: the
-// projection currently exposes only their difference. See `sim-contract.ts`.
+// The row can still decline to print a figure, for a REAL reason rather than a pending one:
+// an hour in which no machine finished or spoiled anything has no ratio to take, and it says
+// that in those words. The gross and kit-spend rows carry the older treatment for a different
+// reason again — the projection exposes only their difference. See `sim-contract.ts`.
+
+import { TICKS_PER_ACTIVE_HOUR } from '@snack/sim';
 
 import { formatCents, formatPerHour, formatPermille, formatTicks, formatWater } from './format';
 import { centsPerActiveHour } from './rate';
 import { r, cx } from './styles';
-import type { ShiftBucket, StubbedRatio } from './types';
+import type { HourRatio, ShiftBucket } from './types';
 import { useReportsSlice } from './use-reports';
 
 export function ShiftReport() {
@@ -103,6 +111,15 @@ export function ShiftReport() {
  * Not a chart with axes — a chart of eight numbers is a chart nobody reads. The bars exist
  * so that a good hour and a bad one have the same SHAPE, which is the tax made visible in
  * one glance rather than in six rows of arithmetic.
+ *
+ * HEIGHT IS THE RATE, WIDTH IS HOW LONG THE HOUR LASTED. Almost every hour is a full one and
+ * draws at full width, so the strip looks exactly as it always did. The exception is hour 0,
+ * which is short because hour boundaries are dawn-aligned: a world born at 09:00 gets 8,400
+ * ticks before the first 06:00 rather than a full 72,000. It used to be dropped from this
+ * strip entirely (see `shift.ts:adopt`), which is why it is worth drawing rather than
+ * hiding — in one measured session it held a third of everything the world had earned.
+ * Height needs no adjustment for it: a rate is already divided by the ticks it took, so a
+ * short hour and a full one are directly comparable. Only the width has anything left to say.
  */
 function HourStrip({ history }: { history: readonly ShiftBucket[] }) {
   if (history.length === 0) {
@@ -124,12 +141,22 @@ function HourStrip({ history }: { history: readonly ShiftBucket[] }) {
           const rate = centsPerActiveHour(bucket.netCents, bucket.ticks);
           const height = Math.max(3, Math.round((Math.abs(rate) / peak) * 34));
           const best = rate > 0 && Math.abs(rate) === peak;
+          const span = Math.min(1, bucket.ticks / TICKS_PER_ACTIVE_HOUR);
+          const part = bucket.ticks < TICKS_PER_ACTIVE_HOUR;
           return (
             <div
               key={bucket.hour}
               className={cx(r.bar, rate < 0 && r.barLoss, best && r.barBest)}
-              style={{ height: `${height}px` }}
-              title={`Hour ${bucket.hour + 1}: ${formatPerHour(rate)}`}
+              // `flexGrow` rather than a modifier class: the bar's own rule is `flex: 1 1 0`,
+              // so a full hour passes 1 and renders byte-identically to before, and a short
+              // one narrows in proportion to what it actually was. `min-width` keeps the
+              // narrowest hour clickable.
+              style={{ height: `${height}px`, flexGrow: span }}
+              title={
+                part
+                  ? `Hour ${bucket.hour + 1}: ${formatPerHour(rate)} over ${formatTicks(bucket.ticks)} — a partial hour`
+                  : `Hour ${bucket.hour + 1}: ${formatPerHour(rate)}`
+              }
             />
           );
         })}
@@ -173,12 +200,19 @@ function Line({
   );
 }
 
-function Ratio({ label, ratio }: { label: string; ratio: StubbedRatio }) {
+/**
+ * A ratio row, which prints a figure or the reason there is not one.
+ *
+ * The stub says what is actually true — the hour has had no throughput to take a ratio of —
+ * rather than the old "not yet measured", which described a system that had already shipped
+ * and made the row indistinguishable from a genuine gap in the instruments.
+ */
+function Ratio({ label, ratio }: { label: string; ratio: HourRatio }) {
   return (
     <Line
       label={`${label} %`}
       value={ratio.measured === 1 ? formatPermille(ratio.permille) : null}
-      stub="not yet measured"
+      stub="nothing ran this hour"
     />
   );
 }

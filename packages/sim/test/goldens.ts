@@ -89,6 +89,15 @@ export type FixtureName = (typeof FIXTURE_NAMES)[number];
  * `yarn typecheck` right here, with the fix — extend a fixture to cover it — in the same
  * file as the complaint. A golden set that quietly stops covering a verb is the failure
  * mode this guards against.
+ *
+ * **COVERAGE MEANS ACCEPTED, NOT ATTEMPTED** (item 139), and the distinction is not academic:
+ * for eighteen months this list was checked against `fixture.commands`, which is a record of
+ * what the recorded player CLICKED. A command the sim refuses is a silent no-op that leaves no
+ * trace entry and changes nothing — so a fixture whose session ran out of money could attempt
+ * `RemovePipe`, tick the coverage box, and pin nothing at all. Twelve verbs were in exactly
+ * that state when the instrument was fixed. `acceptedCommandTypes` reads the replayed world's
+ * trace instead, which by construction holds only commands that took effect, so the check now
+ * measures the thing it always claimed to.
  */
 export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   SetMoveDirection: true,
@@ -241,6 +250,27 @@ export function replay(fixture: GoldenFixture): WorldState {
 
 export function replayHash(fixture: GoldenFixture): string {
   return hashState(replay(fixture));
+}
+
+/**
+ * Every command type the replayed world ACTUALLY ACCEPTED.
+ *
+ * Read off `state.trace` rather than off `fixture.commands`, and the difference is the whole
+ * point: `appendTrace` runs only when `applyCommand` returned true, so the trace is the sim's
+ * own list of what took effect. A refusal — no money, no reach, no tech, no such tile — leaves
+ * nothing behind, which is exactly why the old attempted-command count could report a verb as
+ * covered by a fixture that had never once succeeded at it.
+ *
+ * It costs a full replay per fixture. That is the price of asking a live question instead of a
+ * recorded one: a fixture recorded when a command was legal must keep being able to run it, and
+ * only a replay can tell you whether it still does. See `record-water-works.ts` for the fixture
+ * this check condemned.
+ */
+export function acceptedCommandTypes(fixture: GoldenFixture): Set<CommandType> {
+  const state = replay(fixture);
+  const seen = new Set<CommandType>();
+  for (let i = 0; i < state.trace.length; i++) seen.add(state.trace[i]!.command.type);
+  return seen;
 }
 
 /** Every fixture replayed, as `name -> hash`. The unit the cross-process check compares. */

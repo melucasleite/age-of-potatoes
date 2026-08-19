@@ -326,6 +326,13 @@ function fakeLockManager() {
   return {
     held,
     request: async (name: string, _options: unknown, callback: (lock: unknown) => unknown) => {
+      // **THE BROWSER NEVER GRANTS A LOCK SYNCHRONOUSLY, AND THIS DOUBLE USED TO.** That one
+      // difference is why the StrictMode race below shipped invisible: with the callback run
+      // inside the same turn as the request, `holder` was assigned before `acquireWorldLease`
+      // even returned, so no second caller could ever observe the window where it is null. The
+      // fake was strictly better behaved than the real API, which is the most expensive kind of
+      // test double there is. One microtask restores the gap the real thing has.
+      await Promise.resolve();
       if (held.has(name)) {
         await callback(null);
         return;
@@ -354,8 +361,14 @@ describe('the world lease', () => {
 
     // A second tab is a second page and therefore a second holder set; the shared manager is
     // what stands in for the browser here.
-    locks.held.add('snack-mogul:world:lot-a');
+    //
+    // THE ORDER MATTERS AND IT IS THE HONEST ORDER: this page lets go, the release actually
+    // lands, and only then does the other tab take the lot. Written the other way round — claim
+    // first, release second — the release's own cleanup deletes the lock the "other tab" just
+    // took, and the test passes or fails on how many microtasks deep the fake happens to be.
     releaseWorldLease();
+    await Promise.resolve();
+    locks.held.add('snack-mogul:world:lot-a');
     const second = await acquireWorldLease('lot-a');
     expect(second.held).toBe(false);
     expect(second.enforced).toBe(true);
@@ -370,6 +383,46 @@ describe('the world lease', () => {
     expect(first.held).toBe(true);
     expect(again.held).toBe(true);
     expect(heldWorldId()).toBe('lot-a');
+  });
+
+  it('**SAYS YES TWICE WHEN STRICTMODE ASKS TWICE AT ONCE**, which is how it actually asks', async () => {
+    // **THE BUG THE TEST ABOVE CANNOT SEE.** That one awaits the first answer before asking
+    // again, and the re-entrancy guard reads `holder` — which is assigned inside the lock
+    // callback and is therefore still null for the whole window between asking and being
+    // answered. StrictMode does not wait: it fires both boot effects back to back. Both read
+    // `holder === null`, both ask, the first takes the lock, and the second is handed `null`
+    // BY ITS OWN TAB.
+    //
+    // What the player saw: a brand-new lot, one tab, no other window, and the boot refusal
+    // panel saying the lot was already open somewhere else. Every time, unskippably — which
+    // makes the game unbootable in dev, where `reactStrictMode` is on.
+    vi.stubGlobal('navigator', { locks: fakeLockManager() });
+
+    // NOT awaited in sequence. That is the entire point of this test.
+    const [first, again] = await Promise.all([
+      acquireWorldLease('lot-a'),
+      acquireWorldLease('lot-a'),
+    ]);
+
+    expect(first.held, 'the first ask takes the lock').toBe(true);
+    expect(again.held, 'and the second one joins it rather than being turned away').toBe(true);
+    expect(heldWorldId()).toBe('lot-a');
+  });
+
+  it('still turns away a genuinely second TAB asking at the same time', async () => {
+    // The other side of the fix: joining an in-flight claim must be keyed on this PAGE's own
+    // ask, not on the lot. A second tab has its own module state and its own `claiming`, so it
+    // gets the real answer — otherwise the fix would delete the feature it is repairing.
+    const locks = fakeLockManager();
+    vi.stubGlobal('navigator', { locks });
+
+    // Somebody else already holds it, exactly as a live second tab would.
+    locks.held.add('snack-mogul:world:lot-a');
+
+    const [a, b] = await Promise.all([acquireWorldLease('lot-a'), acquireWorldLease('lot-a')]);
+    expect(a.held).toBe(false);
+    expect(b.held).toBe(false);
+    expect(heldWorldId()).toBeNull();
   });
 
   it('gives the old lot back when the page moves to a new one', async () => {

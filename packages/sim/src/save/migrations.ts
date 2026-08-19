@@ -41,6 +41,7 @@
 // The newest is format 18 — the clock inside a box, so a trip through storage preserves a good's
 // remaining freshness instead of minting a fresh window on the way out.
 
+import type { SaveItemSales } from './canonical';
 import type { SaveEnvelope } from './envelope';
 import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } from './errors';
 
@@ -50,7 +51,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 22;
+export const CURRENT_FORMAT_VERSION = 23;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -1483,6 +1484,33 @@ const FORMAT_22_COMPOSTING_TECH = 'agronomy-composting';
 /** `IntentAction.Fertilize`. A saved errand can be holding it. */
 const FORMAT_22_FERTILIZE_ACTION = 12;
 
+/** Every field of a sales row that is a QUANTITY — which is all of them but `item`, the key. */
+type Format22SalesSumKey = Exclude<keyof SaveItemSales, 'item'>;
+
+/**
+ * **THE FIELDS A MERGED SALES ROW ADDS UP, TAKEN FROM THE ROW'S OWN TYPE** rather than typed out
+ * a second time — because typing them out a second time is exactly how this went wrong once
+ * already (item 141). The first version of this list named `lifetimeCount`, `lifetimeCents`,
+ * `dawnCount` and `dawnCents`, which are the fields of the LIVE ledger and not one of which the
+ * SERIALIZED row has ever had. Every key missed, so every merge added nothing and then dropped
+ * the row it had just failed to fold in.
+ *
+ * **THIS IS THE ONE PLACE IN THE FILE WHERE COUPLING TO A LIVE TYPE IS RIGHT, AND IT IS WORTH
+ * SAYING WHY**, because every other constant in this section is deliberately frozen. A frozen id
+ * is frozen because drift there is SILENT — id 9 stops meaning Compost and this step quietly pays
+ * out the wrong good. Drift here is LOUD: the `satisfies` below stops compiling the moment
+ * `SaveItemSales` gains, loses or renames a field, and the person it stops is then holding the
+ * one question that matters — *did the format-21 row have that field?* If the answer is no, the
+ * right move at that point is to freeze this list as literals with a comment saying so. A build
+ * error asking that question is worth more than four string literals that cannot ask it.
+ */
+const FORMAT_22_SALES_SUM_KEYS = Object.keys({
+  cents: 0,
+  centsAtDawn: 0,
+  units: 0,
+  unitsAtDawn: 0,
+} satisfies Record<Format22SalesSumKey, number>) as readonly Format22SalesSumKey[];
+
 /**
  * **WHAT A VANISHED GOOD IS WORTH, IN CENTS**, at the list price format 21 posted for it.
  *
@@ -1944,10 +1972,13 @@ const migrateFormat21To22: SaveMigration = (payload) => {
         for (let j = 0; j < sales.length; j++) {
           if (format22Int(sales[j]!['item']) !== successor) continue;
           const into = sales[j]!;
-          for (const key of ['lifetimeCount', 'lifetimeCents', 'dawnCount', 'dawnCents']) {
-            if (row[key] !== undefined || into[key] !== undefined) {
-              into[key] = format22Int(into[key]) + format22Int(row[key]);
-            }
+          // Summed unconditionally. The old "only if one of them has it" guard was trying to
+          // notice a key neither row carried — the right instinct, wired to do nothing when it
+          // fired — and it is unnecessary now that the keys come from the row's own type: a
+          // field absent from a hand-edited payload adds 0 and is WRITTEN, which is what the
+          // loader demands of every one of these five anyway.
+          for (const key of FORMAT_22_SALES_SUM_KEYS) {
+            into[key] = format22Int(into[key]) + format22Int(row[key]);
           }
           merged = true;
           break;
@@ -1973,6 +2004,247 @@ const migrateFormat21To22: SaveMigration = (payload) => {
     moneyCents,
     player,
     soilMemory,
+    stats,
+    unlocked,
+  };
+};
+
+// --- format 22 → 23: the pond never runs dry, and the well is paid for (item 140) --------
+//
+// Frozen ids, because a migration describes the world it is READING. All four of these were true
+// when format 22 was current and none of them exist in `data.ts` any more.
+/** `MachineKind.ArtesianWell`. */
+const FORMAT_23_WELL_KIND = 36;
+/** `ItemId.BoxedArtesianWell`. */
+const FORMAT_23_BOXED_WELL = 79;
+/** `TechId.ArtesianWell` as format 22 spelled it. */
+const FORMAT_23_WELL_TECH = 'hydraulics-artesian-well';
+/** What an Artesian Well cost new, and what its node cost. The floor a refund may never fall below. */
+const FORMAT_23_WELL_PRICE_CENTS = 60_000;
+const FORMAT_23_WELL_TECH_PRICE_CENTS = 60_000;
+
+function format23Int(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) ? value : 0;
+}
+
+/** A running wallet, so every payout in this step is one addition at the end. `Format22Purse`, restated. */
+interface Format23Purse {
+  cents: number;
+}
+
+/** What one boxed well is worth: its own invoice, never less than what the machine cost new. */
+function format23BoxCents(invoice: number): number {
+  return invoice > FORMAT_23_WELL_PRICE_CENTS ? invoice : FORMAT_23_WELL_PRICE_CENTS;
+}
+
+/**
+ * Empty one of a machine's item/count pairs if it is holding boxed wells, paying list for them.
+ *
+ * A cargo hold, an output basket and a seed shelf are the three places on a machine record where
+ * a boxed machine can sit. None of them carries an invoice, so list is the only number available
+ * and it is also the floor.
+ */
+function format23EmptySlot(
+  machine: Record<string, unknown>,
+  purse: Format23Purse,
+  itemKey: string,
+  countKey: string,
+): void {
+  if (format23Int(machine[itemKey]) !== FORMAT_23_BOXED_WELL) return;
+  purse.cents += FORMAT_23_WELL_PRICE_CENTS * format23Int(machine[countKey]);
+  machine[itemKey] = 0;
+  machine[countKey] = 0;
+}
+
+/**
+ * Format 22 → 23: **the pond becomes unlimited, and the machine invented to enlarge it is bought
+ * back** (item 140; owner ruling 2026-08-17: *"I want the ponds to have infinite water. Get rid of
+ * the artisan well and just have the pond have an unlimited supply of water."*).
+ *
+ * **THE SAME TWO KINDS OF FIELD FORMAT 21 → 22 SORTED, AND THE SAME RULE.** A field that recorded
+ * a QUANTITY OF STATE nobody bought is dropped in silence; a field that records something a
+ * player PAID FOR is converted or bought back. Here the split happens to fall on the boundary
+ * between the pond and the machine.
+ *
+ * **THE POND LOSES `levelMl`, `capacityMl` AND `rechargeAccum`, AND IS OWED NOTHING.** Water was
+ * never a good — there is no `ItemId` for it, it has never been in a bag, and it was not bought
+ * from anyone. Those three numbers described how much of an unlimited thing was left, which is
+ * not a question, so they go the way `readyAge` went. **A player's pond is not "topped up" by
+ * this step; it stops having a level to top up.** `stats.waterDrawnMl` is untouched, because the
+ * water already drawn was really drawn and plan §6's Dry County board is history rather than
+ * property.
+ *
+ * **THE ARTESIAN WELL IS BOUGHT BACK EVERYWHERE IT CAN SIT**, at `investedCents` floored at the
+ * $600 it cost new — the invoice rather than the list price, exactly as format 21 → 22 bought
+ * back a Composter, because a well with dials on it cost more than one without and a flat refund
+ * would rob the upgraded one:
+ *
+ *   * **A BUILT WELL → its invoice, in cash**, and the machine is removed. It had no hopper, no
+ *     basket, no ports and no cargo, so there is nothing to hand back with it. A saved errand
+ *     that was walking to its tile is left alone: an errand names a TILE, not a machine, and one
+ *     that arrives at empty ground is a no-op its own timeout collects.
+ *   * **A BOXED WELL IN THE BAG → the same, per box, off each box's own invoice.** A payload
+ *     whose `boxes` list is short of its `count` still pays for every unit, at list.
+ *   * **A BOXED WELL ANYWHERE ELSE → $600 flat.** On a belt, in a claw, in a container, in a
+ *     bot's arms, on a shelf, under a route: none of those places carries an invoice, so list is
+ *     the only honest number and it is also the floor, so nobody is short-changed. It comes OFF
+ *     the belt rather than being left as a hole in the run, for format 22's reason — a good
+ *     nobody can name riding past the player forever is worse than a payment.
+ *   * **THE ARTESIAN WELL NODE → $600**, and out of `unlocked`. A node whose machine no longer
+ *     exists is money spent on nothing.
+ *
+ * A grabber filtered to boxed wells is set to "anything" (0), a setting nobody paid for, so the
+ * arm keeps working instead of standing still forever. A `salesByItem` row naming the box is
+ * dropped: boxed machines are `sellable: false`, so the writer never produced one, and a
+ * hand-edited payload that carries one would otherwise be refused by the loader over a number in
+ * a report.
+ *
+ * `payload.version` is NOT rewritten — format 14 → 15's reason, unchanged.
+ */
+const migrateFormat22To23: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-22 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+  const purse: Format23Purse = { cents: 0 };
+
+  // --- the ponds ----------------------------------------------------------------------
+  const reservoirs = rows(p, 'reservoirs').map((reservoir) => {
+    const next = { ...reservoir };
+    delete next['levelMl'];
+    delete next['capacityMl'];
+    delete next['rechargeAccum'];
+    return next;
+  });
+
+  // --- the bag ------------------------------------------------------------------------
+  const inventory: Record<string, unknown>[] = [];
+  const oldInventory = rows(p, 'inventory');
+  for (let i = 0; i < oldInventory.length; i++) {
+    const slot = oldInventory[i]!;
+    if (format23Int(slot['item']) !== FORMAT_23_BOXED_WELL) {
+      inventory.push(slot);
+      continue;
+    }
+    const boxes = Array.isArray(slot['boxes']) ? (slot['boxes'] as Record<string, unknown>[]) : [];
+    for (let b = 0; b < boxes.length; b++) {
+      purse.cents += format23BoxCents(format23Int(boxes[b]!['investedCents']));
+    }
+    const unboxed = format23Int(slot['count']) - boxes.length;
+    if (unboxed > 0) purse.cents += FORMAT_23_WELL_PRICE_CENTS * unboxed;
+  }
+
+  // --- machines: the wells themselves, and boxed wells sitting inside other machines -----
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    const machine = oldMachines[i]!;
+    if (format23Int(machine['kind']) === FORMAT_23_WELL_KIND) {
+      purse.cents += format23BoxCents(format23Int(machine['investedCents']));
+      continue;
+    }
+
+    const next = { ...machine };
+    format23EmptySlot(next, purse, 'cargoItem', 'cargoCount');
+    format23EmptySlot(next, purse, 'outputItem', 'outputCount');
+    format23EmptySlot(next, purse, 'seedShelfItem', 'seedShelfCount');
+    machines.push(next);
+  }
+
+  // --- belts, claws and robots ---------------------------------------------------------
+  const belts = rows(p, 'belts').map((belt) => {
+    const items = belt['items'];
+    if (!Array.isArray(items)) return belt;
+    const kept: unknown[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const raw = items[i];
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue;
+      if (format23Int((raw as Record<string, unknown>)['item']) === FORMAT_23_BOXED_WELL) {
+        purse.cents += FORMAT_23_WELL_PRICE_CENTS;
+        continue;
+      }
+      kept.push(raw);
+    }
+    return { ...belt, items: kept };
+  });
+
+  const grabbers = rows(p, 'grabbers').map((grabber) => {
+    const next = { ...grabber };
+    if (format23Int(next['held']) === FORMAT_23_BOXED_WELL) {
+      purse.cents += FORMAT_23_WELL_PRICE_CENTS;
+      next['held'] = 0;
+    }
+    if (format23Int(next['filter']) === FORMAT_23_BOXED_WELL) next['filter'] = 0;
+    return next;
+  });
+
+  const bots = rows(p, 'bots').map((bot) => {
+    const next = { ...bot };
+    if (format23Int(next['carryItem']) === FORMAT_23_BOXED_WELL) {
+      purse.cents += FORMAT_23_WELL_PRICE_CENTS * format23Int(next['carryCount']);
+      next['carryItem'] = 0;
+      next['carryCount'] = 0;
+    }
+    return next;
+  });
+
+  // --- routes --------------------------------------------------------------------------
+  const contracts: Record<string, unknown>[] = [];
+  const oldContracts = rows(p, 'contracts');
+  for (let i = 0; i < oldContracts.length; i++) {
+    const contract = oldContracts[i]!;
+    if (format23Int(contract['item']) !== FORMAT_23_BOXED_WELL) {
+      contracts.push(contract);
+      continue;
+    }
+    purse.cents +=
+      FORMAT_23_WELL_PRICE_CENTS *
+      (format23Int(contract['stocked']) + format23Int(contract['inTransit']));
+  }
+
+  // --- the tech list, the report, and the wallet ----------------------------------------
+  const unlockedRaw = p['unlocked'];
+  let unlocked = unlockedRaw;
+  if (Array.isArray(unlockedRaw)) {
+    const kept: unknown[] = [];
+    for (let i = 0; i < unlockedRaw.length; i++) {
+      if (unlockedRaw[i] === FORMAT_23_WELL_TECH) {
+        purse.cents += FORMAT_23_WELL_TECH_PRICE_CENTS;
+        continue;
+      }
+      kept.push(unlockedRaw[i]);
+    }
+    unlocked = kept;
+  }
+
+  let stats = p['stats'];
+  if (typeof stats === 'object' && stats !== null && !Array.isArray(stats)) {
+    const statsRecord = stats as Record<string, unknown>;
+    const salesRaw = statsRecord['salesByItem'];
+    if (Array.isArray(salesRaw)) {
+      const sales = salesRaw.filter(
+        (row) =>
+          typeof row !== 'object' ||
+          row === null ||
+          Array.isArray(row) ||
+          format23Int((row as Record<string, unknown>)['item']) !== FORMAT_23_BOXED_WELL,
+      );
+      if (sales.length !== salesRaw.length) stats = { ...statsRecord, salesByItem: sales };
+    }
+  }
+
+  const moneyCents = format23Int(p['moneyCents']) + purse.cents;
+
+  return {
+    ...p,
+    belts,
+    bots,
+    contracts,
+    grabbers,
+    inventory,
+    machines,
+    moneyCents,
+    reservoirs,
     stats,
     unlocked,
   };
@@ -2005,6 +2277,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   19: migrateFormat19To20,
   20: migrateFormat20To21,
   21: migrateFormat21To22,
+  22: migrateFormat22To23,
 };
 
 export interface MigrationOutcome {

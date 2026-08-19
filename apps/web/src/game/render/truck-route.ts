@@ -136,16 +136,42 @@ export function truckAt(
  * running two contracts at once does not stack one lorry on top of another. It is the LAST
  * tiebreak, well below not driving through a machine: two trucks sharing a row looks busy,
  * and one driving through a Fryer looks broken.
+ *
+ * ── THE TWO ROWS OUTSIDE THE FOOTPRINT ARE THE ONLY ONES THAT CAN LEAVE THE MAP ─────────
+ *
+ * `worldTilesHigh` is here because the row above and the row below are offered blind, and a
+ * depot built on row 0 offers row -1. That row scores whatever `westwardBlocked` says about
+ * a row that does not exist — zero, since no machine occupies it — so it does not merely tie
+ * with a walled-in yard, it BEATS one, and the truck drives its whole run along the outside
+ * of the world. Off-map rows are therefore dropped before scoring rather than penalised
+ * afterwards: a lane off the map is not a worse lane, it is not a lane.
+ *
+ * The bound is the world's, not the player's owned parcels. A truck crossing land the player
+ * has not bought yet is fine — it is driving to a road at the lot's west edge, past parcels
+ * that are scenery either way — and the failure being fixed here is leaving the map, not
+ * trespassing.
  */
 export function chooseLane(
   tileY: number,
   tilesHigh: number,
   westwardBlocked: (laneY: number) => number,
   taken: ReadonlySet<number>,
+  worldTilesHigh: number,
 ): number {
+  const high = Math.max(1, tilesHigh);
   const rows: number[] = [];
-  for (let i = 0; i < Math.max(1, tilesHigh); i++) rows.push(tileY + i);
-  rows.push(tileY - 1, tileY + Math.max(1, tilesHigh));
+  const offer = (row: number): void => {
+    if (row >= 0 && row < worldTilesHigh) rows.push(row);
+  };
+  // Footprint rows first, then above, then below — candidate order IS the last tiebreak.
+  for (let i = 0; i < high; i++) offer(tileY + i);
+  offer(tileY - 1);
+  offer(tileY + high);
+
+  // A depot standing on the map has at least its own top row to offer, so this is unreachable
+  // from any lot a player can build. It is here for a projection that publishes a zero-height
+  // world — the same degenerate-input courtesy `truckAt` extends to a depot with no clock.
+  if (rows.length === 0) return tileY;
 
   let best = rows[0]!;
   let bestScore = Number.POSITIVE_INFINITY;

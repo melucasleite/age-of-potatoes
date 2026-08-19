@@ -41,7 +41,13 @@ import type { MachineKind, WorldView } from '@snack/sim';
 
 import { itemName } from '../hud/item-copy';
 
-import { deriveBoards, emptyBests, foldBests, readBoardValues } from './boards';
+import {
+  FIRST_TEN_CENTI_HOURS,
+  deriveBoards,
+  emptyBests,
+  foldBests,
+  readBoardValues,
+} from './boards';
 import type { BoardValues, PersonalBests } from './boards';
 import { dawnCount, dayNumber, ticksUntilDawn } from './day';
 import { diagnosticsUnlocked, rankBleeds } from './diagnostics';
@@ -49,16 +55,10 @@ import { IdleWatch } from './idle';
 import { loadBests, loadLedger, saveBests, saveLedger } from './persist';
 import { centsPerActiveHour, rateIsSettled } from './rate';
 import { ShiftLedger } from './shift';
-import {
-  DESTINATIONS,
-  readCommerce,
-  readGrossAndSpend,
-  readSalesByItem,
-  readWastePermille,
-} from './sim-contract';
+import { DESTINATIONS, readCommerce, readGrossAndSpend, readSalesByItem } from './sim-contract';
 import type { CommandSink, CommerceCommand, CommerceView } from './sim-contract';
 import {
-  NOT_YET_MEASURED,
+  NO_THROUGHPUT,
   ZERO_BOARDS,
   ZERO_COMMERCE,
   ZERO_DAWN,
@@ -80,7 +80,7 @@ import type {
   ReportsSnapshot,
   ShiftBucket,
   ShiftSlice,
-  StubbedRatio,
+  HourRatio,
 } from './types';
 
 /** Plan §2: "a 5-second non-blocking card". A hundred ticks, counted by the sim's clock. */
@@ -114,6 +114,14 @@ export class ReportsStore {
 
   /** Lifetime net earnings the moment the world crossed ten active hours. −1 before that. */
   private firstTenCents = -1;
+
+  /**
+   * 1 once this session has seen the world BELOW ten active hours.
+   *
+   * Without it, a world restored already past the mark would freeze its current lifetime
+   * earnings and call the result a First Ten score. See `publishWorld`.
+   */
+  private sawBeforeTen = false;
 
   private lastCommerce: CommerceView | null = null;
   private lastPublishedTick = 0;
@@ -178,6 +186,7 @@ export class ReportsStore {
     this.bestsLoaded = false;
     this.bestsDirty = false;
     this.firstTenCents = -1;
+    this.sawBeforeTen = false;
     this.lastDawn = -1;
     this.dawnClearTick = -1;
     this.dayMarkNetCents = 0;
@@ -231,7 +240,9 @@ export class ReportsStore {
     this.bests = bests ?? emptyBests();
     this.bestsLoaded = true;
     if (stored !== null) {
-      this.firstTenCents = stored.firstTenCents;
+      // Only when this session has not already taken its own reading. IndexedDB resolving
+      // late is rare and would otherwise undo a freeze that just happened.
+      if (this.firstTenCents < 0) this.firstTenCents = stored.firstTenCents;
       this.ledger.hydrate(stored.ledger, this.lastPublishedTick);
     }
     // Nothing to notify with yet if no publish has happened; the next one picks it up.
@@ -271,16 +282,28 @@ export class ReportsStore {
     if (this.ledger.read(view)) changed = true;
     if (this.setShift(view)) changed = true;
 
-    const values = readBoardValues(view, this.firstTenCents);
-    this.lastValues = values;
-
     // First Ten is scored AT ten active hours and then never again (§7 ruling 4). Freezing
-    // it the first time the world crosses the mark is what makes it a First Ten score
-    // rather than a Dynasty score wearing its name.
-    if (this.firstTenCents < 0 && values.firstTenFinal === 1) {
-      this.firstTenCents = values.firstTenCents;
+    // it the first time the world crosses the mark is what makes it a First Ten score rather
+    // than a Dynasty score wearing its name.
+    //
+    // AND IT ONLY COUNTS IF WE WATCHED IT HAPPEN. A world can arrive at this store already
+    // past the mark — restored from a save whose reports record is gone, which needs no
+    // misfortune at all, since the two live in different stores and `loadLedger` swallows
+    // every failure and returns null. Its lifetime net earnings at that moment are a
+    // twelve-hour figure, and freezing THAT would post a First Ten score nobody ever scored.
+    // So the freeze requires having seen the world below the mark; failing that the score
+    // stays unknown, and the board says unknown rather than guessing.
+    const pastTen = view.stats.centiActiveHours >= FIRST_TEN_CENTI_HOURS;
+    if (!pastTen) this.sawBeforeTen = true;
+    if (pastTen && this.sawBeforeTen && this.firstTenCents < 0) {
+      this.firstTenCents = view.stats.lifetimeNetEarningsCents;
       this.bestsDirty = true;
     }
+
+    // Read AFTER the freeze, so the publish that crosses the mark already reports a known
+    // score instead of an unknown one it corrects a fifth of a second later.
+    const values = readBoardValues(view, this.firstTenCents);
+    this.lastValues = values;
     if (this.bestsLoaded && foldBests(this.bests, values)) this.bestsDirty = true;
     if (this.setBoards(values)) changed = true;
 
@@ -340,10 +363,23 @@ export class ReportsStore {
       this.bestsDirty = false;
       writes.push(saveBests(this.bests));
     }
-    // The ledger is only worth storing while the renderer owns it. Once the sim projects
-    // its own buckets they ride along in the ordinary save and this store would be a stale
-    // second copy of them, which is worse than no copy.
-    if (!this.ledger.simOwned && this.worldSeed !== 0) {
+    // THIS WRITE USED TO BE SKIPPED ONCE THE LEDGER WAS SIM-OWNED, AND THAT SKIPPED MORE
+    // THAN THE LEDGER. The reasoning was sound about the buckets — once the sim projects its
+    // own they ride along in the ordinary save, and a second copy here would be a stale one.
+    // But `firstTenCents` is in this record too, and NOTHING IN THE SIM HOLDS IT: it is a
+    // reports-side reading, taken once, at the moment the world crosses ten active hours.
+    // The sim now always projects `stats.hours`, so `adopt()` flips `simOwned` on the first
+    // publish of every world and the record was never written at all. After a reload First
+    // Ten fell back to live lifetime earnings and `foldBests` raised the record every time
+    // that climbed — plan §7 ruling 4's exact inversion, the Dynasty board with a longer
+    // name. Nobody hit it only because no world has yet reached ten active hours.
+    //
+    // The stale-buckets worry does not survive being written down either: `adopt()` replaces
+    // `history` and `currentBucket` wholesale on its first publish, so a hydrated bucket in a
+    // sim-owned world is overwritten before any panel reads it. What the round trip does buy
+    // is `bestCentsPerHour`, which is otherwise recomputed from the last 24 retained hours
+    // and would quietly forget a record older than that.
+    if (this.worldSeed !== 0) {
       writes.push(
         saveLedger({
           worldSeed: this.worldSeed,
@@ -368,7 +404,7 @@ export class ReportsStore {
     const perHour = centsPerActiveHour(current.netCents, current.ticks);
     const settled = rateIsSettled(current.ticks) ? 1 : 0;
     const untilDawn = ticksUntilDawn(view.tick);
-    const waste = ratio(readWastePermille(view));
+    const waste = ratio(current.wastePermille);
 
     const previous = this.shift;
     if (
@@ -643,8 +679,19 @@ export class ReportsStore {
   }
 }
 
-function ratio(permille: number): StubbedRatio {
-  return permille < 0 ? NOT_YET_MEASURED : Object.freeze({ permille, measured: 1 });
+/**
+ * The Waste row's value, from the hour in progress.
+ *
+ * IT READS THE BUCKET, NOT A TOP-LEVEL STAT. There was a `readWastePermille(view)` here
+ * that reached for `stats.wastePermille` — a field `StatsView` has never had and was never
+ * going to grow, because waste is a RATIO and a ratio only means something over a stated
+ * span. The sim measures it per hour, in `hours[].wastePermille`, which is the same span
+ * every other figure on this panel is quoted over. The old read therefore returned
+ * `undefined` on every publish since the day it was written, and the row printed "not yet
+ * measured" for a system that had already shipped.
+ */
+function ratio(permille: number): HourRatio {
+  return permille < 0 ? NO_THROUGHPUT : Object.freeze({ permille, measured: 1 });
 }
 
 /**

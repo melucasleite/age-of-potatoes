@@ -80,3 +80,85 @@ async function measure(
     return {};
   }
 }
+
+// --- revocation watch ([[041]] follow-up) ---------------------------------------------
+//
+// A GRANT IS NOT A GUARANTEE FOREVER. `requestPersistentStorage` runs once per boot and
+// reports the answer at that instant. Browsers may take the promise back later — Chrome
+// re-evaluates on storage pressure and on the engagement signals that granted it in the
+// first place, and a revoked origin is an evictable one. Item 041's acceptance criterion
+// asks for "denied OR REVOKED", and the denied half has been covered since the notice
+// channel existed; this is the other half.
+//
+// WHY A POLL AND NOT AN EVENT. There is no revocation event to listen for. `persisted()`
+// is the only way to ask, so asking occasionally is the only way to know.
+//
+// WHY IT ONLY RUNS WHEN THE ANSWER WAS YES. A browser that already said no has already been
+// reported by `warnIfNotPersisted`, once, at boot. Polling it would be waiting for a chance
+// to repeat something the player has already read and can already act on.
+//
+// WHY IT STOPS AFTER IT FIRES. The news does not get truer by being repeated, there is
+// nothing further the player can do once told, and a timer that keeps running is a timer
+// somebody has to remember to stop.
+
+/**
+ * How often the watch re-asks.
+ *
+ * Deliberately slow. Revocation is a housekeeping decision measured in days of non-use, not
+ * a thing that happens between two potato harvests, and the only cost of noticing it late is
+ * that a warning arrives a few minutes after it became true. Cheap either way — one promise
+ * against an in-process flag — but a tight loop here would be pure noise.
+ */
+export const PERSISTENCE_POLL_MS = 5 * 60 * 1000;
+
+let watchTimer: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Watch a granted persistence promise, and say so if the browser takes it back.
+ *
+ * `onRevoked` is injected rather than imported so this file keeps knowing nothing about the
+ * notice channel — the same seam `orphans.ts` uses for its money peek, and what lets the
+ * watch be tested without a browser or a HUD.
+ *
+ * Safe to call repeatedly: a second call replaces the first rather than stacking timers.
+ * Never throws, and does nothing at all outside a browser.
+ */
+export function startPersistenceWatch(
+  persistence: PersistenceResult,
+  onRevoked: () => void,
+  pollMs: number = PERSISTENCE_POLL_MS,
+): void {
+  stopPersistenceWatch();
+  if (!persistence.persisted) return;
+  if (typeof navigator === 'undefined' || navigator.storage === undefined) return;
+  const storage = navigator.storage;
+  if (typeof storage.persisted !== 'function') return;
+
+  watchTimer = setInterval(() => {
+    void (async () => {
+      let stillPersisted: boolean;
+      try {
+        stillPersisted = await storage.persisted();
+      } catch {
+        // A browser that will not answer is not a browser that revoked. Say nothing.
+        return;
+      }
+      if (stillPersisted) return;
+      stopPersistenceWatch();
+      logWarn('Persistent storage was granted earlier this session and has been withdrawn.');
+      onRevoked();
+    })();
+  }, pollMs);
+}
+
+/** Stop watching. Called from the ordered exit, and by the watch itself once it has fired. */
+export function stopPersistenceWatch(): void {
+  if (watchTimer === null) return;
+  clearInterval(watchTimer);
+  watchTimer = null;
+}
+
+/** Is the watch running? For tests and the dev overlay. */
+export function persistenceWatchRunning(): boolean {
+  return watchTimer !== null;
+}

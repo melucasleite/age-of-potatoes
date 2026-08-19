@@ -172,12 +172,6 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
     detail:
       'Catches what the Washer throws away and sends it back up the pipe. Needs the Washer as much as it needs the pumps — there is no graywater without a wash.',
   },
-  [TechId.ArtesianWell]: {
-    title: 'Artesian Well',
-    verb: 'Sink a well and make the pond bigger',
-    detail:
-      'Every other thing on this branch moves the water you have. This one makes more of it: sunk on the bank, a well doubles what that pond produces, and three is as many as one pond will take.',
-  },
   [TechId.IrrigationHub]: {
     title: 'Irrigation Hub',
     verb: 'Water only the tiles that are dry',
@@ -379,7 +373,6 @@ export const MACHINE_LABELS: Readonly<Record<number, string>> = {
   [MachineKind.Seasoner]: 'Seasoner',
   [MachineKind.Bagger]: 'Bagger',
   [MachineKind.Pump]: 'Pump',
-  [MachineKind.ArtesianWell]: 'Artesian Well',
   [MachineKind.Tank]: 'Tank',
   [MachineKind.PipedSprinkler]: 'Piped Sprinkler',
   [MachineKind.IrrigationHub]: 'Irrigation Hub',

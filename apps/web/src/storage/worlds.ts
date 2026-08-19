@@ -724,11 +724,34 @@ async function adoptLegacyRecords(): Promise<WorldRegistry> {
     // A genuinely fresh install. Write the empty registry so the adoption path never runs
     // again — a player who starts a world, deletes it, and reloads must not have the migration
     // wake up and go looking for legacy records.
-    await db.put(WORLDS_STORE, plan.registry, REGISTRY_KEY);
+    //
+    // CLAIMED INSIDE THE TRANSACTION, for [[138]]'s reason exactly. This plan was computed
+    // four round-trips ago against a database with no registry in it, and a second tab can
+    // finish a New Game inside that window — so a bare `put` here would overwrite a real lot
+    // with an empty list, which is the world-eater the merge above exists to prevent. The
+    // migration runs at most once per database, so anything already on disk outranks it.
+    const fresh = db.transaction(WORLDS_STORE, 'readwrite');
+    const store = fresh.objectStore(WORLDS_STORE);
+    const raced = await store.get(REGISTRY_KEY);
+    if (raced !== undefined) {
+      await fresh.done;
+      return raced;
+    }
+    await store.put(plan.registry, REGISTRY_KEY);
+    await fresh.done;
     return plan.registry;
   }
 
   const tx = db.transaction([SAVES_STORE, WORLDS_STORE], 'readwrite');
+  const worlds = tx.objectStore(WORLDS_STORE);
+  // The same claim, and the same reason. A registry that already exists means another tab
+  // finished this migration first — its re-key has already moved the records, so repeating it
+  // would abort on `add` anyway, and its registry is the one with the adopted world on it.
+  const raced = await worlds.get(REGISTRY_KEY);
+  if (raced !== undefined) {
+    await tx.done;
+    return raced;
+  }
   const saves = tx.objectStore(SAVES_STORE);
   for (const move of plan.rekey) {
     const record = await saves.get(move.from);
@@ -736,7 +759,7 @@ async function adoptLegacyRecords(): Promise<WorldRegistry> {
     await saves.add(record, move.to);
     await saves.delete(move.from);
   }
-  await tx.objectStore(WORLDS_STORE).put(plan.registry, REGISTRY_KEY);
+  await worlds.put(plan.registry, REGISTRY_KEY);
   await tx.done;
 
   // The last-played record moves too, or the Welcome Back card greets a returning player with

@@ -78,6 +78,15 @@ full tanks — it would round-trip perfectly while proving almost nothing. The i
 fields are the ones that only exist mid-flight: `supplyAccum`, `rrOffset`, `throttled`, and
 the Hub's `scanCursor`.
 
+**THAT RECIPE NO LONGER REPRODUCES, AND THE REASON IS WORTH KEEPING** (item 139, 2026-08-18).
+`water-works` has been re-recorded from scratch, because by 2026-08-17 its recorded session could
+no longer afford the plumbing this payload was taken from — every hydraulics command in it was
+being silently refused, so replaying it to forty ticks past its last command now yields a world
+with no pipes in it at all. This file is therefore evidence rather than a derivation: it is proof
+that the fixture's liquid layer was once genuinely live, and that what happened to it was rot
+under a later re-timing rather than a story that was never recorded. The payload itself is frozen
+and unchanged; only the sentence above about how to re-derive it has expired.
+
 `format-4.json` was recorded by replaying the `walk-errands` golden fixture to tick 3,300 and
 calling `serialize()`. The moment is the whole point of the file: a pending `PlayerIntent` is
 the only thing a format-4 payload has that a format-3 one does not, and it exists **only in
@@ -277,3 +286,32 @@ first take heals it once rather than handing out a fresh window per armful.
 without rows in the table above. The files are real recordings and `save.test.ts` pins both; only
 this document is behind, and item 112 has left it that way rather than inventing provenance for two
 saves it did not record.
+
+`format-22-well.json` was recorded by `scripts/record-format-22-well.ts` (2026-08-18, item 140),
+and it is the only file in this directory that **no current build can write**. The Artesian Well
+was released on 2026-08-17 and retired on 2026-08-18 — ownable for one day — and `format-22.json`,
+recorded during that day, happens not to contain one. So rather than hand-write a format-22 payload
+and test the migration somebody imagined, this was recorded by running that script against commit
+`1fef820`, the last build that had the machine. The script is kept beside the fixture as provenance
+and is deliberately never compiled: it names three ids that no longer exist.
+
+The moment is chosen the way every moment here is: it holds **one of every place a well can hide,
+each at a different invoice**, because the thing most likely to go wrong in a refund is paying list
+for something that cost more. A bare well on the bank at the $600 it cost new; an upgraded one at
+$915; two boxed wells in one slot at $600 and $780, in canonical least-invested-first order; the
+`hydraulics-artesian-well` node researched; and a pond drawn down to 6,040,000 of 20,000,000 ml with
+700 banked in its recharge remainder — so that "the level is dropped" is visibly a different
+migration from "the level is topped up". The 22 → 23 step pays back $3,495 of $3,495.
+
+`format-23.json` was recorded by `scripts/record-format-23.ts` (2026-08-18, item 140). It is the
+first save in which **a pond has nothing in it to record**: format 3 gave a reservoir a level, a
+capacity and a recharge accumulator, and twenty releases carried all three; this one takes them out,
+because the owner ruled the water unlimited.
+
+The item fits in one number, and the fixture is built around it: this world has drawn **25,000,000
+ml — a quarter more than the entire capacity of the pond it is standing next to** — and the pond is
+still answering in full. The instant is the one that used to be the game's worst: three consumers on
+one pump, a tank spent to zero, an amber head part-way through its own buffer, and the pump at its
+**full 600,000 ml/min regardless**. Under format 22 that same world had a drained pond and a pump
+that was halved and then sipping; the tank is empty here because demand outruns the pump, which is a
+fact about the straw rather than about the glass.

@@ -273,12 +273,9 @@ const KNOWN_FRAMELESS: readonly ToolMode[] = [
   // The Recirculator is what remains of that three: still no `machine_recirculator` in
   // `art/manifest.json`.
   ToolMode.PlaceRecirculator,
-  // [[130]]. The Artesian Well shipped with the sim change that needed it rather than waiting
-  // for a sprite, which is the trade [[100]] already made three rows above: a lettered chip on a
-  // machine that ends a water shortage beats a beautiful machine nobody can build. The world
-  // draws it via `registerMachinePlaceholders` like every other frameless kind. `machine_artesian_well`
-  // is an art-lane errand and this line is the reminder.
-  ToolMode.PlaceArtesianWell,
+  // [[130]]'s Artesian Well was the other entry here and it is GONE ([[140]]) — retired with the
+  // water scarcity it existed to relieve, so it has no catalogue row to be frameless in. The
+  // art-lane errand it named retires with it: nobody needs `machine_artesian_well` drawn now.
 ];
 
 describe('the build menu icons ([[071]])', () => {

@@ -723,6 +723,11 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
     // reproduces ab8ef078 exactly — meaning every other hashed field is byte-identical, so item
     // 115 changed no behaviour here even though it changed behaviour elsewhere. The wrench came
     // due, the drone answered, and the factory ended the watch healthy.
-    expect(hashState(state)).toBe('2b433a69');
+    // 2b433a69 -> ea5cf066 (save format 23, item 140): the digest LOST three `d.num` calls per
+    // reservoir — an unlimited pond has no `levelMl`, `capacityMl` or `rechargeAccum` to record.
+    // This watch has no pump, no pipe and no `Cheat`, so those are the only three numbers in it
+    // that could have moved: the pond it never touched is the pond it still never touches, the
+    // wrench still came due, and the drone still answered.
+    expect(hashState(state)).toBe('ea5cf066');
   });
 });

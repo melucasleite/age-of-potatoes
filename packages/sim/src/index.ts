@@ -167,11 +167,6 @@ export {
   REPAIR_KIT_PRICE_CENTS,
   REPAIR_KIT_RADIUS_TILES,
   REPAIR_PER_TOUCH,
-  RESERVOIR_CAPACITY_ML,
-  RESERVOIR_CAPACITY_UNITS,
-  RESERVOIR_LOW_PERMILLE,
-  RESERVOIR_RECHARGE_ML_PER_MINUTE,
-  RESERVOIR_UNIT_ML,
   RETIRED_MACHINE_KINDS,
   ROOT_CELLAR_CAPACITY,
   RUSSET_POTATO_PRICE_CENTS,
@@ -217,9 +212,6 @@ export {
   WASHED_POTATO_PRICE_CENTS,
   WASTE_PERIOD_AT_THRESHOLD,
   WASTE_PERIOD_AT_ZERO,
-  WELL_MAX_PER_RESERVOIR,
-  WELL_RECHARGE_ML_PER_MINUTE,
-  WELL_RECHARGE_UNITS_PER_MINUTE,
   WORK_RATE_SCALE,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
@@ -247,21 +239,15 @@ export type {
 // FLOW, NOT PRESSURE: one ledger per network, one pump and one liquid per network enforced at
 // placement, tanks buffering the difference and showing a net rate and a time-to-empty.
 export {
-  ReservoirThrottle,
   WaterDraw,
   nearestReservoir,
   pumpSupplyMlPerMinute,
-  rechargeReservoir,
   reservoirAdjacentToTile,
   reservoirAt,
   reservoirById,
   reservoirCoversTile,
-  reservoirLevelPermille,
-  reservoirRechargeMlPerMinute,
-  reservoirThrottle,
   takeWater,
   waterAtSubtile,
-  wellsOnReservoir,
 } from './water';
 export {
   BuildRefusal,

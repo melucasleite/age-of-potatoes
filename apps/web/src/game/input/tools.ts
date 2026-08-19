@@ -262,13 +262,17 @@ export const ToolMode = {
   ApplyFertilizer: 51,
 
   /**
-   * **THE ARTESIAN WELL** ([[130]]) — the one row in the palette that buys more water rather
-   * than a better way to spend it.
+   * **RETIRED** ([[140]]). The well was the machine invented to relieve a scarcity, and the
+   * owner deleted the scarcity: a pond is an unlimited source now, so a machine whose entire
+   * purpose was "make this pond produce more" has nothing left to sell. `MachineKind.ArtesianWell`
+   * and `TechId.ArtesianWell` are both gone from the sim, so there is no kind to place, no node
+   * to gate it behind and no price to quote.
    *
-   * A plain `PlaceMachine` on a 1×1, no new gesture, no `pointer.ts` branch: it is here because
-   * a `ToolMode` is the difference between a machine that exists and a machine a player can
-   * build, and the audit behind [[100]]–[[105]] found fifteen machines that had everything else
-   * and not this. Wired in the same pass as the spec, not the next one.
+   * **THE ID STAYS SPENT.** See `ToolMode.PlacePartsBench` for why an enum member outlives its
+   * feature: a saved hotbar is validated whole, and one unknown number discards all of it. This
+   * one is the likeliest of the three to have been pinned — it shipped ten days ago as the
+   * answer to "how do I boost my pump", which is exactly the row a thirsty player puts on their
+   * belt.
    */
   PlaceArtesianWell: 52,
 
@@ -655,15 +659,6 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     costCents: machinePrice(MachineKind.Pump),
     gesture: 'click',
   },
-  [ToolMode.PlaceArtesianWell]: {
-    label: 'Artesian Well',
-    // THE HINT CARRIES THE NUMBER, because the number is the entire feature and there is nowhere
-    // else in the game a player would meet it. "More water" is a promise; "+20 u/min" is an
-    // arithmetic they can check against the pond they are standing next to.
-    hint: 'on the bank — +20 u/min to that pond, three per pond',
-    costCents: machinePrice(MachineKind.ArtesianWell),
-    gesture: 'click',
-  },
   [ToolMode.PlaceTank]: {
     label: 'Tank',
     hint: 'clear 2x2 — a buffer on the line, so a stall is not a drought',
@@ -737,6 +732,14 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
   [ToolMode.ApplyFertilizer]: {
     label: 'Fertilizer',
     hint: 'retired — soil has no quality to improve',
+    costCents: 0,
+    gesture: 'click',
+  },
+
+  /** The retired well's tombstone row — see `ToolMode.PlaceArtesianWell`. Nothing offers it. */
+  [ToolMode.PlaceArtesianWell]: {
+    label: 'Artesian Well',
+    hint: 'retired — the pond never runs dry now',
     costCents: 0,
     gesture: 'click',
   },
@@ -839,8 +842,6 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       return MachineKind.Pump;
     case ToolMode.PlaceTank:
       return MachineKind.Tank;
-    case ToolMode.PlaceArtesianWell:
-      return MachineKind.ArtesianWell;
     case ToolMode.PlacePipedSprinkler:
       return MachineKind.PipedSprinkler;
     case ToolMode.PlaceIrrigationHub:
@@ -861,11 +862,12 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       // `ToolMode.PlacePipe` reaches this line and MUST: a pipe is not a `MachineKind` and
       // never will be, so it has no spec, no footprint and no place in `PLACEMENT_TOOLS`.
       // Its command is `PlacePipe`, built in `pointer.ts` from the drag.
-      // `ToolMode.PlacePartsBench`, `ToolMode.PlaceComposter` and `ToolMode.ApplyFertilizer`
-      // reach this line ON PURPOSE and stay here: all three are retired ([[090]], [[124]]), so
-      // none has a kind, a row or a membership below — but the enum members survive because a
-      // saved hotbar is validated against `Object.values(ToolMode)` and one unknown number
-      // rejects the WHOLE layout. See each member's own note.
+      // `ToolMode.PlacePartsBench`, `ToolMode.PlaceComposter`, `ToolMode.ApplyFertilizer` and
+      // `ToolMode.PlaceArtesianWell` reach this line ON PURPOSE and stay here: all four are
+      // retired ([[090]], [[124]], [[140]]), so none has a kind, a row or a membership below —
+      // but the enum members survive because a saved hotbar is validated against
+      // `Object.values(ToolMode)` and one unknown number rejects the WHOLE layout. See each
+      // member's own note.
       return null;
   }
 }
@@ -914,7 +916,6 @@ const PLACEMENT_TOOLS: readonly ToolMode[] = [
   ToolMode.PlaceDeliveryCart,
   ToolMode.PlaceTruckDepot,
   ToolMode.PlacePump,
-  ToolMode.PlaceArtesianWell,
   ToolMode.PlaceTank,
   ToolMode.PlacePipedSprinkler,
   ToolMode.PlaceIrrigationHub,

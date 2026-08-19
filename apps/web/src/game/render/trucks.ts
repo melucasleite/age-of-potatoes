@@ -167,7 +167,22 @@ export class TruckLayer {
       }
 
       if (visual.route === null) {
-        visual.route = planRoute(view, depot, takenByDepot.get(contract.depotId) ?? EMPTY_LANES);
+        // THE CLAIM IS WRITTEN BACK IMMEDIATELY, and that is the whole point of doing it here
+        // rather than leaning on next frame's rebuild. The pass above can only see lanes that
+        // were ALREADY chosen when the frame started, so two routes on one depot that begin
+        // their runs on the SAME tick — one grabber topping up two one-item contracts, which
+        // is the cheapest route a player can sign — would both read the same set, both find it
+        // empty, and both take the same row. They would then hold that row for the whole run,
+        // because a route is chosen once and never revisited. One truck driving through
+        // another is exactly the thing `chooseLane`'s `taken` argument exists to prevent, so
+        // the claim goes in the instant it is made rather than one frame late.
+        let taken = takenByDepot.get(contract.depotId);
+        if (taken === undefined) {
+          taken = new Set();
+          takenByDepot.set(contract.depotId, taken);
+        }
+        visual.route = planRoute(view, depot, taken);
+        taken.add(visual.route.laneY);
       }
       const route = visual.route;
 
@@ -233,8 +248,6 @@ export class TruckLayer {
     this.visuals.clear();
   }
 }
-
-const EMPTY_LANES: ReadonlySet<number> = new Set();
 
 /** At the bay, nose pointed at the road. Loading is not a position on the run, it precedes it. */
 const PARKED = { away: 0, heading: 1 } as const;
@@ -305,6 +318,7 @@ function planRoute(view: WorldView, depot: DepotFacts, taken: ReadonlySet<number
     depot.tilesHigh,
     (row) => blockedWestOf(view, depot, row),
     taken,
+    view.worldTilesHigh,
   );
   const homeX = Math.max(TRUCK_HALF_W, depot.tileX * TILE_PX - TRUCK_HALF_W);
   return { laneY, homeX, awayX: -TRUCK_HALF_W };

@@ -69,6 +69,26 @@ function lockNameFor(worldId: string): string {
 let holder: { worldId: string; release: () => void } | null = null;
 
 /**
+ * A claim that has been ASKED FOR but has not come back yet.
+ *
+ * **WITHOUT THIS, THE RE-ENTRANCY BELOW IS A CHECK-THEN-ACT RACE AND STRICTMODE LOSES IT.**
+ * `holder` is assigned inside the lock callback, which cannot run until after `locks.request`
+ * returns — so it is null for the whole window between asking and being answered. StrictMode
+ * does not mount, wait, and mount again; it fires both boot effects back to back, and both of
+ * them read `holder === null` before either callback runs. The first takes the lock, the second
+ * asks with `ifAvailable` and is handed `null` — by its own tab — and the game tells a player
+ * with a single tab open that their lot is open somewhere else.
+ *
+ * It survived its own test because that test awaits the two calls one after the other
+ * ("says yes twice to the same page"), which is the one ordering that cannot reproduce it.
+ *
+ * So the second asker joins the FIRST ASK rather than starting a competing one. Same promise,
+ * same verdict, one lock — which is what "re-entrant within the page" was always supposed to
+ * mean.
+ */
+let claiming: { worldId: string; lease: Promise<WorldLease> } | null = null;
+
+/**
  * Claim a world for this page.
  *
  * RE-ENTRANT WITHIN THE PAGE, AND THAT IS NOT A CONVENIENCE. React StrictMode mounts the boot
@@ -80,6 +100,11 @@ export async function acquireWorldLease(worldId: string): Promise<WorldLease> {
   if (holder !== null && holder.worldId === worldId) {
     return { worldId, held: true, enforced: true };
   }
+  // The same question already in flight for the same lot. See `claiming`: this is the branch
+  // StrictMode actually takes, because it asks twice before the first answer arrives.
+  if (claiming !== null && claiming.worldId === worldId) {
+    return claiming.lease;
+  }
   // A page that moves from one lot to another gives the first one back on the way past.
   releaseWorldLease();
 
@@ -89,7 +114,7 @@ export async function acquireWorldLease(worldId: string): Promise<WorldLease> {
     return { worldId, held: true, enforced: false };
   }
 
-  return new Promise<WorldLease>((settle) => {
+  const lease = new Promise<WorldLease>((settle) => {
     void locks
       .request(lockNameFor(worldId), { mode: 'exclusive', ifAvailable: true }, (lock) => {
         // `ifAvailable` means the callback runs immediately either way: with the lock, or with
@@ -116,6 +141,17 @@ export async function acquireWorldLease(worldId: string): Promise<WorldLease> {
         settle({ worldId, held: true, enforced: false });
       });
   });
+
+  // Registered SYNCHRONOUSLY, before the first `await` anyone could interleave on — the whole
+  // point is to be visible to a second caller in the same turn of the event loop.
+  claiming = { worldId, lease };
+  try {
+    return await lease;
+  } finally {
+    // Only clear our own claim: a page that moved to another lot mid-flight has already put a
+    // newer one here, and dropping that would reopen the race one lot over.
+    if (claiming !== null && claiming.lease === lease) claiming = null;
+  }
 }
 
 /**
@@ -129,6 +165,9 @@ export async function acquireWorldLease(worldId: string): Promise<WorldLease> {
 export function releaseWorldLease(): void {
   const current = holder;
   holder = null;
+  // A claim still in flight is dropped too, or a page that left a lot and came straight back
+  // would be handed the verdict from the ask it just abandoned.
+  claiming = null;
   current?.release();
 }
 

@@ -1,53 +1,59 @@
 // Reservoirs, and the one place water leaves a source.
 //
-// PLAN §4, AND BOTH BOLD CLAUSES ARE ANTI-SOFTLOCK GUARANTEES RATHER THAN BALANCE:
+// ────────────────────────────────────────────────────────────────────────────────────────
+// **THE POND NEVER RUNS DRY** (item 140; owner ruling 2026-08-17, verbatim: *"I want the ponds
+// to have infinite water. Get rid of the artisan well and just have the pond have an unlimited
+// supply of water."*).
 //
-//   "Reservoirs ~10,000 units recharging ~20 u/min; overdraw is telegraphed (shoreline
-//    recedes, mud ring), pumps halve below 25% and sip at recharge rate when empty —
-//    **reservoirs always recover**. ... **The watering can always fills at any shore at any
-//    level** — hand-scale farming can never be water-starved."
+// A reservoir is now geometry and an id. It has no level, no capacity and no recharge, so there
+// is no state in it that a draw could move and none that could ever be low. Plan §4's throttle
+// curve — halve below 25%, sip at the recharge rate when empty, "reservoirs always recover" — is
+// gone entire, because every clause of it was a way of managing a scarcity that no longer exists.
+// So is the Artesian Well, which was the machine invented to relieve it.
 //
-// A dry pond is a THROTTLE, never a stop, and never a reason the player cannot play. Do not
-// tune either guarantee away for tension; plan §1's floor is "no debt, no softlocks, no
-// deleted mornings", and a pond that could strand somebody is a deleted morning.
+// **INFINITE SOURCE, FINITE THROUGHPUT.** The pump still has a rate. That is the ruling and it is
+// deliberate: it keeps networks, sizing and tanks meaningful and deletes only the scarcity. A
+// pump is still a straw; there is simply no longer a bottom to the glass.
+// ────────────────────────────────────────────────────────────────────────────────────────
 //
-// ONE ACCOUNTING PATH. Every draw in the game — the can, a hand refill of a barrel, a pump
-// feeding a network, and anything that arrives later — goes through `takeWater()`, which is
-// the only function in this package that decrements a reservoir and the only one that
-// increments `stats.waterDrawnMl`. If two code paths could take water, plan §6's Dry County
-// board ("$ per kilolitre of water drawn") would already be wrong and nobody would notice
-// for months.
+// **THE ONE LEDGER, IN ITS NEW FORM. `takeWater()` IS STILL THE ONLY DOOR WATER COMES THROUGH,
+// AND STILL THE ONLY PLACE `stats.waterDrawnMl` MOVES.** What it stopped being is a withdrawal.
+// The old invariant had two halves — a pond's level fell by exactly what was granted, and the
+// meter rose by exactly what was granted — and the first half described a stock that is gone. The
+// second half is untouched and is now the whole of it:
 //
-// NOTHING HERE READS A CLOCK. Recharge accrues per tick inside `step()`, so a pond does not
-// refill overnight and a player returning after a week finds it exactly as they left it
-// (plan §6: "the economy only simulates while ticks accrue"). That falls out of the
-// architecture for free — there is no `Date` in this package and the tsconfig would not
-// compile one.
+//     every millilitre that enters the world passes through `takeWater` and is counted once.
+//
+// Everything downstream is unchanged, which is the point of leaving the door where it was: a
+// network still books `drawn = delivered + buffered`, `spentMl + heldMl` still equals
+// `waterDrawnMl` across a whole world, and plan §6's Dry County board ("$ per kilolitre of water
+// drawn") still measures a real quantity. What can no longer happen is a draw being SHORT because
+// the source was empty — only because there was no source (see `WaterDraw`).
+//
+// NOTHING HERE READS A CLOCK, and now nothing here accrues one either. The recharge accumulator
+// was the last per-tick arithmetic in this file; a pond does not refill overnight because a pond
+// does not refill at all.
 
-import {
-  MachineRole,
-  RESERVOIR_LOW_PERMILLE,
-  RESERVOIR_RECHARGE_ML_PER_MINUTE,
-  WELL_MAX_PER_RESERVOIR,
-  WELL_RECHARGE_ML_PER_MINUTE,
-  machineSpec,
-} from './data';
 import type { Reservoir, WorldState } from './state';
 import { recordWaterDrawn } from './stats';
-import { SUBTILE, TICKS_PER_MINUTE, clampInt, divFloor, permille } from './units';
+import { SUBTILE, clampInt, divFloor } from './units';
 
 /**
  * How a draw is metered.
  *
- * `Metered` is everything with a hose on it: a pump, a barrel being topped up. It gets what
- * the pond can actually give and no more.
+ * **THE DISTINCTION SURVIVED THE INFINITE POND, BUT ITS MEANING MOVED** (item 140). It used to be
+ * "what the pond can actually give" against "the can fills at any shore at any level, including
+ * an empty one". There are no empty ponds now, so what is left is the deeper half of §4's
+ * anti-softlock clause: a hose needs a source and a hand does not.
  *
- * `Shore` is the watering can, and only the watering can. §4 is explicit and this is the
- * anti-softlock floor: it fills at any shore at any level, including an empty one, where the
- * fiction is that you are scooping the last puddle. The pond still floors at zero — a can
- * never makes a reservoir owe water — but the pour happens and the draw is counted in full,
- * because the honest thing for the Dry County board to measure is the water the player
- * actually used.
+ * `Metered` is everything with a hose on it: a pump, a barrel being topped up. It draws from a
+ * reservoir, and from nowhere else — a pump that is not standing on a bank (which placement
+ * refuses, and a hand-edited save can still present) gets nothing rather than free water.
+ *
+ * `Shore` is the watering can, and only the watering can. It always fills, including in a world
+ * that has no water in it at all, where the fiction is that the Mogul found a puddle. The draw is
+ * counted in full either way, because the honest thing for the Dry County board to measure is the
+ * water the player actually used.
  */
 export const WaterDraw = {
   Metered: 0,
@@ -57,12 +63,17 @@ export const WaterDraw = {
 export type WaterDraw = (typeof WaterDraw)[keyof typeof WaterDraw];
 
 /**
- * Take water. THE ONLY WAY WATER LEAVES A SOURCE, AND THE ONLY PLACE `waterDrawnMl` MOVES.
+ * Take water. THE ONLY WAY WATER ENTERS THE WORLD, AND THE ONLY PLACE `waterDrawnMl` MOVES.
  *
- * Returns the millilitres actually granted, which is what the caller may spend. A `null`
- * reservoir is legal and means "there is no pond here" — a can-scale draw still succeeds
- * (the anti-softlock clause does not depend on a pond existing), and a metered draw gets
- * nothing.
+ * Returns the millilitres granted, which is what the caller may spend. Since item 140 a pond is
+ * an unlimited source, so a metered draw against a real reservoir is granted IN FULL and the only
+ * short answer left is zero — a metered draw with no reservoir at all. A `null` reservoir is
+ * legal and means "there is no pond here".
+ *
+ * **IT STILL EXISTS, AND IT MUST.** A one-line `granted = requestMl` at each call site would be
+ * the same arithmetic and would quietly delete the meter, and with it the one property this file
+ * is arranged around: if two code paths could take water, plan §6's Dry County board would be
+ * wrong and nobody would notice for months.
  */
 export function takeWater(
   state: WorldState,
@@ -72,141 +83,29 @@ export function takeWater(
 ): number {
   if (requestMl <= 0) return 0;
 
-  const level = reservoir === null ? 0 : reservoir.levelMl;
-  const fromReservoir = requestMl < level ? requestMl : level;
-  const granted = mode === WaterDraw.Shore ? requestMl : fromReservoir;
-
-  // Floors at zero by construction: `fromReservoir` is never larger than the level.
-  if (reservoir !== null) reservoir.levelMl -= fromReservoir;
+  const granted = mode === WaterDraw.Shore || reservoir !== null ? requestMl : 0;
   if (granted > 0) recordWaterDrawn(state.stats, granted);
 
   return granted;
 }
 
 /**
- * How many Artesian Wells are sunk on this reservoir's bank, capped at the legal maximum.
+ * What a pump rated at `baseRateMlPerMinute` may actually draw from `reservoir`.
  *
- * **THE SAME ADJACENCY RULE THE PUMP USES, DELIBERATELY.** A well claims the reservoir that
- * `reservoirAdjacentToTile` gives it — own tile first, then the four orthogonal neighbours,
- * lowest id breaking ties — so a well wedged between two ponds feeds exactly one of them and
- * always the same one. Two rules for "standing on the bank" is how a preview ends up disagreeing
- * with a reducer, which is the mistake `pipePathRefusal`'s header is written to prevent.
+ * **THE THROUGHPUT HALF OF ITEM 140'S RULING, AND THE ONLY NUMBER LEFT BETWEEN THE MAP AND THE
+ * PIPES.** The source is unlimited; the straw is not. So a pump on a bank draws exactly what it
+ * is rated for, every tick, forever — no 25% band, no half rate, no sip — and a pump standing on
+ * dry land draws nothing, which is the same refusal `WaterDraw.Metered` states one level down.
  *
- * CLAMPED HERE AS WELL AS AT PLACEMENT. `liquidPlacementRefusal` refuses the fourth well before
- * it exists, but a hand-edited save can present any number, and the ledger's honesty must not
- * depend on the build rules having been obeyed. Recomputed per call rather than cached: a full
- * recompute that is right beats an incremental update that is wrong once, which is the same
- * ruling `rebuildNetworks` is built on. When a profiler complains, cache it — not before.
- */
-export function wellsOnReservoir(state: WorldState, reservoir: Reservoir): number {
-  let count = 0;
-  for (let i = 0; i < state.machines.length; i++) {
-    const machine = state.machines[i]!;
-    const spec = machineSpec(machine.kind);
-    if (spec === null || spec.role !== MachineRole.Well) continue;
-    const claimed = reservoirAdjacentToTile(state, machine.tileX, machine.tileY);
-    if (claimed !== null && claimed.id === reservoir.id) count += 1;
-  }
-  return count > WELL_MAX_PER_RESERVOIR ? WELL_MAX_PER_RESERVOIR : count;
-}
-
-/**
- * What this reservoir MAKES, per minute: §4's ~20 u/min plus whatever has been sunk into it.
- *
- * **ONE DEFINITION, READ IN BOTH PLACES THAT MATTER** — `rechargeReservoir`, which is how the
- * pond refills, and `pumpSupplyMlPerMinute`'s `Sip` band, which is what a pump gets at an empty
- * pond. Those two have to be the same number or the anti-softlock guarantee stops being one: a
- * bored pond that refilled faster but still *sipped* at the base rate would hand the well's
- * water to nobody at exactly the moment the player needs it, since a heavily-drawn pond lives at
- * zero. That is the whole failure mode item 130 was filed against, and it would have been
- * reintroduced by a one-line change in the wrong place.
- */
-export function reservoirRechargeMlPerMinute(state: WorldState, reservoir: Reservoir): number {
-  return (
-    RESERVOIR_RECHARGE_ML_PER_MINUTE +
-    wellsOnReservoir(state, reservoir) * WELL_RECHARGE_ML_PER_MINUTE
-  );
-}
-
-/**
- * One tick of recharge on one reservoir, at `rechargeMlPerMinute`.
- *
- * 40,000 ml a minute is 33⅓ ml a tick, so this accrues per-minute units and spends whole
- * millilitres — the same integer accumulator `PlayerState.moveAccum` uses, for the same
- * reason. `Math.round` on a rate would be a float in disguise and would make the pond
- * permanently 1% wrong in one direction or the other.
- *
- * THE RATE IS AN ARGUMENT RATHER THAN A CONSTANT since item 130, because a pond's recharge is no
- * longer a property of the world — it is a property of THAT pond, and it changes when somebody
- * sinks a well. Passed in rather than looked up so this function stays a pure integer
- * accumulator with nothing to say about machines.
- */
-export function rechargeReservoir(reservoir: Reservoir, rechargeMlPerMinute: number): void {
-  if (reservoir.levelMl >= reservoir.capacityMl) {
-    // A full pond banks nothing. Otherwise a long idle spell would fill the accumulator and
-    // the first draw would be answered instantly out of stored nothing.
-    reservoir.rechargeAccum = 0;
-    return;
-  }
-
-  reservoir.rechargeAccum += rechargeMlPerMinute;
-  const whole = divFloor(reservoir.rechargeAccum, TICKS_PER_MINUTE);
-  if (whole <= 0) return;
-
-  reservoir.rechargeAccum -= whole * TICKS_PER_MINUTE;
-  reservoir.levelMl += whole;
-  if (reservoir.levelMl > reservoir.capacityMl) reservoir.levelMl = reservoir.capacityMl;
-}
-
-/** How full a reservoir is, 0..1000. What the shoreline and the mud ring are drawn from. */
-export function reservoirLevelPermille(reservoir: Reservoir): number {
-  return permille(reservoir.levelMl, reservoir.capacityMl);
-}
-
-/** The three bands of §4's throttle curve, as data the HUD and the renderer can badge. */
-export const ReservoirThrottle = {
-  /** Above 25%. Pumps run at their rated speed. */
-  Full: 0,
-  /** Below 25%. Pumps run at half. The shoreline has visibly receded by now. */
-  Half: 1,
-  /** Empty. Pumps sip at the recharge rate — slow, never dead. */
-  Sip: 2,
-} as const;
-
-export type ReservoirThrottle = (typeof ReservoirThrottle)[keyof typeof ReservoirThrottle];
-
-export function reservoirThrottle(reservoir: Reservoir | null): ReservoirThrottle {
-  if (reservoir === null || reservoir.levelMl <= 0) return ReservoirThrottle.Sip;
-  if (reservoirLevelPermille(reservoir) < RESERVOIR_LOW_PERMILLE) return ReservoirThrottle.Half;
-  return ReservoirThrottle.Full;
-}
-
-/**
- * What a pump rated at `baseRateMlPerMinute` may actually draw, given its source's level.
- *
- * §4'S CURVE, EXACTLY: full above 25%, **half below 25%**, and at empty a **sip at the
- * recharge rate**. That last clause is the one that guarantees recovery — a pump at an empty
- * pond is slow, not dead, and it can never take more than the pond makes, so the level can
- * only go up from there the moment demand eases.
- *
- * `rechargeMlPerMinute` IS THAT POND'S RATE, not the world constant — see
- * `reservoirRechargeMlPerMinute`. A drained pond is where a heavily-drawn factory lives, so the
- * `Sip` band is the band an Artesian Well has to reach or it may as well not exist.
+ * Two answers rather than one, which is why this is still a function: "how much water can this
+ * pump have" now has exactly one interesting input, and that input is whether it is at the water.
  */
 export function pumpSupplyMlPerMinute(
   reservoir: Reservoir | null,
   baseRateMlPerMinute: number,
-  rechargeMlPerMinute: number,
 ): number {
-  if (baseRateMlPerMinute <= 0) return 0;
-  switch (reservoirThrottle(reservoir)) {
-    case ReservoirThrottle.Sip:
-      return reservoir === null ? 0 : rechargeMlPerMinute;
-    case ReservoirThrottle.Half:
-      return divFloor(baseRateMlPerMinute, 2);
-    default:
-      return baseRateMlPerMinute;
-  }
+  if (reservoir === null || baseRateMlPerMinute <= 0) return 0;
+  return baseRateMlPerMinute;
 }
 
 // --- finding a source ---------------------------------------------------------------

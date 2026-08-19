@@ -32,7 +32,8 @@ import {
   foldBests,
   readBoardValues,
 } from './boards';
-import { centsPerActiveHour } from './rate';
+import { formatPermille } from './format';
+import { MIN_RATE_SPAN_TICKS, centsPerActiveHour } from './rate';
 import { ShiftLedger } from './shift';
 
 // The module that actually owns the day. Importing it pulls Pixi, which is fine in a test
@@ -119,6 +120,39 @@ function viewWith(fields: {
   return view;
 }
 
+/**
+ * One sim-projected hour bucket. Defaults are deliberately boring so each test names only
+ * the field it is about — the shape has nine members and a test that restates all of them
+ * is a test about the shape rather than about the behaviour.
+ */
+function hourBucket(fields: {
+  hour: number;
+  ticks: number;
+  grossCents?: number;
+  spendCents?: number;
+  waterMl?: number;
+  itemsSold?: number;
+  wastePermille?: number;
+}) {
+  return {
+    hour: fields.hour,
+    grossCents: fields.grossCents ?? 0,
+    spendCents: fields.spendCents ?? 0,
+    waterMl: fields.waterMl ?? 0,
+    itemsSold: fields.itemsSold ?? 0,
+    ticks: fields.ticks,
+    wastePermille: fields.wastePermille ?? -1,
+  };
+}
+
+/** A projection carrying sim-owned hour buckets — the branch every real world takes. */
+function viewWithHours(tick: number, hours: ReturnType<typeof hourBucket>[]): WorldView {
+  const view = createWorldView();
+  view.tick = tick;
+  view.stats.hours = hours;
+  return view;
+}
+
 describe('the shift ledger', () => {
   it('telescopes: the buckets always sum to the lifetime total', () => {
     const ledger = new ShiftLedger();
@@ -196,6 +230,95 @@ describe('the shift ledger', () => {
     expect(ledger.current.complete).toBe(0);
   });
 
+  it('CARRIES THE WASTE FIGURE THE SIM ALREADY MEASURED', () => {
+    // The whole point of the item. `tick.ts` counts `inputsWastedByMachine`, `view.ts`
+    // divides it by the hour's throughput, and this branch used to read every other field
+    // off the bucket and drop this one on the floor.
+    const ledger = new ShiftLedger();
+    ledger.read(
+      viewWithHours(TICKS_PER_ACTIVE_HOUR + 500, [
+        hourBucket({ hour: 0, ticks: TICKS_PER_ACTIVE_HOUR, wastePermille: 40 }),
+        hourBucket({ hour: 1, ticks: 500, wastePermille: 110 }),
+      ]),
+    );
+    expect(ledger.current.wastePermille).toBe(110);
+    expect(ledger.closed[0]?.wastePermille).toBe(40);
+  });
+
+  it('KEEPS THE SHORT BIRTH HOUR, which classifying by width dropped entirely', () => {
+    // Hour boundaries are dawn-aligned, so hour 0 is the 8,400 ticks between a 09:00 birth
+    // and the first 06:00. Read by width it looked like the hour in progress, and — not
+    // being last — was then overwritten by the hour that really was: gone from the strip,
+    // from the peak the strip scales against, and from "Best hour", silently.
+    const ledger = new ShiftLedger();
+    const birthTicks = 8_400;
+    ledger.read(
+      viewWithHours(TICKS_PER_ACTIVE_HOUR * 2, [
+        hourBucket({ hour: 0, ticks: birthTicks, grossCents: 300_000 }),
+        hourBucket({ hour: 1, ticks: TICKS_PER_ACTIVE_HOUR, grossCents: 100_000 }),
+        hourBucket({ hour: 2, ticks: 900, grossCents: 1_000 }),
+      ]),
+    );
+
+    expect(ledger.closed).toHaveLength(2);
+    expect(ledger.closed[0]?.hour).toBe(0);
+    expect(ledger.closed[0]?.complete).toBe(1);
+    expect(ledger.closed[0]?.ticks).toBe(birthTicks);
+    // The hour in progress is the LAST entry, whatever any of the others measure.
+    expect(ledger.current.hour).toBe(2);
+    expect(ledger.current.complete).toBe(0);
+    // And it counts for the record, because 8,400 ticks clears the width floor.
+    expect(ledger.bestCentsPerHour).toBe(centsPerActiveHour(300_000, birthTicks));
+  });
+
+  it('applies the width floor on the adopt branch too, which it never used to', () => {
+    // A world can close a bucket far narrower than the birth hour — join a session moments
+    // before a boundary and the sim writes a bucket a few hundred ticks wide. `close()` has
+    // always refused those; `adopt()` accepted anything.
+    const ledger = new ShiftLedger();
+    ledger.read(
+      viewWithHours(TICKS_PER_ACTIVE_HOUR, [
+        hourBucket({ hour: 0, ticks: MIN_RATE_SPAN_TICKS - 1, grossCents: 500_000 }),
+        hourBucket({ hour: 1, ticks: 100 }),
+      ]),
+    );
+    expect(ledger.closed).toHaveLength(1);
+    expect(ledger.bestCentsPerHour).toBe(0);
+  });
+
+  it('never lowers the rolling best once a record hour leaves the window', () => {
+    // `stats.hours` is capped at 24. A best recomputed from scratch each publish falls the
+    // moment the record scrolls off the end, and a personal best that goes down is not one.
+    const ledger = new ShiftLedger();
+    ledger.read(
+      viewWithHours(TICKS_PER_ACTIVE_HOUR * 2, [
+        hourBucket({ hour: 0, ticks: TICKS_PER_ACTIVE_HOUR, grossCents: 900_000 }),
+        hourBucket({ hour: 1, ticks: 10 }),
+      ]),
+    );
+    const record = ledger.bestCentsPerHour;
+    expect(record).toBe(900_000);
+
+    ledger.read(
+      viewWithHours(TICKS_PER_ACTIVE_HOUR * 3, [
+        hourBucket({ hour: 1, ticks: TICKS_PER_ACTIVE_HOUR, grossCents: 1_000 }),
+        hourBucket({ hour: 2, ticks: 10 }),
+      ]),
+    );
+    expect(ledger.bestCentsPerHour).toBe(record);
+  });
+
+  it('hands back the same open-hour object when nothing moved', () => {
+    // The store's slice guard is a reference check. A fresh frozen bucket every publish
+    // re-renders the panel 6.7 times a second to redraw the identical five rows.
+    const ledger = new ShiftLedger();
+    const hours = [hourBucket({ hour: 0, ticks: 400, grossCents: 900 })];
+    ledger.read(viewWithHours(400, hours));
+    const first = ledger.current;
+    expect(ledger.read(viewWithHours(400, hours))).toBe(false);
+    expect(ledger.current).toBe(first);
+  });
+
   it('does not let a three-minute hour set the rolling best', () => {
     const ledger = new ShiftLedger();
     // Join late in hour 0 with a big number, then cross into hour 1. The closed bucket is
@@ -265,6 +388,28 @@ describe('the boards', () => {
     const early = readBoardValues(viewWith({ tick: 60_000, netCents: 800_000 }), -1);
     foldBests(bests, early);
     expect(bests.firstTenCents).toBe(0);
+  });
+
+  it('REFUSES TO SCORE A WORLD THAT PASSED TEN HOURS UNRECORDED', () => {
+    // A save restored past the mark whose reports record is gone — which needs no
+    // misfortune, since the sim's save and this store live in different places and
+    // `loadLedger` swallows every failure. The lifetime figure it carries is a twelve-hour
+    // one; posting it as a First Ten score is §7 ruling 4's inversion, and worse, it would
+    // keep rising for as long as the player kept earning.
+    const past = readBoardValues(
+      viewWith({ tick: TICKS_PER_ACTIVE_HOUR * 12, netCents: 9_000_000 }),
+      -1,
+    );
+    expect(past.firstTenFinal).toBe(1);
+    expect(past.firstTenKnown).toBe(0);
+
+    const bests = emptyBests();
+    foldBests(bests, past);
+    expect(bests.firstTenCents).toBe(0);
+
+    const board = deriveBoards(past, emptyBests()).find((r) => r.id === 'first-ten');
+    expect(board?.eligible).toBe(0);
+    expect(board?.gate).toContain('unrecorded');
   });
 });
 
@@ -470,5 +615,72 @@ describe('the reports store across a dawn', () => {
     // exists to prevent, and it would show up as somebody else's numbers on your receipt.
     expect(reportsStore.getSnapshot().dawn.card).toBeNull();
     reportsStore.release(live);
+  });
+
+  it('PUTS A REAL WASTE PERCENTAGE ON THE SHIFT REPORT', () => {
+    // The end-to-end pin, and the one that would have caught the original defect. Every link
+    // in the chain existed — the sim counted it, the projection carried it — and the client
+    // read a `stats.wastePermille` that `StatsView` has never had, so the row printed "not
+    // yet measured" from the day it shipped. Nothing failed. That is what made it survive.
+    const token = {};
+    reportsStore.claim(token, 5150);
+    publish(
+      token,
+      viewWithHours(6_000, [hourBucket({ hour: 0, ticks: 6_000, wastePermille: 110 })]),
+    );
+
+    const waste = reportsStore.getSnapshot().shift.waste;
+    expect(waste.measured).toBe(1);
+    expect(waste.permille).toBe(110);
+    // Through the formatter the panel actually uses, because the row's job is a string.
+    expect(formatPermille(waste.permille)).toBe('11.0%');
+
+    reportsStore.release(token);
+  });
+
+  it('says an hour ran nothing rather than claiming the metric is missing', () => {
+    // −1 is the sim's "no throughput to take a ratio of", which is a real and reachable
+    // state — an hour spent building. It is NOT the same sentence as "nobody is counting",
+    // and the row stopped being allowed to conflate them.
+    const token = {};
+    reportsStore.claim(token, 5151);
+    publish(token, viewWithHours(6_000, [hourBucket({ hour: 0, ticks: 6_000 })]));
+    expect(reportsStore.getSnapshot().shift.waste.measured).toBe(0);
+    reportsStore.release(token);
+  });
+
+  it('SCORES FIRST TEN ONCE AND THEN LEAVES IT ALONE', () => {
+    const token = {};
+    reportsStore.claim(token, 5152);
+    const row = () => reportsStore.getSnapshot().boards.rows.find((r) => r.id === 'first-ten');
+
+    publish(token, viewWith({ tick: TICKS_PER_ACTIVE_HOUR * 9, netCents: 400_000 }));
+    expect(row()?.eligible).toBe(0);
+
+    publish(token, viewWith({ tick: TICKS_PER_ACTIVE_HOUR * 10, netCents: 500_000 }));
+    expect(row()?.eligible).toBe(1);
+    expect(row()?.value).toBe(500_000);
+
+    // Two hours and eight and a half million cents later. A First Ten that follows lifetime
+    // earnings upward is the Dynasty board with a longer name (§7 ruling 4).
+    publish(token, viewWith({ tick: TICKS_PER_ACTIVE_HOUR * 12, netCents: 9_000_000 }));
+    expect(row()?.value).toBe(500_000);
+
+    reportsStore.release(token);
+  });
+
+  it('will not invent a First Ten for a world it first met past the mark', () => {
+    // The reachable version of the above: the reports record is missing (a cleared origin, a
+    // failed IndexedDB open — `loadLedger` returns null for both) while the sim's save is
+    // intact and already twelve hours deep.
+    const token = {};
+    reportsStore.claim(token, 5153);
+    publish(token, viewWith({ tick: TICKS_PER_ACTIVE_HOUR * 12, netCents: 9_000_000 }));
+
+    const row = reportsStore.getSnapshot().boards.rows.find((r) => r.id === 'first-ten');
+    expect(row?.eligible).toBe(0);
+    expect(row?.gate).toContain('unrecorded');
+
+    reportsStore.release(token);
   });
 });

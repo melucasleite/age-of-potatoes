@@ -105,7 +105,6 @@ const TECH_LABELS: Readonly<Record<string, string>> = {
   'hydraulics-piped-sprinklers': 'Piped Sprinklers',
   'hydraulics-recirculator': 'Recirculator',
   'hydraulics-irrigation-hub': 'Irrigation Hub',
-  'hydraulics-artesian-well': 'Artesian Well',
   'hydraulics-soda-press': 'Press & Kettle',
   'hydraulics-soda-mixing': 'Mixing & Bottling',
 };
@@ -225,11 +224,11 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   // fed by a washer rather than chip-line kit that happens to be plumbed.
   pipeEntry(),
   machineEntry('Plumbing', ToolMode.PlacePump),
-  // DIRECTLY UNDER THE PUMP, WHICH IS WHERE THE QUESTION GETS ASKED ([[130]]). A player reads
-  // this group when their water has run out, and the pump is the thing they are staring at when
-  // it does — the owner's report was "how do I boost the pump?", twice. The answer to that
-  // question should be the next row down, not three groups away behind a node they have not met.
-  machineEntry('Plumbing', ToolMode.PlaceArtesianWell),
+  // THE WELL THAT USED TO SIT HERE IS GONE ([[140]]). It was the answer to "how do I boost the
+  // pump?" while a pond could run dry; the owner deleted the running dry, so the question no
+  // longer has that answer — or that urgency. What is left of it is the pump itself, whose rate
+  // is now the only thing between the pond and the pipes, and the Tank below, which is still how
+  // you ride out a stall.
   machineEntry('Plumbing', ToolMode.PlaceTank),
   machineEntry('Plumbing', ToolMode.PlaceRecirculator),
 

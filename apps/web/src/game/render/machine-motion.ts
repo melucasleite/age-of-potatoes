@@ -158,11 +158,9 @@ export const MACHINE_MOTION: Record<MachineKind, MotionSpec> = {
   [MachineKind.Seasoner]: { name: 'shake', driver: 'progress', wave: 'shake', periodMs: 620 },
   [MachineKind.Bagger]: { name: 'squeeze', driver: 'progress', wave: 'squeeze', periodMs: 680 },
   [MachineKind.Pump]: { name: 'throb', driver: 'running', wave: 'throb', periodMs: 420 },
-  // The Artesian Well ([[130]]): a slow deep nod, and slower than the pump beside it on purpose.
-  // The pump is a straw working hard; this is the water table rising, which is not a hurried
-  // thing. `driver: 'running'` rather than `'flow'` — a well is on no network and has no flow to
-  // read, and it is always working.
-  [MachineKind.ArtesianWell]: { name: 'draw', driver: 'running', wave: 'throb', periodMs: 1500 },
+  // The Artesian Well's slow deep nod sat here ([[130]]) and is gone with the machine ([[140]]).
+  // The pump above keeps its throb: it is still a straw working hard, and now it is the only
+  // thing in the game drawing on a pond.
   [MachineKind.Tank]: {
     name: 'fill-breathe',
     driver: 'flow',

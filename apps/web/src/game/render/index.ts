@@ -1216,7 +1216,7 @@ export function statusFor(view: WorldView, ui: RenderUiState): string {
   // purpose: pipes run overhead since item 120, so a main crossing the pond is a thing the
   // player built and pointed at, and it outranks the terrain under it.
   const pond = pondAtTile(view.reservoirs, ui.hover.tileX, ui.hover.tileY);
-  if (pond !== null) return pondStatus(pond);
+  if (pond !== null) return pondStatus(pond, view.machines, view.reservoirs);
 
   if (!query.isField)
     return toolMachineKind(tool) === null ? 'bare ground' : 'ground: clear to build';
@@ -1375,13 +1375,13 @@ function machineStatus(view: WorldView, m: MachineView): string {
   const box = storageStatus(name, m);
   if (box !== null) return box;
 
-  // WHICH WALL THE WATER HIT (item 130). Above the lamp switch for the vehicles' and the boxes'
-  // reason, and then some: for a pump and a tank the lamp is not merely unhelpful, it is wrong.
-  // Both answer `LampState.Running` while healthy — "pump running", silent about the halved
-  // band, which is the single fact the player cannot get any other way — and
-  // `LampState.UtilityMissing` when dry, which is the branch below that says "barrel dry —
-  // click to refill" at four machines that have no barrel and no click.
-  const water = waterStatus(name, m, view.reservoirs);
+  // WHICH WALL THE WATER HIT (item 130, rewritten for item 140). Above the lamp switch for the
+  // vehicles' and the boxes' reason, and then some: for a pump and a tank the lamp is not merely
+  // unhelpful, it is wrong. Both answer `LampState.Running` while healthy — "pump running",
+  // silent about the rate it is actually managing, which is the single fact the player cannot
+  // get any other way — and `LampState.UtilityMissing` when dry, which is the branch below that
+  // says "barrel dry — click to refill" at machines that have no barrel and no click.
+  const water = waterStatus(name, m, view.reservoirs, view.networks);
   if (water !== null) return water;
 
   switch (m.lamp) {

@@ -78,6 +78,7 @@ import {
   goodsMoves,
   itemBearingPaths,
   ledgerCount,
+  testFilesCalling,
 } from './goods';
 
 function standOn(state: WorldState, tileX: number, tileY: number): void {
@@ -356,6 +357,28 @@ describe('the move census', () => {
     // census still fails the day somebody adds a transfer, but greening it means classifying the
     // new line as one of six sentences, and the live harness then holds it to that sentence.
     expect(goodsMoves()).toEqual(Object.keys(MOVE_VERDICTS).sort());
+  });
+
+  it('keeps the two NAME-BLIND guards in more than one file, and says so out loud', () => {
+    // **THE HALF OF ITEM 123 THAT IS NOT ABOUT THE CENSUS AT ALL.** `worldDiff` and
+    // `unfilledNumbers` are the only two guards in this family that name no field, which makes
+    // them the only two that cover a count, a dial or a cursor added tomorrow. Both used to be
+    // asserted in `move-census-live.test.ts` and nowhere else, so deleting that one file took the
+    // whole name-blind layer with it — and it would have gone QUIETLY, because a guard against
+    // unknown fields is not missed by anyone reading a list of known ones. Item 119 spread the
+    // clock scenarios across five files for exactly this reason and these two were left behind.
+    //
+    // They are spread now, and this is the part that notices if they stop being. It lives in a
+    // THIRD file on purpose: put the counter in either of the two homes and deleting that home
+    // deletes the counter with it, which is the same bug wearing a hat.
+    for (const guard of ['worldDiff', 'unfilledNumbers']) {
+      const homes = testFilesCalling(guard);
+      expect(
+        homes.length,
+        `${guard} is asserted in ${homes.join(', ')} — one file, so deleting it un-guards ` +
+          'every field nobody has thought of yet. Spread it back out.',
+      ).toBeGreaterThan(1);
+    }
   });
 
   it('has every door into the player’s bag on it, and says which of them mint', () => {

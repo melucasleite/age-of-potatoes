@@ -247,9 +247,7 @@ import {
   nearestPointOfReservoir,
   nearestReservoir,
   reservoirAt,
-  rechargeReservoir,
   reservoirAdjacentToTile,
-  reservoirRechargeMlPerMinute,
   reservoirWithinReach,
   takeWater,
   waterAtSubtile,
@@ -2780,19 +2778,17 @@ function intentCommand(state: WorldState, intent: PlayerIntent): Command | null 
 // --- 3. water ---------------------------------------------------------------------
 
 /**
- * Reservoir recharge, then every network's ledger.
+ * Every network's ledger, and nothing before it.
  *
- * RECHARGE FIRST, and the order is the mechanism: a pump at an empty pond is served the
- * millilitres the pond made this tick and no more, which is exactly plan §4's "sip at
- * recharge rate when empty". No special case, no floor, no clamp — the guarantee that a
- * reservoir always recovers is a consequence of two lines being in this order.
+ * **THERE WAS A RECHARGE PASS HERE AND IT IS GONE** (item 140). It ran over every reservoir
+ * before the pipes did, and the order was the mechanism: a pump at an empty pond got the
+ * millilitres the pond had made that tick and no more, which is how §4's "sip at recharge rate
+ * when empty" and "reservoirs always recover" fell out of two lines being in sequence. An
+ * unlimited pond needs neither guarantee, so the pass had nothing to do and the sim runs one
+ * fewer sweep over the world. What remains is the pipe ledger, which is where all the arithmetic
+ * about water now lives.
  */
 function advanceWater(state: WorldState): void {
-  for (let i = 0; i < state.reservoirs.length; i++) {
-    const reservoir = state.reservoirs[i]!;
-    // Each pond at ITS OWN rate since item 130 — §4's ~20 u/min plus its Artesian Wells.
-    rechargeReservoir(reservoir, reservoirRechargeMlPerMinute(state, reservoir));
-  }
   advancePipes(state);
 }
 

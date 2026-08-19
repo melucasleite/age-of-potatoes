@@ -1,0 +1,1443 @@
+{
+  "formatVersion": 23,
+  "simVersion": "0.5.0+c48bf489",
+  "worldSeed": 200143,
+  "tick": 50000,
+  "payload": {
+    "belts": [],
+    "bots": [],
+    "ceremonies": ["irrigation-hub-first-run", "piped-sprinkler-first-run"],
+    "contracts": [],
+    "field": [
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 2892,
+        "moistureAccum": 400,
+        "soil": 3,
+        "tileX": 4,
+        "tileY": 4,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 2720,
+        "moistureAccum": 500,
+        "soil": 2,
+        "tileX": 5,
+        "tileY": 4,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 6,
+        "tileY": 4,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 7,
+        "tileY": 4,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 8,
+        "tileY": 4,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 9,
+        "tileY": 4,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 10,
+        "tileY": 4,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 11,
+        "tileY": 4,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 2736,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 4,
+        "tileY": 5,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 2751,
+        "moistureAccum": 500,
+        "soil": 2,
+        "tileX": 5,
+        "tileY": 5,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 6,
+        "tileY": 5,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 7,
+        "tileY": 5,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 8,
+        "tileY": 5,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 9,
+        "tileY": 5,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 10,
+        "tileY": 5,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 11,
+        "tileY": 5,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 3411,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 4,
+        "tileY": 6,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 2936,
+        "moistureAccum": 900,
+        "soil": 3,
+        "tileX": 5,
+        "tileY": 6,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 6,
+        "tileY": 6,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 7,
+        "tileY": 6,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 8,
+        "tileY": 6,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 9,
+        "tileY": 6,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 10,
+        "tileY": 6,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 11,
+        "tileY": 6,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 3512,
+        "moistureAccum": 600,
+        "soil": 3,
+        "tileX": 4,
+        "tileY": 7,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 2943,
+        "moistureAccum": 300,
+        "soil": 3,
+        "tileX": 5,
+        "tileY": 7,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 6,
+        "tileY": 7,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 7,
+        "tileY": 7,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 8,
+        "tileY": 7,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 9,
+        "tileY": 7,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 10,
+        "tileY": 7,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 11,
+        "tileY": 7,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 3411,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 4,
+        "tileY": 8,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 2349,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 5,
+        "tileY": 8,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 6,
+        "tileY": 8,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 7,
+        "tileY": 8,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 8,
+        "tileY": 8,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 9,
+        "tileY": 8,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 10,
+        "tileY": 8,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 11,
+        "tileY": 8,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 3512,
+        "moistureAccum": 500,
+        "soil": 3,
+        "tileX": 4,
+        "tileY": 9,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 5,
+        "tileY": 9,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 6,
+        "tileY": 9,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 7,
+        "tileY": 9,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 8,
+        "tileY": 9,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 9,
+        "tileY": 9,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 10,
+        "tileY": 9,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 11,
+        "tileY": 9,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 3474,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 4,
+        "tileY": 10,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 5,
+        "tileY": 10,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 6,
+        "tileY": 10,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 7,
+        "tileY": 10,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 8,
+        "tileY": 10,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 9,
+        "tileY": 10,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 10,
+        "tileY": 10,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 11,
+        "tileY": 10,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 3411,
+        "moistureAccum": 500,
+        "soil": 2,
+        "tileX": 4,
+        "tileY": 11,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 3512,
+        "moistureAccum": 500,
+        "soil": 3,
+        "tileX": 5,
+        "tileY": 11,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 3474,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 6,
+        "tileY": 11,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 3,
+        "tileX": 7,
+        "tileY": 11,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 8,
+        "tileY": 11,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 9,
+        "tileY": 11,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 1,
+        "tileX": 10,
+        "tileY": 11,
+        "zone": 0
+      },
+      {
+        "crop": 0,
+        "growth": 0,
+        "growthTarget": 0,
+        "moisture": 0,
+        "moistureAccum": 0,
+        "soil": 2,
+        "tileX": 11,
+        "tileY": 11,
+        "zone": 0
+      }
+    ],
+    "grabbers": [],
+    "inventory": [
+      {
+        "boxes": [],
+        "count": 8,
+        "item": 1
+      }
+    ],
+    "machines": [
+      {
+        "blockedTicks": 0,
+        "boundZone": 0,
+        "capacityLevel": 0,
+        "cargoCount": 0,
+        "cargoItem": 0,
+        "condition": 1000,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "flowMlPerMinute": 0,
+        "id": 1,
+        "inputCounts": [],
+        "investedCents": 0,
+        "jammed": false,
+        "junctionInCursor": 0,
+        "junctionOutCursor": 0,
+        "kind": 1,
+        "network": 0,
+        "opCount": 0,
+        "outputCount": 0,
+        "outputItem": 0,
+        "overcookedCount": 0,
+        "ports": [],
+        "progress": 0,
+        "runTicksRemaining": 0,
+        "scanCursor": 0,
+        "seedShelfCount": 0,
+        "seedShelfItem": 0,
+        "skippedCount": 0,
+        "speedLevel": 0,
+        "tankMl": 0,
+        "throttled": false,
+        "tileX": 2,
+        "tileY": 12,
+        "untouchedTicks": 0,
+        "wateredCount": 0
+      },
+      {
+        "blockedTicks": 0,
+        "boundZone": 0,
+        "capacityLevel": 0,
+        "cargoCount": 0,
+        "cargoItem": 0,
+        "condition": 1000,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "flowMlPerMinute": 600000,
+        "id": 2,
+        "inputCounts": [],
+        "investedCents": 20000,
+        "jammed": false,
+        "junctionInCursor": 0,
+        "junctionOutCursor": 0,
+        "kind": 9,
+        "network": 259,
+        "opCount": 0,
+        "outputCount": 0,
+        "outputItem": 0,
+        "overcookedCount": 0,
+        "ports": [],
+        "progress": 0,
+        "runTicksRemaining": 0,
+        "scanCursor": 0,
+        "seedShelfCount": 0,
+        "seedShelfItem": 0,
+        "skippedCount": 0,
+        "speedLevel": 0,
+        "tankMl": 0,
+        "throttled": false,
+        "tileX": 12,
+        "tileY": 12,
+        "untouchedTicks": 0,
+        "wateredCount": 0
+      },
+      {
+        "blockedTicks": 0,
+        "boundZone": 0,
+        "capacityLevel": 0,
+        "cargoCount": 0,
+        "cargoItem": 0,
+        "condition": 1000,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "flowMlPerMinute": 0,
+        "id": 3,
+        "inputCounts": [],
+        "investedCents": 25000,
+        "jammed": false,
+        "junctionInCursor": 0,
+        "junctionOutCursor": 0,
+        "kind": 10,
+        "network": 259,
+        "opCount": 0,
+        "outputCount": 0,
+        "outputItem": 0,
+        "overcookedCount": 0,
+        "ports": [],
+        "progress": 0,
+        "runTicksRemaining": 0,
+        "scanCursor": 0,
+        "seedShelfCount": 0,
+        "seedShelfItem": 0,
+        "skippedCount": 0,
+        "speedLevel": 0,
+        "tankMl": 0,
+        "throttled": false,
+        "tileX": 1,
+        "tileY": 10,
+        "untouchedTicks": 0,
+        "wateredCount": 0
+      },
+      {
+        "blockedTicks": 0,
+        "boundZone": 0,
+        "capacityLevel": 0,
+        "cargoCount": 0,
+        "cargoItem": 0,
+        "condition": 1000,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "flowMlPerMinute": 300000,
+        "id": 4,
+        "inputCounts": [],
+        "investedCents": 25000,
+        "jammed": false,
+        "junctionInCursor": 0,
+        "junctionOutCursor": 0,
+        "kind": 11,
+        "network": 259,
+        "opCount": 341,
+        "outputCount": 0,
+        "outputItem": 0,
+        "overcookedCount": 0,
+        "ports": [],
+        "progress": 0,
+        "runTicksRemaining": 0,
+        "scanCursor": 0,
+        "seedShelfCount": 0,
+        "seedShelfItem": 0,
+        "skippedCount": 0,
+        "speedLevel": 0,
+        "tankMl": 31250,
+        "throttled": true,
+        "tileX": 2,
+        "tileY": 8,
+        "untouchedTicks": 0,
+        "wateredCount": 1705
+      },
+      {
+        "blockedTicks": 0,
+        "boundZone": 0,
+        "capacityLevel": 0,
+        "cargoCount": 0,
+        "cargoItem": 0,
+        "condition": 1000,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "flowMlPerMinute": 300000,
+        "id": 5,
+        "inputCounts": [],
+        "investedCents": 25000,
+        "jammed": false,
+        "junctionInCursor": 0,
+        "junctionOutCursor": 0,
+        "kind": 11,
+        "network": 259,
+        "opCount": 341,
+        "outputCount": 0,
+        "outputItem": 0,
+        "overcookedCount": 0,
+        "ports": [],
+        "progress": 0,
+        "runTicksRemaining": 0,
+        "scanCursor": 0,
+        "seedShelfCount": 0,
+        "seedShelfItem": 0,
+        "skippedCount": 0,
+        "speedLevel": 0,
+        "tankMl": 31250,
+        "throttled": true,
+        "tileX": 4,
+        "tileY": 13,
+        "untouchedTicks": 0,
+        "wateredCount": 1023
+      },
+      {
+        "blockedTicks": 0,
+        "boundZone": 0,
+        "capacityLevel": 0,
+        "cargoCount": 0,
+        "cargoItem": 0,
+        "condition": 1000,
+        "cooldown": 0,
+        "efficiencyLevel": 0,
+        "flowMlPerMinute": 0,
+        "id": 6,
+        "inputCounts": [],
+        "investedCents": 90000,
+        "jammed": false,
+        "junctionInCursor": 0,
+        "junctionOutCursor": 0,
+        "kind": 12,
+        "network": 259,
+        "opCount": 217,
+        "outputCount": 0,
+        "outputItem": 0,
+        "overcookedCount": 0,
+        "ports": [],
+        "progress": 0,
+        "runTicksRemaining": 0,
+        "scanCursor": 38,
+        "seedShelfCount": 0,
+        "seedShelfItem": 0,
+        "skippedCount": 49083,
+        "speedLevel": 0,
+        "tankMl": 60000,
+        "throttled": false,
+        "tileX": 1,
+        "tileY": 4,
+        "untouchedTicks": 0,
+        "wateredCount": 217
+      }
+    ],
+    "moneyCents": 1000000,
+    "networks": [
+      {
+        "deliveredMl": 500,
+        "demandMl": 800,
+        "id": 259,
+        "liquid": 1,
+        "rrOffset": 2313,
+        "supplyAccum": 0,
+        "supplyMl": 500
+      }
+    ],
+    "nextBeltId": 1,
+    "nextBotId": 1,
+    "nextContractId": 1,
+    "nextGrabberId": 1,
+    "nextMachineId": 7,
+    "nextPipeId": 18,
+    "nextReservoirId": 2,
+    "nextZoneId": 1,
+    "ownedParcels": [0],
+    "pipes": [
+      {
+        "id": 1,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 11,
+        "tileY": 12
+      },
+      {
+        "id": 2,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 10,
+        "tileY": 12
+      },
+      {
+        "id": 3,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 9,
+        "tileY": 12
+      },
+      {
+        "id": 4,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 8,
+        "tileY": 12
+      },
+      {
+        "id": 5,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 7,
+        "tileY": 12
+      },
+      {
+        "id": 6,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 6,
+        "tileY": 12
+      },
+      {
+        "id": 7,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 5,
+        "tileY": 12
+      },
+      {
+        "id": 8,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 4,
+        "tileY": 12
+      },
+      {
+        "id": 9,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 3,
+        "tileY": 12
+      },
+      {
+        "id": 10,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 3,
+        "tileY": 11
+      },
+      {
+        "id": 11,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 3,
+        "tileY": 10
+      },
+      {
+        "id": 12,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 3,
+        "tileY": 9
+      },
+      {
+        "id": 13,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 3,
+        "tileY": 8
+      },
+      {
+        "id": 14,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 3,
+        "tileY": 7
+      },
+      {
+        "id": 15,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 3,
+        "tileY": 6
+      },
+      {
+        "id": 16,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 3,
+        "tileY": 5
+      },
+      {
+        "id": 17,
+        "liquid": 1,
+        "network": 259,
+        "tileX": 3,
+        "tileY": 4
+      }
+    ],
+    "reservoirs": [
+      {
+        "id": 1,
+        "tileX": 12,
+        "tileY": 13,
+        "tilesHigh": 3,
+        "tilesWide": 3
+      }
+    ],
+    "player": {
+      "canCharges": 20,
+      "facing": 1,
+      "intent": null,
+      "moveAccum": 0,
+      "moveDir": 0,
+      "towedCartId": 0,
+      "xSub": 2176,
+      "ySub": 3200
+    },
+    "soilMemory": [
+      {
+        "soil": 3,
+        "tile": 260
+      },
+      {
+        "soil": 2,
+        "tile": 261
+      },
+      {
+        "soil": 3,
+        "tile": 262
+      },
+      {
+        "soil": 3,
+        "tile": 263
+      },
+      {
+        "soil": 3,
+        "tile": 264
+      },
+      {
+        "soil": 3,
+        "tile": 265
+      },
+      {
+        "soil": 2,
+        "tile": 266
+      },
+      {
+        "soil": 2,
+        "tile": 267
+      },
+      {
+        "soil": 2,
+        "tile": 324
+      },
+      {
+        "soil": 2,
+        "tile": 325
+      },
+      {
+        "soil": 1,
+        "tile": 326
+      },
+      {
+        "soil": 1,
+        "tile": 327
+      },
+      {
+        "soil": 1,
+        "tile": 328
+      },
+      {
+        "soil": 3,
+        "tile": 329
+      },
+      {
+        "soil": 2,
+        "tile": 330
+      },
+      {
+        "soil": 1,
+        "tile": 331
+      },
+      {
+        "soil": 2,
+        "tile": 388
+      },
+      {
+        "soil": 3,
+        "tile": 389
+      },
+      {
+        "soil": 3,
+        "tile": 390
+      },
+      {
+        "soil": 1,
+        "tile": 391
+      },
+      {
+        "soil": 2,
+        "tile": 392
+      },
+      {
+        "soil": 2,
+        "tile": 393
+      },
+      {
+        "soil": 2,
+        "tile": 394
+      },
+      {
+        "soil": 2,
+        "tile": 395
+      },
+      {
+        "soil": 3,
+        "tile": 452
+      },
+      {
+        "soil": 3,
+        "tile": 453
+      },
+      {
+        "soil": 3,
+        "tile": 454
+      },
+      {
+        "soil": 1,
+        "tile": 455
+      },
+      {
+        "soil": 1,
+        "tile": 456
+      },
+      {
+        "soil": 2,
+        "tile": 457
+      },
+      {
+        "soil": 1,
+        "tile": 458
+      },
+      {
+        "soil": 2,
+        "tile": 459
+      },
+      {
+        "soil": 2,
+        "tile": 516
+      },
+      {
+        "soil": 1,
+        "tile": 517
+      },
+      {
+        "soil": 1,
+        "tile": 518
+      },
+      {
+        "soil": 2,
+        "tile": 519
+      },
+      {
+        "soil": 1,
+        "tile": 520
+      },
+      {
+        "soil": 1,
+        "tile": 521
+      },
+      {
+        "soil": 1,
+        "tile": 522
+      },
+      {
+        "soil": 3,
+        "tile": 523
+      },
+      {
+        "soil": 3,
+        "tile": 580
+      },
+      {
+        "soil": 3,
+        "tile": 581
+      },
+      {
+        "soil": 1,
+        "tile": 582
+      },
+      {
+        "soil": 3,
+        "tile": 583
+      },
+      {
+        "soil": 3,
+        "tile": 584
+      },
+      {
+        "soil": 2,
+        "tile": 585
+      },
+      {
+        "soil": 3,
+        "tile": 586
+      },
+      {
+        "soil": 2,
+        "tile": 587
+      },
+      {
+        "soil": 1,
+        "tile": 644
+      },
+      {
+        "soil": 1,
+        "tile": 645
+      },
+      {
+        "soil": 3,
+        "tile": 646
+      },
+      {
+        "soil": 1,
+        "tile": 647
+      },
+      {
+        "soil": 1,
+        "tile": 648
+      },
+      {
+        "soil": 2,
+        "tile": 649
+      },
+      {
+        "soil": 3,
+        "tile": 650
+      },
+      {
+        "soil": 2,
+        "tile": 651
+      },
+      {
+        "soil": 2,
+        "tile": 708
+      },
+      {
+        "soil": 3,
+        "tile": 709
+      },
+      {
+        "soil": 1,
+        "tile": 710
+      },
+      {
+        "soil": 3,
+        "tile": 711
+      },
+      {
+        "soil": 2,
+        "tile": 712
+      },
+      {
+        "soil": 2,
+        "tile": 713
+      },
+      {
+        "soil": 1,
+        "tile": 714
+      },
+      {
+        "soil": 2,
+        "tile": 715
+      }
+    ],
+    "stats": {
+      "automatedGrossCents": 0,
+      "cheatsUsed": 0,
+      "dawnsSeen": 5,
+      "hourMark": {
+        "earnedCents": 0,
+        "hour": 1,
+        "inputsWasted": 0,
+        "itemsProduced": 0,
+        "itemsSold": 0,
+        "spentCents": 0,
+        "tick": 8400,
+        "waterMl": 4200500
+      },
+      "hours": [
+        {
+          "grossCents": 0,
+          "hour": 0,
+          "inputsWasted": 0,
+          "itemsProduced": 0,
+          "itemsSold": 0,
+          "spendCents": 0,
+          "ticks": 8400,
+          "waterMl": 4200500
+        }
+      ],
+      "inputsWastedByMachine": 0,
+      "itemsHarvestedByHand": 0,
+      "itemsProducedByMachine": 0,
+      "itemsSold": 0,
+      "lifetimeEarnedCents": 0,
+      "lifetimeSpentCents": 0,
+      "longestHandsFreeTicks": 50000,
+      "longestUntouchedMachineTicks": 0,
+      "netWorthCents": 1188800,
+      "netWorthSamples": [
+        1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800,
+        1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800,
+        1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800,
+        1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800, 1188800,
+        1188800, 1188800
+      ],
+      "nextNetWorthSampleTick": 50400,
+      "peakNetWorthCents": 1188800,
+      "repairKitSpendCents": 0,
+      "repairKitsUsed": 0,
+      "salesByItem": [],
+      "ticksElapsed": 50000,
+      "ticksSinceManualTouch": 50000,
+      "touches": {
+        "handCarry": 0,
+        "handHarvest": 0,
+        "handPlant": 0,
+        "handRepair": 0,
+        "handWater": 0,
+        "hopperRefill": 0,
+        "jamWhack": 0
+      },
+      "waterDrawnMl": 25000000
+    },
+    "streams": [
+      {
+        "id": "soil-init",
+        "s0": 2555811562,
+        "s1": 2761384858,
+        "s2": 1032865805,
+        "s3": 3514486028
+      }
+    ],
+    "tick": 50000,
+    "unlocked": ["hydraulics-pumps", "hydraulics-piped-sprinklers", "hydraulics-irrigation-hub"],
+    "version": 13,
+    "worldSeed": 200143,
+    "zones": []
+  }
+}

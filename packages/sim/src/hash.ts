@@ -250,9 +250,6 @@ export function hashStateUint32(state: WorldState): number {
     d.num(reservoir.tileY);
     d.num(reservoir.tilesWide);
     d.num(reservoir.tilesHigh);
-    d.num(reservoir.levelMl);
-    d.num(reservoir.capacityMl);
-    d.num(reservoir.rechargeAccum);
   }
 
   d.text('pipes');
@@ -641,14 +638,9 @@ export function findNonIntegerFields(state: WorldState): string[] {
   }
 
   // Millilitres are integers. If one of these ever goes fractional, the bug is a rate that
-  // was divided instead of accumulated — see `TICKS_PER_MINUTE` in units.ts.
-  for (let i = 0; i < state.reservoirs.length; i++) {
-    const reservoir = state.reservoirs[i]!;
-    check(`reservoirs[${i}].levelMl`, reservoir.levelMl);
-    check(`reservoirs[${i}].capacityMl`, reservoir.capacityMl);
-    check(`reservoirs[${i}].rechargeAccum`, reservoir.rechargeAccum);
-  }
-
+  // was divided instead of accumulated — see `TICKS_PER_MINUTE` in units.ts. A reservoir is no
+  // longer on this list because it no longer holds a millilitre (item 140); a network's supply
+  // accumulator is still the same integer-rate machinery and is still checked.
   for (let i = 0; i < state.networks.length; i++) {
     const network = state.networks[i]!;
     check(`networks[${i}].supplyAccum`, network.supplyAccum);

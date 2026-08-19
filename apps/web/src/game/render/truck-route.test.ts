@@ -125,45 +125,106 @@ describe('chooseLane', () => {
   /** A depot at row 10, two tiles high — the shape `machine_truck_depot` actually is. */
   const TILE_Y = 10;
   const HIGH = 2;
+  /** `PARCEL_TILES * PARCELS_HIGH` — the whole map, which is the only bound on a lane. */
+  const WORLD_HIGH = 64;
 
   it('takes the depot’s own top row when the yard is clear', () => {
-    expect(chooseLane(TILE_Y, HIGH, () => 0, NONE)).toBe(TILE_Y);
+    expect(chooseLane(TILE_Y, HIGH, () => 0, NONE, WORLD_HIGH)).toBe(TILE_Y);
   });
 
   it('takes the other footprint row rather than leaving the yard', () => {
     const blocked = (row: number) => (row === TILE_Y ? 3 : 0);
-    expect(chooseLane(TILE_Y, HIGH, blocked, NONE)).toBe(TILE_Y + 1);
+    expect(chooseLane(TILE_Y, HIGH, blocked, NONE, WORLD_HIGH)).toBe(TILE_Y + 1);
   });
 
   it('steps outside the footprint when both of its rows are walled in', () => {
     const blocked = (row: number) => (row >= TILE_Y && row < TILE_Y + HIGH ? 2 : 0);
     // The row above is offered before the row below, so it wins the tie at zero blockers.
-    expect(chooseLane(TILE_Y, HIGH, blocked, NONE)).toBe(TILE_Y - 1);
+    expect(chooseLane(TILE_Y, HIGH, blocked, NONE, WORLD_HIGH)).toBe(TILE_Y - 1);
   });
 
   it('finds the one clear row below when everything else is blocked', () => {
     const blocked = (row: number) => (row === TILE_Y + HIGH ? 0 : 5);
-    expect(chooseLane(TILE_Y, HIGH, blocked, NONE)).toBe(TILE_Y + HIGH);
+    expect(chooseLane(TILE_Y, HIGH, blocked, NONE, WORLD_HIGH)).toBe(TILE_Y + HIGH);
   });
 
   it('drives the least-blocked row rather than refusing to leave', () => {
     // No pathfinder, and no depot that cannot dispatch. A walled-in yard still sends its
     // truck out — through the thinnest wall.
     const blocked = (row: number) => (row === TILE_Y + 1 ? 1 : 9);
-    expect(chooseLane(TILE_Y, HIGH, blocked, NONE)).toBe(TILE_Y + 1);
+    expect(chooseLane(TILE_Y, HIGH, blocked, NONE, WORLD_HIGH)).toBe(TILE_Y + 1);
   });
 
   it('avoids a lane another truck is already using — but only as the last tiebreak', () => {
     const taken = new Set([TILE_Y]);
     // Both footprint rows clear: the second truck takes the free one.
-    expect(chooseLane(TILE_Y, HIGH, () => 0, taken)).toBe(TILE_Y + 1);
+    expect(chooseLane(TILE_Y, HIGH, () => 0, taken, WORLD_HIGH)).toBe(TILE_Y + 1);
     // The free row is blocked: two lorries sharing a row beats one driving through a machine.
     const blocked = (row: number) => (row === TILE_Y ? 0 : 4);
-    expect(chooseLane(TILE_Y, HIGH, blocked, taken)).toBe(TILE_Y);
+    expect(chooseLane(TILE_Y, HIGH, blocked, taken, WORLD_HIGH)).toBe(TILE_Y);
   });
 
   it('handles a one-tile depot without asking for row -1 of a two-row footprint', () => {
-    expect(chooseLane(TILE_Y, 1, () => 0, NONE)).toBe(TILE_Y);
-    expect(chooseLane(TILE_Y, 0, () => 0, NONE)).toBe(TILE_Y);
+    expect(chooseLane(TILE_Y, 1, () => 0, NONE, WORLD_HIGH)).toBe(TILE_Y);
+    expect(chooseLane(TILE_Y, 0, () => 0, NONE, WORLD_HIGH)).toBe(TILE_Y);
+  });
+
+  // ── THE EDGES OF THE MAP ────────────────────────────────────────────────────────────────
+  //
+  // The row above and the row below are offered blind, and `westwardBlocked` reports ZERO
+  // blockers for a row that does not exist — nothing occupies row -1, because there is no row
+  // -1. So an off-map row does not tie with a walled-in yard, it BEATS one, and the truck
+  // spends its whole run driving along the outside of the world. Each of these fails on the
+  // unbounded version, and the walled-in yard is the half that makes it fire.
+
+  it('will not drive along row -1 for a depot built on the map’s top row', () => {
+    // Both of the depot's own rows walled in, which is what makes row -1 look attractive.
+    const blocked = (row: number) => (row >= 0 && row < HIGH ? 2 : 0);
+    expect(chooseLane(0, HIGH, blocked, NONE, WORLD_HIGH)).toBe(HIGH);
+  });
+
+  it('stays on the map even when EVERY row it can legally take is blocked', () => {
+    // The wall is written as the real scorer works — it COUNTS MACHINES, and no machine
+    // stands on a row that does not exist, so the imaginary row scores a perfect zero and
+    // wins outright against a yard with any wall at all. The thinnest real wall wins instead.
+    const wall = new Map([
+      [0, 9],
+      [1, 4],
+      [2, 9],
+    ]);
+    const blocked = (row: number) => wall.get(row) ?? 0;
+    expect(chooseLane(0, HIGH, blocked, NONE, WORLD_HIGH)).toBe(1);
+  });
+
+  it('will not drive past the map’s bottom row for a depot flush against it', () => {
+    const top = WORLD_HIGH - HIGH;
+    const wall = new Map([
+      [top - 1, 1],
+      [top, 2],
+      [top + 1, 2],
+    ]);
+    const blocked = (row: number) => wall.get(row) ?? 0;
+    // The row ABOVE is the one legal escape and it is the thinnest wall besides. The row
+    // below the footprint is off the map, scores zero for want of existing, and is not
+    // offered — the south edge is the same bug as the north one, one row further down.
+    expect(chooseLane(top, HIGH, blocked, NONE, WORLD_HIGH)).toBe(top - 1);
+  });
+
+  it('offers only real rows to the scorer in the first place', () => {
+    // Not merely "does not return -1" — an off-map row is dropped BEFORE scoring, so nothing
+    // downstream ever has to answer "how blocked is a row that isn't there".
+    const asked: number[] = [];
+    chooseLane(0, HIGH, (row) => (asked.push(row), 0), NONE, WORLD_HIGH);
+    expect(asked).toEqual([0, 1, 2]);
+    const askedAtFoot: number[] = [];
+    chooseLane(WORLD_HIGH - 1, 1, (row) => (askedAtFoot.push(row), 0), NONE, WORLD_HIGH);
+    expect(askedAtFoot).toEqual([WORLD_HIGH - 1, WORLD_HIGH - 2]);
+  });
+
+  it('parks a one-row world’s depot in its one row rather than off the map', () => {
+    expect(chooseLane(0, 1, () => 0, NONE, 1)).toBe(0);
+    // A projection publishing a zero-height world has no legal row at all. The depot's own
+    // row is the answer, the way a depot with no clock parks rather than dividing by zero.
+    expect(chooseLane(0, 1, () => 0, NONE, 0)).toBe(0);
   });
 });

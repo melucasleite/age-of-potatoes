@@ -3,7 +3,7 @@
   "description": "Item 024 instruction 11: the economy ground honestly up to the Splitters node, then a closed belt circuit through two junctions — one splitting one feed across two branches, one merging them back — with six bags circulating forever and both round-robin cursors advancing in the hash.",
   "seed": 626262,
   "ticks": 39230,
-  "expectedHash": "b6550496",
+  "expectedHash": "b9910783",
   "commands": [
     {
       "tick": 0,

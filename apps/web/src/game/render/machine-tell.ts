@@ -16,12 +16,10 @@ import {
   MachineKind,
   MachineRole,
   PortFlow,
-  RESERVOIR_LOW_PERMILLE,
-  ReservoirThrottle,
   TICKS_PER_SECOND,
   machineSpec,
 } from '@snack/sim';
-import type { DepotView, MachineView, ReservoirView } from '@snack/sim';
+import type { DepotView, MachineView, NetworkView, ReservoirView } from '@snack/sim';
 
 import { formatEta } from '../../hud/format';
 import { itemName } from '../../hud/item-copy';
@@ -167,34 +165,46 @@ export function depotStatus(name: string, depot: DepotView): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
-//  THE WATER SENTENCES (item 130)
+//  THE WATER SENTENCES (item 130, rewritten for item 140)
 //
 //  The owner asked twice, four days apart, how to boost his pumps — the second time after
 //  being told the question was filed. He could feel the shortage and could not see a single
-//  number about it, because THE INSTRUMENTS WERE NEVER PLUGGED IN: `MachineView.ticksToEmpty`
-//  and `ReservoirView.throttle` are both computed in `view.ts` and, before this file, read
-//  NOWHERE in `apps/web/src`. `data.ts:2591` says the Tank is "the only object in the game
-//  that shows a net rate and a time-to-empty… it turns 'am I short of water' from a feeling
-//  into arithmetic the player can do at a glance". It did not, because nothing rendered it.
+//  number about it, because THE INSTRUMENTS WERE NEVER PLUGGED IN. That is still why these
+//  functions exist.
 //
-//  **AND THE ONE SENTENCE THAT DID SHIP WAS A WILD GOOSE CHASE.** Every blue `UtilityMissing`
-//  lamp in the game printed "barrel dry — click to refill". That is true of exactly one
-//  machine, the hand-filled Barrel Sprinkler. `lampFor` hands the same blue lamp to a dry
-//  piped head, a dry Irrigation Hub, an empty Tank and a pump at a dry pond — four machines
-//  with no barrel, that no click will refill. A player whose field has gone dry hovers a dead
-//  head, is told to click it, clicks it, nothing happens, and reasonably concludes the PUMP is
-//  the thing that is wrong. That is item 113's lesson — a name the machine cannot support
-//  turns a red lamp into a wild goose chase — repeated on the blue one.
+//  **BUT THE SHORTAGE THEY WERE BUILT TO EXPLAIN IS A DIFFERENT SHORTAGE NOW** (item 140).
+//  Every sentence below used to lead with the pond: how full it was, whether it had crossed
+//  the 25% mark, how long before it hit bottom. The owner deleted that whole model — a pond is
+//  an unlimited source, `RESERVOIR_LOW_PERMILLE` and `ReservoirThrottle` are gone, and a level
+//  is not a number any more. Rewriting those lines to read from whatever survived would have
+//  produced the exact thing `view.ts` warns about one layer down: **a gauge with one possible
+//  value, which reads like information and tells you nothing.**
 //
-//  So these functions answer the four questions in the order a shortage actually raises them:
-//  am I in the halved band, what is my net rate, how long have I got, and how full is the
-//  pond. The band comes FIRST wherever it is true, because a pump silently running at half
-//  its posted rate is indistinguishable from a broken pump, and it is the one fact the player
-//  cannot get any other way — the shoreline recedes, but nothing says what the shoreline MEANS.
+//  **WHAT IS STILL TRUE IS THE THROUGHPUT.** The source is unlimited; the straw is not. So the
+//  two questions a thirsty player can still be answered are:
+//
+//    1. IS THIS PUMP ACTUALLY AT THE WATER? `pumpSupplyMlPerMinute` has exactly two answers —
+//       the rated flow on a bank, and zero off it — so "on a bank or not" is the only question
+//       left about a pump and a pond, and it is a real one a hand-edited save can still fail.
+//    2. IS THE NETWORK KEEPING UP? `NetworkView` publishes `demandMl`, `deliveredMl`,
+//       `flowPermille` and `consumerCount`, and none of those has ever been read by a line of
+//       this app. THAT is where the old halved band's job went: a head going short is now
+//       always an oversubscription — too many machines on one pump — because it can no longer
+//       be a drought. One cause, and a number that says how badly.
+//
+//  So the pond's own sentence counts the straws in it rather than the water, which is the one
+//  thing about a pond a player can still change; and a short head names the pump it is sharing
+//  and the share it is getting, which is the errand.
+//
+//  **AND THE ONE SENTENCE THAT DID SHIP WAS A WILD GOOSE CHASE**, which is unchanged and still
+//  the reason `waterStatus` sits ABOVE the lamp switch. Every blue `UtilityMissing` lamp in the
+//  game printed "barrel dry — click to refill". That is true of exactly one machine, the
+//  hand-filled Barrel Sprinkler. `lampFor` hands the same blue lamp to a dry piped head, a dry
+//  Irrigation Hub and an empty Tank — three machines with no barrel, that no click will refill.
 //
 //  Every number below is read straight off the projection. Nothing here recomputes a rate, a
-//  threshold or a countdown: §12 says the renderer computes no network state of its own, and
-//  a second opinion about when a pump halves is exactly the sort of arithmetic that would end
+//  share or a countdown: §12 says the renderer computes no network state of its own, and a
+//  second opinion about when a line is short is exactly the sort of arithmetic that would end
 //  up disagreeing with the sim in the band where being right matters most.
 // ─────────────────────────────────────────────────────────────────────────────────────────
 
@@ -204,33 +214,42 @@ function rate(mlPerMinute: number): string {
 }
 
 /**
- * The pond a machine draws from, or `null` when the answer is not certain.
+ * The pond a PUMP stands on the bank of, or `null` for a pump standing on dry land.
  *
- * TWO RULES, AND THE SECOND ONE IS THE HONEST ONE. A pump is placed against a bank —
- * `guardPlacement` refuses one anywhere else — so its source is the reservoir its footprint
- * touches, and rect adjacency finds it exactly. Nothing else in the game is adjacent to
- * anything: a Tank or a piped head is fed through the ledger from wherever the pump is, and
+ * `guardPlacement` refuses a pump anywhere but a bank, so its source is the reservoir its
+ * footprint touches and rect adjacency finds it exactly. Nothing else in the game is adjacent
+ * to anything: a Tank or a piped head is fed through the ledger from wherever the pump is, and
  * the view carries no edge from one to the other.
  *
- * So for those, the pond is named ONLY when there is exactly one in the world — which is the
- * case today (`state.ts` builds one and no command makes another) and is the only case where
- * "the pond" is an unambiguous phrase. On a two-pond lot these sentences go quiet about the
- * source rather than guess, which is the difference between a readout and a rumour.
+ * **IT USED TO ANSWER FOR THOSE TOO, AND THAT BRANCH IS GONE** (item 140). A tank or a head got
+ * "the pond" whenever the world held exactly one, so its sentence could quote a level. There
+ * are no levels now, nothing downstream of the pump has a question a pond can answer, and the
+ * fallback would have been a guess kept alive for nobody. What replaced it for those machines
+ * is `networkFor`, which reads an edge the view actually carries.
  */
 function pondFor(reservoirs: readonly ReservoirView[], m: MachineView): ReservoirView | null {
-  const spec = machineSpec(m.kind as MachineKind);
-  if (spec !== null && spec.role === MachineRole.Pump) {
-    for (const r of reservoirs) {
-      const touches =
-        m.tileX <= r.tileX + r.tilesWide &&
-        r.tileX <= m.tileX + m.tilesWide &&
-        m.tileY <= r.tileY + r.tilesHigh &&
-        r.tileY <= m.tileY + m.tilesHigh;
-      if (touches) return r;
-    }
-    return null;
+  for (const r of reservoirs) {
+    const touches =
+      m.tileX <= r.tileX + r.tilesWide &&
+      r.tileX <= m.tileX + m.tilesWide &&
+      m.tileY <= r.tileY + r.tilesHigh &&
+      r.tileY <= m.tileY + m.tilesHigh;
+    if (touches) return r;
   }
-  return reservoirs.length === 1 ? reservoirs[0]! : null;
+  return null;
+}
+
+/**
+ * The pipe network a machine is on, or `null` for a machine on none.
+ *
+ * `MachineView.network` is `0` for "not plumbed", which is a real state and not a missing id —
+ * an unconnected pump has one, and so does every machine in the chip line. The lookup is a scan
+ * over a list that is one or two entries long on any lot that has pipe at all.
+ */
+function networkFor(networks: readonly NetworkView[], m: MachineView): NetworkView | null {
+  if (m.network === 0) return null;
+  for (const n of networks) if (n.id === m.network) return n;
+  return null;
 }
 
 /**
@@ -268,50 +287,87 @@ export function pondAtTile(
 }
 
 /**
- * **HOW FULL THE POND IS, AND WHAT THAT DOES TO THE PUMPS** — the sentence for a hovered
- * water tile, and the reason the 25% line means anything at all.
+ * **HOW MANY STRAWS ARE IN THE POND** — the sentence for a hovered water tile.
  *
- * The threshold is quoted from `RESERVOIR_LOW_PERMILLE` rather than typed as "25%", so the
- * copy cannot outlive the constant. The band itself is `ReservoirThrottle`, decided in the
- * sim by the same function the pumps are throttled by — this file never compares a level to a
- * threshold of its own.
+ * It used to be how full the pond was and which throttle band that put the pumps in. Item 140
+ * deleted the level, the capacity and the band, and the honest reading of that is not "print
+ * the same sentence with fewer facts in it": a pond has no state left to report, so a sentence
+ * about the POND alone could only ever say one thing, and a readout with one possible value is
+ * worse than no readout.
+ *
+ * **SO IT REPORTS THE ONE THING ABOUT A POND A PLAYER CAN STILL CHANGE.** Infinite source,
+ * finite throughput: the water in front of them is unlimited and the rate they get out of it is
+ * exactly the pumps they have put on its bank. That is a number that moves, that they moved,
+ * and that answers the question they hovered the water to ask — which was never "how full is
+ * it" but always "why am I not getting more".
+ *
+ * The zero case earns its own clause because it is the one that is actionable and the one a new
+ * player is most likely to be looking at.
  */
-export function pondStatus(r: ReservoirView): string {
-  const full = formatPermille(r.levelPermille);
-  switch (r.throttle) {
-    case ReservoirThrottle.Sip:
-      return 'pond empty — pumps get only what it refills, so it always recovers';
-    case ReservoirThrottle.Half:
-      return `pond low — ${full} full, under ${formatPermille(RESERVOIR_LOW_PERMILLE)}, so pumps run at HALF RATE`;
-    default:
-      return `pond — ${full} full`;
+export function pondStatus(
+  pond: ReservoirView,
+  machines: readonly MachineView[],
+  reservoirs: readonly ReservoirView[],
+): string {
+  let pumps = 0;
+  let drawing = 0;
+
+  for (const m of machines) {
+    const spec = machineSpec(m.kind as MachineKind);
+    if (spec === null || spec.role !== MachineRole.Pump) continue;
+    // `pondFor` is the SAME adjacency the pump's own sentence uses, asked in the other
+    // direction. Two rect tests that could disagree about which bank a pump is on would put a
+    // different pump count on the water than on the machine standing in it.
+    const source = pondFor(reservoirs, m);
+    if (source === null || source.id !== pond.id) continue;
+    pumps += 1;
+    if (m.flowMlPerMinute > 0) drawing += m.flowMlPerMinute;
   }
+
+  if (pumps === 0) return 'pond — all the water you want, and no pump on the bank to take it';
+
+  const straws = pumps === 1 ? '1 pump' : `${pumps} pumps`;
+  if (drawing <= 0) return `pond — ${straws} on the bank, drawing nothing`;
+  return `pond — ${straws} on the bank, drawing ${rate(drawing)}`;
 }
 
 /**
- * **THE PUMP'S REAL RATE, AND WHY IT IS NOT THE POSTED ONE.**
+ * **THE PUMP'S REAL RATE, AND THE THREE THINGS THAT CAN BE WRONG WITH IT.**
  *
- * `flowMlPerMinute` on a pump is what it ACTUALLY DREW last tick (`pipes.ts:738`), not its
- * rating — so the halved band shows up in the number without this file halving anything. The
- * band is named anyway, because a player reading "300 L/min" has no way to know that is half
- * of something, and "my pump is slower than it says" with no explanation is precisely the
- * report this item was filed under.
+ * `flowMlPerMinute` is what it ACTUALLY DREW last tick (`pipes.ts:738`), not its rating, which
+ * is why a bare number is not enough on its own: the same "0 L/min" is printed by a pump that
+ * nobody has plumbed and by one standing in a field. So the three states are split, and each
+ * one is a different errand.
+ *
+ * **OFF THE BANK IS FIRST AND IT IS NOT DEAD CODE.** `pumpSupplyMlPerMinute` grants a pump on a
+ * bank its full rated flow and a pump anywhere else exactly zero — since item 140 that is the
+ * WHOLE of what a pond does to a pump, and it is the only question about the two of them left
+ * worth asking. `guardPlacement` refuses the placement, so a live lot should never show it; a
+ * hand-edited save can, and a pump that is silently drawing nothing with no sentence explaining
+ * why is the same defect this item was filed under, one cause over.
+ *
+ * **FLAT OUT IS THE OLD HALVED BAND'S REPLACEMENT.** A pump cannot be throttled by a drought
+ * any more, so a line that wants more water than it is getting has exactly one cause: the pump
+ * is already giving everything it has. `flowPermille` is the sim's own delivered-over-demand,
+ * read rather than recomputed.
  */
-function pumpStatus(name: string, m: MachineView, pond: ReservoirView | null): string {
-  if (pond === null) return `${name} — ${rate(m.flowMlPerMinute)}`;
-  const level = formatPermille(pond.levelPermille);
-  switch (pond.throttle) {
-    case ReservoirThrottle.Sip:
-      return `${name} — pond empty, ${rate(m.flowMlPerMinute)} is all it refills`;
-    case ReservoirThrottle.Half:
-      return `${name} at HALF RATE — ${rate(m.flowMlPerMinute)}, pond down to ${level}`;
-    default:
-      // A pump on a healthy pond that is nonetheless drawing nothing has no demand behind it,
-      // which is a real and findable state — an unconnected pump, or a network whose heads are
-      // all full — and reads as a bug if the sentence just prints "0 L/min" and stops.
-      if (m.flowMlPerMinute <= 0) return `${name} idle — nothing on its pipes is asking for water`;
-      return `${name} — ${rate(m.flowMlPerMinute)}, pond at ${level}`;
+function pumpStatus(
+  name: string,
+  m: MachineView,
+  pond: ReservoirView | null,
+  net: NetworkView | null,
+): string {
+  if (pond === null) return `${name} — not on a bank, so it draws nothing`;
+
+  // A pump at the water that is nonetheless drawing nothing has no demand behind it, which is a
+  // real and findable state — an unconnected pump, or a network whose heads are all full — and
+  // reads as a bug if the sentence just prints "0 L/min" and stops.
+  if (m.flowMlPerMinute <= 0) return `${name} idle — nothing on its pipes is asking for water`;
+
+  if (net !== null && net.demandMl > 0 && net.flowPermille < 1000) {
+    return `${name} flat out — ${rate(m.flowMlPerMinute)} is all it has, and the line is asking for more`;
   }
+  return `${name} — ${rate(m.flowMlPerMinute)}`;
 }
 
 /**
@@ -325,13 +381,17 @@ function pumpStatus(name: string, m: MachineView, pond: ReservoirView | null): s
  * The tank is the machine that turns a shortage into a DEADLINE, so when it is draining the
  * clock is the thing the sentence ends on.
  */
-function tankStatus(name: string, m: MachineView, pond: ReservoirView | null): string {
+function tankStatus(name: string, m: MachineView): string {
   const level = formatPermille(m.tankPermille);
 
   // AN EMPTY TANK IS A VERDICT, NOT A LEVEL. Its net rate here is near zero by construction —
   // whatever arrives is spent the same tick — so printing the rate would say "0 L/min" at a
-  // player whose whole line has stopped. The useful number is the POND's, because an empty
-  // buffer over a halved pond and an empty buffer over a full one are two different errands.
+  // player whose whole line has stopped.
+  //
+  // **AND IT IS NOW A ONE-BRANCH VERDICT** (item 140). This used to fork three ways on the
+  // pond, because an empty buffer over a halved pond and an empty buffer over a full one were
+  // two different errands. They are the same errand now and there is only one of them: the pond
+  // cannot be the reason, so the line outrunning the pump is the reason.
   //
   // "EMPTY" IS ASKED OF THE SIM'S OWN BLUE LAMP, not measured here. `MachineView` publishes
   // `tankPermille` and no raw millilitre count, and `permille()` floors — so a tank holding a
@@ -339,12 +399,6 @@ function tankStatus(name: string, m: MachineView, pond: ReservoirView | null): s
   // the sim does. `lampFor` already decides this (`machine.tankMl <= 0` → `UtilityMissing`);
   // one predicate read twice beats two predicates that disagree at the boundary.
   if (m.lamp === LampState.UtilityMissing) {
-    if (pond !== null && pond.throttle === ReservoirThrottle.Half) {
-      return `${name} EMPTY — pond down to ${formatPermille(pond.levelPermille)}, so the pump is at half rate`;
-    }
-    if (pond !== null && pond.throttle === ReservoirThrottle.Sip) {
-      return `${name} EMPTY — the pond is empty too, and refills slowly`;
-    }
     return `${name} EMPTY — the line is spending water faster than the pump brings it`;
   }
 
@@ -358,27 +412,46 @@ function tankStatus(name: string, m: MachineView, pond: ReservoirView | null): s
 }
 
 /**
- * **A HEAD THAT IS DRY OR SHORT, AND WHICH WALL IT HIT** — the sentence that replaces "barrel
- * dry — click to refill" on the two machines that have no barrel.
+ * **A HEAD THAT IS DRY OR SHORT, AND HOW BADLY** — the sentence that replaces "barrel dry —
+ * click to refill" on the machines that have no barrel.
  *
- * The three endings are three different errands and that is the entire point of splitting them:
- * a pond in the halved band is a POND problem (stop drawing so hard, or wait), an empty pond is
- * a worse version of the same, and a head going short while the pond is FULL is an
- * OVERSUBSCRIPTION problem — too many heads on one pump — which is the one case where the
- * answer is a change to the build rather than patience. Collapsing them into "not getting
- * enough water" is what the game said before, and it sent the owner to the pump three times.
+ * **THREE ENDINGS BECAME ONE, AND THAT IS A FINDING RATHER THAN A SIMPLIFICATION** (item 140).
+ * This used to fork on the pond: a halved band was a POND problem (stop drawing so hard, or
+ * wait), an empty pond a worse version of it, and a head going short at a FULL pond was an
+ * OVERSUBSCRIPTION problem — too many heads on one pump. Two of those three causes no longer
+ * exist. A head can only be short because the pump it shares cannot keep up, which means the
+ * answer is always a change to the build and never patience.
+ *
+ * **SO THE SENTENCE CARRIES THE NUMBERS INSTEAD OF THE CAUSE.** `consumerCount` is what
+ * `view.ts` calls "3 heads sharing one pump, at one glance", and `flowPermille` is how much of
+ * what they asked for actually arrived — both computed in the sim, neither ever read by this
+ * app until now. A player told "one pump is not enough for this many heads" still has to go and
+ * count them; this says how many and how short, which is the difference between a diagnosis and
+ * a hint.
  */
-function headStatus(name: string, dry: boolean, pond: ReservoirView | null): string {
+function headStatus(name: string, dry: boolean, net: NetworkView | null): string {
   const trouble = dry ? 'DRY' : 'short of water';
-  if (pond === null) return `${name} ${trouble} — the network is not feeding it`;
-  switch (pond.throttle) {
-    case ReservoirThrottle.Sip:
-      return `${name} ${trouble} — the pond is empty`;
-    case ReservoirThrottle.Half:
-      return `${name} ${trouble} — pond down to ${formatPermille(pond.levelPermille)}, pump at half rate`;
-    default:
-      return `${name} ${trouble} — one pump is not enough for this many heads`;
-  }
+  // No network, or a network nobody is asking anything of, means the head is not plumbed into
+  // a working line at all — there is no share to quote and inventing one would be a rumour.
+  if (net === null || net.demandMl <= 0)
+    return `${name} ${trouble} — the network is not feeding it`;
+
+  // NO SUPPLY AT ALL IS A DIFFERENT ERRAND FROM NOT ENOUGH, and it is the one a player is most
+  // likely to have earned by accident: pipe laid, heads placed, no pump at the end of it. A
+  // share of zero would be arithmetically true and would send them counting heads.
+  if (net.supplyMl <= 0) return `${name} ${trouble} — no pump is feeding this line`;
+
+  // **A DRY HEAD ON A LINE THAT IS MEETING ITS DEMAND IN FULL IS STILL FILLING, AND SAYING
+  // ANYTHING ELSE IS A CONTRADICTION.** A head goes blue the moment its buffer is under what an
+  // activation costs, which is true for a while after it is plumbed in and every time it has
+  // just fired — and on those ticks the network is delivering every millilitre asked of it. The
+  // oversubscription sentence below would print "getting 100.0% of what they ask for" directly
+  // after the word DRY, which is a sentence arguing with itself and would send a player off to
+  // add a pump they do not need. Found by reading the output rather than the types.
+  if (net.flowPermille >= 1000) return `${name} ${trouble} — still filling, the line is keeping up`;
+
+  const sharing = net.consumerCount === 1 ? '1 machine' : `${net.consumerCount} machines`;
+  return `${name} ${trouble} — ${sharing} on this line, getting ${formatPermille(net.flowPermille)} of what they ask for`;
 }
 
 /**
@@ -387,7 +460,7 @@ function headStatus(name: string, dry: boolean, pond: ReservoirView | null): str
  * Answered ABOVE the lamp switch, for the reason the vehicles and the boxes are: the lamp has
  * nothing useful to say about any of these three. A pump and a tank have no work cycle, so a
  * healthy one falls to `LampState.Running` and the words "pump running" — true, and silent
- * about the halved band, which is the one thing worth saying. A dry one lands on
+ * about the rate, which is the one thing worth saying. A dry one lands on
  * `LampState.UtilityMissing` and the barrel line, which is worse than silent.
  *
  * A HEALTHY HEAD IS LEFT ALONE. It returns `null` and keeps "sprinkler running", because a
@@ -398,12 +471,17 @@ export function waterStatus(
   name: string,
   m: MachineView,
   reservoirs: readonly ReservoirView[],
+  networks: readonly NetworkView[],
 ): string | null {
   const spec = machineSpec(m.kind as MachineKind);
   if (spec === null) return null;
 
-  if (spec.role === MachineRole.Pump) return pumpStatus(name, m, pondFor(reservoirs, m));
-  if (spec.role === MachineRole.Tank) return tankStatus(name, m, pondFor(reservoirs, m));
+  if (spec.role === MachineRole.Pump) {
+    return pumpStatus(name, m, pondFor(reservoirs, m), networkFor(networks, m));
+  }
+  // The tank stopped taking a pond at item 140: its buffer is fed from the ledger, and the
+  // source at the far end of that ledger can no longer be the reason it is empty.
+  if (spec.role === MachineRole.Tank) return tankStatus(name, m);
 
   if (spec.role === MachineRole.PipedSprinkler) {
     // "Dry" is whatever this machine cannot afford to start, and the two on this role differ —
@@ -412,7 +490,7 @@ export function waterStatus(
     // `spec.moistureSensing` to pick that floor; asking it is one predicate instead of two.
     const dry = m.lamp === LampState.UtilityMissing;
     if (!dry && m.throttled !== 1) return null;
-    return headStatus(name, dry, pondFor(reservoirs, m));
+    return headStatus(name, dry, networkFor(networks, m));
   }
 
   return null;

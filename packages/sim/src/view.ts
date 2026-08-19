@@ -65,12 +65,6 @@ import {
 } from './commerce';
 import { networkFlowPermille, tankTicksToEmpty } from './pipes';
 import {
-  reservoirLevelPermille,
-  reservoirRechargeMlPerMinute,
-  reservoirThrottle,
-  wellsOnReservoir,
-} from './water';
-import {
   type CropTile,
   type Grabber,
   type Machine,
@@ -397,12 +391,17 @@ export interface MachinePortView {
 }
 
 /**
- * A reservoir, and enough for the renderer to draw a receding shoreline and a mud ring.
+ * A reservoir: **A FOOTPRINT AND AN ID, AND THAT IS THE WHOLE VIEW** (item 140).
  *
- * `levelPermille` is the only number the shoreline needs: the water sits at that fraction of
- * the footprint and the mud ring is the band between it and the bank. The sim does not decide
- * how many rings there are or what they look like — that is the renderer's business, and it
- * is the one number that keeps the two in agreement.
+ * It used to publish six more numbers — a level, a capacity, a permille, a throttle band, what
+ * the pond made per minute, and how many Artesian Wells were sunk on its bank — and every one of
+ * them described a scarcity the owner deleted. A pond is unlimited now, so all six had exactly
+ * one possible value, and a gauge with one possible value is worse than no gauge: it reads like
+ * information and tells you nothing. **The shoreline no longer recedes and there is no mud ring**,
+ * because the water it would be telling you about cannot fall.
+ *
+ * What is left is where the water is, which is what the renderer needs to draw it and the
+ * movement layer needs to keep the player out of it.
  */
 export interface ReservoirView {
   id: number;
@@ -410,28 +409,6 @@ export interface ReservoirView {
   tileY: number;
   tilesWide: number;
   tilesHigh: number;
-  levelMl: number;
-  capacityMl: number;
-  /** 0..1000. Falls when drawn from, rises when left alone. Overdraw is telegraphed here. */
-  levelPermille: number;
-  /** `ReservoirThrottle`: 0 full, 1 halved below 25%, 2 sipping at the recharge rate. */
-  throttle: number;
-  /**
-   * What this pond MAKES, in millilitres per minute — §4's base plus its Artesian Wells.
-   *
-   * **NO LONGER A CONSTANT THE HUD COULD HAVE LOOKED UP** (item 130), which is exactly why it is
-   * published here: before the well, "how much does a pond make" had one answer for every world
-   * and a renderer could have imported it; now it is a fact about THIS pond and changes when
-   * somebody sinks a well. A HUD that read `RESERVOIR_RECHARGE_ML_PER_MINUTE` would quietly
-   * under-report every bored pond in the game.
-   *
-   * It is also half of the sentence the player has been missing. Item 130's owner asked twice how
-   * to boost a pump because nothing in the game ever told him what his pond produced against what
-   * his field wanted; `stats.waterDrawnMl` is the other half.
-   */
-  rechargeMlPerMinute: number;
-  /** How many Artesian Wells are sunk on this bank, 0..`WELL_MAX_PER_RESERVOIR`. */
-  wells: number;
 }
 
 /**
@@ -1376,12 +1353,6 @@ function projectReservoirs(state: WorldState, out: WorldView): void {
         tileY: 0,
         tilesWide: 1,
         tilesHigh: 1,
-        levelMl: 0,
-        capacityMl: 0,
-        levelPermille: 0,
-        throttle: 0,
-        rechargeMlPerMinute: 0,
-        wells: 0,
       };
       out.reservoirs.push(rv);
     }
@@ -1391,12 +1362,6 @@ function projectReservoirs(state: WorldState, out: WorldView): void {
     rv.tileY = reservoir.tileY;
     rv.tilesWide = reservoir.tilesWide;
     rv.tilesHigh = reservoir.tilesHigh;
-    rv.levelMl = reservoir.levelMl;
-    rv.capacityMl = reservoir.capacityMl;
-    rv.levelPermille = reservoirLevelPermille(reservoir);
-    rv.throttle = reservoirThrottle(reservoir);
-    rv.wells = wellsOnReservoir(state, reservoir);
-    rv.rechargeMlPerMinute = reservoirRechargeMlPerMinute(state, reservoir);
   }
 
   out.reservoirs.length = count;

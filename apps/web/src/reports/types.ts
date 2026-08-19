@@ -48,6 +48,19 @@ export interface ShiftBucket {
   /** Water drawn in the hour, in millilitres. */
   readonly waterMl: number;
   readonly itemsSold: number;
+  /**
+   * Permille of machine throughput destroyed this hour, or −1 when NOTHING RAN.
+   *
+   * The sim's own figure — `inputsWasted / (inputsWasted + itemsProduced)` over the same
+   * telescoping accumulators every other field here differences, computed once in
+   * `view.ts` and never recomputed on this side. −1 is not "unmeasured": it means the hour
+   * had no throughput to take a ratio of, which is a real state and a different sentence.
+   *
+   * The renderer-side fallback in `shift.ts` cannot know this and writes −1, because the
+   * lifetime waste accumulator is not projected as a top-level stat. That branch only runs
+   * when the sim projects no buckets at all, which it always does now.
+   */
+  readonly wastePermille: number;
   /** Ticks actually accrued in this bucket. Less than an hour for the one in progress. */
   readonly ticks: number;
   /** 1 once the hour closed and nothing more can land in it. */
@@ -62,29 +75,35 @@ export const ZERO_BUCKET: ShiftBucket = Object.freeze({
   split: 0,
   waterMl: 0,
   itemsSold: 0,
+  wastePermille: -1,
   ticks: 0,
   complete: 0,
 });
 
 /**
- * Waste % measures machine wear, which arrives with the Entropy release, so it is not measured
- * yet — and the row is shown anyway, labelled, rather than hidden.
+ * A ratio that may have no denominator this hour.
  *
- * Plan §8's standing rule is "fake the far side of every interface, stubs listed explicitly",
- * and a report that grows a new row three releases from now is worse than one whose shape was
- * stable from the first hour. `measured: 0` is what makes the row print "not yet measured"
- * instead of a confident and false "0.0%".
+ * THIS WAS A STUB AND IS NOT ONE ANY MORE. It was introduced for a Waste % that "arrives
+ * with the Entropy release", under plan §8's rule that a pending system is shown as a
+ * labelled stub rather than hidden. The system arrived: `tick.ts` counts
+ * `inputsWastedByMachine` and `view.ts` projects a real per-hour `wastePermille`. What the
+ * client did with it was throw it away and keep printing the stub, which is how a promise
+ * that has already been kept turns into a row that lies.
  *
- * ⚠️ A STUB IS A PROMISE, SO IT ONLY FITS A SYSTEM THAT IS STILL COMING. Spoilage % shared this
- * type until [[124]] deleted spoilage as a feature; a stub for a system that will never exist
- * is a row that lies forever, so it was removed rather than left labelled.
+ * So `measured: 0` no longer means "nobody is counting". It means THIS HOUR HAD NO
+ * THROUGHPUT — no machine finished or spoiled anything — so there is no ratio to take, and
+ * the row says so in those words. A confident "0.0%" would still be a lie with a decimal
+ * point on it, but it would now be a different lie: it would claim a clean hour where there
+ * was simply an empty one.
  */
-export interface StubbedRatio {
+export interface HourRatio {
   readonly permille: number;
+  /** 1 when `permille` is a real ratio. 0 when the hour had nothing to take a ratio of. */
   readonly measured: number;
 }
 
-export const NOT_YET_MEASURED: StubbedRatio = Object.freeze({ permille: 0, measured: 0 });
+/** No throughput this hour. Not a pending system — an idle one. */
+export const NO_THROUGHPUT: HourRatio = Object.freeze({ permille: 0, measured: 0 });
 
 export interface ShiftSlice {
   readonly version: number;
@@ -98,7 +117,7 @@ export interface ShiftSlice {
   readonly settled: number;
   /** The best net $/hour any CLOSED hour has ever achieved in this world. */
   readonly bestCentsPerHour: number;
-  readonly waste: StubbedRatio;
+  readonly waste: HourRatio;
   /** Ticks until the next Dawn Report, so the player knows one is coming. */
   readonly ticksUntilDawn: number;
 }
@@ -318,7 +337,7 @@ export const ZERO_SHIFT: ShiftSlice = Object.freeze({
   centsPerHour: 0,
   settled: 0,
   bestCentsPerHour: 0,
-  waste: NOT_YET_MEASURED,
+  waste: NO_THROUGHPUT,
   ticksUntilDawn: 0,
 });
 

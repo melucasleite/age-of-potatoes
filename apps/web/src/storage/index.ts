@@ -90,7 +90,13 @@ export {
   startPresenceClock,
 } from './session';
 export type { PresenceHandle } from './session';
-export { requestPersistentStorage } from './persist';
+export {
+  PERSISTENCE_POLL_MS,
+  persistenceWatchRunning,
+  requestPersistentStorage,
+  startPersistenceWatch,
+  stopPersistenceWatch,
+} from './persist';
 // One tab per lot ([[138]]). `bootWorld` claims below; the ordered exit hands it back.
 export { acquireWorldLease, heldWorldId, leaseRefusalMessage, releaseWorldLease } from './lease';
 export type { WorldLease } from './lease';
@@ -172,11 +178,11 @@ import { type WorldState, createWorld } from '@snack/sim';
 // synchronous check of `process.env` and nothing else.
 import { startCloudSyncIfConfigured } from '@/supabase/bootstrap';
 
-import { type PersistenceResult, requestPersistentStorage } from './persist';
+import { type PersistenceResult, requestPersistentStorage, startPersistenceWatch } from './persist';
 import { type LoadOutcome, loadWorld } from './saves';
 import { clearTraceForWorld } from './trace';
 import { logInfo, logWarn } from './log';
-import { NoticeId, publishNoticeOnce } from './notices';
+import { NoticeId, publishNotice, publishNoticeOnce } from './notices';
 import type { WorldRecord } from './db';
 import { acquireWorldLease, leaseRefusalMessage } from './lease';
 import { activeWorld, sweepTombstones } from './worlds';
@@ -275,6 +281,10 @@ export async function bootWorld(options: BootOptions = {}): Promise<BootResult> 
 
   if (outcome.status === 'loaded') {
     warnIfNotPersisted(persistence);
+    // The other half of the same criterion, and it starts HERE rather than beside the
+    // request for the reason the line above exists: both only speak to a player who has a
+    // world on disk to lose. A brand-new lot has nothing worth warning anybody about yet.
+    startPersistenceWatch(persistence, warnPersistenceRevoked);
     void startCloudSyncIfConfigured({ localTickAtBoot: outcome.state.tick });
     return { state: outcome.state, fresh: false, outcome, persistence, world };
   }
@@ -337,5 +347,31 @@ function warnIfNotPersisted(persistence: PersistenceResult): void {
       'long stretch it may clear the save out to reclaim space. Playing every so often — or ' +
       'bookmarking or installing the game — is usually enough to convince it to keep your ' +
       'world for good.',
+  });
+}
+
+/**
+ * The browser granted persistence and then took it back.
+ *
+ * SAME NOTICE ID AS THE LINE ABOVE, on purpose. "Not promised" and "promise withdrawn" are
+ * two states of one fact and cannot both be true at once, so they are one card and never a
+ * pair — and because `warnIfNotPersisted` only speaks when persistence was already absent,
+ * the two can never race for it either.
+ *
+ * The wording differs because the situation does: a player who is told this has been playing
+ * a world the browser had agreed to keep, so the sentence has to explain that something
+ * changed rather than that something was never true.
+ */
+function warnPersistenceRevoked(): void {
+  publishNotice({
+    id: NoticeId.NotPersistent,
+    tone: 'info',
+    title: 'This browser has stopped promising to keep your world.',
+    body:
+      'Your factory is still saved here and nothing has been lost. Earlier this session the ' +
+      'browser had marked the game as permanent, and it has since changed its mind — usually ' +
+      'because the device is running low on space. That means it may clear the save out to ' +
+      'reclaim room if the game sits unused for a long stretch. Freeing up space on the ' +
+      'device, and playing every so often, is usually enough to win the promise back.',
   });
 }
