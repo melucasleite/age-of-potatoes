@@ -24,6 +24,8 @@ import {
   step,
   toPayload,
   waterAtSubtile,
+  createWorldView,
+  view,
 } from '../src/index';
 import { POND_ORIGIN_X, POND_ORIGIN_Y, POND_TILES_HIGH, POND_TILES_WIDE } from '../src/data';
 import { SUBTILE, tileCentreSubtiles } from '../src/units';
@@ -340,4 +342,63 @@ it('pins the reach the tests above measure with', async () => {
 // `SUBTILE` is imported for the reach maths above; assert the base so the maths reads true.
 it('pins the subtile base', () => {
   expect(SUBTILE).toBe(256);
+});
+
+// ────────────────────────────────────────────────────────────────────────────────────
+//  THE FEET, AS THE RENDERER SEES THEM.
+//
+//  `PlayerView.moving` picks the walk cell or the standing cell, and it used to read
+//  `moveDir === 0 ? 0 : 1` — which describes the HELD-KEY walk and nothing else.
+//  `advancePlayer` returns early into `advanceErrand` before `moveDir` is consulted, so a
+//  click-to-walk ([[070]]) crosses the whole lot with `moveDir` at `None`. The projection
+//  said "standing" and the renderer obligingly drew a statue sliding across the grass.
+//
+//  It was wrong from the day click-to-walk landed and [[134]] is what made it visible: before
+//  the standing frame existed, "not moving" selected a contact pose with a foot in the air, so
+//  the bug read as a bad animation rather than as no animation at all.
+//
+//  Both paths are pinned here because the bug is precisely that somebody checked one of them.
+// ────────────────────────────────────────────────────────────────────────────────────
+
+describe('the walk cycle, as `PlayerView.moving` reports it', () => {
+  it('says MOVING while a click-to-walk errand is carrying the player across the lot', () => {
+    const state = createWorld(70134);
+    const start = { x: state.player.xSub, y: state.player.ySub };
+
+    const target = { x: 6, y: 6 };
+    step(state, { tick: state.tick, commands: [walkCommand(target.x, target.y)] });
+
+    // Mid-errand: the intent is live, the feet are covering ground, and the strip must animate.
+    stepEmpty(state, 10);
+    const mid = view(state, createWorldView());
+    expect(state.player.intent, 'the errand should still be running').not.toBeNull();
+    expect(
+      state.player.xSub !== start.x || state.player.ySub !== start.y,
+      'the player should have actually moved',
+    ).toBe(true);
+    expect(
+      state.player.moveDir,
+      'and NOT by holding a key — the view does not even publish moveDir, which is why the\n       projection had to infer it and inferred it wrong',
+    ).toBe(Direction.None);
+    expect(mid.player.moving, 'a walking player reads as moving').toBe(1);
+  });
+
+  it('says STILL once the errand ends, so the standing frame comes back', () => {
+    const state = createWorld(70135);
+    step(state, { tick: state.tick, commands: [walkCommand(6, 6)] });
+    stepEmpty(state, 600);
+
+    expect(state.player.intent, 'the errand should have finished').toBeNull();
+    expect(view(state, createWorldView()).player.moving).toBe(0);
+  });
+
+  it('still says MOVING for the held-key walk, which was never the broken half', () => {
+    const state = createWorld(70136);
+    step(state, {
+      tick: state.tick,
+      commands: [{ type: 'SetMoveDirection', dir: Direction.East }],
+    });
+    stepEmpty(state, 3);
+    expect(view(state, createWorldView()).player.moving).toBe(1);
+  });
 });

@@ -974,7 +974,23 @@ export function view(state: WorldState, out: WorldView = createWorldView()): Wor
   out.player.xSub = state.player.xSub;
   out.player.ySub = state.player.ySub;
   out.player.facing = state.player.facing;
-  out.player.moving = state.player.moveDir === 0 ? 0 : 1;
+  // MOVING MEANS THE FEET ARE GOING, AND THERE ARE TWO WAYS TO MAKE THEM GO.
+  //
+  // This read `moveDir === 0 ? 0 : 1` and so described only the HELD-KEY walk. Click-to-walk
+  // ([[070]]) is an errand, and `advancePlayer` returns early into `advanceErrand` before
+  // `moveDir` is ever consulted — the errand walks by writing `xSub`/`ySub` itself. So the whole
+  // way across the lot `moveDir` is `None`, this projected 0, and the renderer drew the strip's
+  // standing cell on a character who was visibly crossing the screen.
+  //
+  // IT WAS ALWAYS WRONG AND [[134]] IS WHAT MADE IT VISIBLE. Before the standing frame existed,
+  // "not moving" selected cell 1 — a contact pose with one foot four pixels off the ground — so a
+  // click-walk glided along mid-stride and read as a bad animation rather than as no animation.
+  // Now it reads as a statue on a conveyor, which is the same bug wearing better art.
+  //
+  // An active intent is enough: the errand's own footstep is the only thing that advances it, and
+  // an errand that cannot step (blocked by water, item 080) ends rather than lingering. Derived
+  // from state that already exists, so no field joins `WorldState` and no hash moves.
+  out.player.moving = state.player.moveDir !== 0 || state.player.intent !== null ? 1 : 0;
 
   // All four written unconditionally, on both branches. An early return or an `if` without an
   // `else` would leave the last errand's marker hanging on the map after the errand ended,
