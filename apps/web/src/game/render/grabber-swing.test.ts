@@ -23,15 +23,18 @@ import { Direction, GrabberTier } from '@snack/sim';
 import {
   ARM_SLICE,
   GRIP_FRACTION,
+  SWING_DWELL,
   SWING_TUCK,
   armPose,
   ease,
+  foldAmount,
   gripAmount,
   reachPxOf,
   reachTilesOf,
   strokeProgress,
   sweepSign,
   swingPhase,
+  travelProgress,
 } from './grabber-swing';
 import { TILE_PX } from './pixel';
 
@@ -122,7 +125,7 @@ describe('gripAmount', () => {
     expect(gripAmount(0, 1000)).toBeCloseTo(0);
   });
 
-  it('changes over the first quarter of the stroke and holds after', () => {
+  it('changes over the leading dwell and holds after', () => {
     expect(gripAmount(7, 0)).toBeCloseTo(0);
     expect(gripAmount(7, 1000 * GRIP_FRACTION)).toBeCloseTo(1);
     expect(gripAmount(7, 600)).toBeCloseTo(1);
@@ -130,10 +133,12 @@ describe('gripAmount', () => {
     expect(gripAmount(0, 600)).toBeCloseTo(0);
   });
 
-  it('shuts while the hand is still essentially over the item', () => {
-    // The whole point of easing the ARC and not the grip: by the time the claw is closed,
-    // the hand has covered well under a fifth of the sweep.
-    expect(swingPhase(7, 1000 * GRIP_FRACTION)).toBeLessThan(0.2);
+  it('shuts while the hand is STOPPED on the item, not merely near it', () => {
+    // Decision 4 always claimed this. Under item 094's numbers it was only roughly true —
+    // a quarter of the stroke eased out to about a sixth of the arc, so the claw was still
+    // closing with the hand already 19° down-range. `GRIP_FRACTION` is now `SWING_DWELL`,
+    // so the whole close happens inside the halt and this is an exact zero.
+    expect(swingPhase(7, 1000 * GRIP_FRACTION)).toBe(0);
   });
 });
 
@@ -267,5 +272,131 @@ describe('ARM_SLICE', () => {
     expect(TILE_PX % 2).toBe(0);
     // Both jaws are cut at half the tile, and the art's own centreline is that same row.
     expect(TILE_PX / 2).toBe(16);
+  });
+});
+
+describe('travelProgress — the arm STOPS, which is the whole of the floppy fix', () => {
+  it('is exactly parked, not merely slow, for the first and last SWING_DWELL', () => {
+    // `ease` had a flat derivative at both ends, which slows toward a tile without ever
+    // arriving at zero speed for any measurable time. `toBe`, not `toBeCloseTo`: the dwell
+    // has to be a literal 0 and a literal 1 or item 094's endpoint invariant loosens.
+    expect(travelProgress(0)).toBe(0);
+    expect(travelProgress(SWING_DWELL / 2)).toBe(0);
+    expect(travelProgress(SWING_DWELL)).toBe(0);
+    expect(travelProgress(1 - SWING_DWELL)).toBe(1);
+    expect(travelProgress(1)).toBe(1);
+  });
+
+  it('holds FOUR consecutive Mk1 ticks dead still at a tile, across the changeover', () => {
+    // Mk1 swings in 10 ticks, so `view.ts` reports permille in steps of 100. The dwells of
+    // consecutive strokes stack at the shared tile — the sim starts the next stroke on the
+    // very tick it finishes this one — so the last two frames of the outbound stroke and the
+    // first two of the return are all the same pose, on the same tile. 200ms of dead stop.
+    const arriving = [900, 1000].map((p) => armPose(Direction.East, GrabberTier.Mk1, 5, p));
+    const leaving = [0, 100].map((p) => armPose(Direction.East, GrabberTier.Mk1, 0, p));
+    const first = arriving[0]!;
+    for (const pose of [...arriving, ...leaving]) {
+      expect(pose.handX).toBeCloseTo(first.handX);
+      expect(pose.handY).toBeCloseTo(first.handY);
+      expect(pose.elbowX).toBeCloseTo(first.elbowX);
+      expect(pose.elbowY).toBeCloseTo(first.elbowY);
+      // Parked means parked at FULL extension, straight, on the tile centre.
+      expect(pose.radius).toBeCloseTo(pose.reach);
+    }
+  });
+
+  it('cruises at one constant rate through the middle, which a smoothstep never does', () => {
+    const at = [0.35, 0.45, 0.55, 0.65].map(travelProgress);
+    const steps = [at[1]! - at[0]!, at[2]! - at[1]!, at[3]! - at[2]!];
+    expect(steps[1]!).toBeCloseTo(steps[0]!, 10);
+    expect(steps[2]!).toBeCloseTo(steps[0]!, 10);
+    // The curve this replaced, sampled identically: no two strides the same length. That is
+    // the softest thing a sweep can do, and it is what a trapezoid exists to not do.
+    const old = [0.35, 0.45, 0.55, 0.65].map(ease);
+    expect(old[1]! - old[0]!).not.toBeCloseTo(old[2]! - old[1]!, 3);
+  });
+
+  it('travels FASTER than the curve it replaced — the stop is bought with speed', () => {
+    // Smoothstep's peak rate is exactly 1.5 sweeps per stroke-time. Squeezing the same 180°
+    // into the middle 70% at a constant cruise beats that, which matters: the complaint that
+    // started item 094 was "not enough oomph", and a stop paid for with lethargy undoes it.
+    let peak = 0;
+    for (let t = 0; t < 1; t += 0.001) {
+      peak = Math.max(peak, (travelProgress(t + 0.001) - travelProgress(t)) / 0.001);
+    }
+    expect(peak).toBeGreaterThan(1.8);
+  });
+
+  it('never stutters backwards', () => {
+    let previous = -Infinity;
+    for (let t = 0; t <= 1; t += 0.005) {
+      const at = travelProgress(t);
+      expect(at).toBeGreaterThanOrEqual(previous);
+      previous = at;
+    }
+  });
+
+  it('is antisymmetric about mid-stroke, so out and back mirror exactly', () => {
+    for (const t of [0.05, 0.2, 0.37, 0.5, 0.62]) {
+      expect(travelProgress(1 - t)).toBeCloseTo(1 - travelProgress(t));
+    }
+  });
+});
+
+describe('foldAmount — the elbow is a hinge, not a bow', () => {
+  it('is straight through both dwells, so the hand is at full reach on its tile', () => {
+    expect(foldAmount(0)).toBe(0);
+    expect(foldAmount(SWING_DWELL)).toBe(0);
+    expect(foldAmount(1 - SWING_DWELL)).toBe(0);
+    expect(foldAmount(1)).toBe(0);
+  });
+
+  it('HOLDS one angle across the carry instead of swelling to a peak', () => {
+    // The tuck used to be `sin(PI * phase)`: equal to its own maximum for exactly one instant
+    // and changing on every other frame of the swing. A joint that is always somewhere in
+    // between two postures reads as a bend in a flexible rod. This one is locked at 41.4°
+    // for the whole traverse and locked straight either side of it.
+    for (const t of [0.35, 0.45, 0.5, 0.55, 0.65]) expect(foldAmount(t)).toBe(1);
+    const carrying = [400, 500, 600].map((p) => armPose(Direction.East, GrabberTier.Mk1, 5, p));
+    const bend0 = Math.abs(carrying[0]!.upperAngle - carrying[0]!.foreAngle);
+    for (const pose of carrying) {
+      expect(pose.radius).toBeCloseTo(pose.reach * (1 - SWING_TUCK));
+      expect(Math.abs(pose.upperAngle - pose.foreAngle)).toBeCloseTo(bend0);
+    }
+  });
+
+  it('snaps rather than drifts: near-straight to near-folded in one Mk1 tick', () => {
+    expect(foldAmount(0.2)).toBeLessThan(0.35);
+    expect(foldAmount(0.3)).toBeGreaterThan(0.9);
+  });
+
+  it('is symmetric about mid-stroke, so the elbow never pops at the changeover', () => {
+    // Paired with `travelProgress`'s antisymmetry, this is what makes the outbound and return
+    // strokes show the identical bend at the identical phase.
+    for (const t of [0.05, 0.2, 0.37, 0.5]) {
+      expect(foldAmount(1 - t)).toBeCloseTo(foldAmount(t));
+    }
+  });
+});
+
+describe('gripAmount — the claw clamps while the arm is parked', () => {
+  it('is finished closing before the hand has moved at all, anywhere in the stroke', () => {
+    for (let permille = 0; permille <= 1000; permille += 10) {
+      const phase = swingPhase(5, permille);
+      if (phase > 0 && phase < 1) expect(gripAmount(5, permille)).toBe(1);
+    }
+  });
+
+  it('is fully clamped by the second Mk1 tick, with the arm still on its tile', () => {
+    expect(swingPhase(5, 200)).toBeLessThan(0.02);
+    expect(gripAmount(5, 200)).toBe(1);
+  });
+
+  it('is linear, so the jaw runs at one rate and stops dead on its stop', () => {
+    const at = [0.2, 0.4, 0.6].map((f) => gripAmount(5, 1000 * GRIP_FRACTION * f));
+    expect(at[1]! - at[0]!).toBeCloseTo(at[2]! - at[1]!, 10);
+    // A smoothstep over the same window decelerates onto its own stop, which is the single
+    // most obviously soft thing an end effector can do.
+    expect(ease(0.4) - ease(0.2)).not.toBeCloseTo(ease(0.6) - ease(0.4), 3);
   });
 });

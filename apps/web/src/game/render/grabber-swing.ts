@@ -54,6 +54,60 @@
 //    over the item, which is what makes the grab read as a grab. It also means a stalled
 //    arm parks correctly without a special case: blocked-and-holding sits clamped shut over
 //    a full destination, starved-and-empty sits open over an empty source.
+//
+// ── 5. IT STOPS. WHICH, FOR FOUR MONTHS, IT DID NOT ────────────────────────────────────
+//
+// The owner, looking at the arm again after its sprite was redrawn: "2nd looks nice, it's
+// more about the motion than the sprite itself to be honest." The complaint underneath it
+// had been "the arms look like floppy dicks", and the redraw had answered only half of it.
+//
+// So the motion was measured instead of guessed, and it turned out to have one dominant
+// tell. **Every joint of this arm was a single smooth wave of a single parameter.** The
+// shoulder was `ease(t)`; the elbow was `sin(PI * phase)` — the same `t`, one function
+// later; the claw was `ease(t / 0.25)` — the same `t` again. All three therefore peaked on
+// the same frame and were changing on every other frame of the swing, and nothing anywhere
+// in the cycle was ever equal to itself twice running. That is not a description of a
+// machine. It is very nearly the definition of a rope.
+//
+// Three changes, and the ordering is by how much each one carries:
+//
+//   DWELL (`SWING_DWELL`).      The sweep now holds a hard 0 and a hard 1 at its two ends.
+//                               Real machinery travels, HALTS, acts, travels. The dwells of
+//                               consecutive strokes stack at the shared tile, so each pickup
+//                               and each drop gets ~150ms of dead stop. This is the big one.
+//   CRUISE (`TRAVEL_RAMP`).     Trapezoidal velocity in place of the smoothstep: ramp, a run
+//                               of frames at one constant rate, ramp. Smoothstep's speed is
+//                               changing at literally every instant, which is the softest
+//                               possible thing a sweep can do.
+//   PLATEAU (`foldAmount`).     The elbow snaps to its bend, HOLDS it across the carry, and
+//                               snaps straight — instead of swelling to a peak and back. Two
+//                               locked postures with a fast change between them is a hinge;
+//                               a value that is always somewhere in between is a bent rod.
+//                               It is also driven off the stroke rather than the phase, so
+//                               the joints no longer all peak together.
+//
+// ── WHAT THIS DELIBERATELY DID NOT TOUCH, BECAUSE HE LIKED IT ──────────────────────────
+//
+// Item 094 got "Oh my god, I love the arms. Good job." That verdict is not being relitigated,
+// and the four decisions above are all still standing exactly as written. Specifically:
+//
+//   · THE ARC IS THE ARC. Same 180° sweep, same `sweepSign`, same over-the-top apex, same
+//     eastward tie-break. Decision 1 is untouched, to the character.
+//   · THE ENDPOINTS ARE STRICTER, NOT LOOSER. Decision 2's load-bearing promise is that the
+//     hand lands dead on the two tile centres. It still does — and now holds there for a run
+//     of frames rather than for one instant.
+//   · THE LINKAGE IS THE LINKAGE. Two equal bars, `acos(r / reach)`, trailing elbow.
+//     Decision 3 is not edited at all.
+//   · THE CLAW STILL SHUTS OVER THE ITEM. Decision 4's stated intent is now literally true
+//     rather than approximately true: the grip completes while the hand is stopped on the
+//     tile, not a sixth of the way down-range.
+//   · THE WHOLE ARM GOT QUICKER. The 180° is compressed into the middle 70% of the same
+//     `swingTicks`, so peak sweep rate is up about 27%. The stop is bought with speed, not
+//     with lethargy — which matters, because "not enough oomph" was the original complaint.
+//
+// And EVERY ONE of item 094's tests passes unchanged. Nothing in this item needed a guard
+// relaxed, which is the strongest evidence available that it sharpened that arc rather than
+// replacing it. `SWING_TUCK` even documents the fence its own test sets, and stops short.
 
 import { GRABBER_SPECS, grabberSpec } from '@snack/sim';
 
@@ -61,22 +115,121 @@ import { grabberBodyRotation } from './grabber-facing';
 import { TILE_PX } from './pixel';
 
 /**
- * How far the reach pulls in at mid-swing, as a fraction of full extension.
+ * How far the reach pulls in while the arm is CARRYING, as a fraction of full extension.
  *
- * A sixth: enough that the elbow visibly breaks (about 33° of bend at the apex, from
- * `acos(1 - 1/6)`) and nowhere near enough to make the hand look like it is falling short
- * of the tile it is aiming at.
+ * A quarter, up from item 094's sixth: 41.4° of elbow break at the apex (`acos(1 - 1/4)`)
+ * against the old 33.6°. The extra 8° is not the point and on its own would not have been
+ * worth the churn — `foldAmount` is the point, and a deeper angle is simply worth more once
+ * the joint HOLDS it instead of sliding through it.
+ *
+ * A quarter is also very close to the most this may ever be, and the ceiling is item 094's
+ * own: its `leaves the straight line` test demands the hand clear the pivot-to-pivot chord by
+ * more than 0.7 of a tile, and at the apex the hand sits at `reach * (1 - SWING_TUCK)`. A
+ * one-tile Mk1 clears 24px against a 22.4px bar. A THIRD would clear 21.3px and fail it —
+ * which is exactly the "looks like it is falling short" failure the original note warned
+ * about, caught by a test rather than by an eye. Do not go past a quarter without moving
+ * that fence first, and have a reason for moving it.
  */
-export const SWING_TUCK = 1 / 6;
+export const SWING_TUCK = 1 / 4;
 
 /**
- * The fraction of a half-swing the claw spends changing its mind about gripping.
+ * The fraction of each stroke the arm spends COMPLETELY MOTIONLESS, at each end.
  *
- * Quarter of the STROKE, which the easing turns into roughly a sixth of the ARC — see
- * decision 4 in the header. Shorter and it snaps in a single frame; longer and the arm is
- * halfway to the machine before it has hold of anything.
+ * ── THE ONE CHANGE THIS ITEM IS REALLY ABOUT ────────────────────────────────────────────
+ *
+ * Item 094 built a sweep that runs from tile to tile and, the instant it arrives, turns round
+ * and runs back. Nothing in the old pose function was ever equal to itself two frames
+ * running: `ease` has a flat derivative at both ends, so the arm slowed *toward* each tile,
+ * but slowing is not stopping and a smoothstep never actually reaches zero speed for any
+ * measurable time. **The arm had literally never stood still.** That is the difference the
+ * owner was pointing at — a rope flows and a servo stops — and it is a property of the
+ * ANIMATION CURVE, not of the arc, not of the endpoints, and not of the sprite.
+ *
+ * So: for the first and last `SWING_DWELL` of every stroke, `travelProgress` returns a hard
+ * 0 or a hard 1, and the arm is parked. Two consequences worth spelling out.
+ *
+ * FIRST, THE DWELLS STACK. The sim starts a fresh stroke on the tick it finishes one (see
+ * `advanceGrabber`), so the trailing dwell of the outbound stroke and the leading dwell of
+ * the return stroke are adjacent in time AND at the same place. Each tile therefore gets
+ * `2 * SWING_DWELL` of stillness — 0.3 of a stroke, which at Mk1's 10 ticks is 3 ticks of
+ * stroke-time and lands on the sample grid as FOUR CONSECUTIVE IDENTICAL FRAMES (a stroke's
+ * last two plus the next stroke's first two), 200ms of dead stop at every pickup and every
+ * drop. That is a beat you can see.
+ *
+ * SECOND, THE ARM GOT FASTER, NOT LAZIER. The 180° still has to happen inside the same
+ * `swingTicks`, now compressed into the middle 70% of it, and `travelProgress`'s cruise
+ * carries a peak angular rate of about 1.9 sweeps per stroke-time against the old
+ * smoothstep's 1.5. It travels 27% quicker than it ever did and then it hits a wall. Nothing
+ * here trades away the "oomph" item 094 was asked for; the oomph is what makes the stop read.
+ *
+ * 0.15 rather than something rounder because the stroke is only 10 ticks: 0.2 would put THREE
+ * of the eleven sampled frames on each endpoint and leave six for the sweep, at which point
+ * the traverse starts to read as dropped frames instead of speed.
  */
-export const GRIP_FRACTION = 1 / 4;
+export const SWING_DWELL = 0.15;
+
+/**
+ * The fraction of the TRAVERSE spent accelerating, and again decelerating.
+ *
+ * `travelProgress` is a trapezoidal velocity profile — ramp up, hold a constant rate, ramp
+ * down — which is what a stepper under a motion controller actually does, and the reason to
+ * prefer it over the smoothstep it replaces is the flat top. Smoothstep's velocity is a
+ * parabola: it is at its own peak for exactly one instant and is changing at every other
+ * moment of the swing. Continuous change of speed is the single most organic cue a linkage
+ * can give off. A quarter-ramp gives four of the eleven frames at an identical 34° step — a
+ * genuine constant-velocity cruise — with the acceleration a square wave either side of it.
+ */
+export const TRAVEL_RAMP = 1 / 4;
+
+/**
+ * The fraction of the traverse spent folding the elbow up, and again spent unfolding it.
+ *
+ * ── WHY THE TUCK STOPPED BEING A SINE ───────────────────────────────────────────────────
+ *
+ * It used to be `sin(PI * phase)`, driven off the very same eased parameter as the shoulder.
+ * Every joint therefore peaked on the same frame: maximum sweep speed, maximum bend and
+ * maximum retraction all arrived together at mid-stroke and left together. A limb whose
+ * joints are all one wave does not read as several bones — it undulates, as one thing.
+ *
+ * `foldAmount` breaks that. It is a plateau, not a hump, and it is a function of the STROKE
+ * rather than of the phase: the elbow snaps to `SWING_TUCK` over the first quarter of the
+ * traverse, HOLDS that exact angle across the middle half, and snaps straight over the last
+ * quarter. So the bend now spends most of the cycle being one of two constants — locked
+ * straight through both dwells, locked at 41.4° through the carry — with fast transitions
+ * between them. Two rigid postures and a quick change of posture is what a hinge looks like.
+ * A value that is always somewhere in between is what a bent rod looks like.
+ *
+ * And the two peaks no longer coincide: the folding happens where the shoulder is
+ * ACCELERATING, the plateau covers the cruise. The undulation has nothing left to sync to.
+ *
+ * The ramps are `ease`d rather than linear on purpose. The shape carries the mechanical
+ * read — fast, then held — and a hard corner in `radius` would be a visible pop in the hand
+ * position rather than a snap in the elbow, which is a different and worse thing.
+ */
+export const FOLD_RAMP = 1 / 4;
+
+/**
+ * The fraction of a stroke the claw spends changing its mind about gripping.
+ *
+ * **Exactly `SWING_DWELL`, and that equation is the whole point** — the claw finishes
+ * clamping on the precise frame the arm begins to move. Clamp, then go; arrive, then release.
+ *
+ * Decision 4 in the header always CLAIMED this ("the claw shuts while the hand is still
+ * essentially over the item") and under the old numbers it was only roughly true: a quarter
+ * of the stroke eased out to about a sixth of the arc, so the claw was still closing with the
+ * hand already 30° down-range. Now it is exactly true. The hand is not "essentially" over
+ * the item, it is stationary on it.
+ *
+ * The curve is LINEAR where it used to be a smoothstep, which matters more than the window
+ * does: a smoothstepped grip decelerates onto its own stop, and a gripper that eases shut is
+ * the single most obviously soft thing on the arm. Linear runs at one rate and stops dead
+ * when it meets the mechanical stop, which is what a jaw does.
+ *
+ * The old note's floor is still respected. At Mk1's 10 ticks a 0.15 window is 1.5 ticks, so
+ * the sampled frames are open, one intermediate, shut — a two-step close, not the single-
+ * frame teleport that note warned against.
+ */
+export const GRIP_FRACTION = SWING_DWELL;
 
 /**
  * Where the authored grabber tile divides into housing | shaft | claw.
@@ -146,7 +299,13 @@ export function reachPxOf(tier: number): number {
   return reachTilesOf(tier) * TILE_PX;
 }
 
-/** Smoothstep. Accelerates off the mark and settles onto it; flat derivative at both ends. */
+/**
+ * Smoothstep. Accelerates off the mark and settles onto it; flat derivative at both ends.
+ *
+ * NO LONGER THE SWING CURVE — `travelProgress` is, and the swap is most of this item. What
+ * `ease` still does is shape `foldAmount`'s two short ramps, where a soft landing is wanted
+ * because the thing being eased is a RADIUS and a corner in a radius pops the hand.
+ */
 export function ease(x: number): number {
   const c = x < 0 ? 0 : x > 1 ? 1 : x;
   return c * c * (3 - 2 * c);
@@ -187,25 +346,92 @@ export function strokeProgress(swingPermille: number): number {
 }
 
 /**
- * Position along the sweep, eased: **0 is over the SOURCE tile, 1 is over the DESTINATION**,
+ * How far the arm has got round its sweep, given how far it is through its stroke: **0 at the
+ * near end, 1 at the far end**, with a HARD STOP at each.
+ *
+ * Dwell, then a trapezoidal velocity profile, then dwell. See `SWING_DWELL` for why the
+ * stopping is the entire point and `TRAVEL_RAMP` for why the middle is a flat cruise rather
+ * than a parabola. Sampled at Mk1's eleven frames the sweep steps
+ *
+ *   0° · 0° · 2° · 22° · 56° · 90° · 124° · 158° · 178° · 180° · 180°
+ *
+ * against the smoothstep this replaces, which stepped
+ *
+ *   0° · 5° · 19° · 39° · 63° · 90° · 117° · 141° · 161° · 175° · 180°
+ *
+ * — never twice in the same place, and never twice at the same speed. Four identical 34°
+ * strides in the middle of the new one is the cruise; the pairs of repeated numbers at either
+ * end are the halt.
+ *
+ * **Returns literal 0 and literal 1 in the dwells, not something that rounds to them.** Item
+ * 094's endpoint invariant — hand dead on the tile centre, every tier, every direction — was
+ * the load-bearing half of its decision 2 and it is not weakened here, it is STRENGTHENED:
+ * what used to be exact for one instant is now exact for a run of frames.
+ */
+export function travelProgress(strokeT: number): number {
+  if (strokeT <= SWING_DWELL) return 0;
+  if (strokeT >= 1 - SWING_DWELL) return 1;
+  const u = (strokeT - SWING_DWELL) / (1 - 2 * SWING_DWELL);
+  // Area under a trapezoid of unit total: peak rate `vMax`, reached after ramping for `a`.
+  const a = TRAVEL_RAMP;
+  const vMax = 1 / (1 - a);
+  if (u < a) return (vMax * u * u) / (2 * a);
+  if (u > 1 - a) {
+    const remaining = 1 - u;
+    return 1 - (vMax * remaining * remaining) / (2 * a);
+  }
+  return vMax * (u - a / 2);
+}
+
+/**
+ * How folded the elbow is, 0 straight and 1 at `SWING_TUCK`: a PLATEAU across the carry, and
+ * flat zero through both dwells.
+ *
+ * A function of the STROKE, deliberately not of the phase — see `FOLD_RAMP` for the argument.
+ * Two things follow that are worth stating because tests lean on both.
+ *
+ * It is zero at both ends, so the radius is full extension exactly when the hand is on a tile,
+ * which is the same guarantee `sin(PI * phase)` used to give and the reason the endpoints did
+ * not move.
+ *
+ * It is SYMMETRIC about mid-stroke, and `travelProgress` is antisymmetric about it
+ * (`travelProgress(1 - t) === 1 - travelProgress(t)`), so the outbound stroke and the return
+ * stroke show the identical bend at the identical phase. That is what keeps the elbow from
+ * popping through itself at the changeover — the property item 094's `folds the elbow the
+ * SAME way on both strokes` test exists to catch, still holding for a new reason.
+ */
+export function foldAmount(strokeT: number): number {
+  if (strokeT <= SWING_DWELL || strokeT >= 1 - SWING_DWELL) return 0;
+  const u = (strokeT - SWING_DWELL) / (1 - 2 * SWING_DWELL);
+  if (u < FOLD_RAMP) return ease(u / FOLD_RAMP);
+  if (u > 1 - FOLD_RAMP) return ease((1 - u) / FOLD_RAMP);
+  return 1;
+}
+
+/**
+ * Position along the sweep: **0 is over the SOURCE tile, 1 is over the DESTINATION**,
  * whichever way the arm happens to be travelling.
  *
  * The direction is read off `held`, exactly as the layer header has always claimed: a
  * loaded arm is on its way out (source → destination), an empty one is on its way home.
  */
 export function swingPhase(held: number, swingPermille: number): number {
-  const eased = ease(strokeProgress(swingPermille));
-  return held !== 0 ? eased : 1 - eased;
+  const travelled = travelProgress(strokeProgress(swingPermille));
+  return held !== 0 ? travelled : 1 - travelled;
 }
 
 /**
  * How shut the claw is: 0 wide open, 1 clamped.
  *
- * Loaded strokes close, empty strokes open, and both do it over the first `GRIP_FRACTION`
- * of the stroke — which is where the hand is still over the tile it is acting on.
+ * Loaded strokes close, empty strokes open, and both do it over the first `GRIP_FRACTION` of
+ * the stroke — which, that constant being `SWING_DWELL`, is exactly the window in which the
+ * hand is not merely near its tile but STOPPED ON IT.
+ *
+ * Linear, not eased: a jaw runs at one rate and hits its stop. See `GRIP_FRACTION`.
  */
 export function gripAmount(held: number, swingPermille: number): number {
-  const shut = ease(strokeProgress(swingPermille) / GRIP_FRACTION);
+  const t = strokeProgress(swingPermille);
+  const shut = t >= GRIP_FRACTION ? 1 : t / GRIP_FRACTION;
   return held !== 0 ? shut : 1 - shut;
 }
 
@@ -247,11 +473,14 @@ export function armPose(dir: number, tier: number, held: number, swingPermille: 
   const reach = reachPxOf(tier);
   const source = grabberBodyRotation(dir);
   const sign = sweepSign(dir);
+  const stroke = strokeProgress(swingPermille);
   const phase = swingPhase(held, swingPermille);
 
   const handAngle = source + sign * Math.PI * phase;
-  // Zero at both ends by construction — see decision 2. The hand hits its tile exactly.
-  const radius = reach * (1 - SWING_TUCK * Math.sin(Math.PI * phase));
+  // Zero through both dwells by construction — see decision 2, and `foldAmount` for why this
+  // is a plateau off the STROKE rather than the sine of the PHASE it used to be. The hand
+  // hits its tile exactly, and now goes on hitting it for several frames.
+  const radius = reach * (1 - SWING_TUCK * foldAmount(stroke));
 
   const handX = Math.cos(handAngle) * radius;
   const handY = Math.sin(handAngle) * radius;
