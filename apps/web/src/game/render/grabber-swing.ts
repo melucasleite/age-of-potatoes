@@ -100,20 +100,32 @@ export const GRIP_FRACTION = 1 / 4;
  * each slice, which is also the arm's own midline in the authored art, so an anchor at 0.5
  * puts the hinge exactly on the bar rather than a pixel above it.
  *
- * ── IT SURVIVED THE [[135]] REDRAW UNCHANGED, AND THAT WAS CHECKED RATHER THAN ASSUMED ──
+ * ── IT HAS SURVIVED TWO REDRAWS UNCHANGED, AND THAT WAS CHECKED RATHER THAN ASSUMED ─────
  *
- * Item 135 redrew all three tiers at native 32px. This table did NOT move, which is the whole
- * reason item 094's arc is untouched: `armPose` reads `clawW` and nothing else from here, so
- * an unchanged partition is an unchanged swing — same angles, same tuck, same endpoints, same
- * hand point on the same two tile centres. Counted off the new PNGs before trusting it:
- * opaque columns 0–13 span rows 8–23, columns 14–21 span rows 12–19, columns 22–31 span rows
- * 8–23, in every one of the three tiers. Exactly the spans this comment already claimed.
+ * Item 135 redrew all three tiers at native 32px; the floppy-arm item redrew the shaft again.
+ * This table did NOT move either time, which is the whole reason item 094's arc is untouched:
+ * `armPose` reads `clawW` and nothing else from here, so an unchanged partition is an
+ * unchanged swing — same angles, same tuck, same endpoints, same hand point on the same two
+ * tile centres. Counted off the PNGs before trusting it: opaque columns 0–13 span rows 8–23,
+ * columns 14–21 span rows 12–19, columns 22–31 span rows 8–23, in every one of the three
+ * tiers. Exactly the spans this comment already claimed.
  *
- * The one thing that DID change is invisible from here and deliberately so: the shaft's eight
- * columns are now byte-identical to each other. `grabbers.ts` stretches that slice with
- * `Sprite.width`, and stretching a column-uniform texture is pixel-identical to tiling it —
- * which is why the `TilingSprite` this item was expected to need is a no-op and was not
- * written.
+ * ── A CORRECTION, BECAUSE THIS NOTE SENT THE NEXT READER THE WRONG WAY ───────────────────
+ *
+ * What stood here said the shaft's eight columns had been made byte-identical, and that the
+ * `TilingSprite` item 135 was expected to need "is a no-op and was not written" — because
+ * stretching a column-uniform texture is pixel-identical to tiling it.
+ *
+ * Every clause of that was true and the conclusion was still a trap. It reads as "the
+ * stretching problem is handled", and it was not: `grabbers.ts` went on stretching the slice
+ * with `Sprite.width`, ANISOTROPICALLY, and the texture was only column-uniform because of
+ * it. The two facts held each other up, and what fell out of them was a smooth featureless
+ * tube that bends in the middle — which the owner, watching it, called a floppy dick.
+ *
+ * The `TilingSprite` is written now. `grabbers.ts`'s `shaftBar` repeats the module at 1:1,
+ * column detail survives, and the art carries a waist, segment rings and rivets again. If you
+ * are here because a shaft looks smeared, check that the bar is still tiling before you reach
+ * for the pixels.
  */
 export const ARM_SLICE = {
   mountX: 0,

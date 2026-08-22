@@ -38,21 +38,46 @@
 // and the old renderer drew that whole picture as a static pedestal with a separate 6px brick
 // sliding around on top of it. So there were two arms on screen, one of them rigid.
 //
-// `armPieces` cuts the authored frame into its three parts at the columns the art actually
-// uses, and the layer reassembles them as a jointed arm: housing on the pivot, shaft stretched
-// twice over as upper arm and forearm, claw split down its midline into two jaws that close.
-// The tier's whole identity — amber Mk1, red Mk2, cyan Long, and each one's tick count — comes
+// `piece` cuts the authored frame into its three parts at the columns the art actually uses,
+// and the layer reassembles them as a jointed arm: housing on the pivot, shaft repeated twice
+// over as upper arm and forearm, claw split down its midline into two jaws that close. The
+// tier's whole identity — amber Mk1, red Mk2, cyan Long, and each one's tick count — comes
 // along for free, because it is the same paint. The Long arm reads heavier as well as longer:
 // its bars are scaled by its reach, which is an exact 2× and therefore still pixel-crisp.
 //
-// The slice columns are a fact ABOUT THE ART, so they are asserted in `grabbers.test.ts`
-// against the procedural bodies in `textures.ts`, which are painted to the same grid on
-// purpose. That is what keeps a grey-box build from producing an arm chopped in the wrong
-// places, and it is the one thing here that a re-authored atlas could quietly break.
+// The slice columns are a fact ABOUT THE ART, and `make-factory-parts.mjs` asserts the same
+// partition from its end, against the procedural bodies in `textures.ts` painted to the same
+// grid. That is what keeps a grey-box build from producing an arm chopped in the wrong places,
+// and it is the one thing here that a re-authored atlas could quietly break.
+//
+// ── "THE ARMS LOOK LIKE FLOPPY DICKS" — TWO CAUSES, ONE OF THEM IN THIS FILE ───────────
+//
+// The owner, 2026-08-21, watching his factory: "the arms look like floppy dicks, can you
+// address the animation? And also the sprites". Crude, and a precise note: the arm read as
+// SOFT AND ORGANIC where it should read as rigid machinery. Both halves of the sentence were
+// right, and neither was the arc — item 094's sweep, tuck and endpoints are untouched.
+//
+// 1. THE SPRITE. The bar was a smooth cylinder of constant cross-section, because the shaft
+//    was STRETCHED rather than tiled. `shaftBar`'s note has the full story; the art half is
+//    in `make-factory-parts.mjs`.
+//
+// 2. THE WRIST, AND THIS ONE WAS A BUG. The claw was rotated to `pose.handAngle` — the
+//    PIVOT-TO-HAND direction — and positioned along that same chord, while the forearm it
+//    hangs off runs at `pose.foreAngle`. Those differ by the elbow's own bend: 33.6° at the
+//    deepest part of the tuck, which put the claw's body 5.8 source pixels off the forearm's
+//    centreline, on a bar 8 pixels thick. So the arm bent one way at the elbow and the
+//    OTHER WAY at the wrist, every single swing — an S-curve, in a smooth tube, which is
+//    about the floppiest thing a linkage can do. The claw now wears `foreAngle` and hangs off
+//    the forearm's tip, so the arm has the two joints it is drawn to have.
+//
+//    Costless at the ends, which is why it is safe: at both endpoints of the stroke the tuck
+//    is zero, so `upperAngle`, `foreAngle` and `handAngle` are all the same number and the
+//    claw lands exactly where it always did. The change is invisible at rest and only edits
+//    the middle of the swing — the part that was wrong.
 
 import { TILE_PX } from './pixel';
 
-import { Rectangle, Sprite, Texture } from 'pixi.js';
+import { Rectangle, Sprite, Texture, TilingSprite } from 'pixi.js';
 import { LampState } from '@snack/sim';
 import type { WorldView } from '@snack/sim';
 
@@ -67,13 +92,32 @@ import type { ArtSet } from './textures';
 /** How far each jaw travels toward the midline when the claw shuts, in source pixels. */
 const CLAW_TRAVEL = 4;
 
+/**
+ * Half a shaft module, in source pixels: how far the FOREARM's tiling is phase-shifted.
+ *
+ * The module carries its segment ring on its last two columns and a bar is exactly two
+ * modules (`make-factory-parts.mjs` proves the arithmetic), so an unshifted bar wears rings
+ * at its midpoint and at its outboard tip. That is what puts the upper arm's ring ON the
+ * elbow — and it would put the forearm's ring on the wrist, on top of the claw's own collar,
+ * where it says nothing that is not already said and hides a joint that already reads.
+ *
+ * Shifted by half a module, the forearm's rings land just PAST the elbow and mid-forearm
+ * instead. So the bend gets hardware on both sides of it, the wrist keeps one collar rather
+ * than two, and the two bars stop being the same picture twice — which is most of what makes
+ * the arm read as having a direction rather than being a symmetrical noodle.
+ */
+const SHAFT_PHASE = ARM_SLICE.linkW / 2;
+
 interface GrabberVisual {
   /** The housing, on the pivot. Quarter-turns with facing ([[082]]) and never swings. */
   mount: Sprite;
-  /** Shoulder → elbow. */
-  upper: Sprite;
-  /** Elbow → wrist. */
-  fore: Sprite;
+  /**
+   * Shoulder → elbow. A `TilingSprite`, and that is the whole of this item's renderer fix:
+   * see the note above `shaftBar`.
+   */
+  upper: TilingSprite;
+  /** Elbow → wrist. Same texture, phase-shifted by `SHAFT_PHASE`. */
+  fore: TilingSprite;
   clawUpper: Sprite;
   clawLower: Sprite;
   cargo: Sprite;
@@ -126,8 +170,8 @@ export class GrabberLayer {
       if (visual === undefined) {
         visual = {
           mount: new Sprite(),
-          upper: new Sprite(),
-          fore: new Sprite(),
+          upper: new TilingSprite(),
+          fore: new TilingSprite(),
           clawUpper: new Sprite(),
           clawLower: new Sprite(),
           cargo: new Sprite(this.items.texture(g.held)),
@@ -180,9 +224,8 @@ export class GrabberLayer {
       // assembled from either one is an arm rather than a handful of offcuts.
       const body = grabberBodyFrame(g.tier);
       visual.mount.texture = this.piece(body, ARM_SLICE.mountX, 0, ARM_SLICE.mountW, TILE_PX);
+      // One module of shaft, which `shaftBar` repeats along each bar rather than stretching.
       const link = this.piece(body, ARM_SLICE.linkX, 0, ARM_SLICE.linkW, TILE_PX);
-      visual.upper.texture = link;
-      visual.fore.texture = link;
       const half = TILE_PX / 2;
       visual.clawUpper.texture = this.piece(body, ARM_SLICE.clawX, 0, ARM_SLICE.clawW, half);
       visual.clawLower.texture = this.piece(body, ARM_SLICE.clawX, half, ARM_SLICE.clawW, half);
@@ -206,48 +249,52 @@ export class GrabberLayer {
 
       // Exact 2× on the Long arm and 1× on the others, so a heavier arm is still crisp.
       const heft = reachTiles;
-      visual.upper.position.set(pivotX, pivotY);
-      visual.upper.rotation = pose.upperAngle;
-      visual.upper.width = pose.upperLength;
-      visual.upper.scale.y = heft;
+      shaftBar(visual.upper, link, pivotX, pivotY, pose.upperAngle, pose.upperLength, heft, 0);
 
       const elbowX = pivotX + pose.elbowX;
       const elbowY = pivotY + pose.elbowY;
-      visual.fore.position.set(Math.round(elbowX), Math.round(elbowY));
-      visual.fore.rotation = pose.foreAngle;
-      visual.fore.width = pose.foreLength;
-      visual.fore.scale.y = heft;
+      shaftBar(
+        visual.fore,
+        link,
+        Math.round(elbowX),
+        Math.round(elbowY),
+        pose.foreAngle,
+        pose.foreLength,
+        heft,
+        SHAFT_PHASE,
+      );
 
-      // The claw occupies the LAST `clawW` pixels of the reach, so its jaws close on the
-      // hand point and its tip lands on the tile the arm is working — the same two tile
-      // centres the old straight-line code hit, which is why no golden anything moved.
-      const wrist = pose.radius - ARM_SLICE.clawW;
-      const alongX = Math.cos(pose.handAngle);
-      const alongY = Math.sin(pose.handAngle);
+      // The claw occupies the LAST `clawW` pixels of the FOREARM, hanging off its tip like a
+      // hand off a wrist. Its tip still lands on the hand point — the tile centre the sweep
+      // was built to hit — because that is where the forearm ends.
+      const alongX = Math.cos(pose.foreAngle);
+      const alongY = Math.sin(pose.foreAngle);
+      const handPx = pivotX + Math.cos(pose.handAngle) * pose.radius;
+      const handPy = pivotY + Math.sin(pose.handAngle) * pose.radius;
       // Screen-down in the claw's own frame; the jaws travel along it, toward each other.
       const perpX = -alongY;
       const perpY = alongX;
       const shut = CLAW_TRAVEL * pose.grip;
-      const wristX = pivotX + alongX * wrist;
-      const wristY = pivotY + alongY * wrist;
+      const wristX = handPx - alongX * ARM_SLICE.clawW;
+      const wristY = handPy - alongY * ARM_SLICE.clawW;
 
       visual.clawUpper.position.set(
         Math.round(wristX + perpX * shut),
         Math.round(wristY + perpY * shut),
       );
-      visual.clawUpper.rotation = pose.handAngle;
+      visual.clawUpper.rotation = pose.foreAngle;
       visual.clawLower.position.set(
         Math.round(wristX - perpX * shut),
         Math.round(wristY - perpY * shut),
       );
-      visual.clawLower.rotation = pose.handAngle;
+      visual.clawLower.rotation = pose.foreAngle;
 
       if (g.held !== 0) {
         visual.cargo.texture = this.items.texture(g.held);
         // Between the jaws, not on the wrist: the item rides where the claw is holding it.
         visual.cargo.position.set(
-          Math.round(pivotX + alongX * (pose.radius - ARM_SLICE.clawW / 2)),
-          Math.round(pivotY + alongY * (pose.radius - ARM_SLICE.clawW / 2)),
+          Math.round(handPx - alongX * (ARM_SLICE.clawW / 2)),
+          Math.round(handPy - alongY * (ARM_SLICE.clawW / 2)),
         );
       }
     }
@@ -266,6 +313,49 @@ export class GrabberLayer {
     for (const texture of this.slices.values()) texture.destroy(false);
     this.slices.clear();
   }
+}
+
+/**
+ * Place one bar of the linkage: a length of shaft, hinged at its inboard end.
+ *
+ * ── WHY THIS IS A `TilingSprite` AND NOT A STRETCHED `Sprite` ──────────────────────────
+ *
+ * The shaft slice is 8 source pixels wide and a bar is 16 (Mk1, Mk2) or 32 (Long). The old
+ * code set `Sprite.width` and let the quad stretch, which is 2× or 4× along the bar against
+ * an integer `heft` across it — ANISOTROPIC, so a rivet came out twice as wide as it was
+ * tall and a seam came out as a stripe. Item 135 measured that correctly and drew the wrong
+ * conclusion from it: it made the shaft column-uniform so the stretch had nothing left to
+ * destroy, and left the stretch in place. Its own note recorded the `TilingSprite` as "a
+ * no-op and was not written" — true of a column-uniform texture, and circular, because the
+ * texture was only column-uniform because of the stretch. What shipped was a smooth tube of
+ * constant cross-section hinged in the middle, which is the shape the owner named.
+ *
+ * Tiling repeats the module at 1:1 (times the integer `heft`) instead of smearing it, so
+ * structure ALONG the bar survives to the screen — which is what let the art be redrawn with
+ * a waist, segment rings, a bolt and rivets. Exactly two modules fit each bar at every tier;
+ * the arithmetic is proved in `make-factory-parts.mjs`.
+ *
+ * `height` and `tileScale` are set rather than `scale`, because on a `TilingSprite` `scale`
+ * would resize the tiles along with the area and undo the 1:1 the whole change is for.
+ * `phase` shifts which columns land where — see `SHAFT_PHASE`.
+ */
+function shaftBar(
+  bar: TilingSprite,
+  texture: Texture,
+  x: number,
+  y: number,
+  rotation: number,
+  length: number,
+  heft: number,
+  phase: number,
+): void {
+  bar.texture = texture;
+  bar.position.set(x, y);
+  bar.rotation = rotation;
+  bar.width = length;
+  bar.height = TILE_PX * heft;
+  bar.tileScale.set(heft, heft);
+  bar.tilePosition.set(-phase * heft, 0);
 }
 
 /**

@@ -487,54 +487,94 @@ const GRABBER_16 = [
 
 const GRABBER = upscaleRows(GRABBER_16);
 
-// --- the grabber redesign (work item 082, redrawn at native 32px by work item 135) -----
+// --- the grabber redesign (082, redrawn at native 32px by 135, re-engineered by this item) --
 //
 // Owner ruling 2026-08-15: "also reskin the grabbers. I don't like how they look." Owner
 // ruling 2026-08-17: "the arms are looking a little low-res, even though the animation is
-// perfect. I just want them to look higher resolution." The first ruling built the body
-// below; the second is why it is now drawn at 32px instead of at 16px and doubled.
+// perfect. I just want them to look higher resolution." Owner ruling 2026-08-21, watching a
+// running factory: **"the arms look like floppy dicks, can you address the animation? And
+// also the sprites"**.
 //
-// ANSWERING THE SECOND ONE NEEDED A FACT ABOUT THE RENDERER, NOT ABOUT THE ART.
+// The third ruling is crude and also a precise art note: THE ARM READS AS SOFT AND ORGANIC
+// WHERE IT SHOULD READ AS RIGID MACHINERY. It is the direct consequence of what item 135 did
+// here, and undoing that is most of this file's share of the fix.
 //
-// `grabbers.ts` draws the shaft by assigning `visual.upper.width = pose.upperLength` to a
-// plain Sprite, and uses the same 8px `link` slice for both the upper arm and the forearm.
-// The shaft is therefore STRETCHED along its length — roughly 2x for Mk1 and Mk2 and 4x for
-// the Long arm, on top of whatever the zoom is doing. Its other axis is only ever multiplied
-// by `heft`, which is an exact integer.
+// ── WHAT 135 DID, AND THE ARGUMENT THAT TURNED OUT TO BE HALF TRUE ─────────────────────
 //
-// So detail authored across the shaft's COLUMNS is destroyed downstream of this file, and
-// detail authored down its ROWS survives pixel-crisp. That is the whole design rule for the
-// bar, and it is why "draw it richer" was the wrong instinct: a busier shaft would have been
-// smeared exactly as hard as a plain one. The shaft is instead COLUMN-UNIFORM — all eight of
-// its columns are identical, asserted at the foot of this file — so the stretch has no
-// information left to destroy, and the bar reads as a machined tube at any extension rather
-// than as a stripe. Every pixel of its budget is spent on a rounded cross-section: ink edge,
-// tier piping, mid body, pale crown, four tones where there were two.
+// 135 reasoned, correctly, that `grabbers.ts` drew the shaft by assigning
+// `visual.upper.width = pose.upperLength` to a plain Sprite — so the 8px slice was STRETCHED
+// 2x along its length for Mk1 and Mk2 and 4x for the Long arm, while its other axis was only
+// ever multiplied by an integer `heft`. Anisotropic, therefore detail authored across the
+// shaft's COLUMNS was destroyed downstream and detail authored down its ROWS survived. From
+// that it concluded "draw it richer" was the wrong instinct and made the shaft COLUMN-UNIFORM:
+// all eight columns identical, the whole budget spent on one cross-section.
 //
-// THE TIER SIGNAL MOVED, AND FIXING IT FIXED A BUG.
+// The measurement was right. The conclusion was a dead end, and it is what shipped the noodle:
 //
-// [[082]] put the tier's TICK COUNT on the shaft (1 / 2 / 3 — the belts' chevron rule in
-// grabber vocabulary, so that colour is never the only signal, per [[042]]). Two things were
-// wrong with that. The stretch smeared the ticks into stripes, which is what made the Long
-// arm read as a ruler. And the Long's third tick was authored at 16px x=11, which lands in
-// columns 22-23 — inside the CLAW slice, not the shaft — where the wrist was then drawn over
-// the top of it. Counted in the shipped PNGs rather than inferred: Mk1 showed 1 tick, Mk2
-// showed 2, and Long showed 2. The colourblind-safe signal could not separate the top two
-// tiers at all.
+//   1. COLUMN-UNIFORM MEANS NO STRUCTURE ALONG THE LENGTH AT ALL. Not "less" — none. A bar
+//      with literally identical columns has nothing to say about being made of segments,
+//      being bolted together, or having a joint anywhere. It is an extrusion of a single
+//      cross-section, which is exactly what a hose is.
+//   2. THE CROSS-SECTION IT SPENT THE BUDGET ON WAS A SMOOTH RAMP: ink -> accentDark ->
+//      accent -> pale, darkest at the rim and lightest on the midline. That is the textbook
+//      recipe for a LIT ROUND TUBE. Read the Mk2 luminances off the master palette and it is
+//      unambiguous — 17, 70, 106, 192, monotonically increasing toward the centre. The art
+//      was not merely plain, it was actively drawing a cylinder.
 //
-// The count is now a stack of 1 / 2 / 3 studs on the housing rim, which is drawn 1:1 and
-// never stretched, and the tier's hue additionally runs the FULL LENGTH of the bar as piping
-// — a stronger colour signal than a tick was, and a count that survives to the screen.
+// Put those together — a perfect cylinder, uniform along its whole length, hinged in the
+// middle — and the owner's noun is simply an accurate description of the shape.
+//
+// ── THE FIX IS UPSTREAM: `grabbers.ts` NOW TILES THE SLICE INSTEAD OF STRETCHING IT ─────
+//
+// 135's own note anticipated a `TilingSprite` and then recorded that it was "a no-op and was
+// not written", because against a column-uniform texture stretching and tiling are pixel
+// identical. True — and circular: the texture was only column-uniform because of the stretch.
+// This item wrote the TilingSprite. The 8px slice now REPEATS at 1:1 (times an integer
+// `heft`) instead of smearing, so column detail survives to the screen pixel-crisp, and the
+// design rule that governed this shape is repealed.
+//
+// The repeat count is the same for every tier and that is arithmetic, not luck: a bar is
+// `reach / 2` = `reachTiles * 16` px long and one module is `8 * heft` = `8 * reachTiles` px
+// on screen, so every bar is EXACTLY TWO MODULES, Mk1 through Long. Asserted at the foot of
+// this file, in the same spirit as the belt's chevron-period proof.
+//
+// ── WHAT IS DRAWN NOW, AND WHY EVERY PIECE OF IT IS MIRROR-SYMMETRIC ────────────────────
+//
+// The hard constraint has not moved: the arm rotates through 180 degrees, so there is no
+// permanent "top" and NOTHING may read as lighting from above. Every gain below is therefore
+// a STRUCTURAL one — symmetric about the midline by construction, via `sym`.
+//
+//   * A WAIST. The bar necks down to 6 rows between its joints and swells to the full 8 at
+//     the segment rings. A silhouette that varies along its length cannot be an extrusion,
+//     and it is what gives the arm a direction without giving it a lit side.
+//   * SEGMENT RINGS, ON THE LAST TWO COLUMNS OF THE MODULE. Tiling then lands hardware
+//     exactly where the bend is: the upper arm's outboard ring sits ON the elbow, and
+//     `grabbers.ts` phase-shifts the forearm by half a module so a second ring sits just past
+//     it. A bend with a knuckle either side of it reads as a joint; the same bend in a smooth
+//     rod reads as a kink. This is the single biggest lever on the owner's complaint.
+//   * A CHANNEL CROSS-SECTION INSTEAD OF A RAMP: ink rim, tier-hue rail, DARK recessed web.
+//     Non-monotonic — brightest between the rim and the midline, never on it — so it cannot
+//     read as a lit cylinder from any angle. That property is asserted numerically against
+//     the master palette's luminances at the foot of this file, because it is the one thing
+//     here that a well-meaning "tidy the shading" edit would quietly undo.
+//     The web is `metal_dark` rather than a tier tone precisely so the proof holds for all
+//     three: `chip_gold` is BRIGHTER than `metal_pale`, so a tier hue on the midline would
+//     rebuild the cylinder for Mk1 while looking fine on Mk2 and Long.
+//   * RIVETS. One per segment, sunk into the rail, at 1:1 now that tiling preserves columns.
+//
+// THE TIER SIGNAL IS UNCHANGED AND STILL DOUBLED. The count is a stack of 1 / 2 / 3 studs on
+// the housing rim, drawn 1:1 and never stretched (042's colourblind rule); the hue still runs
+// the FULL LENGTH of the bar, now as two rails rather than as the whole body.
 //
 // The two original guarantees are untouched: authored pointing EAST, centred, and mirror-
 // symmetric about the horizontal midline, so the renderer's quarter-turns stay wobble-free.
-// Symmetry is now structural rather than a property to be checked afterwards — `sym` draws
-// every shape together with its own reflection — and the assertion still runs regardless.
 //
 // The partition `grabber-swing.ts` cuts is preserved exactly, and asserted below: housing in
 // columns 0-13 spanning rows 8-23, shaft in 14-21 spanning rows 12-19, claw in 22-31
 // spanning rows 8-23. `ARM_SLICE` is a partition of the tile, so a redraw that let a shape
 // wander one column into its neighbour would slice the arm apart rather than fail loudly.
+// The shaft's span still reads 12-19 because the RINGS are full height; only the waisted
+// stretches between them are 6 rows, which is the point.
 
 function grabberGrid(accent, accentDark, tierCount, hooks) {
   const grid = blankGrid();
@@ -575,17 +615,32 @@ function grabberGrid(accent, accentDark, tierCount, hooks) {
   if (tierCount >= 2) sym(0, 11, 2, 2, accent);
 
   // --- shaft: columns 14-21, rows 12-19 -----------------------------------------------
-  // Eight identical columns. See the header: this slice is stretched along its length, so a
-  // cross-section is the only thing that survives, and it is given the whole budget.
-  // The body is the TIER'S OWN HUE rather than grey, and that is the tier signal doing more
-  // work than it used to, not less: the boom is the longest thing a grabber puts on screen,
-  // so colouring all of it beats one tick that the stretch turned into a smear. The value
-  // still ramps dark -> bright -> pale about the midline, so it reads as a round bar and not
-  // as a flat coloured band. Housing and claw stay metal, so the machine still reads as one.
-  sym(14, 12, 8, 1, 'K'); // ink edge
-  sym(14, 13, 8, 1, accentDark); // shaded flank
-  sym(14, 14, 8, 1, accent); // lit flank
-  sym(14, 15, 8, 1, 'P'); // crown
+  // ONE TILING MODULE, not a cross-section. `grabbers.ts` repeats these eight columns along
+  // the bar at 1:1, so everything here arrives on screen pixel-crisp and structure along the
+  // LENGTH is finally worth drawing. See the header for why 135's column-uniform rule is
+  // repealed rather than merely bent.
+  //
+  // Read left to right, the module is: five columns of waisted beam, an ink shadow line, and
+  // a two-column segment ring. The ring being LAST is load-bearing — the upper arm is exactly
+  // two modules long, so the outboard ring lands on the elbow.
+
+  // The beam. Six rows, not eight: the bar necks down between its joints, which is the whole
+  // silhouette argument. Rim -> rail -> web is deliberately NOT a ramp; the web is darker
+  // than the rail, so the profile peaks off-centre and cannot read as a lit cylinder. Proved
+  // against the palette's luminances at the foot of this file.
+  sym(14, 13, 5, 1, 'K'); //  ink rim (rows 12 and 19 stay EMPTY — that is the waist)
+  sym(14, 14, 5, 1, accent); //  the tier's hue, as a rail running the full length of the bar
+  sym(14, 15, 5, 1, 'D'); //  recessed web
+  sym(16, 15, 2, 1, 'K'); //  a bolt through the web, once per segment — ON the midline,
+  //                          which is the one place a detail cannot imply a lit side
+
+  // The segment ring: full height, so it swells proudly out of the waisted beam either side.
+  // Plain metal rather than tier hue, so housing, ring and claw read as one machine and the
+  // colour stays the bar's business.
+  sym(19, 12, 1, 4, 'K'); //  ink shadow line dividing one segment from the next
+  sym(20, 12, 2, 1, 'K'); //  ring: ink cap
+  sym(20, 13, 2, 2, 'P'); //       bright collar face
+  sym(20, 15, 2, 1, 'D'); //       and a groove on the midline, so the ring is not a slab
 
   // --- claw: columns 22-31, rows 8-23 -------------------------------------------------
   // Cut in half at row 16 by the renderer into two jaws that open and close, so every shape
@@ -595,6 +650,7 @@ function grabberGrid(accent, accentDark, tierCount, hooks) {
   sym(22, 10, 4, 6, 'K'); // wrist collar
   sym(23, 11, 3, 5, 'D');
   sym(24, 12, 2, 4, 'M');
+  sym(23, 11, 2, 2, 'L'); // the jaw's pivot bolt — the shaft's ring vocabulary, at the wrist
   sym(26, 8, 6, 4, 'K'); // jaw: ink outer edge
   sym(26, 9, 5, 3, 'D'); //      body
   sym(27, 10, 4, 2, 'M'); //      lit flank
@@ -628,6 +684,36 @@ const ARM_SLICES = [
   { name: 'shaft', x: 14, w: 8, top: 12, bottom: 19 },
   { name: 'claw', x: 22, w: 10, top: 8, bottom: 23 },
 ];
+
+/**
+ * THE TILING PROOF: every bar is EXACTLY TWO SHAFT MODULES, at every tier.
+ *
+ * `grabbers.ts` draws each of the two bars as a `TilingSprite` of length `reach / 2` with
+ * `tileScale` set to the tier's integer `heft`, and `heft === reachTiles`. So a bar is
+ * `reachTiles * TILE_PX / 2` px long and one module covers `shaftW * reachTiles` px of it.
+ *
+ * The two matter together. AN INTEGER repeat count is what stops the module being cut off
+ * mid-ring at the elbow — the arm's outboard ring has to land ON the joint, or the whole
+ * "hardware at the bend" argument arrives half a segment short. And the count being the SAME
+ * for every tier is what keeps a Long arm reading as a bigger Mk1 rather than as a different
+ * machine with more segments: it is twice the size, not twice the parts.
+ *
+ * `reachTiles` is `@snack/sim`'s to choose and this file cannot import it, so the tiers it
+ * ships today are restated here. A new tier with a reach this does not divide would give an
+ * arm a ring sawn in half, and it should fail here rather than on the owner's screen.
+ */
+const REACH_TILES = [1, 2]; // Mk1 and Mk2 reach 1, Long reaches 2.
+for (const reachTiles of REACH_TILES) {
+  const barPx = (reachTiles * SIZE) / 2;
+  const modulePx = ARM_SLICES[1].w * reachTiles;
+  if (barPx % modulePx !== 0 || barPx / modulePx !== 2) {
+    throw new Error(
+      `A reach-${reachTiles} bar is ${barPx}px long and its shaft module is ${modulePx}px — ` +
+        `${barPx / modulePx} repeats. Every bar must be exactly 2, or the segment ring stops ` +
+        `landing on the elbow.`,
+    );
+  }
+}
 
 // --- emit ----------------------------------------------------------------------------
 
@@ -798,17 +884,88 @@ for (const [name, grid] of Object.entries(GRABBER_TIERS)) {
     }
   }
 
-  // 2. THE SHAFT IS COLUMN-UNIFORM. The renderer stretches this slice along its length, so
-  //    any difference between its columns is smeared across the whole arm — which is exactly
-  //    how the Long arm came to read as a striped ruler. Uniform columns cannot smear.
+  // 2. THE SHAFT IS A TILING MODULE, AND IT IS SHAPED. `grabbers.ts` REPEATS this slice
+  //    along the bar at 1:1 rather than stretching it, so — unlike under [[135]] — column
+  //    detail survives to the screen and is worth authoring. These pin the three things the
+  //    redraw is actually made of, because each one is a plausible casualty of a later tidy.
   const shaft = ARM_SLICES[1];
+  const opaque = (x, y) => grid[y][x] !== '.';
+
+  //    (a) THE WAIST. The beam necks down to six rows and only the RINGS run the full eight.
+  //        A bar of constant thickness is an extrusion, and an extrusion is the shape the
+  //        owner complained about. `ARM_SLICE`'s 12-19 span is carried by the rings alone.
+  for (let x = shaft.x; x < shaft.x + shaft.w; x++) {
+    const ring = x >= shaft.x + 5;
+    for (const y of [12, 19]) {
+      if (opaque(x, y) !== ring) {
+        throw new Error(
+          `${name}: shaft column ${x} is ${opaque(x, y) ? 'full' : 'waisted'} height at row ${y}, ` +
+            `expected ${ring ? 'full — it is a segment ring' : 'waisted — it is beam'}.`,
+        );
+      }
+    }
+    for (let y = 13; y <= 18; y++) {
+      if (!opaque(x, y)) throw new Error(`${name}: hole in the shaft at ${x},${y}.`);
+    }
+  }
+
+  //    (b) IT IS NOT COLUMN-UNIFORM. The inverse of 135's assertion, and deliberately so: a
+  //        bar whose columns are all identical has nothing to say about segments, rivets or
+  //        joints, which is precisely how it came to read as a hose.
   const column = (x) => Array.from({ length: SIZE }, (_, y) => grid[y][x]).join('');
-  const reference = column(shaft.x);
-  for (let x = shaft.x + 1; x < shaft.x + shaft.w; x++) {
-    if (column(x) !== reference) {
+  const distinct = new Set(Array.from({ length: shaft.w }, (_, i) => column(shaft.x + i)));
+  if (distinct.size < 3) {
+    throw new Error(
+      `${name}: the shaft has only ${distinct.size} distinct column(s) — it is an extrusion ` +
+        `again. The renderer tiles this slice now; structure along the length is the point.`,
+    );
+  }
+
+  //    (c) NO SHAFT COLUMN IS SHADED LIKE A LIT CYLINDER. The arm rotates through 180
+  //        degrees, so it has no permanent top: shading that brightens toward the midline is
+  //        upside down half the time, and — worse — it is the exact recipe for a round tube.
+  //        135's ink -> accentDark -> accent -> pale ramp put the BRIGHTEST tone on the
+  //        midline for Mk2 and Long, which is the shape the owner ended up naming.
+  //
+  //        So every column must PEAK BETWEEN its rim and the midline, and its midline must
+  //        sit a clear palette step below that peak. Checked in luminance off the master
+  //        palette rather than by eye, because the trap is tier-shaped: `chip_gold` outshines
+  //        `metal_pale`, so a profile that reads as a channel on Mk2 and Long can still read
+  //        as a tube on Mk1, and only the numbers say so.
+  //
+  //        Honest about its reach: this catches shading that crests on or beside the midline,
+  //        which is the failure that shipped. It is not a general proof that a shape reads as
+  //        machined — nothing checkable is. A flat single-tone column is exempt because it is
+  //        a shadow line rather than a cross-section, and it must be INK so the exemption
+  //        cannot be used to smuggle a pale slab past the rule.
+  const MIDLINE_DIP = 24; // Comfortably inside the metal ramp's smallest step (36 luma).
+  const luma = (glyph) => {
+    const hex = hexOf(ROLES[glyph]);
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  for (let x = shaft.x; x < shaft.x + shaft.w; x++) {
+    // Rows 12-15: the rim down to the midline. The other half is its mirror by construction.
+    const rows = [12, 13, 14, 15].filter((y) => opaque(x, y));
+    const tones = rows.map((y) => luma(grid[y][x]));
+    if (new Set(rows.map((y) => grid[y][x])).size === 1) {
+      if (grid[rows[0]][x] !== 'K') {
+        throw new Error(
+          `${name}: shaft column ${x} is a flat slab of "${grid[rows[0]][x]}". A single-tone ` +
+            `column is only allowed to be an ink shadow line.`,
+        );
+      }
+      continue;
+    }
+    const peak = Math.max(...tones);
+    const peakAt = rows[tones.indexOf(peak)];
+    const midline = tones[tones.length - 1];
+    if (peakAt === rows[0] || peakAt === 15 || midline > peak - MIDLINE_DIP) {
       throw new Error(
-        `${name}: shaft column ${x} differs from column ${shaft.x} — the renderer stretches ` +
-          `this slice, so the difference would smear along the whole arm.`,
+        `${name}: shaft column ${x} runs ${tones.map((t) => t.toFixed(0)).join(' -> ')} from ` +
+          `rim to midline, peaking at row ${peakAt}. It has to crest BETWEEN the rim and the ` +
+          `midline and drop at least ${MIDLINE_DIP} luma after it — anything else is a lit ` +
+          `round tube, and this arm has no permanent top.`,
       );
     }
   }
