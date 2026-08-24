@@ -16,9 +16,14 @@
 //   · THE ELBOW'S ARITHMETIC. Two bars of a fixed length have to actually REACH the hand.
 //     A forearm whose drawn length disagrees with the gap it spans leaves a break in the arm
 //     that only shows at the deepest part of the tuck.
+//   · THE GIMBAL. `clawAngle` has now been all three of `handAngle`, `foreAngle` and
+//     `handAngle` again over three items, and the third time is for a reason the first two
+//     did not have. Every one of those edits is one token wide and none of them changes a
+//     parked arm by a pixel, so the only thing that can tell them apart is a test that
+//     measures the head's motion across the MIDDLE of the stroke.
 
 import { describe, expect, it } from 'vitest';
-import { Direction, GrabberTier } from '@snack/sim';
+import { Direction, GrabberTier, grabberSpec } from '@snack/sim';
 
 import {
   ARM_SLICE,
@@ -375,6 +380,259 @@ describe('foldAmount — the elbow is a hinge, not a bow', () => {
     // strokes show the identical bend at the identical phase.
     for (const t of [0.05, 0.2, 0.37, 0.5]) {
       expect(foldAmount(1 - t)).toBeCloseTo(foldAmount(t));
+    }
+  });
+});
+
+describe('clawAngle — the head is gimballed, not welded to the forearm', () => {
+  /**
+   * Every permille the sim can actually report for a tier — the real, discrete frame grid.
+   *
+   * Taken from `GRABBER_SPECS` rather than a copied-out table, because the tick count is
+   * exactly the thing this suite must notice a change in: `grabbers.ts` never interpolates,
+   * so `swingTicks` IS the frame rate of the arm. A hardcoded 10 would go on passing while a
+   * retuned tier quietly drew its stroke in five frames.
+   */
+  function ticksOf(tier: number): number[] {
+    const n = grabberSpec(tier as never)?.swingTicks ?? 0;
+    expect(n).toBeGreaterThan(0);
+    const out: number[] = [];
+    for (let i = 0; i <= n; i++) out.push(Math.round((i * 1000) / n));
+    return out;
+  }
+  function wrap(radians: number): number {
+    let d = radians;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    return d;
+  }
+
+  it('is EXACTLY the forearm at every endpoint, so no parked arm moves a pixel', () => {
+    // `toBe`, not `toBeCloseTo`, and it is not optimism: at an endpoint `foldAmount` is 0, so
+    // `radius === reach`, `acos(1)` is a hard 0, the elbow lands on the pivot-hand chord and
+    // `atan2` gives that chord's own angle back. The whole safety argument for this item is
+    // this assertion — every resting pose and all 24 stall poses draw what they drew before.
+    for (const dir of DIRS) {
+      for (const tier of TIERS) {
+        for (const held of [0, 5]) {
+          for (const permille of [0, 1000]) {
+            const pose = armPose(dir, tier, held, permille);
+            expect(pose.clawAngle).toBe(pose.foreAngle);
+          }
+        }
+      }
+    }
+  });
+
+  it('holds the line of reach, so the elbow s fold never reaches the head', () => {
+    // The one-line statement of the gimbal law. `foreAngle` carries the sweep AND the bend;
+    // `clawAngle` carries only the sweep.
+    for (const dir of DIRS) {
+      for (const tier of TIERS) {
+        for (const permille of ticksOf(tier)) {
+          const pose = armPose(dir, tier, 5, permille);
+          expect(pose.clawAngle).toBe(pose.handAngle);
+        }
+      }
+    }
+  });
+
+  it('turns 180° per stroke and NEVER doubles back — today s arm turned 224.6°', () => {
+    // The measurement that started this item. Sampled fine rather than on the tick grid,
+    // because the reversal is what matters and a coarse grid can step straight over it.
+    let head = 0;
+    let fore = 0;
+    let reversals = 0;
+    let previousSign = 0;
+    let a = armPose(Direction.East, GrabberTier.Mk1, 5, 0);
+    for (let i = 1; i <= 2000; i++) {
+      const b = armPose(Direction.East, GrabberTier.Mk1, 5, (i * 1000) / 2000);
+      const step = wrap(b.clawAngle - a.clawAngle);
+      head += Math.abs(step);
+      fore += Math.abs(wrap(b.foreAngle - a.foreAngle));
+      const sign = Math.sign(step);
+      if (sign !== 0) {
+        if (previousSign !== 0 && sign !== previousSign) reversals++;
+        previousSign = sign;
+      }
+      a = b;
+    }
+    // Exactly the 180° it has to travel to present outward at the far tile, and not one
+    // degree more. The forearm, over the same stroke, travels a quarter as much again.
+    expect((head * 180) / Math.PI).toBeCloseTo(180, 4);
+    expect((fore * 180) / Math.PI).toBeGreaterThan(220);
+    // Zero reversals is the whole of "stabilized": a head that overshoots its aim and comes
+    // back is a head that wags, which is what the owner was looking at.
+    expect(reversals).toBe(0);
+  });
+
+  it('is the ONLY blend of the two angles that does not wag — k=0 is forced', () => {
+    // The argument that actually settles the design, pinned so nobody "splits the difference"
+    // later and reintroduces the fault at half strength.
+    //
+    // Every admissible law equals the two angles' common value at the endpoints, so the whole
+    // family is `handAngle + k·bend` for constant k: k=0 is the head, k=1 is the forearm. But
+    // `bend` is `foldAmount`, a plateau that RISES AND FALLS, so any k above zero puts a
+    // rise-and-fall into the aim and the head reverses direction mid-stroke. Zero is not the
+    // best value here, it is the only one.
+    function sweepOf(k: number): { degrees: number; reversals: number } {
+      let total = 0;
+      let reversals = 0;
+      let previousSign = 0;
+      const at = (permille: number) => {
+        const p = armPose(Direction.East, GrabberTier.Mk1, 5, permille);
+        return p.handAngle + k * wrap(p.foreAngle - p.handAngle);
+      };
+      let a = at(0);
+      for (let i = 1; i <= 2000; i++) {
+        const b = at((i * 1000) / 2000);
+        const step = wrap(b - a);
+        total += Math.abs(step);
+        const sign = Math.sign(step);
+        if (sign !== 0) {
+          if (previousSign !== 0 && sign !== previousSign) reversals++;
+          previousSign = sign;
+        }
+        a = b;
+      }
+      return { degrees: (total * 180) / Math.PI, reversals };
+    }
+
+    const head = sweepOf(0);
+    expect(head.degrees).toBeCloseTo(180, 4);
+    expect(head.reversals).toBe(0);
+    // Every other member of the family wags, and the parasitic rotation grows with k.
+    let previousDegrees = head.degrees;
+    for (const k of [0.25, 0.5, 0.75, 1]) {
+      const blend = sweepOf(k);
+      expect(blend.reversals).toBeGreaterThan(0);
+      expect(blend.degrees).toBeGreaterThan(previousDegrees);
+      previousDegrees = blend.degrees;
+    }
+    // k=1 is `foreAngle` itself — 224.6°, a quarter as much again as the 180° it achieves.
+    expect(previousDegrees).toBeCloseTo(224.6, 1);
+    // And every member really does hit the endpoints, which is why k had to be argued at all
+    // rather than dismissed: the endpoint test alone cannot tell any of them apart.
+    for (const k of [0, 0.25, 0.5, 1]) {
+      for (const dir of DIRS) {
+        for (const tier of TIERS) {
+          const p = armPose(dir, tier, 5, 1000);
+          expect(p.handAngle + k * wrap(p.foreAngle - p.handAngle)).toBe(p.clawAngle);
+        }
+      }
+    }
+  });
+
+  it('does not wring the item in place while the hand is STOPPED on its tile', () => {
+    // The sharpest symptom, and the one the owner could actually see: through the leading
+    // dwell the hand has not moved and the jaws are shut on the item, so any head rotation is
+    // the arm twisting the goods where they stand.
+    //
+    // Stated as a RATIO of two angles, deliberately. An earlier draft of this guard compared
+    // the head's rotation in DEGREES against the hand's travel in PIXELS and asserted the
+    // first was smaller — which happens to hold here, and is not a statement about anything.
+    // Two angles over the same frames is the comparison that means something.
+    const parked = armPose(Direction.East, GrabberTier.Mk1, 5, 0);
+    let head = 0;
+    let fore = 0;
+    for (const permille of [100, 200]) {
+      const pose = armPose(Direction.East, GrabberTier.Mk1, 5, permille);
+      head = Math.max(head, Math.abs(wrap(pose.clawAngle - parked.clawAngle)));
+      fore = Math.max(fore, Math.abs(wrap(pose.foreAngle - parked.foreAngle)));
+    }
+    // 2.4° against the forearm's 20.6° — the head does under an eighth of the twisting, and
+    // all of what remains is the sweep itself, which by tick 2 has genuinely begun.
+    expect((head * 180) / Math.PI).toBeLessThan(3);
+    expect((fore * 180) / Math.PI).toBeGreaterThan(20);
+    expect(head).toBeLessThan(fore / 8);
+    // And through the dwell proper the head is not merely quiet but STOPPED, exactly as the
+    // hand is: `travelProgress` is flat there and the head is now a function of nothing else.
+    const stillOnTile = armPose(Direction.East, GrabberTier.Mk1, 5, 100);
+    expect(stillOnTile.clawAngle).toBe(parked.clawAngle);
+    expect(stillOnTile.handX).toBe(parked.handX);
+  });
+
+  it('settles onto its drop instead of overshooting and flicking back', () => {
+    // Mk1's last three ticks. The forearm arrives 15.7° past its final aim and snaps back
+    // while the hand covers its last 1.6px; the head must approach monotonically.
+    const landed = armPose(Direction.East, GrabberTier.Mk1, 5, 1000);
+    let previous = Infinity;
+    for (const permille of [700, 800, 900, 1000]) {
+      const pose = armPose(Direction.East, GrabberTier.Mk1, 5, permille);
+      const off = Math.abs(wrap(pose.clawAngle - landed.clawAngle));
+      expect(off).toBeLessThanOrEqual(previous);
+      previous = off;
+    }
+    const late = armPose(Direction.East, GrabberTier.Mk1, 5, 800);
+    expect(Math.abs((wrap(late.clawAngle - landed.clawAngle) * 180) / Math.PI)).toBeLessThan(5);
+    // The curve it replaced, measured the same way, is on the wrong side of that fence.
+    expect(Math.abs((wrap(late.foreAngle - landed.foreAngle) * 180) / Math.PI)).toBeGreaterThan(10);
+  });
+
+  it('is continuous across the changeover, unlike aiming at the tile being worked', () => {
+    // The last frame of the outbound stroke and the first of the return are the SAME instant
+    // on the SAME tile, inside stacked dwells. A head that aims at "the tile this stroke ends
+    // on" — the most literal reading of the owner's words — swaps target there and snaps a
+    // full 180°. This one cannot: both frames are endpoints, so both are `foreAngle`.
+    for (const dir of DIRS) {
+      for (const tier of TIERS) {
+        const arriving = armPose(dir, tier, 5, 1000);
+        const leaving = armPose(dir, tier, 0, 0);
+        expect(wrap(arriving.clawAngle - leaving.clawAngle)).toBeCloseTo(0, 12);
+        const home = armPose(dir, tier, 0, 1000);
+        const lifting = armPose(dir, tier, 5, 0);
+        expect(wrap(home.clawAngle - lifting.clawAngle)).toBeCloseTo(0, 12);
+      }
+    }
+  });
+
+  it('breaks the wrist by the elbow s own bend, and no more', () => {
+    // The honest cost of the gimbal, fenced. The claw pivots on a pin that sits ON the
+    // forearm's centreline — `grabbers.ts` takes the wrist from `foreAngle` and must go on
+    // doing so — and swings its far end `clawW * sin(bend)` off the bar's axis. At the
+    // deepest tuck that is 41.4° and 6.6px, under the 16px-tall claw covering an 8px bar.
+    // The S-curve bug this must not become displaced the claw's ROOT by the same 6.6px —
+    // the identical `clawW * sin(bend)`. Magnitude cannot separate the fix from the bug; only
+    // which END of the part moves can, which is what the wrist-on-the-forearm test pins.
+    let worst = 0;
+    for (const dir of DIRS) {
+      for (const tier of TIERS) {
+        for (const held of [0, 5]) {
+          for (const permille of ticksOf(tier)) {
+            const pose = armPose(dir, tier, held, permille);
+            worst = Math.max(worst, Math.abs(wrap(pose.clawAngle - pose.foreAngle)));
+          }
+        }
+      }
+    }
+    // `acos(1 - SWING_TUCK)` — the elbow's break, which is exactly what the head declines to
+    // inherit. Deepen `SWING_TUCK` and this moves with it, on purpose.
+    expect((worst * 180) / Math.PI).toBeCloseTo((Math.acos(1 - SWING_TUCK) * 180) / Math.PI, 6);
+    expect(ARM_SLICE.clawW * Math.sin(worst)).toBeLessThan(TILE_PX / 4);
+  });
+
+  it('aims through the tile centre at both ends, which is "pointing at the object"', () => {
+    // The claw's tip is `clawW` out from the wrist along the head's aim, and the wrist is
+    // `clawW` back from the hand along the forearm. When the two angles agree — both
+    // endpoints — the tip lands dead on the hand point, which `armPose` puts dead on the
+    // tile centre. Payload-level, target-tracking and work-axis all miss it by 20px here.
+    for (const dir of DIRS) {
+      for (const tier of TIERS) {
+        const at = sourceOffset(dir, tier);
+        for (const [held, permille, tx, ty] of [
+          [0, 1000, at.x, at.y],
+          [5, 0, at.x, at.y],
+          [5, 1000, -at.x, -at.y],
+          [0, 0, -at.x, -at.y],
+        ] as [number, number, number, number][]) {
+          const pose = armPose(dir, tier, held, permille);
+          const wristX = pose.handX - Math.cos(pose.foreAngle) * ARM_SLICE.clawW;
+          const wristY = pose.handY - Math.sin(pose.foreAngle) * ARM_SLICE.clawW;
+          const tipX = wristX + Math.cos(pose.clawAngle) * ARM_SLICE.clawW;
+          const tipY = wristY + Math.sin(pose.clawAngle) * ARM_SLICE.clawW;
+          expect(Math.hypot(tipX - tx, tipY - ty)).toBeCloseTo(0, 9);
+        }
+      }
     }
   });
 });

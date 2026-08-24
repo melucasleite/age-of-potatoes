@@ -63,9 +63,12 @@
 //
 // 2. THE WRIST, AND THIS ONE WAS A BUG. The claw was rotated to `pose.handAngle` — the
 //    PIVOT-TO-HAND direction — and positioned along that same chord, while the forearm it
-//    hangs off runs at `pose.foreAngle`. Those differ by the elbow's own bend: 33.6° at the
-//    deepest part of the tuck, which put the claw's body 5.8 source pixels off the forearm's
-//    centreline, on a bar 8 pixels thick. So the arm bent one way at the elbow and the
+//    hangs off runs at `pose.foreAngle`. Those differ by the elbow's own bend: 41.4° at the
+//    deepest part of the tuck, which put the claw's body 6.6 source pixels off the forearm's
+//    centreline, on a bar 8 pixels thick. (Both figures move with `SWING_TUCK`, and both are
+//    `acos(1 - SWING_TUCK)` and `clawW * sin` of it. They read 33.6° and 5.8px when this was
+//    written, because the tuck was a sixth then; c0c7ad0 deepened it to a quarter.) So the
+//    arm bent one way at the elbow and the
 //    OTHER WAY at the wrist, every single swing — an S-curve, in a smooth tube, which is
 //    about the floppiest thing a linkage can do. The claw now wears `foreAngle` and hangs off
 //    the forearm's tip, so the arm has the two joints it is drawn to have.
@@ -74,6 +77,35 @@
 //    is zero, so `upperAngle`, `foreAngle` and `handAngle` are all the same number and the
 //    claw lands exactly where it always did. The change is invisible at rest and only edits
 //    the middle of the swing — the part that was wrong.
+//
+// ── "STABILIZED LIKE A GIMBAL" — AND WHY THE CLAW WEARS A THIRD ANGLE NOW ──────────────
+//
+// The owner, after the motion pass: "I feel like the head of the grabber needs to be always
+// pointing at the object like stabilized by a gimbal."
+//
+// The claw now wears `pose.clawAngle`, which is neither of the two above. The argument is in
+// `grabber-swing.ts` section 6 and is not repeated here; what matters at THIS end is the one
+// rule that keeps the fix above intact, because the two are easy to confuse:
+//
+//   **ROTATION FROM THE HEAD. POSITION FROM THE FOREARM.**
+//
+// The S-curve bug took the claw's rotation AND its position from the pivot-hand chord, which
+// lifted the claw's whole body — root included — off the bar. The wrist below still comes off
+// `foreAngle`, so the claw's root stays on the forearm's centreline to 3.6e-15px; only its
+// aim is decoupled. A part that pivots on its mount is a wrist. A part that has left its
+// mount is the thing the owner called floppy. If you are ever tempted to compute the wrist
+// from `clawAngle` "for consistency", that is the bug, and it is a five-character edit.
+//
+// Worth knowing before you weigh the trade: the gimbal swings the claw's FAR END 6.6px off
+// the bar's axis, and that is the same `clawW * sin(bend)` the S-curve bug moved the claw's
+// ROOT by. Identical magnitude. What separates them is which end of the part moves — a hand
+// that pivots about a wrist that stays put is a joint, and a hand that has left the wrist is
+// a hand that fell off. Numbers alone will not tell those two apart, which is exactly why
+// this note exists.
+//
+// Three things ride the head's frame rather than the forearm's, and all three must move
+// together or the claw comes apart: the claw's `rotation`, the jaws' closing direction, and
+// the cargo's seat between them. All three are below, within a dozen lines of each other.
 
 import { TILE_PX } from './pixel';
 
@@ -264,37 +296,49 @@ export class GrabberLayer {
         SHAFT_PHASE,
       );
 
-      // The claw occupies the LAST `clawW` pixels of the FOREARM, hanging off its tip like a
-      // hand off a wrist. Its tip still lands on the hand point — the tile centre the sweep
-      // was built to hit — because that is where the forearm ends.
-      const alongX = Math.cos(pose.foreAngle);
-      const alongY = Math.sin(pose.foreAngle);
+      // THE WRIST IS A POINT ON THE FOREARM, AND THE GIMBAL DOES NOT GET TO MOVE IT. The
+      // claw is mounted `clawW` back from the hand point along the FOREARM — that is where
+      // the bar ends, so that is where a wrist can be. Position from `foreAngle`, rotation
+      // from `pose.clawAngle`, and keeping those two apart is the entire safety argument:
+      // the old S-curve bug took BOTH from the pivot-hand chord and floated the claw's whole
+      // body 6.6px off the bar. Here the claw's root sits on the forearm's centreline at
+      // every frame and only pivots about it, the way a wrist does.
+      const foreX = Math.cos(pose.foreAngle);
+      const foreY = Math.sin(pose.foreAngle);
       const handPx = pivotX + Math.cos(pose.handAngle) * pose.radius;
       const handPy = pivotY + Math.sin(pose.handAngle) * pose.radius;
+      const wristX = handPx - foreX * ARM_SLICE.clawW;
+      const wristY = handPy - foreY * ARM_SLICE.clawW;
+
+      // Everything from here is in the CLAW's frame, not the forearm's — see `clawAngle`.
+      const alongX = Math.cos(pose.clawAngle);
+      const alongY = Math.sin(pose.clawAngle);
       // Screen-down in the claw's own frame; the jaws travel along it, toward each other.
+      // It has to be the CLAW's perpendicular: taken off the forearm, a gimballed head would
+      // shut its jaws across its own bite, up to 41.4° sideways at the deepest tuck.
       const perpX = -alongY;
       const perpY = alongX;
       const shut = CLAW_TRAVEL * pose.grip;
-      const wristX = handPx - alongX * ARM_SLICE.clawW;
-      const wristY = handPy - alongY * ARM_SLICE.clawW;
 
       visual.clawUpper.position.set(
         Math.round(wristX + perpX * shut),
         Math.round(wristY + perpY * shut),
       );
-      visual.clawUpper.rotation = pose.foreAngle;
+      visual.clawUpper.rotation = pose.clawAngle;
       visual.clawLower.position.set(
         Math.round(wristX - perpX * shut),
         Math.round(wristY - perpY * shut),
       );
-      visual.clawLower.rotation = pose.foreAngle;
+      visual.clawLower.rotation = pose.clawAngle;
 
       if (g.held !== 0) {
         visual.cargo.texture = this.items.texture(g.held);
-        // Between the jaws, not on the wrist: the item rides where the claw is holding it.
+        // Between the jaws, not on the wrist: the item rides where the claw is holding it —
+        // half a claw out from the wrist along the HEAD's aim, so a stabilized head carries
+        // a stabilized item rather than swinging it around a point it no longer points at.
         visual.cargo.position.set(
-          Math.round(handPx - alongX * (ARM_SLICE.clawW / 2)),
-          Math.round(handPy - alongY * (ARM_SLICE.clawW / 2)),
+          Math.round(wristX + alongX * (ARM_SLICE.clawW / 2)),
+          Math.round(wristY + alongY * (ARM_SLICE.clawW / 2)),
         );
       }
     }

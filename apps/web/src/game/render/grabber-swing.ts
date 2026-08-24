@@ -108,6 +108,102 @@
 // And EVERY ONE of item 094's tests passes unchanged. Nothing in this item needed a guard
 // relaxed, which is the strongest evidence available that it sharpened that arc rather than
 // replacing it. `SWING_TUCK` even documents the fence its own test sets, and stops short.
+//
+// ── 6. THE HEAD IS GIMBALLED: `clawAngle` ──────────────────────────────────────────────
+//
+// The owner, watching the arm after the motion pass: "I feel like the head of the grabber
+// needs to be always pointing at the object like stabilized by a gimbal."
+//
+// He is describing a real machine — a pick-and-place head or an excavator bucket keeps its
+// aim on the work while the boom slews around it — and the arm had a measurable defect that
+// matches the words exactly. The claw wore `foreAngle`, so it inherited **the elbow's fold on
+// top of the sweep**, and those are two different curves:
+//
+//   · `handAngle` is the sweep. It is `travelProgress` × 180°: dwell, ramp, cruise, ramp,
+//     dwell. Monotonic, and it is the profile the whole motion pass above was built around.
+//   · `bend` is the elbow, and it is `foldAmount` — a plateau that rises and FALLS. It is
+//     deliberately a different function of a different parameter, so the joints stop peaking
+//     together (see `FOLD_RAMP`).
+//   · `foreAngle` is their SUM, because the forearm carries both. So the head's aim rose,
+//     overshot, and came back.
+//
+// Measured over one Mk1 stroke, driving this function across the real tick grid:
+//
+//   THE HEAD TURNED 224.6° TO ACHIEVE 180°, AND REVERSED DIRECTION ONCE.
+//
+//   · 44.6° of that was PARASITIC — pure elbow leak, cancelling itself out over the stroke.
+//   · By tick 2 the hand had travelled 2.07px, still standing on the tile with the item
+//     clamped in shut jaws — and the head had already twisted 20.6°. It wrung the payload
+//     in place, during the very dwell `SWING_DWELL` exists to make dead still.
+//   · By tick 8 the hand was 1.6px from the drop and the head was 15.7° PAST its final aim,
+//     then flicked back. That wag at the moment of delivery is the tell he was pointing at.
+//
+// `clawAngle` cancels exactly that. The head holds the **pivot-to-hand bearing** — the arm's
+// own line of reach, the line it grips along — so the elbow's fold no longer reaches it, and
+// the head's aim becomes `travelProgress` and nothing else. 180.0° per stroke, zero parasitic
+// rotation, zero reversals: the head now moves on the same trapezoid as the shoulder. It
+// dwells when the hand dwells and cruises when the hand cruises, which is the whole of what
+// "stabilized" means here.
+//
+// THE HARD CONSTRAINT, WHICH IS WHAT ACTUALLY DECIDES THIS. The claw's tip has to land on the
+// tile centre at both ends of the stroke, because that is where it grips and where it lets go.
+// The linkage puts the HAND on the tile centre and the wrist `clawW` back along the forearm,
+// so the ONLY aim that puts the tip on the tile is `foreAngle` — and at an endpoint the tuck
+// is zero, so `foreAngle` and `handAngle` are the same number. **Every admissible law equals
+// `handAngle` at both endpoints.** That is arithmetic, not taste, and it kills three readings
+// outright. Measured on the real tick grid, worst case over 4 directions and 3 tiers:
+//
+//   PAYLOAD-LEVEL (a constant screen angle, the literal camera-gimbal reading) — claw tip
+//     20.0px off the tile at BOTH endpoints, item released 15.0px off centre, 180° of wrist
+//     break. No constant can face both ends of a 180° sweep. And it buys nothing anyway: the
+//     cargo sprite's `rotation` is never assigned, so the carried item CANNOT tumble however
+//     the head moves. The one reading named after the payload does not affect the payload.
+//   TARGET-TRACKING (aim at the tile this stroke ends on) — the closest reading to his actual
+//     words, and it fails in the sharpest possible way. It is exact at the tile it is leaving
+//     and 20.0px wide of the tile it is GRIPPING: it points away from the item at the precise
+//     moment it closes on it. And it snaps a full 180° at the changeover, because the tile it
+//     is working swaps at the instant the two dwells meet. Aiming at the tile the stroke
+//     STARTS on just mirrors the fault — exact where it grips, 20.0px out where it releases.
+//   WORK-AXIS (the static source→destination axis off `dir`) — a constant, so it fails both
+//     endpoints the same 20.0px way, and parks the claw pointing back at its own pedestal.
+//
+// AND THE LINE OF REACH IS THE UNIQUE SURVIVOR, not merely a good one. Write the whole
+// admissible family as `handAngle + k · bend` — every member hits both endpoints exactly,
+// because `bend` is 0 there. `bend` is `foldAmount`, a plateau that RISES AND FALLS, so any
+// `k ≠ 0` puts a rise-and-fall into the head's aim and the head reverses direction mid-stroke.
+// Measured: k=0 gives 180.0° per stroke and 0 reversals; k=¼ gives 184.3° and 1; k=½ gives
+// 194.6° and 1; k=1 is `foreAngle` itself, 224.6° and 1. **k=0 is the only member that does
+// not wag**, and `handAngle + 0·bend` is `handAngle`. The choice is forced.
+//
+// Blends that ramp into a constant across the carry escape that family by making `k` a
+// function of the stroke, and fail differently: endpoints exact, but the head rotates 78.6°
+// between two adjacent frames of the real tick grid and breaks the wrist 177.4° — the claw
+// ends up pointing backwards down its own forearm. The head is the smallest part on the arm;
+// it is the one part that must never be the fastest thing moving.
+//
+// WHY THIS IS NOT THE S-CURVE BUG COMING BACK, which is the first thing to check, because
+// `grabbers.ts` removed `handAngle` from the claw for good reason. That bug was TWO changes
+// and only one of them was the rotation: the claw was also POSITIONED along the pivot-hand
+// chord, which put its whole body — root included — 6.6px off the forearm's centreline on an
+// 8px bar. It had come off the arm. The wrist here stays exactly where the linkage puts it,
+// `clawW` back along the FOREARM, so the claw's root sits on the forearm's centreline at
+// 3.6e-15px — zero — at every pose the sim can produce. The claw is hinged, not adrift. What
+// it costs is the honest cost of a wrist joint: the claw's far end swings up to 6.6px
+// (`clawW * sin 41.4°`) off the bar's axis at the deepest tuck, and the 16px-tall claw covers
+// the 8px-thick bar end through all of it.
+//
+// THOSE TWO 6.6s ARE THE SAME `clawW * sin(bend)`, AND THAT IS THE WHOLE POINT. The gimbal
+// displaces the claw's FAR END by exactly the distance the S-curve bug displaced its ROOT. A
+// magnitude cannot tell the fix from the bug; only the end of the part that moves can. A hand
+// that pivots about a wrist that stays put is a joint. A hand whose root has left the wrist
+// has fallen off. So the test that matters is not "how far did the claw move" — it is the one
+// that pins the ROOT to the forearm, and it reads zero.
+//
+// AND THE PARKED ARM CANNOT MOVE. At both endpoints `foldAmount` is 0, so `radius` is exactly
+// `reach`, `acos(1)` is exactly 0, and `handAngle` and `foreAngle` are not merely close —
+// they are bit-identical, `0.000e+0` rad apart across all four directions, all three tiers and
+// both strokes. Every resting pose, and all 24 stall poses, draw the same pixels they drew
+// before. As with the S-curve fix: costless at the ends, which is why it is safe.
 
 import { GRABBER_SPECS, grabberSpec } from '@snack/sim';
 
@@ -441,7 +537,7 @@ export function gripAmount(held: number, swingPermille: number): number {
  * on the map this arm is, which is what makes the whole thing testable without a canvas.
  */
 export interface ArmPose {
-  /** Radians from the pivot to the hand. Both claw halves wear this. */
+  /** Radians from the pivot to the hand: the arm's line of reach, and the sweep itself. */
   handAngle: number;
   handX: number;
   handY: number;
@@ -453,6 +549,25 @@ export interface ArmPose {
   /** Radians from the elbow to the hand, and the bar's length: the forearm's transform. */
   foreAngle: number;
   foreLength: number;
+  /**
+   * Where the HEAD aims — the claw's own rotation, and the jaws' line of travel with it.
+   *
+   * A THIRD angle on purpose, and section 6 of the header is the argument for it. The claw
+   * is not rigid with the forearm (that inherits the elbow's fold and wags the payload) and
+   * it is not free of the arm either (a constant world angle cannot face both ends of a 180°
+   * sweep). It holds the **pivot-to-hand bearing**: the line the arm reaches along, which is
+   * the line the jaws grip along, which at each end of the stroke runs through the centre of
+   * the tile the claw is working. Pointed at the object at both ends by construction, and
+   * driven by `travelProgress` alone in between.
+   *
+   * It is the same number as `handAngle`, and that is a FACT ABOUT THE GIMBAL LAW rather than
+   * a coincidence worth collapsing: this is where a different law would be written, and the
+   * separate name is what stops the next reader from concluding the claw is welded to the
+   * chord the way the old bug welded it. `grabbers.ts` still takes the claw's POSITION from
+   * `foreAngle` — the wrist is a point on the forearm and stays one. Rotation here, position
+   * there; that split is the whole invariant.
+   */
+  clawAngle: number;
   /** Distance from pivot to hand — full extension at both ends of the stroke, tucked between. */
   radius: number;
   /** Full extension for this tier, which is also the sum of the two bars. */
@@ -508,6 +623,10 @@ export function armPose(dir: number, tier: number, held: number, swingPermille: 
     upperLength,
     foreAngle: Math.atan2(handY - elbowY, handX - elbowX),
     foreLength: upperLength,
+    // The gimbal: the head holds the line of reach, so the elbow's fold never reaches it.
+    // Equal to `foreAngle` exactly wherever `bend` is 0 — which is both endpoints, every
+    // dwell and all 24 stall poses — and short of it by `bend` across the carry.
+    clawAngle: handAngle,
     radius,
     reach,
     grip: gripAmount(held, swingPermille),
