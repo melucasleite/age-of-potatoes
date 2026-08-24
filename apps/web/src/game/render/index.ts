@@ -526,12 +526,25 @@ function updateMachines(scene: WorldScene, view: WorldView, now: number, deltaMs
     const running = m.lamp === LampState.Running && m.progressPermille > 0;
     visual.progress.visible = running;
     if (running) {
-      // `ui_pixel` is a 1×1 white texture, so the second scale argument is the bar's
-      // THICKNESS in source px — a `1` here is a pixel count wearing a unit-scale disguise,
-      // and it doubled with everything else. (If `ui_pixel` ever stops being 1×1 this and
-      // every other `scale.set` on it silently multiplies twice over.)
+      // `setSize`, NOT `scale.set`, AND THE COMMENT THIS REPLACES IS WHY.
+      //
+      // It used to read: "`ui_pixel` is a 1×1 white texture, so the second scale argument is
+      // the bar's THICKNESS in source px… if `ui_pixel` ever stops being 1×1 this and every
+      // other `scale.set` on it silently multiplies twice over." That warning was exactly
+      // right and the condition was ALREADY TRUE when it was written.
+      //
+      // `ui_pixel` is declared `{ width: 1, height: 1 }` — but `bake()` renders every
+      // placeholder at `width * BAKE_SCALE`, and `BAKE_SCALE` is `TILE_PX / PAINT_PX`, which
+      // the resolution bump took to 2. So the texture is 2×2 and every one of these numbers
+      // was doubling twice: this bar came out 56px long on a 32px machine and SPILLED OUT OF
+      // THE MACHINE by 24px. The owner reported it as "overly long", which is the tell — the
+      // extra thickness was the smaller half of the symptom.
+      //
+      // Reading the declaration is what fooled three passes at this bug, including mine. A
+      // declared size is not a texture size. `setSize` takes absolute pixels and asks the
+      // texture nothing, so these numbers now mean what they say at any `BAKE_SCALE`.
       visual.progress.position.set(left + 2, top + height - 4);
-      visual.progress.scale.set(((width - 4) * m.progressPermille) / 1000, 2);
+      visual.progress.setSize(((width - 4) * m.progressPermille) / 1000, 2);
     }
 
     // THE HARVESTER DOCK'S SHELF IS CARGO, NOT AN OUTPUT BUFFER (item 083): its spec makes
@@ -553,7 +566,7 @@ function updateMachines(scene: WorldScene, view: WorldView, now: number, deltaMs
     if (hopper > 0) {
       const bar = Math.max(2, Math.round((height - 8) * hopper));
       visual.hopper.position.set(left, top + height - 4 - bar);
-      visual.hopper.scale.set(2, bar);
+      visual.hopper.setSize(2, bar);
     }
 
     // What is waiting in the output buffer, so a red lamp names its own cargo. Bobs, so a
@@ -677,7 +690,7 @@ function updateCommerce(scene: WorldScene, view: WorldView): void {
     if (rolling) {
       const done = Math.max(0, Math.min(1, (cart.runTicks - cart.ticksRemaining) / cart.runTicks));
       visual.progress.position.set(cart.tileX * TILE_PX + 2, (cart.tileY + 1) * TILE_PX - 4);
-      visual.progress.scale.set((TILE_PX - 4) * done, 2);
+      visual.progress.setSize((TILE_PX - 4) * done, 2);
     }
 
     // What is aboard, and how full. Hidden while it is away: a pip bobbing over an empty
@@ -719,7 +732,7 @@ function fillColumn(
   const height = tilesHigh * TILE_PX;
   const bar = Math.max(2, Math.round((height - 8) * fill));
   visual.hopper.position.set(tileX * TILE_PX, tileY * TILE_PX + height - 4 - bar);
-  visual.hopper.scale.set(2, bar);
+  visual.hopper.setSize(2, bar);
 }
 
 /** Never more collars than a machine could plausibly have plumbed. */
@@ -867,7 +880,7 @@ function updateTankFill(
     left + Math.round((width - columnWidth) / 2),
     top + height - 8 - columnHeight,
   );
-  visual.tankFill.scale.set(columnWidth, columnHeight);
+  visual.tankFill.setSize(columnWidth, columnHeight);
 }
 
 /**
