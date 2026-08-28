@@ -60,25 +60,16 @@ const SHOP_COPY: Readonly<Record<number, ShopCopy>> = {
     name: 'Cane seeds',
     note: 'Cuts and regrows without replanting. Thirsty enough to notice.',
   },
-  [ItemId.CornSeed]: {
-    name: 'Corn seeds',
-    note: 'Slow in the ground. The oil press is downstream of it.',
-  },
-  [ItemId.ChiliSeed]: {
-    name: 'Chili seeds',
-    note: 'Regrows. Everything the seasoner does starts here.',
-  },
+  // Corn, chili and gold potato seeds had rows here; the crops are cut (item 145) and their
+  // seeds with them, so `purchasable` no longer lists them and copy for an item the board
+  // cannot show is copy waiting to go stale unseen.
   [ItemId.RepairKit]: {
     name: 'Repair kit',
     note: 'Services every machine standing near you at once. It buys the walk, not the repair.',
   },
   // THE FIVE PRICED ROWS THAT STOOD ON THE BOARD WITH NOTHING TO SAY ([[103]]). The fallback
-  // above is a name from the slug and an empty note, which is readable and completely silent —
-  // and one of the five is the seed for a crop the game could not plant at all until this item.
-  [ItemId.GoldPotatoSeed]: {
-    name: 'Gold potato seeds',
-    note: 'Three times a Russet at the till, and three times the water in the ground.',
-  },
+  // above is a name from the slug and an empty note, which is readable and completely silent.
+  // (The gold potato seed was one of the five; the crop and its seed are cut — item 145.)
   [ItemId.KolaNut]: {
     name: 'Kola nuts',
     note: 'What the Grinder turns into powder. A Kola Tree grows them instead of buying them.',

@@ -316,7 +316,10 @@ export default function HudRoot() {
           clicks meant for tiles.
         */}
           {panels.open === null ? null : (
-            <div className={s.floatWin}>
+            // Research alone takes the WIDE wrapper ([[144]]): the manual is a map of the whole
+            // game now — sprites, four branch columns, labeled dependency edges — and a map at
+            // 460px is a keyhole. The other panels keep `.floatWin`'s 460 untouched.
+            <div className={panels.open === 'research' ? s.floatWinWide : s.floatWin}>
               {panels.open === 'research' ? (
                 <TechPanel onClose={panels.close} />
               ) : panels.open === 'shop' ? (
@@ -533,7 +536,7 @@ function ZonesToggle({
       name="The Zones"
       badge={zones === 0 ? 'none drawn' : `${zones} ${zones === 1 ? 'zone' : 'zones'}`}
       hotkey="Z"
-      title="Grow Zones — crop, seed hopper, priority, name"
+      title="Grow Zones — crop, priority, name"
       open={open}
       onToggle={onToggle}
     />

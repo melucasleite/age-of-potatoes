@@ -30,7 +30,6 @@ import {
   SPEED_WEAR_PENALTY_PERCENT_PER_LEVEL,
   SUBTILE,
   TECH_NODES,
-  TICKS_PER_IN_GAME_DAY,
   TICKS_PER_SECOND,
   TechBranch,
   TechId,
@@ -49,7 +48,7 @@ import {
 import type { MachineSpec, MachineView, TechNode, WorldView } from '@snack/sim';
 
 import { dialCopy, machineLabel, nodeCopy } from './tech-copy';
-import type { BenchDial, TechCard, TechStatus } from './types';
+import type { BenchDial, TechCard, TechRequirement, TechStatus } from './types';
 
 /** The mutable scratch the store fills each publish, mirroring `BenchSlice` minus its version. */
 export interface BenchFields {
@@ -126,6 +125,25 @@ export function eraOfNode(id: string): number {
   return ERA_BY_ID[id] ?? 1;
 }
 
+/**
+ * The FORWARD edges — which nodes list this one as a prerequisite — by title, for the detail
+ * pane's "opens up" line ([[144]]).
+ *
+ * Derived once at module load, because it is a fact about the build: `TECH_NODES` is constant
+ * and the copy table is constant, so recomputing the inversion per publish would be work spent
+ * proving the tree has not changed shape since the last frame. The BACKWARD edges are per-card
+ * (`TechCard.requires`) because their `met` flags are about the player, not the tree.
+ */
+export const TECH_LEADS_TO: Readonly<Record<string, readonly string[]>> = (() => {
+  const forward: Record<string, string[]> = {};
+  for (const node of TECH_NODES) {
+    for (const required of node.requires) {
+      (forward[required] ??= []).push(nodeCopy(node.id).title);
+    }
+  }
+  return forward;
+})();
+
 /** The highest era any node sits in. Drives how many bands the panel draws. */
 export const MAX_ERA: number = (() => {
   let max = 1;
@@ -171,17 +189,12 @@ function milestoneProgress(node: TechNode, view: WorldView, working: number): nu
       return working;
     case MilestoneKind.MachineOutput:
       return view.stats.itemsProducedByMachine;
-    case MilestoneKind.UntouchedLine:
-      // The node's amount is DAYS (plan §3's own number); the projection carries ticks.
-      return untouchedLineDays(view);
+    // `UntouchedLine` had a case here, fed by `untouchedLineDays` — the days-of-absence
+    // conversion the Corporate Charter measured. Charter, milestone kind and counter chain
+    // are all cut together (item 147), sim-side and here in the same breath.
     default:
       return 0;
   }
-}
-
-/** In-game days the best production line has run untouched. The sim's own conversion. */
-function untouchedLineDays(view: WorldView): number {
-  return divFloor(view.stats.longestUntouchedMachineTicks, TICKS_PER_IN_GAME_DAY);
 }
 
 export function deriveTech(view: WorldView, out: TechFields): TechFields {
@@ -210,7 +223,6 @@ export function deriveTech(view: WorldView, out: TechFields): TechFields {
       view.stats.itemsSold,
       working,
       view.stats.itemsProducedByMachine,
-      untouchedLineDays(view),
     );
     const affordable = view.moneyCents >= node.priceCents;
 
@@ -224,12 +236,17 @@ export function deriveTech(view: WorldView, out: TechFields): TechFields {
             ? 'ready'
             : 'short';
 
-    // Unmet prerequisites BY NAME. This is the entire complaint the panel exists to answer:
-    // the build menu says "needs Belts" and stops, so the player learns the name of a thing
-    // and nothing else about it. Here the name is a card they can look at.
+    // EVERY prerequisite BY NAME, met or not ([[144]]). `missing` was the first half of the
+    // complaint this panel exists to answer — the build menu says "needs Belts" and stops —
+    // and `requires` is the second: a dependency EDGE is a fact about the tree whether or not
+    // the player has crossed it, and drawing only the unmet half made a researched prereq
+    // vanish from the card, so the shape of the tree changed as you climbed it.
     const missing: string[] = [];
+    const requires: TechRequirement[] = [];
     for (const required of node.requires) {
-      if (!hasTech(unlocked, required)) missing.push(nodeCopy(required).title);
+      const met = hasTech(unlocked, required);
+      requires.push({ id: required, title: nodeCopy(required).title, met: met ? 1 : 0 });
+      if (!met) missing.push(nodeCopy(required).title);
     }
 
     const copy = nodeCopy(node.id);
@@ -243,6 +260,7 @@ export function deriveTech(view: WorldView, out: TechFields): TechFields {
       priceCents: node.priceCents,
       status,
       missing,
+      requires,
       milestoneKind: node.milestone,
       milestoneNeed: node.milestoneAmount,
       milestoneHave,

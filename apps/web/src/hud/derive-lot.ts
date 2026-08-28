@@ -19,16 +19,7 @@
 // and the HUD owns what that is CALLED. `cropName`, `regrows` and the picker's rows are
 // phrasing and gating decisions, and phrasing decisions live on this side of the line.
 
-import {
-  CROP_SPECS,
-  CropId,
-  LampState,
-  MachineKind,
-  TechId,
-  cropSpec,
-  hasTech,
-  techSatisfied,
-} from '@snack/sim';
+import { CROP_SPECS, CropId, LampState, MachineKind, cropSpec, techSatisfied } from '@snack/sim';
 import type { WorldView } from '@snack/sim';
 
 import { itemName } from './item-copy';
@@ -44,7 +35,6 @@ export interface LotFields {
   blocked: number;
   sprinklers: number;
   cropOptions: ZoneCropOption[];
-  autoReplantOwned: number;
 }
 
 export function createLotFields(): LotFields {
@@ -58,7 +48,6 @@ export function createLotFields(): LotFields {
     blocked: 0,
     sprinklers: 0,
     cropOptions: [],
-    autoReplantOwned: 0,
   };
 }
 
@@ -70,17 +59,17 @@ export function createLotFields(): LotFields {
  * itself.
  */
 export function deriveLot(view: WorldView, out: LotFields): LotFields {
-  // The picker's rows and the hopper's gate, both read straight off the world's own unlocked
-  // list ([[102]]). Built before the zones because each zone's seed count comes out of it.
+  // The picker's rows, read straight off the world's own unlocked list ([[102]]). Built before
+  // the zones because each zone's seed count comes out of it.
   deriveCropOptions(view, out);
-  out.autoReplantOwned = hasTech(view.unlocked, TechId.AutoReplant) ? 1 : 0;
 
   out.zones.length = 0;
   for (const zone of view.zones) {
-    // ⚠️ `crop`, `priority` and `autoReplant` USED TO BE DROPPED HERE and that was the whole
-    // data half of [[102]]: the sim published all three, this loop copied the counts, and four
-    // working reducers ended up with no caller in the app because the HUD could not see the
-    // state they wrote. Anything `ZoneView` carries belongs on the row.
+    // ⚠️ `crop` and `priority` USED TO BE DROPPED HERE and that was the whole data half of
+    // [[102]]: the sim published them, this loop copied the counts, and working reducers ended
+    // up with no caller in the app because the HUD could not see the state they wrote.
+    // Anything `ZoneView` carries belongs on the row. (`autoReplant` was the third dropped
+    // field; the hopper retired with its node — item 146 — and the view no longer carries it.)
     const spec = cropSpec(zone.crop as CropId);
     out.zones.push({
       id: zone.id,
@@ -91,7 +80,6 @@ export function deriveLot(view: WorldView, out: LotFields): LotFields {
       // a second table of "which crops regrow" would be wrong the first time a crop was added.
       regrows: spec !== null && spec.regrowTicks > 0 ? 1 : 0,
       priority: zone.priority,
-      autoReplant: zone.autoReplant,
       seeds: spec === null ? 0 : countOf(view, spec.seedItem),
       tiles: zone.tiles,
       planted: zone.planted,
@@ -118,12 +106,12 @@ function countOf(view: WorldView, item: number): number {
  * THE GATE IS ASKED, NOT GUESSED. The reducer's `cropAssignable` is `techSatisfied(state,
  * spec.requiresTech)`; this calls the same exported function on the same published list, so a
  * crop appears in the picker on exactly the tick it becomes plantable. A hand-kept list here
- * would offer Gold Potato to a player who cannot plant it, and the refusal would arrive as
+ * would offer Sugar Cane to a player who cannot plant it, and the refusal would arrive as
  * nothing happening at all — the failure mode this whole item exists to end.
  *
  * FALLOW IS A ROW, not an omission. `CropId.None` is assignable by the reducer's first line, and
- * "stop this rectangle sowing anything" is a thing a player wants to say — particularly once the
- * hopper is armed, where it is the difference between a plan and a runaway.
+ * "stop this rectangle sowing anything" is a thing a player wants to say — particularly once a
+ * planter bot works the zone, where it is the difference between a plan and a runaway.
  */
 function deriveCropOptions(view: WorldView, out: LotFields): void {
   out.cropOptions.length = 0;

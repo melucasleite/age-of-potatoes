@@ -50,7 +50,9 @@ function priceOf(kind: MachineKind): number {
 
 export interface MachineCounts {
   sprinklers: number;
-  kitchens: number;
+  // `kitchens` sat here, counting `MachineKind.ChipKitchen` — a machine the sim no longer has
+  // (item 145). Nothing read the count even while the kitchen stood, so the field goes rather
+  // than being kept at a permanent zero.
   jammed: number;
   halted: number;
   blocked: number;
@@ -62,7 +64,6 @@ export interface MachineCounts {
 export function createMachineCounts(): MachineCounts {
   return {
     sprinklers: 0,
-    kitchens: 0,
     jammed: 0,
     halted: 0,
     blocked: 0,
@@ -74,7 +75,6 @@ export function createMachineCounts(): MachineCounts {
 
 export function censusMachines(view: WorldView, out: MachineCounts): MachineCounts {
   out.sprinklers = 0;
-  out.kitchens = 0;
   out.jammed = 0;
   out.halted = 0;
   out.blocked = 0;
@@ -84,7 +84,6 @@ export function censusMachines(view: WorldView, out: MachineCounts): MachineCoun
 
   for (const machine of view.machines) {
     if (machine.kind === MachineKind.Sprinkler) out.sprinklers += 1;
-    if (machine.kind === MachineKind.ChipKitchen) out.kitchens += 1;
     if (machine.wrenchDue === 1) out.wrenchDue += 1;
     switch (machine.lamp) {
       case LampState.Jammed:
@@ -121,10 +120,10 @@ export function censusMachines(view: WorldView, out: MachineCounts): MachineCoun
  * falls through to `itemName` and reads "Bagged Chips", which is what the other three read.
  *
  * "seeds" IS THE SAME SHAPE AND IS DELIBERATELY LEFT, which is worth writing down rather
- * than leaving for someone to spot: there are four seeds in the game, so "12 seeds" beside
- * "8 Corn Seed" has exactly the chips problem. It is not item 111's — the second crop caused
- * it — and it is the first line of the tutorial's pouch, so it wants its own decision rather
- * than a drive-by from a flavour feature.
+ * than leaving for someone to spot: there are two seeds in the game (the 145/146 cuts took
+ * the other two), so "12 seeds" beside "8 Cane Seed" still has exactly the chips problem in
+ * miniature. It is the first line of the tutorial's pouch, so it wants its own decision
+ * rather than a drive-by from a content cut.
  */
 const ITEM_LABELS: Readonly<Record<number, string>> = {
   [ItemId.PotatoSeed]: 'seeds',
@@ -447,7 +446,7 @@ export function deriveClipboard(
       82,
       'blocked',
       'warn',
-      'The kitchen has filled its own output tray. It stops until somebody takes the chips.',
+      'A machine has filled its own output tray. It stops until somebody takes what it made.',
     );
   }
   if (bags.count > 0) {
@@ -492,7 +491,7 @@ export function deriveClipboard(
     );
   }
   if (counts.starved > 0 && bases === 0) {
-    add(56, 'starved', 'nudge', 'The kitchen is idle with nothing to fry.');
+    add(56, 'starved', 'nudge', 'The chip line is idle with nothing to fry.');
   }
   // §2's promotion whisper, verbatim in spirit and computed in fact: hand output this hour
   // against what the purchasable device would have done with the same crops, from its spec.
@@ -555,17 +554,14 @@ function countOf(view: WorldView, item: ItemId): number {
 }
 
 /**
- * Bags in the pocket and what they are worth — **all four kinds** (item 111).
+ * Bags in the pocket and what they are worth — every kind the Bagger makes (item 111).
  *
- * The whisper counted `BaggedChips` and multiplied by a literal 2000, which was two separate
- * ways to be wrong the moment a second bag existed: a player who had just run a chili batch
- * was told nothing at all, and a player who had run a gold one would have been told the wrong
- * price. The count is now every bag and the value is every bag's own list price.
- *
- * **"A BAG OF CHIPS" IS DEFINED AS "WHAT THE BAGGER MAKES"**, read off its recipes rather
- * than written here as four item ids. That is the definition that stays true: a fifth flavour
- * is a row in `data.ts` and this whisper picks it up on the same commit, where a list over
- * here would go quietly short in exactly the way `reports/store.ts`'s label table twice did.
+ * The whisper once counted `BaggedChips` and multiplied by a literal 2000, which was two
+ * separate ways to be wrong the moment a second bag existed. **"A BAG OF CHIPS" IS DEFINED AS
+ * "WHAT THE BAGGER MAKES"**, read off its recipes rather than written here as item ids — the
+ * definition that stays true in both directions: it picked up the flavour tier when item 111
+ * added it, and it shrank back to the one plain bag when the 145 cuts removed it, with no
+ * edit here either time.
  */
 function baggedChips(view: WorldView): { count: number; cents: number } {
   const spec = machineSpec(MachineKind.Bagger);
@@ -587,12 +583,13 @@ function baggedChips(view: WorldView): { count: number; cents: number } {
 
 /**
  * Crops in the bag that the chip line could actually eat, which gates the "nothing to fry"
- * whisper. Russets, and — since item 111 — gold potatoes.
+ * whisper.
  *
- * A whisper that says a starved kitchen has nothing to fry while the player is carrying six
- * gold potatoes is not merely stale copy; it is the Clipboard telling them to go and do the
+ * A whisper that says a starved line has nothing to fry while the player is carrying six
+ * washable crops is not merely stale copy; it is the Clipboard telling them to go and do the
  * thing they have already done. The Washer's hoppers are the list of what feeds the line, so
- * they are what is counted.
+ * they are what is counted — which is also what kept this correct through the 145 cuts, when
+ * the gold potato left that list without an edit here.
  */
 function washableCrops(view: WorldView): number {
   const spec = machineSpec(MachineKind.Washer);

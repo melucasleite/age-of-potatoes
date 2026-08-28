@@ -37,13 +37,14 @@ import { MilestoneKind } from '@snack/sim';
 
 import { formatCentsWhole, formatEta, plural } from './format';
 import { keepFocus, PanelRow, PanelWindow } from './PanelFrame';
+import { paintIcon, resolveTechIcon } from './item-art';
 import { cx, s } from './styles';
 import { hudStore } from './store';
-import { MAX_ERA } from './derive-tech';
+import { MAX_ERA, TECH_LEADS_TO } from './derive-tech';
 import { BRANCH_COPY, BRANCH_ORDER, eraCopy, milestoneLabel, milestoneNoun } from './tech-copy';
 import { useHudSlice } from './use-hud';
 import { usePending } from './use-pending';
-import type { EconomySlice, TechCard } from './types';
+import type { EconomySlice, TechCard, TechRequirement } from './types';
 
 // --- the sidebar row -------------------------------------------------------------------
 
@@ -111,20 +112,22 @@ export function TechPanel({ onClose }: { onClose: () => void }) {
     return new Set(BRANCH_ORDER.filter((branch) => !populated.has(branch)));
   }, [tech.cards]);
 
-  // A CENTRED FLOATING WINDOW SINCE [[093]], not the sidebar's slot. Item 069 took the scrim
-  // off and docked this into the dock; the owner's consolidation ruling floats it back out
-  // over the canvas, alongside the bag and build — but still with no scrim, because that part
-  // of 069 was right: the lot stays visible and clickable around the window, and closing is
-  // the ESC key or the button. There is no backdrop to click, by design.
+  // A CENTRED FLOATING WINDOW SINCE [[093]], not the sidebar's slot — and THE WIDE ONE since
+  // [[144]]: `HudRoot` hands research `.floatWinWide` (~90% of the stage) while the other
+  // panels keep `.floatWin`'s 460px. Same shell (`PanelWindow`), same head, same one-open
+  // invariant; only the wrapper differs, because the manual is a map now — sprites, four
+  // branch columns, labeled edges — and a map at 460px is a keyhole. Still no scrim, because
+  // that part of 069 was right: the lot stays visible and clickable around the window, and
+  // closing is the ESC key or the button. There is no backdrop to click, by design.
   //
   // THE HEAD LOST TWO WORDS TO THE SHARED FRAME, and both were already on screen. The tag
-  // was "Era IV · The Corporation"; the era's NAME is the headline of the current era band a
-  // few pixels below, so the head keeps the numeral and lets the band do the flavour. The
-  // count was "32 of 32 researched"; the last word is implied by a window titled RESEARCH.
-  // This head carries the most of the four and is the one that proves the shared geometry is
-  // real — 460px holds a title, a tag, a count, six figures of money and an ESC key, and it
-  // holds them because nothing in here is longer than it needs to be. Measured, not guessed:
-  // before the trim the money and the ESC button rendered OUTSIDE the panel's right edge.
+  // was "Era IV · The Corporation" (an era the tree no longer reaches — item 147); the era's
+  // NAME is the headline of the current era band a few pixels below, so the head keeps the
+  // numeral and lets the band do the flavour. The count was "32 of 32 researched"; the last
+  // word is implied by a window titled RESEARCH. The trim was measured at 460px, not guessed
+  // — before it, the money and the ESC button rendered OUTSIDE the panel's right edge — and
+  // the wide wrapper does not un-earn it: a head sized for the narrow case survives every
+  // wider one.
   return (
     <PanelWindow
       title="Research"
@@ -304,14 +307,82 @@ function NodeButton({
       onMouseDown={keepFocus}
       onClick={() => onSelect(card.id)}
     >
-      <span className={s.nodeTop}>
-        <span className={s.nodeTitle}>{card.title}</span>
-        <span className={s.nodePrice}>
-          {card.status === 'owned' ? 'done' : formatCentsWhole(card.priceCents)}
+      <NodeIcon id={card.id} title={card.title} />
+      <span className={s.nodeBody}>
+        <span className={s.nodeTop}>
+          <span className={s.nodeTitle}>{card.title}</span>
+          <span className={s.nodePrice}>
+            {card.status === 'owned' ? 'done' : formatCentsWhole(card.priceCents)}
+          </span>
         </span>
+        <span className={s.nodeVerb}>{card.verb}</span>
+        <Requires requires={card.requires} />
       </span>
-      <span className={s.nodeVerb}>{card.verb}</span>
     </button>
+  );
+}
+
+/** How big a node's sprite box is. 64px art draws at ½ inside it — crisp, per `paintIcon`. */
+const NODE_ICON = 36;
+
+/**
+ * The node's picture, by the three-rung ladder ([[144]]): its own `tech_*` portrait, else the
+ * machine frame of what it unlocks (`TECH_ICON_FALLBACKS`), else the same quiet lettered chip
+ * the bag and the build menu use for art that has not landed — NEVER the renderer's magenta
+ * ([[037]]). `CellIcon` in `BuildMenu.tsx` is the template, deliberately: two panels of cards
+ * whose missing art degrades differently would read as two games.
+ */
+function NodeIcon({ id, title }: { id: string; title: string }) {
+  const source = resolveTechIcon(id);
+
+  if (source === null) {
+    return (
+      <span
+        className={cx(s.icon, s.iconBlank, s.nodeIcon)}
+        style={{ width: NODE_ICON, height: NODE_ICON }}
+        aria-hidden="true"
+      >
+        {title.charAt(0).toUpperCase()}
+      </span>
+    );
+  }
+
+  const paint = paintIcon(source, NODE_ICON);
+  return (
+    <span
+      className={cx(s.icon, s.nodeIcon)}
+      style={{
+        width: NODE_ICON,
+        height: NODE_ICON,
+        backgroundImage: paint.backgroundImage,
+        backgroundPosition: paint.backgroundPosition,
+        backgroundSize: paint.backgroundSize,
+      }}
+      aria-hidden="true"
+    />
+  );
+}
+
+/**
+ * The dependency edges, ON THE CARD FACE ([[144]]) — met prereqs quietly, unmet ones loudly,
+ * cross-branch ones visible without a click precisely because they are the ones a player
+ * cannot see by looking up their own column. The `title` attribute is the house tooltip rule
+ * (native only, no framework); the chip text is the edge itself.
+ */
+function Requires({ requires }: { requires: readonly TechRequirement[] }) {
+  if (requires.length === 0) return null;
+  return (
+    <span className={s.nodeReqs}>
+      {requires.map((edge) => (
+        <span
+          key={edge.id}
+          className={cx(s.nodeReq, edge.met === 1 ? s.nodeReqMet : s.nodeReqUnmet)}
+          title={edge.met === 1 ? `${edge.title} — researched` : `needs ${edge.title} first`}
+        >
+          {edge.title}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -361,9 +432,14 @@ function CharterBand({
       onClick={() => onSelect(card.id)}
     >
       <span className={s.charterSeal}>{owned ? '✔' : '§'}</span>
+      {/* The Charter's portrait, beside the seal rather than instead of it: the seal is the
+          STATE (unsigned/signed) and the sprite is the THING, and a band this wide has room to
+          say both ([[144]]). */}
+      <NodeIcon id={card.id} title={card.title} />
       <span className={s.charterBody}>
         <span className={s.charterName}>{card.title}</span>
         <span className={s.charterVerb}>{owned ? 'Signed. The era is open.' : card.verb}</span>
+        <Requires requires={card.requires} />
 
         <span className={s.charterGates}>
           <span className={s.charterGate}>
@@ -428,12 +504,32 @@ function Detail({
 
   const buyable = card.status === 'ready' && !pending;
 
+  // The forward edges — what THIS node stands under — derived once at module load
+  // (`TECH_LEADS_TO`), because the tree's shape is a fact about the build, not the player.
+  const opens = TECH_LEADS_TO[card.id] ?? [];
+
   return (
     <div className={s.techDetail}>
       <div className={s.detailBody}>
         <div className={s.detailTitle}>{card.title}</div>
         <div className={s.detailVerb}>{card.verb}</div>
         <div className={s.detailText}>{card.detail}</div>
+
+        {/* Both directions of the graph, always ([[144]]): what this stands on — every edge,
+            met ones quiet, unmet ones loud — and what it opens up. The louder sentence below
+            still spells out the unmet half; these are the map, that is the directions. */}
+        {card.requires.length > 0 ? (
+          <div className={s.detailEdges}>
+            <span className={s.detailEdgeLabel}>stands on</span>
+            <Requires requires={card.requires} />
+          </div>
+        ) : null}
+        {opens.length > 0 ? (
+          <div className={s.detailEdges}>
+            <span className={s.detailEdgeLabel}>opens up</span>
+            <span className={s.detailEdgeList}>{opens.join(' · ')}</span>
+          </div>
+        ) : null}
 
         {card.missing.length > 0 ? (
           <div className={s.detailNeeds}>

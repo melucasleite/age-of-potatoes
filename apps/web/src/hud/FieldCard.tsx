@@ -3,9 +3,9 @@
 // The zone card readout ([[021]], [[102]]).
 //
 // IT IS NOT A READOUT ANY MORE — the zone rows are OPENERS ([[102]]). For the whole life of
-// this card its rows were `<span>`s that emitted nothing, which is how four working zone
-// reducers (`SetZoneCrop`, `SetZoneAutoReplant`, `SetZonePriority`, `RenameZone`) ended up with
-// no caller anywhere in the app. The controls themselves are NOT here: they live in
+// this card its rows were `<span>`s that emitted nothing, which is how working zone reducers
+// (`SetZoneCrop`, `SetZonePriority`, `RenameZone`) ended up with no caller anywhere in the
+// app. The controls themselves are NOT here: they live in
 // `ZonePanel.tsx`, a floating window, because [[096]] unmounts this whole column when the
 // sidebar folds and a control in here would be unreachable for anyone who had pressed `[`.
 // A row click is `openZonePanel(zone.id)` — a second door to one panel, never a second copy of
@@ -76,17 +76,14 @@ function ZoneLine({ zone }: { zone: ZoneRow }) {
     <button
       type="button"
       className={cx(s.fieldRow, s.fieldRowOpen)}
-      title={`${zone.name} — crop, seed hopper, priority, name`}
+      title={`${zone.name} — crop, priority, name`}
       onMouseDown={keepFocus}
       onClick={() => openZonePanel(zone.id)}
     >
-      <div className={s.fieldName}>
-        {zone.name}
-        {/* The armed hopper, on the row that is always on screen. It is the one zone fact with
-            no sign of itself in the field — a tile that re-sows looks like a tile somebody
-            sowed — so if it is not said here it is not said anywhere the player is looking. */}
-        {zone.autoReplant === 1 ? <span className={s.fieldArmed}>hopper</span> : null}
-      </div>
+      {/* The "hopper" badge sat beside the name here — the armed auto-replant, the one zone
+          fact with no sign of itself in the field. The hopper retired with its node (item 146),
+          and a badge for a state that cannot exist went with it. */}
+      <div className={s.fieldName}>{zone.name}</div>
       <div className={s.fieldReadout}>{join(parts)}</div>
     </button>
   );

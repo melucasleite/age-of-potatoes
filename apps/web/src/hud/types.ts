@@ -144,6 +144,21 @@ export interface ClipboardSlice {
  */
 export type TechStatus = 'owned' | 'ready' | 'short' | 'pending' | 'blocked';
 
+/**
+ * One dependency edge, from the card's side ([[144]]).
+ *
+ * `met` is per-player where the edge itself is per-build, which is why this is on the slice
+ * rather than read out of `TECH_NODES` by the component: the panel renders met prereqs
+ * quietly and unmet ones loudly, and that distinction has to arrive through the store so the
+ * card redraws on the publish where a prerequisite is bought — not when something else moves.
+ */
+export interface TechRequirement {
+  readonly id: string;
+  readonly title: string;
+  /** 1 once the prerequisite is researched. */
+  readonly met: number;
+}
+
 export interface TechCard {
   readonly id: string;
   readonly branch: number;
@@ -157,6 +172,8 @@ export interface TechCard {
   readonly status: TechStatus;
   /** Titles of unmet prerequisites. The answer to the build menu's unhelpful "needs Belts". */
   readonly missing: readonly string[];
+  /** Every prerequisite edge, met or not, in the sim's own order ([[144]]). */
+  readonly requires: readonly TechRequirement[];
   readonly milestoneKind: number;
   readonly milestoneNeed: number;
   /**
@@ -242,28 +259,29 @@ export interface ZoneRow {
   /**
    * `CropId`, or `CropId.None` for a rectangle nobody has filled in yet.
    *
-   * ⚠️ **THIS FIELD, `priority` AND `autoReplant` WERE SILENTLY DROPPED FOR THE WHOLE LIFE OF
-   * THE HUD** ([[102]]). `ZoneView` has published all three since zones landed; `deriveLot`
-   * copied the counts and left them on the floor, so the zone card could not have shown a crop
-   * even if it had wanted to, and no surface in the app could tell whether a hopper was armed.
-   * Restoring the copy is the whole of the data half of that item — no sim change, no new
-   * projection. If a future zone control needs a fact, check `ZoneView` before adding one.
+   * ⚠️ **THIS FIELD AND `priority` WERE SILENTLY DROPPED FOR THE WHOLE LIFE OF THE HUD**
+   * ([[102]]). `ZoneView` published them since zones landed; `deriveLot` copied the counts and
+   * left them on the floor, so the zone card could not have shown a crop even if it had wanted
+   * to. Restoring the copy was the whole of the data half of that item. If a future zone
+   * control needs a fact, check `ZoneView` before adding one. (`autoReplant` was the third of
+   * the dropped fields; the hopper is retired with its node — item 146 — and the field is gone
+   * from `ZoneView` itself.)
    */
   readonly crop: number;
   /** The crop's yield spelled for a player — "Sugar Cane". Empty when no crop is set. */
   readonly cropName: string;
   /** 1 when this crop grows back after a harvest. §5's whole pacing argument, as a flag. */
   readonly regrows: number;
-  /** 0–9. Who the seed hopper serves first when seed is short, and nothing else ([[102]]). */
-  readonly priority: number;
-  /** 1 when the seed hopper is armed on this zone. */
-  readonly autoReplant: number;
   /**
-   * Seeds for this zone's crop in the player's own bag.
-   *
-   * The hopper plants FROM THE PLAYER'S STOCK (`zones.ts`'s `replantOneTile`), so an armed zone
-   * with an empty seed bag does nothing whatsoever and looks identical to a broken one. This is
-   * the number that lets the panel say which of the two it is looking at.
+   * 0–9. Saved by the sim and — since the hopper's seed queue retired with item 146 — read by
+   * nothing in it: planter bots work whatever zone their dock is bound to. The control stays
+   * wired because the command still lands and persists; its copy says plainly that nothing
+   * consumes it yet. Flagged for a design ruling in the wave report.
+   */
+  readonly priority: number;
+  /**
+   * Seeds for this zone's crop in the player's own bag — the stock a planter dock's hopper is
+   * filled from by hand (`RefillHopper`), and the number the crop picker prints per cell.
    */
   readonly seeds: number;
   readonly tiles: number;
@@ -319,16 +337,9 @@ export interface LotSlice {
    * satisfied techs actually changes — see `setLot`.
    */
   readonly cropOptions: readonly ZoneCropOption[];
-  /**
-   * 1 when `agronomy-seed-hopper` is researched.
-   *
-   * ⚠️ THE $1,200 NODE THAT DID NOTHING ([[102]]). `applySetZoneAutoReplant` refuses outright
-   * until this is true — the lock is in the simulation, not in the UI — so the toggle reads
-   * this to decide whether it is a control or an explanation. It is published rather than
-   * re-derived in the component because a panel asking the tech tree a question is a panel
-   * with a second opinion about what is unlocked.
-   */
-  readonly autoReplantOwned: number;
+  // `autoReplantOwned` sat here — the $1,200 node that did nothing ([[102]]) and then, once
+  // wired, the node the owner cut anyway (item 146): planter bots are the only automatic
+  // planting now, and the hopper toggle went with `SetZoneAutoReplant` and `ZoneView.autoReplant`.
 }
 
 /**
@@ -675,7 +686,6 @@ export const ZERO_LOT: LotSlice = Object.freeze({
   blocked: 0,
   sprinklers: 0,
   cropOptions: Object.freeze([]),
-  autoReplantOwned: 0,
 });
 
 export const ZERO_SHOP: ShopSlice = Object.freeze({

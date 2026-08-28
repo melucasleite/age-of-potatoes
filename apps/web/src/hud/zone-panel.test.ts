@@ -16,8 +16,6 @@
 //     HUD copied the counts and threw all three away.
 //   · IF THE CROP PICKER STOPS ASKING THE SIM'S GATE, it offers a crop the reducer refuses,
 //     and the refusal arrives as a click that does nothing.
-//   · IF THE HOPPER IS NOT ACTUALLY WIRED, the $1,200 node keeps doing nothing. The
-//     five-thousand-tick pair below is the verifier's manual finding, kept.
 //
 // NOT COVERED, deliberately: React. There is no DOM here, so what a click does to a component
 // is not exercised — the browser pass on the work item is what checked that, and its findings
@@ -36,7 +34,6 @@ import {
   createWorldView,
   insertUnlocked,
   step,
-  stepMany,
   view,
 } from '@snack/sim';
 import type { Command, WorldState, WorldView } from '@snack/sim';
@@ -82,23 +79,22 @@ function lotOf(state: WorldState) {
   return deriveLot(project(state), createLotFields());
 }
 
-describe('the three fields the HUD used to drop', () => {
-  // The data half of the item. `ZoneView` carried all three the whole time; `deriveLot` copied
-  // the counts and left these on the floor, so no surface in the app could see them.
-  it('carries crop, priority and auto-replant onto the zone row', () => {
+describe('the fields the HUD used to drop', () => {
+  // The data half of the item. `ZoneView` carried these the whole time; `deriveLot` copied the
+  // counts and left them on the floor, so no surface in the app could see them. (`autoReplant`
+  // was the third dropped field; the hopper retired with its node — item 146 — and the view no
+  // longer carries it.)
+  it('carries crop and priority onto the zone row', () => {
     const { state, zoneId } = worldWithZone(CropId.RussetPotato);
-    insertUnlocked(state.unlocked, TechId.AutoReplant);
     send(state, { type: 'SetZonePriority', zoneId, priority: 4 });
-    send(state, { type: 'SetZoneAutoReplant', zoneId, on: true });
 
     const row = lotOf(state).zones[0];
     expect(row?.crop).toBe(CropId.RussetPotato);
     expect(row?.cropName).toBe('Russet Potato');
     expect(row?.priority).toBe(4);
-    expect(row?.autoReplant).toBe(1);
   });
 
-  it('reports the seed stock the hopper would actually plant from', () => {
+  it('reports the seed stock a planter dock would be filled from', () => {
     // Relative to what the world already ships with — `createWorld` starts the player holding
     // a few potato seeds, and pinning that number here would make this test a hostage of a
     // starting-loadout change it has no opinion about.
@@ -157,47 +153,11 @@ describe('the crop picker offers exactly what the reducer accepts', () => {
   });
 });
 
-describe('the seed hopper, which was $1,200 for nothing', () => {
-  // ⚠️ THE FINDING, KEPT AS A TEST. The verifier ran this by hand: a fully-researched world,
-  // 5,000 ticks, ZERO tiles replanted, because `SetZoneAutoReplant` had no caller anywhere in
-  // the app. Fed the reducer directly, the same window replanted. The mechanism was perfect and
-  // unreachable — so what this pins is not the mechanism (that is `zones.ts`'s own business)
-  // but that the command the PANEL sends is the one that switches it on.
-  const REPLANT_WINDOW = 5_000;
-
-  function armedRun(on: boolean): number {
-    const { state, zoneId } = worldWithZone(CropId.RussetPotato);
-    insertUnlocked(state.unlocked, TechId.AutoReplant);
-    addItem(state, ItemId.PotatoSeed, 50);
-    // The panel's own command object, character for character with `ZonePanel.tsx`'s.
-    send(state, { type: 'SetZoneAutoReplant', zoneId, on });
-    const before = lotOf(state).zones[0]?.planted ?? 0;
-    stepMany(state, REPLANT_WINDOW);
-    return (lotOf(state).zones[0]?.planted ?? 0) - before;
-  }
-
-  it('replants nothing while the zone is disarmed', () => {
-    expect(armedRun(false)).toBe(0);
-  });
-
-  it('replants once the panel arms it', () => {
-    expect(armedRun(true)).toBeGreaterThan(0);
-  });
-
-  it('is refused outright until the node is researched — the lock is in the sim', () => {
-    // This is why the toggle draws an explanation rather than a disabled button when the node
-    // is unowned: a control that dispatched here would be a control that lies about being one.
-    const { state, zoneId } = worldWithZone();
-    send(state, { type: 'SetZoneAutoReplant', zoneId, on: true });
-    expect(state.zones[0]?.autoReplant).toBe(false);
-    expect(lotOf(state).autoReplantOwned).toBe(0);
-
-    insertUnlocked(state.unlocked, TechId.AutoReplant);
-    expect(lotOf(state).autoReplantOwned).toBe(1);
-    send(state, { type: 'SetZoneAutoReplant', zoneId, on: true });
-    expect(state.zones[0]?.autoReplant).toBe(true);
-  });
-});
+// THE SEED HOPPER'S DESCRIBE BLOCK STOOD HERE — the $1,200 node item 102 found dead, wired,
+// and item 146 then retired outright: `SetZoneAutoReplant`, `ZoneView.autoReplant` and the
+// node are gone from the sim, and with them the armed/disarmed replant pair and the
+// locked-until-researched gate those tests pinned. Planter bots are the only automatic
+// planting now, and their coverage lives sim-side with the bots.
 
 describe('priority and rename', () => {
   it('sets a priority the sim keeps', () => {

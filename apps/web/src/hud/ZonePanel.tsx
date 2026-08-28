@@ -4,23 +4,19 @@
 // thing with settings ([[102]]).
 //
 // ────────────────────────────────────────────────────────────────────────────────────
-//  WHAT WAS BROKEN, BECAUSE IT IS NOT WHAT IT LOOKS LIKE. Four zone commands —
-//  `SetZoneCrop`, `SetZoneAutoReplant`, `SetZonePriority`, `RenameZone` — have correct,
+//  WHAT WAS BROKEN, BECAUSE IT IS NOT WHAT IT LOOKS LIKE. The zone commands — `SetZoneCrop`,
+//  `SetZonePriority`, `RenameZone`, and at the time `SetZoneAutoReplant` — have correct,
 //  tested reducers in `tick.ts` and had ZERO callers anywhere in the app. Not a broken
 //  caller: none. The zone card existed (`FieldCard`) and rendered `<span>`s. The sim was
-//  never at fault, and neither was the projection: `ZoneView` published `crop`, `priority`
-//  and `autoReplant` the whole time and `derive-lot.ts` copied the counts and dropped the
-//  three fields on the floor. So the card could not have drawn a crop even if it had
-//  wanted to, and the state four working reducers wrote was invisible to the entire HUD.
+//  never at fault, and neither was the projection: `ZoneView` published the fields the whole
+//  time and `derive-lot.ts` copied the counts and dropped them on the floor. So the card
+//  could not have drawn a crop even if it had wanted to, and the state working reducers
+//  wrote was invisible to the entire HUD.
 //
-//  THE EXPENSIVE ONE IS THE HOPPER. `agronomy-seed-hopper` costs $1,200, its panel copy
-//  promises that an armed zone "sows a tile the moment it is cleared", every zone is minted
-//  `autoReplant: false`, and the only writer of that flag was a reducer nothing called. A
-//  verifier ran 5,000 ticks in a fully-researched world: 0 tiles replanted. Fed the reducer
-//  directly: 8 tiles in the same window. The mechanism was perfect and unreachable — and
-//  not skippable either, since the $3,000 Planter Bot lists it as a prerequisite. It was a
-//  mandatory toll gate on the road to a node that works, which is exactly why nobody
-//  noticed: the thing behind the dead node did its job by a different mechanism.
+//  (The most expensive casualty of that bug was the seed hopper — a $1,200 node whose toggle
+//  was perfect and unreachable. Item 102 wired it; item 146 then retired the node outright in
+//  favour of the planter bot, so the hopper section this panel briefly had is gone with
+//  `SetZoneAutoReplant` itself. History in item 102's log.)
 // ────────────────────────────────────────────────────────────────────────────────────
 //
 // WHY THIS IS A FLOATING PANEL AND NOT AN AT-THE-MACHINE CARD, which is the item's open
@@ -56,14 +52,9 @@
 //   question and the row is simply not drawn. A button that dispatches a discarded command is
 //   indistinguishable, to the player, from the bug this item is about.
 //
-//   IT DOES NOT PRETEND THE HOPPER IS ARMABLE UNRESEARCHED. `applySetZoneAutoReplant`'s first
-//   line is a tech check — the lock is in the simulation, not in the UI — so with the node
-//   unowned the toggle is inert and says what buys it. That is also the first place in the
-//   game where $1,200 gets to describe what it is for.
-//
-//   IT DOES NOT INVENT A SECOND CONSUMER FOR PRIORITY. Priority drives the seed queue and
-//   nothing else (`zones.ts`), which is correct and stays correct. The dial is wired and the
-//   copy says plainly what it decides; auto-replant is what gives it meaning.
+//   IT DOES NOT INVENT A SECOND CONSUMER FOR PRIORITY. Priority drives the planter bots' seed
+//   queue and nothing else (`zones.ts`), which is correct and stays correct. The dial is wired
+//   and the copy says plainly what it decides.
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
@@ -112,8 +103,8 @@ export function ZonePanel({ onClose }: { onClose: () => void }) {
         // no zones at all. Naming the tool is not a quest, it is the answer to "settings for
         // what?" — the same call `DockCard` makes about an unpainted lot.
         <div className={s.invEmpty}>
-          No Grow Zones yet. Paint a rectangle over the rows you want to plan, and it gets a crop, a
-          hopper and a name in here.
+          No Grow Zones yet. Paint a rectangle over the rows you want to plan, and it gets a crop
+          and a name in here.
         </div>
       ) : (
         <div className={s.winScroll}>
@@ -129,12 +120,7 @@ export function ZonePanel({ onClose }: { onClose: () => void }) {
               ))}
             </div>
 
-            <ZoneDetail
-              zone={active}
-              options={lot.cropOptions}
-              hopperOwned={lot.autoReplantOwned === 1}
-              pending={pending}
-            />
+            <ZoneDetail zone={active} options={lot.cropOptions} pending={pending} />
           </div>
         </div>
       )}
@@ -147,7 +133,7 @@ function plural(count: number): string {
 }
 
 /**
- * One zone in the list: which rectangle, what is in it, and whether its hopper is on.
+ * One zone in the list: which rectangle, and what is in it.
  *
  * THE SWATCH IS THE ONLY THING HERE THAT ANSWERS "WHICH RECTANGLE?" — the same eight tints the
  * overlay paints on the ground, for the reason `derive-dock.ts` gives at length. A zone is
@@ -173,9 +159,6 @@ function ZoneButton({
       <span className={s.zoneItemHead}>
         <span className={s.dockZoneSwatch} style={{ background: zoneSwatch(zone.id) }} />
         <span className={s.dockZoneName}>{zone.name}</span>
-        {/* The armed hopper, said on the row rather than only in the pane, because "which of my
-            six zones is replanting itself" is a question about the LIST. */}
-        {zone.autoReplant === 1 ? <span className={s.zoneItemArmed}>hopper</span> : null}
         <span className={s.dockZoneCrop}>{zone.cropName === '' ? 'fallow' : zone.cropName}</span>
       </span>
       <span className={s.dockZoneCounts}>
@@ -186,16 +169,14 @@ function ZoneButton({
   );
 }
 
-/** The four controls, in the order a player meets them: name, crop, hopper, priority. */
+/** The three controls, in the order a player meets them: name, crop, priority. */
 function ZoneDetail({
   zone,
   options,
-  hopperOwned,
   pending,
 }: {
   zone: ZoneRow;
   options: readonly ZoneCropOption[];
-  hopperOwned: boolean;
   pending: ReturnType<typeof usePending>;
 }) {
   const waiting = pending.isPending(`zone:${zone.id}`);
@@ -220,7 +201,7 @@ function ZoneDetail({
    * `null` and a null draft sends nothing, so double-sending is not reachable — and taking the
    * hold here would be actively wrong in two ways at once. It disabled the focused field, which
    * is the entire bug. And it would fire in the middle of somebody else's click: the pointer
-   * goes down on the hopper toggle, this commits, the hold greys the toggle, and React's own
+   * goes down on a priority pip, this commits, the hold greys the pip, and React's own
    * disabled-element check swallows the click the player was making. The name would be saved by
    * eating the gesture that saved it.
    */
@@ -260,8 +241,6 @@ function ZoneDetail({
           </div>
         ) : null}
       </div>
-
-      <Hopper zone={zone} owned={hopperOwned} disabled={waiting} onSend={send} />
 
       <Priority zone={zone} disabled={waiting} onSend={send} />
     </div>
@@ -435,95 +414,21 @@ function NameField({
   );
 }
 
-/**
- * THE SEED HOPPER — the $1,200 node that did nothing, given the one thing it was missing.
- *
- * THE TOGGLE MUST BE VISIBLY EFFECTIVE THE MOMENT IT IS SWITCHED, and that is a chain of four
- * links rather than a CSS class: the button dispatches, the reducer flips `zone.autoReplant`,
- * `deriveLot` copies it (it did not, before this item), and `setLot` compares it (it did not
- * either). Break any link and the player presses a button and watches nothing happen, which is
- * the precise bug being fixed. The armed state also shows on the zone's row in the list, so the
- * feedback is not confined to the control that caused it.
- *
- * IT REPORTS THE SEED BAG, because that is the difference between "armed and working" and
- * "armed and mute". `replantOneTile` plants from the player's own stock and simply returns
- * false when there is none — no lamp, no message, nothing — so an armed zone with no seed looks
- * exactly like the bug this item is about. Naming it is what stops the next bug report.
- */
-function Hopper({
-  zone,
-  owned,
-  disabled,
-  onSend,
-}: {
-  zone: ZoneRow;
-  owned: boolean;
-  disabled: boolean;
-  onSend: (command: Parameters<typeof hudStore.dispatch>[0]) => void;
-}) {
-  const on = zone.autoReplant === 1;
-  const fallow = zone.crop === CropId.None;
-
-  return (
-    <div className={s.zoneSection}>
-      {/*
-        [[133]]. "Seed hopper" everywhere in this section, down to the prose, and the player
-        who read it went looking for a hopper to build. There is not one — the node buys this
-        toggle and nothing else. Renamed here in the same breath as `TECH_LABELS` and the
-        tech card's title, because the locked line below is a SIGNPOST to that node and a
-        signpost that uses a different name than the destination is worse than no signpost.
-      */}
-      <div className={s.zoneSectionHead}>Auto-replant</div>
-
-      {owned ? (
-        <>
-          <button
-            type="button"
-            aria-pressed={on}
-            className={cx(s.zoneToggle, on && s.zoneToggleOn)}
-            disabled={disabled}
-            onMouseDown={keepFocus}
-            onClick={() => onSend({ type: 'SetZoneAutoReplant', zoneId: zone.id, on: !on })}
-          >
-            <span className={cx(s.zoneToggleLamp, on && s.zoneToggleLampOn)} />
-            <span className={s.zoneToggleWord}>{on ? 'Armed' : 'Disarmed'}</span>
-          </button>
-
-          {/*
-            WHAT IT WILL ACTUALLY DO NEXT, in three cases, because "armed" alone is a claim the
-            player cannot check. Fallow and out-of-seed are both states where an armed zone
-            does nothing at all, and both are invisible in the field.
-          */}
-          <div className={cx(s.zoneNote, on && (fallow || zone.seeds === 0) && s.zoneNoteWarn)}>
-            {!on
-              ? 'Cleared tiles stay bare until you sow them yourself.'
-              : fallow
-                ? 'Nothing to sow — give this zone a crop and it starts filling itself.'
-                : zone.seeds === 0
-                  ? `Armed, but there is no ${zone.cropName} seed in your bag. It sows from your own stock, so it will sit idle until you buy some.`
-                  : `Sows a cleared tile from your own stock — ${zone.seeds} ${zone.cropName} ${zone.seeds === 1 ? 'seed' : 'seeds'} in the bag.`}
-          </div>
-        </>
-      ) : (
-        // The locked case, and the first time in the game that $1,200 gets to say what it buys.
-        // A fact about what is not owned yet, never a refusal of the click — the bench's rule.
-        <div className={s.benchLocked}>
-          Locked. Auto-Replant (research, Agronomy) arms a zone to replant itself: it sows a tile
-          from your own seed stock the moment one is cleared. There is nothing to build — the
-          research unlocks this switch.
-        </div>
-      )}
-    </div>
-  );
-}
+// THE SEED HOPPER'S SECTION STOOD HERE — the $1,200 node item 102 found dead, wired, and item
+// 146 then retired outright: `SetZoneAutoReplant`, `ZoneView.autoReplant` and the node itself
+// are gone from the sim, and planter bots are the only automatic planting. The toggle, its
+// three-case seed-bag note and the locked signpost went with them; the history is in item
+// 102's log.
 
 /**
- * PRIORITY — wired, honest about being second-order, and deliberately not given a second job.
+ * PRIORITY — wired, honest, and currently consumed by NOTHING in the sim.
  *
- * The item's own constraint: "Do not 'fix' `SetZonePriority` by inventing a second consumer.
- * Its only consumer is the replant queue and that is correct; wire the control and let
- * auto-replant give it meaning." So the copy states the one thing it decides and does not
- * imply a bot pays attention to it, because none does.
+ * Item 102's constraint was "do not 'fix' `SetZonePriority` by inventing a second consumer";
+ * its one consumer was the seed hopper's queue, and item 146 retired the hopper. The command
+ * still lands, persists and hashes, so the control stays — but the copy below says out loud
+ * that no bot reads it yet, because a caption claiming a queue that does not run is exactly
+ * the lie this panel was built to stop telling. Flagged for a design ruling (cut the command,
+ * or point the planter bots at it) in the wave report.
  *
  * Drawn as ten pips rather than a number field, which is the bench's dial vocabulary: the range
  * is the sim's own `ZONE_PRIORITY_MIN`/`MAX` read rather than a 0–9 written here, so a rebalance
@@ -561,8 +466,8 @@ function Priority({
         ))}
       </div>
       <div className={s.zoneNote}>
-        Which zone the seed hopper serves first when seed runs short. It changes nothing else — the
-        bots work whatever zone their dock is pointed at.
+        A rank saved with the zone. Nothing on the lot reads it yet — a planter bot works whatever
+        zone its dock is pointed at, seed or no seed.
       </div>
     </div>
   );

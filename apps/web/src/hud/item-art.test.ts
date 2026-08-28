@@ -20,12 +20,18 @@
 // know; see the agent log on work item 058 for what was and was not checked in a running build.
 
 import { describe, expect, it } from 'vitest';
-import { CROP_SPECS, ITEM_SPECS, ItemId, MachineKind } from '@snack/sim';
+import { CROP_SPECS, ITEM_SPECS, ItemId, MachineKind, TECH_NODES } from '@snack/sim';
 
 // Relative rather than the `@/` alias, exactly as the other HUD tests do: vitest runs with no
 // config in this repo, so the alias is not resolvable from a test.
 import { ATLAS_FRAMES, ATLAS_IMAGE_URL, ATLAS_SIZE } from '../art/manifest.generated';
-import { paintIcon, resolveItemIcon, resolveMachineIcon } from './item-art';
+import {
+  paintIcon,
+  resolveItemIcon,
+  resolveMachineIcon,
+  resolveTechIcon,
+  TECH_ICON_FALLBACKS,
+} from './item-art';
 import type { IconSource } from './item-art';
 
 const FRAMES: Readonly<Record<string, { x: number; y: number; width: number; height: number }>> =
@@ -183,5 +189,44 @@ describe('which picture an item is', () => {
     // this null into a neutral chip.
     expect(resolveItemIcon(999_999)).toBeNull();
     expect(resolveMachineIcon(999_999)).toBeNull();
+  });
+});
+
+// The research manual's ladder ([[144]]): a node's own `tech_*` portrait, else the machine
+// frame of what it unlocks, else the lettered chip. The gate below is the acceptance criterion
+// stated as a walk of `TECH_NODES`: EVERY node resolves to a real rectangle today, so the chip
+// rung is reachable only by a node added faster than its art — never by a typo in the table.
+describe('which picture a research node is', () => {
+  it('resolves every node in the tree to a frame the atlas actually has', () => {
+    expect(TECH_NODES.length).toBeGreaterThan(0);
+    for (const node of TECH_NODES) {
+      const source = resolveTechIcon(node.id);
+      expect(source, `${node.id} has no icon — portrait missing and no fallback`).not.toBeNull();
+      expect(FRAMES[(source as IconSource).frame]).toBeDefined();
+    }
+  });
+
+  it('prefers the node’s own portrait over its fallback', () => {
+    // `agronomy-cane` has both a `tech_agronomy_cane` frame and (hypothetically) machines it
+    // unlocks; the portrait must win, because the fallback rung is consulted only on absence.
+    expect(resolveTechIcon('agronomy-cane')?.frame).toBe('tech_agronomy_cane');
+  });
+
+  it('falls back to the frame of what the node unlocks, from the exported table', () => {
+    for (const [techId, frame] of Object.entries(TECH_ICON_FALLBACKS)) {
+      // The table names only real frames — a typo here would silently demote a card to the
+      // lettered chip, which is exactly the quiet failure the export exists to make testable.
+      expect(
+        FRAMES[frame],
+        `${techId} falls back to ${frame}, which the atlas lacks`,
+      ).toBeDefined();
+    }
+    expect(resolveTechIcon('logistics-splitters')?.frame).toBe('belt_junction');
+    expect(resolveTechIcon('commerce-repair-drones')?.frame).toBe('machine_drone_bay');
+  });
+
+  it('answers "no picture" for a node from the future, never a guess', () => {
+    expect(resolveTechIcon('agronomy-space-elevator')).toBeNull();
+    expect(resolveTechIcon('')).toBeNull();
   });
 });

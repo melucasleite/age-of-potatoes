@@ -236,13 +236,15 @@ describe('the zones it can be pointed at', () => {
     expect(dockFor({ zones: [zone(1)] }).zones[0]?.cropName).toBe('Russet Potato');
   });
 
-  // §5: "regrowing crops automate first; one-shots wait for the seed-hopper bot". This is that
-  // sentence as an assertion, read off `regrowTicks` rather than a table of ids kept here.
+  // §5: "regrowing crops automate first; one-shots wait for the planter bot". This is that
+  // sentence as an assertion, read off `regrowTicks` rather than a table of ids kept here —
+  // which is also why this test survived the 145 cuts by swapping one crop id: chili is gone,
+  // and cane is the surviving regrower.
   it('reads regrowth off the crop rather than listing which crops regrow', () => {
     const potato = dockFor({ zones: [zone(1, { crop: CropId.RussetPotato })] });
     expect(potato.zones[0]?.regrows).toBe(0);
 
-    const regrowing = dockFor({ zones: [zone(1, { crop: CropId.ChiliPepper })] });
+    const regrowing = dockFor({ zones: [zone(1, { crop: CropId.SugarCane })] });
     expect(regrowing.zones[0]?.regrows).toBe(1);
   });
 });

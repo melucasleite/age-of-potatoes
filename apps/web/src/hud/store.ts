@@ -31,8 +31,11 @@
 
 import type { Command, WorldView } from '@snack/sim';
 
-import { publishArmedTool } from '@/game/input/armed-tool';
-import type { ToolMode } from '@/game/input/tools';
+// Relative rather than the `@/` alias, for the reason `derive.ts` and `derive-inventory.ts`
+// both state at length: `@/*` is a tsconfig path that Next resolves and vitest does not, and
+// this module is now under test (`derive-tech.test.ts` exercises the tech diff through it).
+import { publishArmedTool } from '../game/input/armed-tool';
+import type { ToolMode } from '../game/input/tools';
 
 import {
   HarvestPace,
@@ -487,10 +490,15 @@ export class HudStore {
    * The research slice.
    *
    * Only four things about a card can move — its status, its milestone counter, its era, and
-   * which prerequisites it is still missing — because everything else on it is copy. So the
+   * which of its prerequisites are met — because everything else on it is copy. So the
    * comparison walks those and nothing else. Without it this slice would be rebuilt on every
-   * publish and re-render the whole panel 6.7 times a second to redraw thirteen identical
+   * publish and re-render the whole panel 6.7 times a second to redraw two dozen identical
    * cards, which is precisely the storm the version counters exist to prevent.
+   *
+   * `requires[].met` is compared per edge ([[144]]) rather than through `missing.length`
+   * alone: the two are equivalent today (an edge's flag flips exactly when a title leaves
+   * `missing`), but the card face now DRAWS the met flags, and a comparison that reached the
+   * same answer by a different field is the kind of coincidence a refactor breaks silently.
    */
   private setTech(next: TechFields): boolean {
     const current = this.tech;
@@ -508,18 +516,33 @@ export class HudStore {
           a.id !== b.id ||
           a.status !== b.status ||
           a.milestoneHave !== b.milestoneHave ||
-          a.missing.length !== b.missing.length
+          a.missing.length !== b.missing.length ||
+          a.requires.length !== b.requires.length
         ) {
           same = false;
           break;
         }
+        for (let j = 0; j < b.requires.length; j++) {
+          if (a.requires[j]!.met !== b.requires[j]!.met) {
+            same = false;
+            break;
+          }
+        }
+        if (!same) break;
       }
       if (same) return false;
     }
 
     this.tech = Object.freeze({
       version: current.version + 1,
-      cards: Object.freeze(next.cards.map((card) => Object.freeze({ ...card }))),
+      cards: Object.freeze(
+        next.cards.map((card) =>
+          Object.freeze({
+            ...card,
+            requires: Object.freeze(card.requires.map((edge) => Object.freeze({ ...edge }))),
+          }),
+        ),
+      ),
       ownedCount: next.ownedCount,
       era: next.era,
       frontierId: next.frontierId,
@@ -696,18 +719,17 @@ export class HudStore {
    * mechanism is gone ([[124]]).
    *
    * ⚠️ **THE ZONE COMPARISON IS NOW LOAD-BEARING FOR A CONTROL, NOT ONLY FOR A READOUT**
-   * ([[102]]). `crop`, `priority` and `autoReplant` are the three fields the zone panel writes,
-   * and a comparison that ignored them would leave a player who armed the seed hopper looking
-   * at an unlit toggle until some unrelated number in the field happened to move. That is
-   * exactly the "nothing happened" this item was filed about, reproduced one layer up. Every
-   * field a control can change must be compared here. `seeds` is compared too — it is what the
-   * panel's "no seed in the bag" line reads, and it falls as the hopper spends them.
+   * ([[102]]). `crop` and `priority` are the fields the zone panel writes (`autoReplant` was
+   * the third until the hopper retired with its node — item 146), and a comparison that
+   * ignored them would leave a player looking at a stale control until some unrelated number
+   * in the field happened to move. That is exactly the "nothing happened" that item was filed
+   * about, reproduced one layer up. Every field a control can change must be compared here.
+   * `seeds` is compared too — it is what the panel's "no seed in the bag" line reads.
    */
   private setLot(next: LotFields): boolean {
     const current = this.lot;
 
     if (
-      current.autoReplantOwned === next.autoReplantOwned &&
       current.cropOptions.length === next.cropOptions.length &&
       current.machines === next.machines &&
       current.running === next.running &&
@@ -743,14 +765,13 @@ export class HudStore {
           same = false;
           break;
         }
-        // The four things a zone control writes, plus the seed stock the panel reports. None
-        // of these can move on their own; each one moving means a command landed, and a
-        // command landing is precisely when the panel has to redraw ([[102]]).
+        // The things a zone control writes, plus the seed stock the panel reports. None of
+        // these can move on their own; each one moving means a command landed, and a command
+        // landing is precisely when the panel has to redraw ([[102]]).
         if (
           a.name !== b.name ||
           a.crop !== b.crop ||
           a.priority !== b.priority ||
-          a.autoReplant !== b.autoReplant ||
           a.seeds !== b.seeds
         ) {
           same = false;
@@ -764,7 +785,6 @@ export class HudStore {
       version: current.version + 1,
       zones: Object.freeze(next.zones.map((zone) => Object.freeze({ ...zone }))),
       cropOptions: Object.freeze(next.cropOptions.map((option) => Object.freeze({ ...option }))),
-      autoReplantOwned: next.autoReplantOwned,
       machines: next.machines,
       running: next.running,
       halted: next.halted,

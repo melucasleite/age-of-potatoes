@@ -204,22 +204,23 @@ describe('the place affordance', () => {
 
 // --- the one button that can create a box ------------------------------------------------
 
-const KITCHEN_TILE = 4;
-/** Subtile centre of the 2×2 Chip Kitchen standing at `KITCHEN_TILE`. */
-const KITCHEN_CENTRE_SUB = 4 * 256 + 256;
+const FRYER_TILE = 4;
+/** Subtile centre of the 2×2 Fryer standing at `FRYER_TILE`. (The Chip Kitchen played this
+ * part until item 145 cut it; any machine with a work cycle serves — the bench's own gate.) */
+const FRYER_CENTRE_SUB = 4 * 256 + 256;
 
 function benchView(lamp: number): WorldView {
   return {
-    player: { xSub: KITCHEN_CENTRE_SUB, ySub: KITCHEN_CENTRE_SUB },
+    player: { xSub: FRYER_CENTRE_SUB, ySub: FRYER_CENTRE_SUB },
     moneyCents: 1_000_000,
     unlocked: [],
     inventory: [],
     machines: [
       {
         id: 7,
-        kind: MachineKind.ChipKitchen,
-        tileX: KITCHEN_TILE,
-        tileY: KITCHEN_TILE,
+        kind: MachineKind.Fryer,
+        tileX: FRYER_TILE,
+        tileY: FRYER_TILE,
         tilesWide: 2,
         tilesHigh: 2,
         lamp,

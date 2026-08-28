@@ -108,13 +108,11 @@ describe('botCatchUpPhrase', () => {
   });
 });
 
-// The Clipboard's other computed line, and the one item 111 broke by adding products.
-//
-// It counted `BaggedChips` and multiplied by a literal 2000, which is two ways to be wrong
-// the moment there is a second bag: a pocket full of chili chips is worth $24.50 each and was
-// reported as no bags at all, and a gold bag would have been priced as a plain one. Neither
-// failure raises anything — the note simply does not appear, or appears with a smaller number
-// than the truth, on the surface whose whole job is telling the player what they have.
+// The Clipboard's other computed line. Item 111 taught it to read the Bagger's recipes instead
+// of one hard-coded item id and one hard-coded price, and the 145 cuts are why that mattered
+// in the OTHER direction: the flavour tier is gone, the recipe list shrank back to the one
+// plain bag, and the note stayed correct with no edit. These pin the definition — "a bag of
+// chips is what the Bagger makes, valued at its own list price" — in the one-bag world.
 describe('the chips-in-your-pocket note', () => {
   function pocketView(rows: readonly { item: number; count: number }[]): WorldView {
     const view = clipView({});
@@ -135,29 +133,22 @@ describe('the chips-in-your-pocket note', () => {
     return note === undefined ? null : note.text;
   }
 
-  it('counts every kind of bag, not only the plain one', () => {
+  it('counts the bags the Bagger makes and stays silent over everything else', () => {
     const text = chipsNote(
       pocketView([
-        { item: ItemId.BaggedChips, count: 2 },
-        { item: ItemId.BaggedChiliChips, count: 3 },
+        { item: ItemId.BaggedChips, count: 5 },
+        // Loose seasoned chips are the Bagger's INPUT, not a bag — the note must not count them.
+        { item: ItemId.SeasonedChips, count: 9 },
       ]),
     );
     expect(text).not.toBeNull();
     expect(text).toContain('five bags');
+    expect(chipsNote(pocketView([{ item: ItemId.SeasonedChips, count: 9 }]))).toBeNull();
   });
 
-  it('speaks at all for a pocket holding no plain chips whatsoever', () => {
-    expect(chipsNote(pocketView([{ item: ItemId.BaggedChiliChips, count: 4 }]))).not.toBeNull();
-  });
-
-  it('values each bag at its own list price rather than at the plain one', () => {
-    // A chili bag is a plain bag plus the flavour premium; two of them are not $40.
+  it("values the stack at the bag's own list price, never a number written in the HUD", () => {
     const plain = listPriceCents(ItemId.BaggedChips);
-    const chili = listPriceCents(ItemId.BaggedChiliChips);
-    expect(chili).toBeGreaterThan(plain);
-
-    const text = chipsNote(pocketView([{ item: ItemId.BaggedChiliChips, count: 2 }]))!;
-    expect(text).toContain(formatCents(chili * 2));
-    expect(text).not.toContain(formatCents(plain * 2));
+    const text = chipsNote(pocketView([{ item: ItemId.BaggedChips, count: 2 }]))!;
+    expect(text).toContain(formatCents(plain * 2));
   });
 });

@@ -26,6 +26,8 @@ export type StyleName =
   | 'stage'
   | 'corner'
   | 'floatWin'
+  // The wide window ([[144]]) — research's alone. Every other panel stays on `.floatWin`.
+  | 'floatWinWide'
   // Where the at-the-machine cards go when the dock is folded away under them ([[106]]) — a
   // fourth use of `.corner`, not a second floating chrome.
   | 'machineFloat'
@@ -124,6 +126,14 @@ export type StyleName =
   | 'branchName'
   | 'branchEmpty'
   | 'node'
+  // The card face since [[144]]: sprite on the left, text stacked beside it, the dependency
+  // chips under the verb.
+  | 'nodeIcon'
+  | 'nodeBody'
+  | 'nodeReqs'
+  | 'nodeReq'
+  | 'nodeReqMet'
+  | 'nodeReqUnmet'
   | 'nodeTop'
   | 'nodeTitle'
   | 'nodePrice'
@@ -155,6 +165,11 @@ export type StyleName =
   | 'detailTitle'
   | 'detailVerb'
   | 'detailText'
+  // Both directions of the dependency graph, in the pane ([[144]]): "stands on" re-uses the
+  // node chips, "opens up" is a plain list.
+  | 'detailEdges'
+  | 'detailEdgeLabel'
+  | 'detailEdgeList'
   | 'detailNeeds'
   | 'detailEta'
   | 'detailBuy'
@@ -305,12 +320,11 @@ export type StyleName =
   // Its shell, head, scroll and footer are the panel family's (`PanelWindow`), its zone list
   // borrows the dock card's swatch/name/crop/counts spans class for class — same subject, same
   // reading — and the crop picker is the grabber card's `.armGrid` unchanged. What is new is
-  // only the rename field, the hopper toggle and the priority pips.
+  // only the rename field and the priority pips.
   | 'zoneList'
   | 'zoneItem'
   | 'zoneItemOn'
   | 'zoneItemHead'
-  | 'zoneItemArmed'
   | 'zoneDetail'
   | 'zoneSection'
   | 'zoneSectionHead'
@@ -319,11 +333,8 @@ export type StyleName =
   | 'zoneNameRow'
   | 'zoneNameInput'
   | 'zoneTiles'
-  | 'zoneToggle'
-  | 'zoneToggleOn'
-  | 'zoneToggleLamp'
-  | 'zoneToggleLampOn'
-  | 'zoneToggleWord'
+  // The hopper toggle's five classes (`zoneToggle*`) and the armed badges (`zoneItemArmed`,
+  // `fieldArmed`) retired with auto-replant (item 146).
   | 'zonePips'
   | 'zonePip'
   | 'zonePipOn'
@@ -335,7 +346,6 @@ export type StyleName =
   // A row is a button since [[102]] — it opens the zones panel on the zone it describes.
   | 'fieldRowOpen'
   | 'fieldName'
-  | 'fieldArmed'
   | 'fieldFallow'
   | 'fieldReadout'
   | 'fieldSep'

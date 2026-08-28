@@ -210,6 +210,50 @@ export function resolveFrameIcon(name: string): IconSource | null {
   return lookup(name, MACHINE_ALIASES);
 }
 
+/**
+ * The research manual's fallback rung ([[144]]): tech node → the frame of what it UNLOCKS,
+ * consulted only when the node has no `tech_*` portrait of its own.
+ *
+ * The atlas ships seventeen `tech_*` frames and thirteen of them belong to living nodes; the
+ * other nine nodes each unlock something with a face, and a card wearing the machine it buys
+ * is honest in the same way a boxed Fryer wearing the Fryer is. ONE TABLE, EXPORTED, so the
+ * test can walk `TECH_NODES` and prove every card resolves to a real rectangle — the ladder's
+ * last rung (the lettered chip, never magenta — [[037]]) should be reachable only by a node
+ * added faster than its art, not by a typo here.
+ *
+ * `belt_junction` is the junction's real frame name — the one machine drawn on the belt page
+ * (see `MACHINE_ALIASES`) — and it is written directly rather than as `machine_belt_junction`
+ * so this table states where the picture IS, not where an alias will find it.
+ */
+export const TECH_ICON_FALLBACKS: Readonly<Record<string, string>> = {
+  'logistics-splitters': 'belt_junction',
+  'commerce-trucking': 'machine_truck_depot',
+  'hydraulics-soda-press': 'machine_juicer',
+  'hydraulics-soda-mixing': 'machine_bottler',
+  'commerce-bundles': 'machine_six_packer',
+  'agronomy-kola-tree': 'machine_kola_tree',
+  'agronomy-agri-bots': 'machine_harvester_dock',
+  'agronomy-planter-bot': 'machine_planter_dock',
+  'commerce-repair-drones': 'machine_drone_bay',
+};
+
+/**
+ * The sprite for a research node, or null for the lettered chip.
+ *
+ * The ladder, in order: the node's own portrait (`tech_` + the sim's slug under the pipeline's
+ * naming rule), then the machine frame of what it unlocks (the table above), then nothing —
+ * and nothing draws the same neutral chip every other missing frame gets, never the
+ * renderer's magenta ([[037]]).
+ */
+export function resolveTechIcon(techId: string): IconSource | null {
+  if (techId === '') return null;
+  const portrait = lookup(`tech_${frameSlug(techId)}`, MACHINE_ALIASES);
+  if (portrait !== null) return portrait;
+  const fallback = TECH_ICON_FALLBACKS[techId];
+  if (fallback === undefined) return null;
+  return lookup(fallback, MACHINE_ALIASES);
+}
+
 const CACHE = new Map<number, IconSource | null>();
 
 /**

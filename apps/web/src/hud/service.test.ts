@@ -102,13 +102,13 @@ describe('whose card it is', () => {
   });
 
   /*
-    THE TWO MACHINES THIS CARD EXISTS FOR. Neither accepts upgrades, so neither has ever had an
-    upgrade bench; neither is a bot dock, so neither has a dock card. Both wear. Before this item
-    they were repaired by right-click and by nothing else, and right-click now tears down.
+    THE MACHINE THIS CARD EXISTS FOR. It does not accept upgrades, so it has never had an
+    upgrade bench; it is not a bot dock, so it has no dock card. It wears. Before this item it
+    was repaired by right-click and by nothing else, and right-click now tears down. (The
+    Maintenance Station was this test's second subject until item 145 cut the machine.)
   */
-  it('takes the Sprinkler and the Maintenance Station, which have no other card', () => {
+  it('takes the Sprinkler, which has no other card', () => {
     expect(serviceFor({ kind: MachineKind.Sprinkler }).machineId).toBe(7);
-    expect(serviceFor({ kind: MachineKind.MaintenanceStation }).machineId).toBe(7);
   });
 
   it('leaves a Tank alone — it cannot wear, so there is nothing to offer', () => {

@@ -50,46 +50,11 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
     detail:
       'Cane regrows from the cut stalk instead of dying, so a row planted once keeps paying without being sown again.',
   },
-  [TechId.Corn]: {
-    title: 'Corn',
-    verb: 'Plant corn',
-    detail:
-      'Corn is the dual-use crop: frying oil today, and the syrup half of every bottle once the soda line exists.',
-  },
-  [TechId.Chili]: {
-    title: 'Chili',
-    verb: 'Plant chili',
-    detail:
-      'Regrows like cane, and it is the half of seasoning you cannot buy in. Salt alone has never sold a bag.',
-  },
-  // [[133]]. The `verb` and `detail` here were always right — this node's card is the one
-  // surface that never lied about it. Only the TITLE did: "Seed Hopper" names a machine, and
-  // this node unlocks a toggle. See `game/input/build-menu.ts`'s note for why the rename had
-  // to happen on every surface in the same breath.
-  [TechId.AutoReplant]: {
-    title: 'Auto-Replant',
-    verb: 'Arm a zone to replant itself',
-    detail:
-      'A Grow Zone with auto-replant armed sows a tile the moment it is cleared. The field stops waiting for you to walk back.',
-  },
-  [TechId.GoldPotato]: {
-    title: 'Gold Potato',
-    verb: 'Plant gold potatoes',
-    detail:
-      'Three times a Russet at the till and three times the water in the ground. The sprinkler you already own will not keep up with a whole row of them.',
-  },
-  [TechId.RootCellar]: {
-    title: 'Root Cellar',
-    verb: 'Store a harvest in bulk',
-    detail:
-      'Five hundred slots underground. It is the answer to a harvest bigger than the line can eat today.',
-  },
-  [TechId.Orchard]: {
-    title: 'Orchard',
-    verb: 'Plant orange and lemon trees',
-    detail:
-      'Trees take four tiles and stay forever, dropping fruit on their own cycle. You plant one once and pick it for the rest of the game.',
-  },
+  // Corn, Chili, Auto-Replant, Gold Potato, the Root Cellar and the Orchard all had copy here
+  // and all six nodes are cut (items 145/146/147, owner cut list 2026-08-27) — the crops with
+  // their flavour tier, the hopper toggle in favour of the planter bot, the cellar and the two
+  // fruit trees outright. The slugs are burned in the sim, so a stale block here would never
+  // render; it is deleted rather than left to read like a promise.
   [TechId.KolaTree]: {
     title: 'Kola Tree',
     verb: 'Plant the kola tree',
@@ -106,14 +71,14 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
     title: 'Planter Bot',
     verb: 'Send a robot to sow the row',
     detail:
-      'The seed hopper on legs. Chili and cane never needed one — potatoes, corn and gold potatoes have been waiting for it.',
+      'The sowing half of the dock family, and the only automatic planting there is. Cane regrows on its own — potatoes are the crop that has been waiting for this.',
   },
 
   [TechId.WashAndSlice]: {
     title: 'Wash & Slice',
     verb: 'Build the Washer and the Slicer',
     detail:
-      'The front half of a real chip line. Two machines that do the two jobs the Chip Kitchen was doing badly at once.',
+      'The front half of a real chip line: one machine washes, the next one slices, and each does its one job properly.',
   },
   [TechId.Fryer]: {
     title: 'The Fryer',
@@ -166,12 +131,7 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
     detail:
       'A sprinkler head fed by pipe instead of by barrel. It never runs dry, and you never walk out to refill it again.',
   },
-  [TechId.Recirculator]: {
-    title: 'Recirculator',
-    verb: 'Reclaim the wash water',
-    detail:
-      'Catches what the Washer throws away and sends it back up the pipe. Needs the Washer as much as it needs the pumps — there is no graywater without a wash.',
-  },
+  // The Recirculator's block sat here; the node and its graywater loop are cut (item 145).
   [TechId.IrrigationHub]: {
     title: 'Irrigation Hub',
     verb: 'Water only the tiles that are dry',
@@ -212,12 +172,8 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
       'A bag and a bottle sold together fetch more than the two sold apart, so running both districts beats running either one twice. It needs a finished line on each side.',
   },
 
-  [TechId.Diagnostics]: {
-    title: 'Diagnostics',
-    verb: 'Read where the money bleeds',
-    detail:
-      'A ranked list of what every machine wasted in the last minute, priced in cash — and the Maintenance Station to aim at the worst line on it.',
-  },
+  // Diagnostics' block sat here; the node, its bleed list and the Maintenance Station are cut
+  // (item 145). Drones below are the only automated repair now.
   [TechId.Drones]: {
     title: 'Repair Drones',
     verb: 'Let the bay fix the lot',
@@ -229,7 +185,7 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
     title: 'Workshop Charter',
     verb: 'Open the Workshop era',
     detail:
-      'The lot stops being a roadside patch. Belts, the upgrade bench, and the seed hopper all sit on the far side of this signature.',
+      'The lot stops being a roadside patch. Belts, the upgrade bench, and the plumbing all sit on the far side of this signature.',
   },
   [TechId.AssemblyCharter]: {
     title: 'Assembly Charter',
@@ -237,12 +193,9 @@ export const TECH_COPY: Readonly<Record<string, NodeCopy>> = {
     detail:
       'The paperwork that turns a workshop into a factory floor. Express belt and the long arm are behind it.',
   },
-  [TechId.CorporateCharter]: {
-    title: 'Corporate Charter',
-    verb: 'Leave a line running and walk away',
-    detail:
-      'The only signature in the game you earn by not being there: ten in-game days of one machine working with nobody\u2019s hands on it. What is on the far side is the Corporation era, and it is still being built.',
-  },
+  // The Corporate Charter's block sat here. The Charter is retired (item 147, owner: "The Era 4
+  // should be combined with Era 3") \u2014 the tree ends at the Assembly Line now, and the
+  // ten-untouched-days milestone it carried went with it.
 };
 
 export function nodeCopy(id: string): NodeCopy {
@@ -302,12 +255,17 @@ export interface EraCopy {
   readonly blurb: string;
 }
 
-/** Plan §3's era table, verbatim in spirit: the Spud Shack, the Workshop, the Assembly Line. */
+/**
+ * Plan §3's era table, verbatim in spirit: the Spud Shack, the Workshop, the Assembly Line.
+ *
+ * Row IV — The Corporation — is gone with its Charter (item 147). The table is not what says
+ * how many bands the panel draws (`MAX_ERA` derives that from the tree); it only names them,
+ * and a fourth name here would be an era the game can no longer reach.
+ */
 export const ERA_COPY: readonly EraCopy[] = [
   { numeral: 'I', name: 'The Spud Shack', blurb: 'You, a can, and dirt' },
   { numeral: 'II', name: 'The Workshop', blurb: 'Machines, and things that move on their own' },
   { numeral: 'III', name: 'The Assembly Line', blurb: 'A floor that runs without you' },
-  { numeral: 'IV', name: 'The Corporation', blurb: 'Maintenance becomes a logistics problem' },
 ];
 
 export function eraCopy(era: number): EraCopy {
@@ -331,8 +289,8 @@ export function milestoneLabel(kind: number, amount: number): string {
       return `${amount} machines running a work cycle`;
     case MilestoneKind.MachineOutput:
       return `${amount} items made by machine`;
-    case MilestoneKind.UntouchedLine:
-      return `${amount} in-game days of a line running untouched`;
+    // `UntouchedLine` had a case here — the only milestone that measured absence — and it is
+    // gone with the Corporate Charter that was its one bearer (item 147).
     default:
       return '';
   }
@@ -347,8 +305,6 @@ export function milestoneNoun(kind: number): string {
       return 'running';
     case MilestoneKind.MachineOutput:
       return 'made';
-    case MilestoneKind.UntouchedLine:
-      return 'days untouched';
     default:
       return '';
   }
@@ -364,8 +320,12 @@ export function milestoneNoun(kind: number): string {
  * deterministic core (same reason `format.ts` owns the dollar sign).
  */
 export const MACHINE_LABELS: Readonly<Record<number, string>> = {
+  // The Chip Kitchen's row led this table for the whole life of the HUD; the machine is cut
+  // (item 145) and its boxed item with it, so there is no crate left for the row to name. The
+  // Recirculator, Root Cellar and Maintenance Station rows are gone by the same cut — unlike
+  // the retired Parts Bench below, whose BOX survives in old saves, these four machines were
+  // migrated out of every save entirely, boxes included.
   [MachineKind.SellBin]: 'Sell Bin',
-  [MachineKind.ChipKitchen]: 'Chip Kitchen',
   [MachineKind.Sprinkler]: 'Sprinkler',
   [MachineKind.Washer]: 'Washer',
   [MachineKind.Slicer]: 'Slicer',
@@ -376,7 +336,6 @@ export const MACHINE_LABELS: Readonly<Record<number, string>> = {
   [MachineKind.Tank]: 'Tank',
   [MachineKind.PipedSprinkler]: 'Piped Sprinkler',
   [MachineKind.IrrigationHub]: 'Irrigation Hub',
-  [MachineKind.Recirculator]: 'Recirculator',
   // The soda line. Named here for the same reason as the rest, and needed by more than the
   // bench now: a boxed machine in the bag is named by its machine ([[054]], `item-copy.ts`), so
   // a kind missing from this table would read "Machine" on a row the player is about to scrap.
@@ -394,17 +353,12 @@ export const MACHINE_LABELS: Readonly<Record<number, string>> = {
   [MachineKind.DeliveryCart]: 'Delivery Cart',
   [MachineKind.TruckDepot]: 'Truck Depot',
   [MachineKind.BeltJunction]: 'Belt Junction',
-  // Storage ([[035]]) and the Agri-Bots ([[038]]). Kinds that shipped without a row here, which
-  // is not cosmetic for exactly the reason stated twice above: a boxed machine in the bag is
-  // named by its machine, so a $250 Root Cellar was reading "Machine" on the row a player is about
-  // to scrap. The dock card names its subject from this table too.
-  [MachineKind.RootCellar]: 'Root Cellar',
+  // The Agri-Bots ([[038]]). Kinds that shipped without a row here, which is not cosmetic for
+  // exactly the reason stated twice above: a boxed machine in the bag is named by its machine.
+  // The dock card names its subject from this table too.
   [MachineKind.HarvesterDock]: 'Harvester Dock',
   [MachineKind.PlanterDock]: 'Planter Dock',
-  // The maintenance chain ([[039]]). Same non-cosmetic reason a third time: a boxed machine
-  // is named by its machine, and the diagnostics list ranks these by name too — a row that
-  // says "Machine — $14 wasted" points the player at nothing.
-  [MachineKind.MaintenanceStation]: 'Maintenance Station',
+  // The Drone Bay ([[039]]'s survivor — the Maintenance Station half of that chain is cut).
   [MachineKind.DroneBay]: 'Drone Bay',
   // The Parts Bench is RETIRED ([[090]]) and its row stays for exactly the reason stated three
   // times above: a boxed machine in the bag is named by its machine. A player who owned one
