@@ -17,10 +17,7 @@
     "frames": 2,
     "framesRequested": 4,
     "frameSize": 48,
-    "keptFrames": [
-      0,
-      2
-    ],
+    "keptFrames": [0, 2],
     "discardRule": "sheetCells at time of purchase — the live selection is art/manifest.json",
     "takes": 1,
     "geometry": "sheet accepted: 4x4 cells of 48px, cell choice deferred to cook"

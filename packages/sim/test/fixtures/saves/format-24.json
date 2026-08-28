@@ -770,10 +770,7 @@
         "efficiencyLevel": 0,
         "flowMlPerMinute": 0,
         "id": 2,
-        "inputCounts": [
-          6,
-          2
-        ],
+        "inputCounts": [6, 2],
         "investedCents": 6000,
         "jammed": false,
         "junctionInCursor": 0,
@@ -809,9 +806,7 @@
     "nextPipeId": 1,
     "nextReservoirId": 2,
     "nextZoneId": 2,
-    "ownedParcels": [
-      0
-    ],
+    "ownedParcels": [0],
     "pipes": [],
     "reservoirs": [
       {
@@ -1113,9 +1108,7 @@
       "lifetimeSpentCents": 0,
       "longestHandsFreeTicks": 251,
       "netWorthCents": 108536,
-      "netWorthSamples": [
-        107720
-      ],
+      "netWorthSamples": [107720],
       "nextNetWorthSampleTick": 1200,
       "peakNetWorthCents": 108536,
       "repairKitSpendCents": 0,
@@ -1144,9 +1137,7 @@
       }
     ],
     "tick": 251,
-    "unlocked": [
-      "fabrication-wash-and-slice"
-    ],
+    "unlocked": ["fabrication-wash-and-slice"],
     "version": 13,
     "worldSeed": 200145,
     "zones": [
