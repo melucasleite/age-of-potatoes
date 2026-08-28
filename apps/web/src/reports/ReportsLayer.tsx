@@ -38,14 +38,19 @@ import { BoardsPanel } from './BoardsPanel';
 import { CommercePanel } from './CommercePanel';
 import { DawnCard } from './DawnCard';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
+import { LeaderboardPanel } from './LeaderboardPanel';
 import { ShiftReport } from './ShiftReport';
 import { r, cx } from './styles';
 
-type Tab = 'shift' | 'boards' | 'dispatch' | 'diagnostics';
+type Tab = 'shift' | 'boards' | 'ranks' | 'dispatch' | 'diagnostics';
 
 const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   { id: 'shift', label: 'Shift' },
   { id: 'boards', label: 'Bests' },
+  // The cloud half of the leaderboard work, beside the local half it grew out of. The
+  // panel degrades to one quiet sentence when Supabase is absent, so the tab earns its
+  // place even in a fork with no backend — same argument as the locked Diagnostics tab.
+  { id: 'ranks', label: 'Ranks' },
   { id: 'dispatch', label: 'Dispatch' },
   // Present even before its node is researched — the panel renders its locked state, for
   // the same reason a locked build-menu row stays visible ([[039]], `DiagnosticsPanel`).
@@ -118,6 +123,7 @@ export default function ReportsLayer() {
 
         {open === 'shift' ? <ShiftReport /> : null}
         {open === 'boards' ? <BoardsPanel /> : null}
+        {open === 'ranks' ? <LeaderboardPanel /> : null}
         {open === 'dispatch' ? <CommercePanel /> : null}
         {open === 'diagnostics' ? <DiagnosticsPanel /> : null}
       </div>

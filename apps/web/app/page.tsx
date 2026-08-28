@@ -51,7 +51,7 @@ export default function Home() {
         imageRendering: 'pixelated',
       }}
     >
-      <h1 style={{ margin: 0, fontSize: '2.5rem', letterSpacing: '0.05em' }}>SNACK MOGUL</h1>
+      <h1 style={{ margin: 0, fontSize: '2.5rem', letterSpacing: '0.05em' }}>AGE OF POTATOES</h1>
       <p style={{ margin: 0, opacity: 0.7, maxWidth: '32rem', lineHeight: 1.6 }}>
         Rent&rsquo;s paid through the month. Make chips.
       </p>

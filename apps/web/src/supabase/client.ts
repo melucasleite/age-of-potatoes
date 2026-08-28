@@ -76,9 +76,17 @@ export function getSupabaseClient(): SupabaseClient | null {
       persistSession: true,
       autoRefreshToken: true,
       storageKey: AUTH_STORAGE_KEY,
-      // No OAuth and no magic links in v0.1, so there is never a token in the URL to detect.
-      // Leaving this on makes the client parse every navigation's hash for no reason.
-      detectSessionInUrl: false,
+      // OAUTH AND MAGIC LINKS EXIST NOW, so the two flags below stopped being dead weight.
+      // PKCE is the flow Supabase documents for a browser SPA (guides/auth/sessions/pkce-flow,
+      // verified 2026-08-24, not from memory): the sign-in redirect comes back carrying a
+      // `?code=` that is only useful together with the verifier this client stashed in
+      // localStorage, so a leaked URL is not a leaked session. With `detectSessionInUrl` on,
+      // the client exchanges that code for a session by itself during initialisation — no
+      // callback route, no manual `exchangeCodeForSession`, and `getSession()` in
+      // `session.ts` awaits that initialisation, which is what stops the boot path from
+      // minting a fresh anonymous user over the account the player just linked.
+      flowType: 'pkce',
+      detectSessionInUrl: true,
     },
   });
 

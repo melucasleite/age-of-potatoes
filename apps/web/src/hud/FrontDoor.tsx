@@ -226,7 +226,7 @@ export default function FrontDoor({ onEnter }: FrontDoorProps = {}) {
   return (
     <div className={s.door}>
       <div className={s.inner}>
-        <h1 className={s.wordmark}>SNACK MOGUL</h1>
+        <h1 className={s.wordmark}>AGE OF POTATOES</h1>
         <p className={s.tagline}>Rent&rsquo;s paid through the month. Make chips.</p>
 
         {newest !== null && (

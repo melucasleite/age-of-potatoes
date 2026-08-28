@@ -3466,13 +3466,18 @@
   color: #9a8873;
 }
 
+/*
+ * A 3-column grid, not the original slim row: the portraits are 96px (the 48px cell at a
+ * whole 2×), and five of those plus gaps outgrow a 460px window. Three across, then two,
+ * keeps every button the same size — a wrapped flex row would stretch the orphan pair.
+ */
 .pauseAvatars {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
 .pauseAvatar {
-  flex: 1 1 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3513,6 +3518,154 @@
   place-items: center;
   font-size: 13px;
   color: #9a8873;
+}
+
+/* --- the account panel ----------------------------------------------------------- */
+
+/*
+ * The sixth floating window (`AccountPanel.tsx`): sign-in and the leaderboard name. It
+ * borrows the pause menu's visual grammar — the same section heads, the same button
+ * recipe — but under its own names, because the pause section's header calls those
+ * classes the pause menu's and a shared name is how two screens end up described by one
+ * stylesheet. Kept deliberately quiet: this is paperwork, not gameplay.
+ */
+.accountBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 20px 16px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #46392f #14100e;
+}
+
+/* The exit button's shelf grew a second occupant, so the two share one row of chrome. */
+.sideTopRow {
+  display: flex;
+  gap: 6px;
+}
+
+.accountSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.accountSectionHead {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #9a8873;
+}
+
+.accountStatusLine {
+  font-size: 13px;
+  color: #efe2c6;
+}
+
+.accountNote {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #9a8873;
+}
+
+/* The consequence line on the session-replacing flow: warned in the HUD's amber, like
+ * every other "you are about to mean this" note (`.zoneNoteWarn`). */
+.accountNoteWarn {
+  color: #f2a93b;
+}
+
+.accountRow {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+/* THE THIRD AND FOURTH TEXT FIELDS IN THE HUD. Their keydown guards live in
+ * `AccountPanel.tsx` and are load-bearing — see the ⚠️ there. Styled as the zone rename
+ * field is, because a text field that looked like a label would not read as somewhere
+ * to type. */
+.accountInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px 6px;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  color: #efe2c6;
+  background: #14100e;
+  box-shadow: inset 0 0 0 2px #14100e;
+}
+
+.accountInput:focus {
+  outline: 0;
+  box-shadow:
+    inset 0 0 0 2px #14100e,
+    inset 0 0 0 3px #f5d382;
+}
+
+.accountInput::placeholder {
+  color: #6d5c4d;
+}
+
+.accountButton {
+  flex: 0 0 auto;
+  padding: 6px 12px 7px;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #efe2c6;
+  background: #2f251b;
+  box-shadow:
+    inset 0 0 0 1px #14100e,
+    inset 0 0 0 2px #46392f;
+}
+
+.accountButton:hover:not(:disabled),
+.accountButton:focus-visible:not(:disabled) {
+  background: #3d3024;
+  color: #ffd98a;
+}
+
+.accountButton:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* The mode switch is a sentence, not a button: it changes what the panel shows, never
+ * what any server knows, and dressing it as an action would promote it above the verbs. */
+.accountSwitch {
+  align-self: flex-start;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  color: #9a8873;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.accountSwitch:hover {
+  color: #efe2c6;
+}
+
+.accountNotice {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.accountNoticeGood {
+  color: #5fd44a;
+}
+
+.accountNoticeWarn {
+  color: #f2a93b;
 }
 
 /* --- small screens -------------------------------------------------------------- */

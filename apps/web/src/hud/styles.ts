@@ -369,7 +369,24 @@ export type StyleName =
   | 'pauseAvatar'
   | 'pauseAvatarOn'
   | 'pauseAvatarArt'
-  | 'pauseAvatarBlank';
+  | 'pauseAvatarBlank'
+  // --- the account panel ---
+  // The sixth floating window (`AccountPanel.tsx`): sign-in, sign-out, and the leaderboard
+  // name. `sideTopRow` is the chrome shelf it shares with "exit game" in the dock.
+  | 'sideTopRow'
+  | 'accountBody'
+  | 'accountSection'
+  | 'accountSectionHead'
+  | 'accountStatusLine'
+  | 'accountNote'
+  | 'accountNoteWarn'
+  | 'accountRow'
+  | 'accountInput'
+  | 'accountButton'
+  | 'accountSwitch'
+  | 'accountNotice'
+  | 'accountNoticeGood'
+  | 'accountNoticeWarn';
 
 export const s = raw as Readonly<Record<StyleName, string>>;
 

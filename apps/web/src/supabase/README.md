@@ -1,10 +1,11 @@
 # Cloud sync
 
-**There is no Supabase project provisioned for this repo.** Everything in this directory is
-inert until someone sets two environment variables, and "inert" is meant literally: with no
-keys configured the Supabase SDK is never even downloaded, because
-[`bootstrap.ts`](./bootstrap.ts) checks the env synchronously and only then dynamically
-imports the client.
+**A Supabase project is live for this game now** (ref `fikglrbievvcutrsgrcp`), configured
+through `apps/web/.env.local`. The design below still holds for any fork without one:
+everything in this directory is inert until someone sets two environment variables, and
+"inert" is meant literally — with no keys configured the Supabase SDK is never even
+downloaded, because [`bootstrap.ts`](./bootstrap.ts) checks the env synchronously and only
+then dynamically imports the client.
 
 That is the design, not a temporary state. Plan §11: _"Deliberately small. Nothing about the
 game requires the server to be up."_ IndexedDB is the source of truth; this is a mirror.
@@ -20,8 +21,28 @@ need re-homing.
 [`linkEmailToCurrentUser()`](./session.ts) is the payoff and the reason the item is worth
 doing now: a player can attach an email to their **existing** anonymous user later, keeping
 the same `user.id`, and therefore the same `saves` row, with no migration and without losing
-a tick. It ships as a function with no UI — an account screen is not v0.1 scope, and
-building the function now is what keeps the door open.
+a tick. The account screen that door was held open for exists now: the HUD's Account panel
+(`hud/AccountPanel.tsx`), which drives the rest of `session.ts` — `linkOAuthToCurrentUser`
+(GitHub / Google via `linkIdentity`, same user id), the deliberately-separate
+session-replacing pair `signInToExistingWithOAuth` / `sendMagicLinkToExisting`, and
+`signOut` — plus [`profile.ts`](./profile.ts) for the leaderboard display name.
+
+## Real sign-in, and the dashboard switches it depends on
+
+OAuth redirects and magic links use the **PKCE flow** with `detectSessionInUrl: true`
+(`client.ts`, verified against the Supabase PKCE guide on 2026-08-24): the redirect returns
+with a `?code=` that the client exchanges for a session on its own during initialisation,
+which `getSession()` awaits — so the boot path never mints an anonymous user over a session
+the player just linked. Three switches live in the dashboard and no client code can flip
+them:
+
+1. **Authentication → Sign In / Providers**: enable **GitHub** and **Google**, each with its
+   own OAuth app credentials.
+2. **Authentication → Settings**: enable **manual linking**, or `linkIdentity()` — the
+   upgrade path that keeps the anonymous `user.id` — answers every click with an error
+   (which the panel surfaces verbatim).
+3. **Authentication → URL Configuration**: the site URL and redirect allow-list must cover
+   wherever the game is served, or the `redirectTo` this code sends is ignored.
 
 ## Setup, when someone provisions a project
 
@@ -87,6 +108,7 @@ scope and is not something a single-device v0.1 needs.
 | `env.ts`       | Which keys we have. Imports no SDK, so the gate is free     |
 | `bootstrap.ts` | The gate: dynamically imports the rest only when configured |
 | `client.ts`    | The one browser client, memoised, or `null`                 |
-| `session.ts`   | Anonymous sign-in, and the identity-upgrade helper          |
+| `session.ts`   | Anonymous sign-in, the upgrade paths, sign-out              |
+| `profile.ts`   | The leaderboard display name, and the account status read   |
 | `cloudSync.ts` | Push, pull, the conflict rule, and the backoff policy       |
 | `log.ts`       | Deliberately quiet logging, and `once()`                    |

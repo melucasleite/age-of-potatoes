@@ -50,6 +50,7 @@
 // its controls opt back in, because a HUD that swallows a click meant for a tile makes the
 // game feel broken in a way the player cannot name.
 
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
 import { onPanelRequest } from '@/game/input/panels';
@@ -100,6 +101,18 @@ import { UpgradeBench } from './UpgradeBench';
 import { WelcomeBack } from './WelcomeBack';
 import { ZonePanel } from './ZonePanel';
 import { useHudSlice } from './use-hud';
+
+/**
+ * THE ACCOUNT PANEL IS THE ONE LAZY CHILD IN THIS TREE, AND THAT IS LOAD-BEARING. Its
+ * imports reach `@supabase/supabase-js` through `supabase/client.ts`, and
+ * `supabase/bootstrap.ts` exists precisely so an unconfigured build never pays for that
+ * chunk — a static import here would pull the SDK into every player's first load and
+ * quietly undo it. `next/dynamic` keeps the SDK in a chunk fetched the first time the
+ * window opens, which is also the first moment anything in it could matter.
+ */
+const AccountPanel = dynamic(async () => import('./AccountPanel').then((mod) => mod.AccountPanel), {
+  ssr: false,
+});
 
 export default function HudRoot() {
   // Nothing has published yet — no world, or a save the client refused to overwrite. An
@@ -172,9 +185,28 @@ export default function HudRoot() {
           save-then-teardown runs where the world and its autosave live (`GameCanvas`), and
           there is no "are you sure": the save IS the confirmation, because nothing is lost.
         */}
-              <button type="button" className={s.exitButton} onClick={requestExit}>
-                exit game
-              </button>
+              <div className={s.sideTopRow}>
+                <button type="button" className={s.exitButton} onClick={requestExit}>
+                  exit game
+                </button>
+                {/*
+                  THE ACCOUNT DOOR — chrome, not a fifth gameplay row. Sign-in and the
+                  leaderboard name are about the PLAYER, not the farm, so it lives beside
+                  "exit game" on the meta shelf rather than among the panel rows, and it
+                  knowingly shares that button's limitation: folded away with the dock.
+                  The window it opens is a `LocalPanel` all the same, so the one-open
+                  invariant holds without a special case.
+                */}
+                <button
+                  type="button"
+                  className={s.exitButton}
+                  aria-pressed={panels.open === 'account'}
+                  title="Account — sign in, and the name the leaderboard shows"
+                  onClick={panels.toggleAccount}
+                >
+                  account
+                </button>
+              </div>
 
               {/*
           THE FOUR ROWS ([[093]]) — Research, the Stand, the Bag, Build, hanging off the
@@ -293,6 +325,8 @@ export default function HudRoot() {
                 <InventoryWindow onClose={panels.close} />
               ) : panels.open === 'zones' ? (
                 <ZonePanel onClose={panels.close} />
+              ) : panels.open === 'account' ? (
+                <AccountPanel onClose={panels.close} />
               ) : (
                 <BuildMenuPanel />
               )}
@@ -565,6 +599,7 @@ function usePanels(): {
   toggleShop: () => void;
   toggleBag: () => void;
   toggleZones: () => void;
+  toggleAccount: () => void;
   close: () => void;
 } {
   // A primitive snapshot (a name or null), so every build-seam publish that is not an
@@ -582,6 +617,11 @@ function usePanels(): {
   }, []);
   const toggleZones = useCallback(() => {
     togglePanel('zones');
+  }, []);
+  // No key for the account window — see the chrome button above. Every letter this hook
+  // takes is one the game can never have back, and paperwork does not earn one.
+  const toggleAccount = useCallback(() => {
+    togglePanel('account');
   }, []);
   const close = useCallback(() => {
     closeLocalPanel();
@@ -627,5 +667,5 @@ function usePanels(): {
     [],
   );
 
-  return { open, toggleResearch, toggleShop, toggleBag, toggleZones, close };
+  return { open, toggleResearch, toggleShop, toggleBag, toggleZones, toggleAccount, close };
 }

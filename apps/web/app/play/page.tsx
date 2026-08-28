@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import PlayClient from './play-client';
 
 export const metadata: Metadata = {
-  title: 'Snack Mogul — the lot',
+  title: 'Age of Potatoes — the lot',
   description: 'Plant, water, harvest, fry, sell.',
 };
 

@@ -48,8 +48,14 @@ import { buildMenuClose, buildMenuSnapshot, subscribeBuildMenu } from '../game/i
  * so anything living in `.sideContext` or `.sidePapers` vanishes with it, and the four zone
  * verbs would have shipped unreachable for every player who ever pressed `[`. The float lives
  * in `.stage`, and its key is bound outside the fold — so the panel opens folded or not.
+ *
+ * SIX WITH THE ACCOUNT PANEL. It is meta rather than gameplay — sign-in, the leaderboard
+ * name — so it gets no `PanelRow` and no hotkey: its opener is a chrome button beside "exit
+ * game", which shares that button's known limitation of folding away with the dock. It joins
+ * THIS union all the same, because a window over the canvas obeys the one-open invariant no
+ * matter what kind of thing it is.
  */
-export type LocalPanel = 'research' | 'shop' | 'bag' | 'zones';
+export type LocalPanel = 'research' | 'shop' | 'bag' | 'zones' | 'account';
 /** Everything `panelSnapshot` can answer — the build float's truth lives in the input layer. */
 export type PanelName = LocalPanel | 'build';
 

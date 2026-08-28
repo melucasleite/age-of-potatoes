@@ -169,6 +169,13 @@ export interface HoldState {
   crop: CropId;
 }
 
+/**
+ * Scroll distance that equals one zoom rung — a discrete mouse wheel's single click in
+ * pixel mode. Raising this slows every zoom gesture; the trackpad fix lives in the
+ * accumulation in `onWheel`, not in tuning this number.
+ */
+const WHEEL_NOTCH_PX = 100;
+
 export class PointerInput {
   private attached = false;
   private drag: Drag | null = null;
@@ -312,15 +319,38 @@ export class PointerInput {
   /**
    * The wheel zooms, one rung per notch, on the integer ladder and nowhere between.
    *
+   * A NOTCH IS AN AMOUNT OF SCROLL, NOT AN EVENT. A discrete mouse wheel reports one
+   * ~100px event per physical click, but a trackpad's two-finger swipe is dozens of
+   * 1–20px events — stepping a rung per event made one flick traverse the whole ladder.
+   * So deltas accumulate and a rung fires per WHEEL_NOTCH_PX, which keeps a mouse notch
+   * at exactly one rung and makes a trackpad earn each one. The accumulator resets on
+   * direction change (a reversal should not have to pay off the old momentum first) and
+   * after each step (a big swipe coasts to a stop instead of banking future rungs).
+   *
    * `passive: false` because this calls `preventDefault()`: without it the page scrolls
    * behind the canvas on a trackpad, and the game slides off screen while you are trying
    * to look at it.
    */
   private readonly onWheel = (event: WheelEvent): void => {
     event.preventDefault();
-    if (event.deltaY === 0) return;
-    this.system.stepZoom(event.deltaY < 0 ? 1 : -1);
+    // Firefox reports line-mode deltas for real mice (~3 lines per notch); 40px a line
+    // lands a notch at ~120, in family with pixel-mode wheels. Page mode is a full notch.
+    const delta =
+      event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? event.deltaY * 40
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? Math.sign(event.deltaY) * WHEEL_NOTCH_PX
+          : event.deltaY;
+    if (delta === 0) return;
+    if (Math.sign(delta) !== Math.sign(this.wheelAccum)) this.wheelAccum = 0;
+    this.wheelAccum += delta;
+    if (Math.abs(this.wheelAccum) < WHEEL_NOTCH_PX) return;
+    this.system.stepZoom(this.wheelAccum < 0 ? 1 : -1);
+    this.wheelAccum = 0;
   };
+
+  /** Signed scroll banked toward the next rung. Reset on step and on direction change. */
+  private wheelAccum = 0;
 
   private readonly onPointerDown = (event: PointerEvent): void => {
     event.preventDefault();

@@ -65,8 +65,13 @@ import { paintIcon } from './item-art';
 import { keepFocus, PanelWindow } from './PanelFrame';
 import { cx, s } from './styles';
 
-/** The picker's cell art. Smaller than the front door's 48 — this is a row in a window. */
-const PORTRAIT_PX = 32;
+/**
+ * The picker's cell art. 96 is the 2× whole magnification of the 48px avatar cell — the
+ * next crisp step down is 48 and the next up is 144, neither of which `fitScale` would
+ * actually reach in a smaller box. Five of these do not fit one 460px row, which is why
+ * `.pauseAvatars` is a 3-column grid rather than the slim row this section shipped as.
+ */
+const PORTRAIT_PX = 96;
 
 export function PauseMenu() {
   const open = useSyncExternalStore(
@@ -203,8 +208,8 @@ function AvatarSwitch() {
  * cell to a 48px one when the whole game doubled, and this component never learns either
  * number. `avatarPortrait` cuts the first SQUARE cell of the down strip by reading the
  * strip's own height, and `paintIcon` picks a whole magnification that fits whatever it is
- * handed into the box asked for. A 48px face in a 32px box is a clean half scale; a future
- * 64px one would be a quarter. Nothing in this file has a cell size in it.
+ * handed into the box asked for. A 48px face in a 96px box is a clean 2×; a future 64px
+ * one would land at 1×. Nothing in this file has a cell size in it.
  */
 function Portrait({ avatar }: { avatar: number }) {
   const source = avatarPortrait(avatar);

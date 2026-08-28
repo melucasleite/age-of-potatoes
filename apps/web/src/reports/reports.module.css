@@ -329,6 +329,99 @@
   color: #6d5c4d;
 }
 
+/* --- the cloud leaderboard ------------------------------------------------------- */
+
+/* The in-panel board toggle borrows the tab strip's buttons; this only spaces it. */
+.lbToggle {
+  margin-bottom: 9px;
+}
+
+/* Smaller than .button on purpose: refresh is a courtesy in the header, not an action row. */
+.lbRefresh {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 2px 6px 3px;
+  border: 0;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9a8873;
+  background: #14100e;
+  box-shadow: inset 0 0 0 2px #46392f;
+}
+
+.lbRefresh:hover:not(:disabled) {
+  color: #efe2c6;
+}
+
+.lbRefresh:disabled {
+  cursor: default;
+  color: #46392f;
+}
+
+.lbRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 4px 5px;
+  border-top: 2px solid #14100e;
+  font-variant-numeric: tabular-nums;
+}
+
+.lbRow:first-of-type {
+  border-top: 0;
+}
+
+.lbRank {
+  flex: 0 0 20px;
+  color: #6d5c4d;
+  font-size: 10.5px;
+}
+
+.lbName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #cbb99b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lbMeta {
+  flex: 0 0 auto;
+  color: #6d5c4d;
+  font-size: 10px;
+}
+
+.lbValue {
+  flex: 0 0 auto;
+  color: #f5d382;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+/* The signed-in player's own standing: a gold edge, not a fanfare. */
+.lbSelf {
+  background: rgba(138, 98, 52, 0.22);
+  box-shadow: inset 2px 0 0 #f5d382;
+}
+
+.lbSelf .lbName {
+  color: #f5d382;
+}
+
+/* Loading, empty, unconfigured, offline: one quiet sentence each, all dressed the same. */
+.lbNote {
+  padding: 6px 0 2px;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: #6d5c4d;
+}
+
 /* --- the Dawn Report card -------------------------------------------------------- */
 
 /*
