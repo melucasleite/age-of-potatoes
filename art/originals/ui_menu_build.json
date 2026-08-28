@@ -1,0 +1,24 @@
+{
+  "id": "ui_menu_build",
+  "provider": "retro-diffusion",
+  "model": "rd_fast",
+  "seed": 360129129,
+  "prompt": "a single bold flat game icon of a claw hammer with a wooden handle crossed over a grey metal wrench in an x shape, one simple object centred and filling most of the frame, seen straight on, very large solid areas of flat colour, thick heavy chunky shapes, bold dark outline, no thin lines, no small details, no background, no frame, no border, no badge, no circle behind it, no shadow, transparent background, no text",
+  "promptStyle": "rd_fast__default",
+  "native": {
+    "width": 64,
+    "height": 64
+  },
+  "requested": {
+    "width": 64,
+    "height": 64
+  },
+  "removeBg": true,
+  "tileX": false,
+  "tileY": false,
+  "palette": "palette/master.json",
+  "anchor": "center",
+  "atlasGroup": "ui",
+  "costUsd": 0.017,
+  "generatedAt": "2026-08-28T00:32:26.379Z"
+}

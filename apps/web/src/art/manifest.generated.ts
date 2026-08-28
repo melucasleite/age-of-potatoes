@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.c86d6d8f.png';
-export const ATLAS_JSON_URL = '/art/atlas.c86d6d8f.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.303d9af3.png';
+export const ATLAS_JSON_URL = '/art/atlas.303d9af3.json';
 
 export const ATLAS_SIZE = { width: 1024, height: 1024 } as const;
 
@@ -1341,6 +1341,54 @@ export const ATLAS_FRAMES = {
     height: 40,
     anchor: 'top-left',
     group: 'font',
+  },
+  ui_menu_bag: {
+    x: 0,
+    y: 792,
+    width: 64,
+    height: 64,
+    anchor: 'center',
+    group: 'ui',
+  },
+  ui_menu_build: {
+    x: 65,
+    y: 792,
+    width: 64,
+    height: 64,
+    anchor: 'center',
+    group: 'ui',
+  },
+  ui_menu_dispatch: {
+    x: 130,
+    y: 792,
+    width: 64,
+    height: 64,
+    anchor: 'center',
+    group: 'ui',
+  },
+  ui_menu_research: {
+    x: 195,
+    y: 792,
+    width: 64,
+    height: 64,
+    anchor: 'center',
+    group: 'ui',
+  },
+  ui_menu_stand: {
+    x: 260,
+    y: 792,
+    width: 64,
+    height: 64,
+    anchor: 'center',
+    group: 'ui',
+  },
+  ui_menu_zones: {
+    x: 325,
+    y: 792,
+    width: 64,
+    height: 64,
+    anchor: 'center',
+    group: 'ui',
   },
   ui_pipe_nub: {
     x: 198,
