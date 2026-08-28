@@ -138,13 +138,9 @@ export interface MotionSample {
  */
 export const MACHINE_MOTION: Record<MachineKind, MotionSpec> = {
   [MachineKind.SellBin]: { name: 'kaching', driver: 'sales', wave: 'hop', periodMs: 480 },
-  [MachineKind.ChipKitchen]: {
-    name: 'chop-and-sizzle',
-    driver: 'progress',
-    wave: 'chop',
-    periodMs: 520,
-    specks: 'oil',
-  },
+  // The Chip Kitchen's chop-and-sizzle sat here until [[145]] cut the machine; unlike the
+  // Parts Bench below, its `MachineKind` is gone from the sim, so the table stays total
+  // without a row.
   [MachineKind.Sprinkler]: { name: 'wag', driver: 'running', wave: 'sineX', periodMs: 1300 },
   [MachineKind.Washer]: { name: 'slosh', driver: 'progress', wave: 'sineX', periodMs: 760 },
   [MachineKind.Slicer]: { name: 'chop', driver: 'progress', wave: 'chop', periodMs: 440 },
@@ -175,7 +171,7 @@ export const MACHINE_MOTION: Record<MachineKind, MotionSpec> = {
     periodMs: 1100,
   },
   [MachineKind.IrrigationHub]: { name: 'surge', driver: 'running', wave: 'sineY', periodMs: 950 },
-  [MachineKind.Recirculator]: { name: 'churn', driver: 'running', wave: 'sineX', periodMs: 420 },
+  // The Recirculator's churn went with the machine ([[145]]).
   [MachineKind.Juicer]: { name: 'press', driver: 'progress', wave: 'press', periodMs: 900 },
   [MachineKind.Kettle]: {
     name: 'simmer',
@@ -204,34 +200,13 @@ export const MACHINE_MOTION: Record<MachineKind, MotionSpec> = {
     periodMs: 520,
   },
   [MachineKind.BeltJunction]: { name: 'shunt', driver: 'beltItem', wave: 'lift', periodMs: 300 },
-  [MachineKind.RootCellar]: {
-    name: 'chill-shiver',
-    driver: 'stockChange',
-    wave: 'jitter',
-    periodMs: 420,
-  },
+  // The Root Cellar's chill-shiver, the Orange and Lemon trees' sways and the Maintenance
+  // Station's crank all went with their machines ([[145]]). The kola keeps the slowest sway
+  // on the lot, now uncontested.
   [MachineKind.HandCart]: { name: 'trundle', driver: 'towed', wave: 'lift', periodMs: 260 },
-  [MachineKind.OrangeTree]: {
-    name: 'orange-sway',
-    driver: 'progress',
-    wave: 'sineX',
-    periodMs: 1900,
-  },
-  [MachineKind.LemonTree]: {
-    name: 'lemon-sway',
-    driver: 'progress',
-    wave: 'sineX',
-    periodMs: 2100,
-  },
   [MachineKind.KolaTree]: { name: 'kola-sway', driver: 'progress', wave: 'sineX', periodMs: 2300 },
   [MachineKind.HarvesterDock]: { name: 'hum', driver: 'bot', wave: 'lift', periodMs: 800 },
   [MachineKind.PlanterDock]: { name: 'chug', driver: 'bot', wave: 'doubleTap', periodMs: 800 },
-  [MachineKind.MaintenanceStation]: {
-    name: 'crank',
-    driver: 'kitSpend',
-    wave: 'crank',
-    periodMs: 700,
-  },
   [MachineKind.DroneBay]: { name: 'rotor-whir', driver: 'bot', wave: 'flutter', periodMs: 220 },
   // RETIRED ([[090]]) and kept, because this table is total over `MachineKind` and its own test
   // asserts that. No world can contain a Parts Bench after the 16 → 17 migration, so nothing

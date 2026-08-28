@@ -1,8 +1,10 @@
-// The reports' read boundary. One store, four slices, the same three rules as `hud/store.ts`.
+// The reports' read boundary. One store, three slices, the same three rules as `hud/store.ts`.
+// (Four slices until item 150 removed the Shift Report's ledger slice and the Diagnostics
+// slice that item 145's tech cut had already orphaned.)
 //
-// This is a SECOND external store rather than four more slices on the HUD's, and that is a
+// This is a SECOND external store rather than more slices on the HUD's, and that is a
 // deliberate call with a reason on both sides. Against: two stores means two `subscribe`
-// sets. For: the reports own a ledger, a per-machine idle watch, an IndexedDB connection and
+// sets. For: the reports own a per-machine idle watch, an IndexedDB connection and
 // a command sink, none of which the Ticker or the toolbelt has any business carrying — and
 // the HUD is being extended by another agent right now, so a second file is also a second
 // merge that never conflicts. The publish path is identical, the cadence is identical, and
@@ -49,25 +51,13 @@ import {
   readBoardValues,
 } from './boards';
 import type { BoardValues, PersonalBests } from './boards';
-import { dawnCount, dayNumber, ticksUntilDawn } from './day';
-import { diagnosticsUnlocked, rankBleeds } from './diagnostics';
+import { dawnCount, dayNumber } from './day';
 import { IdleWatch } from './idle';
-import { loadBests, loadLedger, saveBests, saveLedger } from './persist';
-import { centsPerActiveHour, rateIsSettled } from './rate';
-import { ShiftLedger } from './shift';
+import { loadBests, loadWorldRecord, saveBests, saveWorldRecord } from './persist';
 import { DESTINATIONS, readCommerce, readGrossAndSpend, readSalesByItem } from './sim-contract';
 import type { CommandSink, CommerceCommand, CommerceView } from './sim-contract';
-import {
-  NO_THROUGHPUT,
-  ZERO_BOARDS,
-  ZERO_COMMERCE,
-  ZERO_DAWN,
-  ZERO_DIAGNOSTICS,
-  ZERO_REPORTS,
-  ZERO_SHIFT,
-} from './types';
+import { ZERO_BOARDS, ZERO_COMMERCE, ZERO_DAWN, ZERO_REPORTS } from './types';
 import type {
-  BleedRow,
   BoardsSlice,
   CartRow,
   CommerceSlice,
@@ -75,18 +65,14 @@ import type {
   DawnCard,
   DawnSlice,
   DepotRow,
-  DiagnosticsSlice,
   ReportsSliceName,
   ReportsSnapshot,
-  ShiftBucket,
-  ShiftSlice,
-  HourRatio,
 } from './types';
 
 /** Plan §2: "a 5-second non-blocking card". A hundred ticks, counted by the sim's clock. */
 const DAWN_CARD_TICKS = 100;
 
-/** How often the ledger and the bests are written back. Thirty seconds of sim time. */
+/** How often the world record and the bests are written back. Thirty seconds of sim time. */
 const PERSIST_PERIOD_TICKS = 600;
 
 export type Unsubscribe = () => void;
@@ -94,18 +80,15 @@ export type Unsubscribe = () => void;
 export class ReportsStore {
   private readonly listeners = new Set<() => void>();
 
-  private shift: ShiftSlice = ZERO_SHIFT;
   private dawn: DawnSlice = ZERO_DAWN;
   private boards: BoardsSlice = ZERO_BOARDS;
   private commerce: CommerceSlice = ZERO_COMMERCE;
-  private diagnostics: DiagnosticsSlice = ZERO_DIAGNOSTICS;
   private snapshot: ReportsSnapshot = ZERO_REPORTS;
 
   private owner: object | null = null;
   private sink: CommandSink | null = null;
   private worldSeed = 0;
 
-  private readonly ledger = new ShiftLedger();
   private readonly idle = new IdleWatch();
 
   private bests: PersonalBests = emptyBests();
@@ -126,8 +109,6 @@ export class ReportsStore {
   private lastCommerce: CommerceView | null = null;
   private lastPublishedTick = 0;
   private lastValues: BoardValues | null = null;
-  private lastHistoryRevision = -1;
-  private historySnapshot: readonly ShiftBucket[] = Object.freeze([]);
 
   private lastDawn = -1;
   private dawnClearTick = -1;
@@ -146,11 +127,9 @@ export class ReportsStore {
 
   /** Stable per-slice getters, built once. A closure per render would allocate per render. */
   readonly getters: { readonly [K in ReportsSliceName]: () => ReportsSnapshot[K] } = {
-    shift: () => this.snapshot.shift,
     dawn: () => this.snapshot.dawn,
     boards: () => this.snapshot.boards,
     commerce: () => this.snapshot.commerce,
-    diagnostics: () => this.snapshot.diagnostics,
   };
 
   /**
@@ -159,11 +138,9 @@ export class ReportsStore {
    * here is an infinite-loop error rather than a hydration warning.
    */
   readonly serverGetters: { readonly [K in ReportsSliceName]: () => ReportsSnapshot[K] } = {
-    shift: () => ZERO_REPORTS.shift,
     dawn: () => ZERO_REPORTS.dawn,
     boards: () => ZERO_REPORTS.boards,
     commerce: () => ZERO_REPORTS.commerce,
-    diagnostics: () => ZERO_REPORTS.diagnostics,
   };
 
   getSnapshot(): ReportsSnapshot {
@@ -180,7 +157,6 @@ export class ReportsStore {
   claim(token: object, worldSeed: number): void {
     this.owner = token;
     this.worldSeed = worldSeed;
-    this.ledger.reset();
     this.idle.reset();
     this.bests = emptyBests();
     this.bestsLoaded = false;
@@ -195,8 +171,6 @@ export class ReportsStore {
     this.lastCommerce = null;
     this.lastPublishedTick = 0;
     this.lastValues = null;
-    this.lastHistoryRevision = -1;
-    this.historySnapshot = Object.freeze([]);
     this.lastSellable = Object.freeze([]);
     this.lastSellableKey = '';
     this.resetSlices();
@@ -207,7 +181,7 @@ export class ReportsStore {
   /** Called by a disposing `GameHost`. A stale host calling this is ignored, by design. */
   release(token: object): void {
     if (this.owner !== token) return;
-    // Flush before letting go. The player navigating away mid-hour should not lose the hour.
+    // Flush before letting go. A First Ten frozen moments before navigating away must land.
     void this.flush();
     this.owner = null;
     this.sink = null;
@@ -232,7 +206,7 @@ export class ReportsStore {
   }
 
   private async restore(token: object, worldSeed: number): Promise<void> {
-    const [bests, stored] = await Promise.all([loadBests(), loadLedger(worldSeed)]);
+    const [bests, stored] = await Promise.all([loadBests(), loadWorldRecord(worldSeed)]);
     // The host may have been swapped while IndexedDB was thinking. Restoring into a store
     // somebody else now owns would hand the live world another world's records.
     if (this.owner !== token) return;
@@ -243,7 +217,6 @@ export class ReportsStore {
       // Only when this session has not already taken its own reading. IndexedDB resolving
       // late is rare and would otherwise undo a freeze that just happened.
       if (this.firstTenCents < 0) this.firstTenCents = stored.firstTenCents;
-      this.ledger.hydrate(stored.ledger, this.lastPublishedTick);
     }
     // Nothing to notify with yet if no publish has happened; the next one picks it up.
     this.commitIfChanged(this.rebuildBoardsFromLast());
@@ -255,11 +228,9 @@ export class ReportsStore {
   }
 
   private resetSlices(): void {
-    this.shift = ZERO_SHIFT;
     this.dawn = ZERO_DAWN;
     this.boards = ZERO_BOARDS;
     this.commerce = ZERO_COMMERCE;
-    this.diagnostics = ZERO_DIAGNOSTICS;
     this.snapshot = ZERO_REPORTS;
     this.notify();
   }
@@ -279,8 +250,6 @@ export class ReportsStore {
     let changed = false;
 
     this.idle.observe(view);
-    if (this.ledger.read(view)) changed = true;
-    if (this.setShift(view)) changed = true;
 
     // First Ten is scored AT ten active hours and then never again (§7 ruling 4). Freezing
     // it the first time the world crosses the mark is what makes it a First Ten score rather
@@ -288,8 +257,8 @@ export class ReportsStore {
     //
     // AND IT ONLY COUNTS IF WE WATCHED IT HAPPEN. A world can arrive at this store already
     // past the mark — restored from a save whose reports record is gone, which needs no
-    // misfortune at all, since the two live in different stores and `loadLedger` swallows
-    // every failure and returns null. Its lifetime net earnings at that moment are a
+    // misfortune at all, since the two live in different stores and `loadWorldRecord`
+    // swallows every failure and returns null. Its lifetime net earnings at that moment are a
     // twelve-hour figure, and freezing THAT would post a First Ten score nobody ever scored.
     // So the freeze requires having seen the world below the mark; failing that the score
     // stays unknown, and the board says unknown rather than guessing.
@@ -310,7 +279,6 @@ export class ReportsStore {
     this.refreshSellable(view);
     this.lastCommerce = readCommerce(view);
     if (this.setCommerce(this.lastCommerce, this.sink !== null)) changed = true;
-    if (this.setDiagnostics(view)) changed = true;
     if (this.advanceDawn(view)) changed = true;
 
     if (view.tick >= this.persistDueTick) {
@@ -344,11 +312,9 @@ export class ReportsStore {
 
   private commit(): void {
     this.snapshot = {
-      shift: this.shift,
       dawn: this.dawn,
       boards: this.boards,
       commerce: this.commerce,
-      diagnostics: this.diagnostics,
     };
     this.notify();
   }
@@ -363,27 +329,15 @@ export class ReportsStore {
       this.bestsDirty = false;
       writes.push(saveBests(this.bests));
     }
-    // THIS WRITE USED TO BE SKIPPED ONCE THE LEDGER WAS SIM-OWNED, AND THAT SKIPPED MORE
-    // THAN THE LEDGER. The reasoning was sound about the buckets — once the sim projects its
-    // own they ride along in the ordinary save, and a second copy here would be a stale one.
-    // But `firstTenCents` is in this record too, and NOTHING IN THE SIM HOLDS IT: it is a
-    // reports-side reading, taken once, at the moment the world crosses ten active hours.
-    // The sim now always projects `stats.hours`, so `adopt()` flips `simOwned` on the first
-    // publish of every world and the record was never written at all. After a reload First
-    // Ten fell back to live lifetime earnings and `foldBests` raised the record every time
-    // that climbed — plan §7 ruling 4's exact inversion, the Dynasty board with a longer
-    // name. Nobody hit it only because no world has yet reached ten active hours.
-    //
-    // The stale-buckets worry does not survive being written down either: `adopt()` replaces
-    // `history` and `currentBucket` wholesale on its first publish, so a hydrated bucket in a
-    // sim-owned world is overwritten before any panel reads it. What the round trip does buy
-    // is `bestCentsPerHour`, which is otherwise recomputed from the last 24 retained hours
-    // and would quietly forget a record older than that.
+    // The per-world record is down to First Ten (item 150 removed the Shift Report and its
+    // ledger), and that one number still MUST be written: it is a reports-side reading taken
+    // once, at the moment the world crosses ten active hours, and NOTHING IN THE SIM HOLDS
+    // IT. Skipping this write is how First Ten silently becomes the Dynasty board with a
+    // longer name after a reload (plan §7 ruling 4's exact inversion).
     if (this.worldSeed !== 0) {
       writes.push(
-        saveLedger({
+        saveWorldRecord({
           worldSeed: this.worldSeed,
-          ledger: this.ledger.toPersisted(),
           firstTenCents: this.firstTenCents,
         }),
       );
@@ -392,49 +346,7 @@ export class ReportsStore {
   }
 
   // --- slice writers -----------------------------------------------------------------
-
-  private setShift(view: WorldView): boolean {
-    const current = this.ledger.current;
-    if (this.ledger.historyRevision !== this.lastHistoryRevision) {
-      this.lastHistoryRevision = this.ledger.historyRevision;
-      this.historySnapshot = Object.freeze(this.ledger.closed.slice());
-    }
-    const history = this.historySnapshot;
-    const best = this.ledger.bestCentsPerHour;
-    const perHour = centsPerActiveHour(current.netCents, current.ticks);
-    const settled = rateIsSettled(current.ticks) ? 1 : 0;
-    const untilDawn = ticksUntilDawn(view.tick);
-    const waste = ratio(current.wastePermille);
-
-    const previous = this.shift;
-    if (
-      previous.current === current &&
-      previous.history === history &&
-      previous.centsPerHour === perHour &&
-      previous.settled === settled &&
-      previous.bestCentsPerHour === best &&
-      previous.waste.measured === waste.measured &&
-      previous.waste.permille === waste.permille &&
-      // The dawn countdown is quantised to whole seconds before comparison. Unquantised it
-      // moves on every publish and would re-render the panel 6.7 times a second to redraw
-      // the same string.
-      Math.floor(previous.ticksUntilDawn / 20) === Math.floor(untilDawn / 20)
-    ) {
-      return false;
-    }
-
-    this.shift = Object.freeze({
-      version: previous.version + 1,
-      current,
-      history,
-      centsPerHour: perHour,
-      settled,
-      bestCentsPerHour: best,
-      waste,
-      ticksUntilDawn: untilDawn,
-    });
-    return true;
-  }
+  // (`setShift` stood first here until item 150 removed the Shift Report's slice.)
 
   private setBoards(values: BoardValues): boolean {
     const rows = deriveBoards(values, this.bests);
@@ -549,27 +461,8 @@ export class ReportsStore {
     return true;
   }
 
-  /**
-   * The diagnostics ranking (work item 039): worst bleeds first, behind the tech node.
-   *
-   * Same shape as `setCommerce`: derive, compare field by field, and only republish when a
-   * row actually moved. The rows are integers off the projection, so the comparison is
-   * cheap and the slice holds still for minutes at a time on a healthy lot.
-   */
-  private setDiagnostics(view: WorldView): boolean {
-    const unlocked = diagnosticsUnlocked(view) ? 1 : 0;
-    const rows: BleedRow[] = unlocked === 1 ? rankBleeds(view) : [];
-
-    const previous = this.diagnostics;
-    if (previous.unlocked === unlocked && sameBleeds(previous.rows, rows)) return false;
-
-    this.diagnostics = Object.freeze({
-      version: previous.version + 1,
-      unlocked,
-      rows: Object.freeze(rows.map((row) => Object.freeze(row))),
-    });
-    return true;
-  }
+  // (`setDiagnostics` stood here until item 150 removed the panel; the sim-side bleed
+  // figures it ranked were cut with item 145's Diagnostics tech.)
 
   /**
    * Products the lot can write a contract for: whatever its machines actually make.
@@ -680,21 +573,6 @@ export class ReportsStore {
 }
 
 /**
- * The Waste row's value, from the hour in progress.
- *
- * IT READS THE BUCKET, NOT A TOP-LEVEL STAT. There was a `readWastePermille(view)` here
- * that reached for `stats.wastePermille` — a field `StatsView` has never had and was never
- * going to grow, because waste is a RATIO and a ratio only means something over a stated
- * span. The sim measures it per hour, in `hours[].wastePermille`, which is the same span
- * every other figure on this panel is quoted over. The old read therefore returned
- * `undefined` on every publish since the day it was written, and the row printed "not yet
- * measured" for a system that had already shipped.
- */
-function ratio(permille: number): HourRatio {
-  return permille < 0 ? NO_THROUGHPUT : Object.freeze({ permille, measured: 1 });
-}
-
-/**
  * The day's best seller, or null.
  *
  * NULL IS THE HONEST ANSWER TODAY. `StatsView` projects `itemsSold` as one total with no
@@ -780,16 +658,6 @@ export function itemLabel(item: number): string {
 /** A destination name for a new contract. Flavour only; every one of them pays list. */
 export function destinationFor(contractCount: number): string {
   return DESTINATIONS[contractCount % DESTINATIONS.length] ?? DESTINATIONS[0]!;
-}
-
-function sameBleeds(a: readonly BleedRow[], b: readonly BleedRow[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    const x = a[i]!;
-    const y = b[i]!;
-    if (x.id !== y.id || x.bleedCents !== y.bleedCents || x.label !== y.label) return false;
-  }
-  return true;
 }
 
 function sameCarts(a: readonly CartRow[], b: readonly CartRow[]): boolean {

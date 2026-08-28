@@ -33,13 +33,11 @@ import type { Command, WorldState, WorldView } from '@snack/sim';
 import { machineTell, primaryCommand, reachAdjusted } from './pointer';
 import { ToolMode } from './tools';
 
-const BOXES = [
-  { name: 'Root Cellar', kind: MachineKind.RootCellar },
-  { name: 'Hand Cart', kind: MachineKind.HandCart },
-] as const;
+// The Root Cellar was the second box on this list until [[145]] cut it; the Hand Cart is
+// the surviving `MachineRole.Storage` machine, and the role-gating claim needs only one.
+const BOXES = [{ name: 'Hand Cart', kind: MachineKind.HandCart }] as const;
 
 const CAPACITY: Readonly<Record<number, number>> = {
-  [MachineKind.RootCellar]: machineSpec(MachineKind.RootCellar)!.inputCapacity,
   [MachineKind.HandCart]: machineSpec(MachineKind.HandCart)!.inputCapacity,
 };
 
@@ -143,7 +141,7 @@ describe.each(BOXES)('the hand at a $name', ({ kind }) => {
   it('empties it when you are carrying something else, since a box holds one product', () => {
     const v = withItem(
       withMachine(standingOn(4, 4), 4, 5, kind, ItemId.RussetPotato, 7),
-      ItemId.Corn,
+      ItemId.SugarCane,
       30,
     );
     expect(click(v)).toEqual({ type: 'UnloadMachine', machineId: 1, count: 7 });

@@ -49,9 +49,7 @@ export const EMPTY_PIPE_TINT = 0x868a99;
  */
 export const LIQUID_LOOKS: Readonly<Record<string, LiquidLook>> = {
   water: { tint: 0x4fa3d1, name: 'water' },
-  // Recirculated washer graywater (§4's Recirculator). Murky on purpose: it is water you
-  // would not drink, and the colour says so before the tooltip does.
-  graywater: { tint: 0x6d5c4d, name: 'graywater' },
+  // The Recirculator's murky graywater row sat here until [[145]] cut the machine.
   // The full green from the palette's grass ramp rather than the pale one above it. The pale
   // green sits close enough to simple syrup that the two converge at small sizes — caught by
   // `pipes.test.ts`, which is the whole reason that test measures distances instead of
@@ -63,8 +61,6 @@ export const LIQUID_LOOKS: Readonly<Record<string, LiquidLook>> = {
   'kola-syrup': { tint: 0x855428, name: 'kola syrup' },
   'soda-syrup': { tint: 0x9e2f27, name: 'soda syrup' },
   'carbonated-water': { tint: 0x9fdcef, name: 'carbonated water' },
-  'corn-oil': { tint: 0xf5d382, name: 'corn oil' },
-  oil: { tint: 0xf5d382, name: 'oil' },
 } as const;
 
 /**
@@ -83,8 +79,6 @@ const ASSUMED_ID_ORDER = [
   'carbonated-water',
   'kola-syrup',
   'soda-syrup',
-  'corn-oil',
-  'graywater',
 ] as const;
 
 /**

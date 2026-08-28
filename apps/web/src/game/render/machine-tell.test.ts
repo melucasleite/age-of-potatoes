@@ -61,37 +61,42 @@ function hopper(kind: MachineKind, item: ItemId): number {
   return hopperIndexFor(machineSpec(kind)!, item);
 }
 
-/** The reported state: one chili chip in the basket, twelve plain chips, peppers gone. */
-function strandedSeasoner(seed: number): MachineView {
+/**
+ * The reported state, re-pinned on the Washer since [[145]] cut the flavour tier: one clean
+ * bottle in the basket, twelve potatoes in the hopper. The potato recipe cannot run while
+ * the basket holds a different product, so the lamp is Blocked — the exact shape the
+ * original stranded Seasoner had.
+ */
+function strandedWasher(seed: number): MachineView {
   const state = createWorld(seed);
-  const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
-  seasoner.outputCount = 1;
-  seasoner.outputItem = ItemId.ChiliChips;
-  seasoner.inputCounts[hopper(MachineKind.Seasoner, ItemId.PlainChips)] = 12;
-  return projected(state, seasoner);
+  const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
+  washer.outputCount = 1;
+  washer.outputItem = ItemId.Bottle;
+  washer.inputCounts[hopper(MachineKind.Washer, ItemId.RussetPotato)] = 12;
+  return projected(state, washer);
 }
 
 describe('what a stopped machine says under the cursor', () => {
-  it('does not send a Seasoner full of chips off to find chips', () => {
-    const m = strandedSeasoner(301);
+  it('does not send a Washer full of potatoes off to find potatoes', () => {
+    const m = strandedWasher(301);
 
     // The lamp is red, so the sentence the switch reaches is the blocked one — which is the
     // half of the fix that decides which end of the factory the player walks to.
     expect(m.lamp).toBe(LampState.Blocked);
-    const sentence = blockedStatus('seasoner', m);
+    const sentence = blockedStatus('washer', m);
 
     expect(sentence).not.toContain('wants');
-    expect(sentence).toContain('Chili Chips');
+    expect(sentence).toContain('Bottle');
     expect(sentence).toContain('clear the basket');
   });
 
-  it('does not call a basket with nineteen free slots full', () => {
-    // "Full" was the only word the red lamp had. A Seasoner stopped at 1 of 20 is not full of
-    // anything, and a player who reads that goes looking for a jam that is not there.
-    const m = strandedSeasoner(302);
+  it('does not call a basket with free slots full', () => {
+    // "Full" was the only word the red lamp had. A Washer stopped at 1 of capacity is not
+    // full of anything, and a player who reads that goes looking for a jam that is not there.
+    const m = strandedWasher(302);
 
     expect(m.outputCount).toBeLessThan(m.outputCapacity);
-    expect(blockedStatus('seasoner', m)).not.toContain('full');
+    expect(blockedStatus('washer', m)).not.toContain('full');
   });
 
   it('still says full when the basket is genuinely full', () => {
@@ -204,24 +209,13 @@ describe('what a container says it is holding', () => {
     expect(storageStatus('hand cart', after)).toBe('hand cart — 12 Russet Potato');
   });
 
-  it('gives a cellar the same sentence as a cart, with no word about preserving anything', () => {
-    // The $250 machine used to buy a FROZEN clock and said so — "(frozen with 4:12 left)".
-    // There is no clock to freeze, so what it buys is bulk (`ROOT_CELLAR_CAPACITY`), and the
-    // sentence is a plain count. Left as a test rather than deleted because "root cellar idle"
-    // is the bug item 114 fixed, and that fix has to survive this one.
-    const m = box(403, MachineKind.RootCellar, ItemId.RussetPotato, 40, 5 * 60 * 20);
-
-    const sentence = storageStatus('root cellar', m)!;
-    expect(sentence).toBe('root cellar — 40 Russet Potato');
-    expect(sentence).not.toContain('frozen');
-    expect(sentence).not.toContain('(');
-  });
-
-  it('says a cellar holding nothing is empty', () => {
+  // The Root Cellar's two sentences (a plain count with no "frozen", and "empty") were pinned
+  // here until [[145]] cut the machine; the cart carries the same `storageStatus` branches.
+  it('says a cart holding nothing is empty', () => {
     const state = createWorld(404);
-    const cellar = spawnMachine(state, MachineKind.RootCellar, 0, 0)!;
+    const cart = spawnMachine(state, MachineKind.HandCart, 0, 0)!;
 
-    expect(storageStatus('root cellar', projected(state, cellar))).toBe('root cellar empty');
+    expect(storageStatus('hand cart', projected(state, cart))).toBe('hand cart empty');
   });
 
   it('stays silent on anything that is not a box, so the lamp keeps its sentence', () => {

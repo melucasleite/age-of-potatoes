@@ -74,7 +74,8 @@ describe('the beat grid', () => {
       const rig = makeRig();
       rig.engine.anchorTick = tick;
       rig.scheduler.setTick(tick, performance.now());
-      rig.scheduler.push({ soundId: SoundId.MachineCycleKitchen, tick, pan: 0, gain: 1, rate: 1 });
+      // The jam alarm is the beat-quantized machine sound since [[145]] took the kitchen's.
+      rig.scheduler.push({ soundId: SoundId.MachineJam, tick, pan: 0, gain: 1, rate: 1 });
 
       for (let pass = 0; pass < 40 && rig.played.length === 0; pass++) {
         rig.engine.now = ANCHOR + pass * 0.025;
@@ -102,7 +103,7 @@ describe('the beat grid', () => {
 
   it('places the running ensemble once per beat and only on boundaries', () => {
     const rig = makeRig();
-    rig.scheduler.setEnsemble([{ soundId: SoundId.MachineWorkKitchen, pan: 0, gain: 1, rate: 1 }]);
+    rig.scheduler.setEnsemble([{ soundId: SoundId.MachineJam, pan: 0, gain: 1, rate: 1 }]);
 
     for (let pass = 0; pass < 200; pass++) {
       const elapsed = pass * 0.025;
@@ -120,7 +121,7 @@ describe('the beat grid', () => {
   it('stops drumming when the world stops reporting frames', () => {
     // A paused game or a hidden tab. Projected tick times are fiction from there on.
     const rig = makeRig();
-    rig.scheduler.setEnsemble([{ soundId: SoundId.MachineWorkKitchen, pan: 0, gain: 1, rate: 1 }]);
+    rig.scheduler.setEnsemble([{ soundId: SoundId.MachineJam, pan: 0, gain: 1, rate: 1 }]);
     rig.scheduler.setTick(0, performance.now() - 5000);
 
     for (let pass = 0; pass < 100; pass++) {
@@ -164,7 +165,7 @@ describe('the synthesized bank', () => {
   });
 
   it('quantizes machines and never quantizes the player', () => {
-    for (const id of [SoundId.MachineWorkKitchen, SoundId.MachineCycleKitchen]) {
+    for (const id of [SoundId.MachineJam]) {
       expect(soundSpec(id).quantize, `${id} must ride the grid`).toBe('beat');
     }
     for (const id of [SoundId.WaterPour, SoundId.HarvestPop, SoundId.PlantSeed, SoundId.UiClick]) {

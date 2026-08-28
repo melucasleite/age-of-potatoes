@@ -105,25 +105,9 @@ const RECIPES: Readonly<Record<SoundId, Recipe>> = {
       { kind: 'tone', wave: 'sine', f0: 2093, gain: 0.1, attack: 0.002, decay: 0.18, at: 0.055 },
     ],
   },
-  // The kitchen's heartbeat. Low, short, and felt more than heard — this is the sound the
-  // player learns to miss when a line starves.
-  [SoundId.MachineWorkKitchen]: {
-    duration: 0.24,
-    layers: [
-      { kind: 'tone', wave: 'sine', f0: 132, f1: 68, gain: 0.55, attack: 0.003, decay: 0.07 },
-      { kind: 'noise', gain: 0.3, attack: 0.002, decay: 0.055, lp0: 950, lp1: 300 },
-    ],
-  },
-  // A batch actually landing. Brighter, and up a fifth from the chug so it reads as a
-  // resolution rather than another beat.
-  [SoundId.MachineCycleKitchen]: {
-    duration: 0.32,
-    layers: [
-      { kind: 'tone', wave: 'triangle', f0: 392, f1: 588, gain: 0.34, attack: 0.003, decay: 0.09 },
-      { kind: 'noise', gain: 0.2, attack: 0.002, decay: 0.03, hp: 2500 },
-    ],
-  },
-  // Airy and high, so it sits above the kitchen instead of fighting it.
+  // The kitchen's heartbeat and its batch-complete chime were rendered here until [[145]]
+  // cut the machine that played them.
+  // Airy and high, so it sits above the machine layer instead of fighting it.
   [SoundId.SprinklerPour]: {
     duration: 0.34,
     layers: [

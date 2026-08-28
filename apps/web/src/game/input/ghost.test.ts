@@ -10,15 +10,14 @@
 //
 //   · THE RADIUS COMES FROM THE SPEC. A hardcoded 5×5 would pass today and silently lie the
 //     day the spec moves, so the test compares against `SPRINKLER_RADIUS_TILES` itself.
-//   · MACHINES WITHOUT COVERAGE ARE UNTOUCHED. The Chip Kitchen's ghost growing 25 cells
-//     would be a plainly wrong overlay that throws nothing.
+//   · MACHINES WITHOUT COVERAGE ARE UNTOUCHED. A Washer's ghost growing 25 cells would be
+//     a plainly wrong overlay that throws nothing.
 
 import { describe, expect, it } from 'vitest';
 import {
   CropId,
   Direction,
   MachineKind,
-  REPAIR_KIT_RADIUS_TILES,
   SPRINKLER_RADIUS_TILES,
   createWorldView,
   machineSpec,
@@ -36,7 +35,7 @@ describe('toolCoverageRadius', () => {
   });
 
   it('is zero for a machine without an area of effect', () => {
-    expect(toolCoverageRadius(ToolMode.PlaceChipKitchen)).toBe(0);
+    expect(toolCoverageRadius(ToolMode.PlaceWasher)).toBe(0);
     expect(toolCoverageRadius(ToolMode.Water)).toBe(0);
   });
 });
@@ -83,27 +82,16 @@ describe('ghostBand coverage preview', () => {
     }
   });
 
-  it('gives the Maintenance Station the hand kit’s cell, and the right verb ([[039]])', () => {
-    // The station IS the kit without the walk, so its preview must be the kit's own radius,
-    // read off the spec. And a ghost that said the repair bench "waters 7×7" would be the
-    // preview lying about the one fact it exists to state — the verb comes off the role.
-    expect(toolCoverageRadius(ToolMode.PlaceMaintenanceStation)).toBe(REPAIR_KIT_RADIUS_TILES);
-    expect(toolCoverageVerb(ToolMode.PlaceMaintenanceStation)).toBe('services');
+  it('waters is the only coverage verb left — the station and its "services" went with [[145]]', () => {
+    // The Maintenance Station reused the kit's cell and was the one machine whose preview
+    // did not water; with it cut, every coverage machine is a watering head and the verb is
+    // a constant. A future non-watering coverage machine must reopen the role-based branch.
     expect(toolCoverageVerb(ToolMode.PlaceSprinkler)).toBe('waters');
-
-    const band = ghostBand(
-      createWorldView(),
-      HOVER,
-      ToolMode.PlaceMaintenanceStation,
-      Direction.East,
-    );
-    const span = REPAIR_KIT_RADIUS_TILES * 2 + 1;
-    expect(band!.label).toContain(`services ${span}×${span}`);
-    expect(band!.label).not.toContain('waters');
+    expect(toolCoverageRadius(ToolMode.PlaceMaintenanceStation)).toBe(0);
   });
 
   it('leaves a coverage-free machine ghost exactly as it was', () => {
-    const band = ghostBand(createWorldView(), HOVER, ToolMode.PlaceChipKitchen, Direction.East);
+    const band = ghostBand(createWorldView(), HOVER, ToolMode.PlaceWasher, Direction.East);
     expect(band).not.toBeNull();
     expect(band!.cells).toBeUndefined();
     expect(band!.x).toBe(HOVER.tileX);

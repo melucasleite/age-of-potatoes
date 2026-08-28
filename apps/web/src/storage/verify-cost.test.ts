@@ -47,7 +47,7 @@ function fullLot(ticks: number): WorldState {
   state.unlocked = TECH_NODES.map((n) => n.id).sort();
 
   // MachineKind is a numeric as-const map: Washer 4, Slicer 5, Fryer 6, Seasoner 7, Bagger 8.
-  const kinds = [4, 5, 6, 7, 8, 2] as const;
+  const kinds = [4, 5, 6, 7, 8] as const;
   const commands: Command[] = [];
   // Land deeds (item 053): only parcel 0 starts owned, and everything east of tile 16 would
   // be refused as unowned — turning this "maxed-out lot" into a quiet 44-machine one. Buy

@@ -87,7 +87,6 @@ export const ART = {
     `crop_${CROP_SLUG.get(crop) ?? 'russet_potato'}_${stage}`,
   machine: (kind: number) => `machine_${MACHINE_SLUG.get(kind) ?? 'sell_bin'}`,
   machineSellBin: 'machine_sell_bin',
-  machineChipKitchen: 'machine_chip_kitchen',
   machineSprinkler: 'machine_sprinkler',
   /** One 8px cell per belt-rideable good. Every one of these lands on the item page. */
   item: (id: number) => `item_${ITEM_SLUG.get(id) ?? 'russet_potato'}`,
@@ -686,8 +685,8 @@ const PLACEHOLDERS: Record<string, PlaceholderSpec> = {
   // rather than a per-tile tint that would break the batch.
   [ART.soilWet]: { paint: (g) => g.rect(0, 0, PAINT_PX, PAINT_PX).fill(PALETTE.soilWet) },
 
-  // Crop stages are registered per crop id at the bottom of this file — four crops ship,
-  // and hand-writing sixteen near-identical plants is how three of them end up wrong.
+  // Crop stages are registered per crop id at the bottom of this file, over whatever roster
+  // the sim ships — hand-writing near-identical plants is how some of them end up wrong.
 
   // Machines are registered at the bottom of this file, keyed by the sim's own slug and
   // sized from the sim's own footprint. See `registerMachinePlaceholders`.
@@ -1306,16 +1305,7 @@ const MACHINE_LOOKS: Record<string, MachinePaint> = {
     g.rect(4, 9, 8, 4).fill(PALETTE.black);
   },
 
-  'chip-kitchen': (g) => {
-    g.rect(1, 6, 30, 25).fill(PALETTE.metal);
-    g.rect(1, 6, 30, 3).fill(PALETTE.metalDark);
-    g.rect(4, 12, 12, 12).fill(PALETTE.black);
-    g.rect(6, 14, 8, 8).fill(0xe8a33d);
-    g.rect(20, 12, 8, 14).fill(PALETTE.metalDark);
-    g.rect(21, 14, 6, 4).fill(PALETTE.potato);
-    // Chimney, so a 2×2 blob reads as a cooker from across the lot.
-    g.rect(22, 0, 6, 7).fill(PALETTE.metalDark);
-  },
+  // The Chip Kitchen's cooker-with-a-chimney stood here until [[145]] cut the machine.
 
   sprinkler: (g) => {
     g.rect(6, 8, 4, 7).fill(PALETTE.metalDark);
@@ -1495,26 +1485,9 @@ const MACHINE_LOOKS: Record<string, MachinePaint> = {
   // apart before they can tell the machine apart, which is the same argument the chip line's
   // "one loud unshared cue each" makes one level up.
 
-  'orange-tree': orchardTree(0xe08a2c, 0xf2a748),
-  'lemon-tree': orchardTree(0xdcc63c, 0xf2e06a),
-  // Darker canopy and a dark nut, because the kola is the expensive one and the tree the
-  // player has to work for — and because a third yellow-orange ball would be a third of the
-  // same tree.
+  // The Orange and Lemon trees and the Root Cellar's turf mound stood here until [[145]];
+  // the kola keeps its dark canopy and dark nut, now against nothing.
   'kola-tree': orchardTree(0x6b4326, 0x8a5c33, 0x3f7a34, 0x2f5c24),
-
-  'root-cellar': (g, w, h) => {
-    // A turf mound with a timber door in it, sunk into the ground. Nothing here is a box on
-    // legs: the whole promise of the Cellar is that it is UNDER something.
-    g.rect(0, 6, w, h - 6).fill(PALETTE.grassDark);
-    g.rect(0, 6, w, 3).fill(PALETTE.grass);
-    g.rect(2, 9, w - 4, 2).fill(PALETTE.grassLight);
-    const doorW = Math.round(w / 2);
-    const doorX = Math.round((w - doorW) / 2);
-    g.rect(doorX, h - 15, doorW, 14).fill(PALETTE.woodDark);
-    g.rect(doorX + 1, h - 14, doorW - 2, 12).fill(PALETTE.wood);
-    g.rect(doorX + 1, h - 9, doorW - 2, 1).fill(PALETTE.woodDark);
-    g.rect(doorX + doorW - 4, h - 9, 2, 2).fill(PALETTE.metalDark);
-  },
 
   'hand-cart': (g, w, h) => {
     // A barrow: one wheel, two handles, a tray. It is the only machine in the game with a
@@ -1546,10 +1519,9 @@ const MACHINE_LOOKS: Record<string, MachinePaint> = {
  *
  * ROUND AND TALLER THAN IT IS WIDE, against a district of squat rectangles — a tree has to
  * read as a plant from the zoom level where a machine reads as a box, and at 32px the only
- * reliable way to say "plant" is silhouette rather than detail. The three trees share this and
- * differ only in fruit colour and canopy tone, which is the same trade the lamps make: one
- * shape, several tints, and the one that is genuinely a different tree (the kola) gets a
- * darker canopy as well so it is not a third citrus.
+ * reliable way to say "plant" is silhouette rather than detail. Parameterised because three
+ * trees once shared it ([[145]] cut the citrus pair); the kola is the whole orchard now and
+ * keeps its dark canopy and dark nut.
  */
 function orchardTree(
   fruit: number,

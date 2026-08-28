@@ -1,4 +1,5 @@
-// Item 103: the hand-plant verb sows the crop the player armed, and the dial can reach all five.
+// Item 103: the hand-plant verb sows the crop the player armed, and the dial can reach the
+// whole roster — two crops since [[145]] cut corn, chili and the gold potato.
 //
 // WHAT FAILS QUIETLY HERE, which is the only reason any of this is pinned (AGENTS.md):
 //
@@ -44,23 +45,14 @@ import {
 import { nextCrop } from './system';
 import { DEFAULT_CROP, ToolMode } from './tools';
 
-const ALL_CROPS: readonly CropId[] = [
-  CropId.RussetPotato,
-  CropId.SugarCane,
-  CropId.Corn,
-  CropId.ChiliPepper,
-  CropId.GoldPotato,
-];
+const ALL_CROPS: readonly CropId[] = [CropId.RussetPotato, CropId.SugarCane];
 
-const ALL_TECH: readonly string[] = [TechId.Cane, TechId.Corn, TechId.Chili, TechId.GoldPotato];
+const ALL_TECH: readonly string[] = [TechId.Cane];
 
 /** Seed item per crop, from the sim's own table — never a second list over here. */
 const SEEDS: Readonly<Record<number, number>> = {
   [CropId.RussetPotato]: ItemId.PotatoSeed,
   [CropId.SugarCane]: ItemId.CaneSeed,
-  [CropId.Corn]: ItemId.CornSeed,
-  [CropId.ChiliPepper]: ItemId.ChiliSeed,
-  [CropId.GoldPotato]: ItemId.GoldPotatoSeed,
 };
 
 function standingOn(tileX: number, tileY: number): WorldView {
@@ -110,14 +102,14 @@ describe('the hand plants what is armed ([[103]])', () => {
       { tileX: 14, tileY: 14 },
       ToolMode.Plant,
       Direction.None,
-      CropId.GoldPotato,
+      CropId.SugarCane,
     )!;
     expect(reachAdjusted(view, { tileX: 14, tileY: 14 }, direct)).toEqual({
       type: 'WalkAndAct',
       action: IntentAction.Plant,
       tileX: 14,
       tileY: 14,
-      item: CropId.GoldPotato,
+      item: CropId.SugarCane,
       count: 0,
     });
   });
@@ -153,10 +145,10 @@ describe('a gesture keeps the crop it started with', () => {
       action: IntentAction.Plant,
       tileX: 14,
       tileY: 14,
-      item: CropId.ChiliPepper,
+      item: CropId.SugarCane,
       count: 0,
     };
-    expect(createWorkQueue(view, ToolMode.Plant, dispatched).crop).toBe(CropId.ChiliPepper);
+    expect(createWorkQueue(view, ToolMode.Plant, dispatched).crop).toBe(CropId.SugarCane);
   });
 
   it('leaves a water queue on the default crop rather than inventing one', () => {
@@ -179,15 +171,9 @@ describe('the C dial ([[103]]: the Gold Potato was not in it)', () => {
   });
 
   it('skips what is not researched — an unresearched crop cannot be armed', () => {
-    // Cane only: the $25 node, and the first thing most players buy.
-    const seen = new Set<number>();
-    let crop: CropId = DEFAULT_CROP;
-    seen.add(crop);
-    for (let i = 0; i < 20; i++) {
-      crop = nextCrop(crop, [TechId.Cane]);
-      seen.add(crop);
-    }
-    expect([...seen].sort((a, b) => a - b)).toEqual([CropId.RussetPotato, CropId.SugarCane]);
+    // Holding cane with the node unresearched, C escapes back to the Russet rather than
+    // standing on a crop the reducer would refuse.
+    expect(nextCrop(CropId.SugarCane, [])).toBe(CropId.RussetPotato);
   });
 
   it('stands still on a fresh save, where the Russet is the only thing there is', () => {
@@ -230,11 +216,15 @@ describe('the plant ghost says which crop, before the button goes down', () => {
     );
   });
 
-  it('names the Gold Potato at all, which the old table could not', () => {
-    const view = field(CropId.GoldPotato, 1);
-    expect(plantBand(view, { tileX: 4, tileY: 5 }, CropId.GoldPotato).label).toContain(
-      'Gold Potato',
-    );
+  it('names every crop on the roster — [[103]]: an unnamed crop is an unannouncable one', () => {
+    const names: Readonly<Record<number, string>> = {
+      [CropId.RussetPotato]: 'Russet Potato',
+      [CropId.SugarCane]: 'Sugar Cane',
+    };
+    for (const crop of ALL_CROPS) {
+      const view = field(crop, 1);
+      expect(plantBand(view, { tileX: 4, tileY: 5 }, crop).label).toContain(names[crop]!);
+    }
   });
 });
 

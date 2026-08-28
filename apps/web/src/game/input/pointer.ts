@@ -1729,7 +1729,7 @@ const PIPE_NEIGHBOUR_DY: readonly number[] = [-1, 0, 1, 0];
  * Every liquid a machine will let a pipe present to it, or empty for one with no plumbing.
  *
  * The client's mirror of the sim's `specAcceptsLiquid`: the single `liquid` field is the
- * utility machines' one port (Pump, Tank, the heads, the Recirculator) and `ports` is a
+ * utility machines' one port (Pump, Tank, the heads) and `ports` is a
  * converter's list, and `machineHasPorts` is exactly "this list is not empty". Read off the
  * spec, so a machine that gains a port gains it here too.
  */
@@ -3151,17 +3151,14 @@ function arrow(dir: number): string {
 }
 
 /**
- * Keyed on `CropId` rather than on bare numbers, and complete — the Gold Potato's absence here
- * was the second half of its exile ([[103]]): a crop the cycle could not reach and the band
- * could not name. The HUD spells the same names from `itemName(spec.yieldItem)`; this table
- * stays hand-written because the game layer does not import the HUD's copy modules.
+ * Keyed on `CropId` rather than on bare numbers, and complete over the surviving roster —
+ * two crops since [[145]]. [[103]]'s lesson holds: a crop this table cannot name is a crop
+ * the band cannot announce. The HUD spells the same names from `itemName(spec.yieldItem)`;
+ * this table stays hand-written because the game layer does not import the HUD's copy modules.
  */
 const CROP_NAMES: Readonly<Record<number, string>> = {
   [CropId.RussetPotato]: 'Russet Potato',
   [CropId.SugarCane]: 'Sugar Cane',
-  [CropId.Corn]: 'Corn',
-  [CropId.ChiliPepper]: 'Chili Pepper',
-  [CropId.GoldPotato]: 'Gold Potato',
 };
 
 export function cropName(crop: number): string {

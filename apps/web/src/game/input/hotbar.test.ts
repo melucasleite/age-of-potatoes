@@ -46,7 +46,8 @@ function bar(storage: Storage = fakeStorage()): Hotbar {
  * Was `BoxedComposter` until [[124]] deleted the machine. Any boxed kind with a `ToolMode`
  * does the job; the two only have to be DIFFERENT so the swap and replace cases are real. */
 const PLACEABLE = ItemId.BoxedHandCart;
-const PLACEABLE_2 = ItemId.BoxedRootCellar;
+// Was `BoxedRootCellar` until [[145]] cut the cellar; any boxed kind with a cursor will do.
+const PLACEABLE_2 = ItemId.BoxedKolaTree;
 
 describe('the default layout', () => {
   it('holds the five hand tools then empties, ten slots in all', () => {

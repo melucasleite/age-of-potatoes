@@ -74,7 +74,6 @@ function machine(overrides: Partial<MachineView> = {}): MachineView {
     cargoCount: 0,
     seedShelfItem: 0,
     seedShelfCount: 0,
-    bleedCentsLast60s: 0,
     recipe: [],
     ports: [],
     ...overrides,
@@ -235,17 +234,8 @@ describe('the working detector', () => {
     expect(motion.sample(bin, world(), 2000 + 2000, out)).toBe(false);
   });
 
-  it('cranks the maintenance station on a kit SPENT, never on a kit arriving', () => {
-    const motion = makeMotion();
-    const out = blankSample();
-    const station = (kits: number) =>
-      machine({ kind: MachineKind.MaintenanceStation, inputCount: kits });
-    const v = world();
-
-    motion.sample(station(2), v, 1000, out); // prime
-    expect(motion.sample(station(3), v, 2000, out)).toBe(false); // a delivery
-    expect(motion.sample(station(2), v, 3000, out)).toBe(true); // a service
-  });
+  // The Maintenance Station's kit-spent crank was pinned here until [[145]] cut the machine;
+  // its 'kitSpend' driver has no rows left.
 });
 
 describe('the speck pool', () => {
@@ -264,14 +254,10 @@ describe('the speck pool', () => {
     expect(motion.activeSpecks).toBe(0);
   });
 
-  it('feeds the fryer, kettle, carbonator and kitchen from the one shared pool', () => {
+  it('feeds the fryer, kettle and carbonator from the one shared pool', () => {
     // The budget ruling in one assertion: the specking kinds name a style, not a pool.
-    const specking = [
-      MachineKind.Fryer,
-      MachineKind.Kettle,
-      MachineKind.Carbonator,
-      MachineKind.ChipKitchen,
-    ];
+    // The kitchen was the fourth member until [[145]] cut it.
+    const specking = [MachineKind.Fryer, MachineKind.Kettle, MachineKind.Carbonator];
     for (const kind of specking) {
       expect(MACHINE_MOTION[kind].specks).toBeDefined();
     }

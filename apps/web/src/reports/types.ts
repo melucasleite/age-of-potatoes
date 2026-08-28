@@ -13,114 +13,9 @@
 // MONEY IS CENTS. Every field below whose name ends in `Cents` is an integer number of
 // cents and is formatted at the last moment, in a component, through `format.ts`.
 
-/**
- * One hour of trading, closed or in progress.
- *
- * The five measured figures are DIFFERENCES OF MONOTONE LIFETIME ACCUMULATORS, never
- * independently counted. That is what makes the ledger add up: whatever the sampling
- * cadence does at an hour boundary, the buckets always sum to the lifetime total exactly,
- * because bucket N is `lifetime at close(N) − lifetime at close(N−1)` and the terms
- * telescope. A ledger that counts its own events instead drifts, and a drifting ledger is
- * worse than no ledger — it teaches the player something false about their factory.
- */
-export interface ShiftBucket {
-  /** 0-based active-hour index. Hour 0 is the first hour of the world. */
-  readonly hour: number;
-  /**
-   * Net movement in the hour — earned minus spent. ALWAYS EXACT: it is the difference of
-   * `lifetimeNetEarningsCents`, which the projection already carries.
-   */
-  readonly netCents: number;
-  /** Gross receipts in the hour. Meaningless unless `split` is 1. */
-  readonly grossCents: number;
-  /** Machines, seeds, kits. Plan §4's "kit spend". Meaningless unless `split` is 1. */
-  readonly spendCents: number;
-  /**
-   * 1 when `grossCents` and `spendCents` are real numbers rather than placeholders.
-   *
-   * The projection carries only the DIFFERENCE of the two lifetime accumulators, and no
-   * arithmetic can recover the halves from it — see `sim-contract.ts`. So the two rows print
-   * "not yet projected" rather than a confident zero, which is the same discipline the waste
-   * row gets and for the same reason: a false zero on a receipt is a lie with a decimal point
-   * on it.
-   */
-  readonly split: number;
-  /** Water drawn in the hour, in millilitres. */
-  readonly waterMl: number;
-  readonly itemsSold: number;
-  /**
-   * Permille of machine throughput destroyed this hour, or −1 when NOTHING RAN.
-   *
-   * The sim's own figure — `inputsWasted / (inputsWasted + itemsProduced)` over the same
-   * telescoping accumulators every other field here differences, computed once in
-   * `view.ts` and never recomputed on this side. −1 is not "unmeasured": it means the hour
-   * had no throughput to take a ratio of, which is a real state and a different sentence.
-   *
-   * The renderer-side fallback in `shift.ts` cannot know this and writes −1, because the
-   * lifetime waste accumulator is not projected as a top-level stat. That branch only runs
-   * when the sim projects no buckets at all, which it always does now.
-   */
-  readonly wastePermille: number;
-  /** Ticks actually accrued in this bucket. Less than an hour for the one in progress. */
-  readonly ticks: number;
-  /** 1 once the hour closed and nothing more can land in it. */
-  readonly complete: number;
-}
-
-export const ZERO_BUCKET: ShiftBucket = Object.freeze({
-  hour: 0,
-  netCents: 0,
-  grossCents: 0,
-  spendCents: 0,
-  split: 0,
-  waterMl: 0,
-  itemsSold: 0,
-  wastePermille: -1,
-  ticks: 0,
-  complete: 0,
-});
-
-/**
- * A ratio that may have no denominator this hour.
- *
- * THIS WAS A STUB AND IS NOT ONE ANY MORE. It was introduced for a Waste % that "arrives
- * with the Entropy release", under plan §8's rule that a pending system is shown as a
- * labelled stub rather than hidden. The system arrived: `tick.ts` counts
- * `inputsWastedByMachine` and `view.ts` projects a real per-hour `wastePermille`. What the
- * client did with it was throw it away and keep printing the stub, which is how a promise
- * that has already been kept turns into a row that lies.
- *
- * So `measured: 0` no longer means "nobody is counting". It means THIS HOUR HAD NO
- * THROUGHPUT — no machine finished or spoiled anything — so there is no ratio to take, and
- * the row says so in those words. A confident "0.0%" would still be a lie with a decimal
- * point on it, but it would now be a different lie: it would claim a clean hour where there
- * was simply an empty one.
- */
-export interface HourRatio {
-  readonly permille: number;
-  /** 1 when `permille` is a real ratio. 0 when the hour had nothing to take a ratio of. */
-  readonly measured: number;
-}
-
-/** No throughput this hour. Not a pending system — an idle one. */
-export const NO_THROUGHPUT: HourRatio = Object.freeze({ permille: 0, measured: 0 });
-
-export interface ShiftSlice {
-  readonly version: number;
-  /** The hour in progress. Never `complete`. */
-  readonly current: ShiftBucket;
-  /** Closed hours, oldest first, capped. Never contains the current hour. */
-  readonly history: readonly ShiftBucket[];
-  /** Gross minus spend for the hour in progress, per active hour. Plan §4's headline. */
-  readonly centsPerHour: number;
-  /** 1 once the hour in progress is wide enough to quote a rate from. */
-  readonly settled: number;
-  /** The best net $/hour any CLOSED hour has ever achieved in this world. */
-  readonly bestCentsPerHour: number;
-  readonly waste: HourRatio;
-  /** Ticks until the next Dawn Report, so the player knows one is coming. */
-  readonly ticksUntilDawn: number;
-}
+// The SHIFT LEDGER'S SHAPES stood here — `ShiftBucket`, `HourRatio`, `ShiftSlice` and their
+// zeros — until item 150 removed the Shift Report with its ledger and persistence. The Dawn
+// Report below is what remains of plan §4's receipts.
 
 /**
  * One flagged inefficiency, phrased in cash.
@@ -207,36 +102,9 @@ export interface BoardsSlice {
   readonly loaded: number;
 }
 
-// --- diagnostics ---------------------------------------------------------------------
-
-/**
- * One machine's waste over the trailing minute, phrased in cash by the component.
- *
- * The number is the sim's own (`MachineView.bleedCentsLast60s` — inputs destroyed, priced
- * at list over `BLEED_WINDOW_TICKS`), never recomputed here. See `diagnostics.ts` for why
- * this is a different quantity from `idle.ts`'s standing-still cost and must not be summed
- * with it.
- */
-export interface BleedRow {
-  readonly id: number;
-  /** "Fryer B" — kind label plus letter rank, the same naming `idle.ts` uses. */
-  readonly label: string;
-  readonly bleedCents: number;
-}
-
-/**
- * The diagnostics slice: work item 039's ranked list, behind its tech node.
- *
- * `unlocked` is 0 until the Diagnostics node is researched. The panel renders its locked
- * state rather than vanishing — same argument as a locked build-menu row: a surface that
- * hides until researched is a surface the player never learns to want.
- */
-export interface DiagnosticsSlice {
-  readonly version: number;
-  readonly unlocked: number;
-  /** Worst first, capped at `DIAGNOSTICS_ROW_LIMIT`. Empty is a good minute. */
-  readonly rows: readonly BleedRow[];
-}
+// The DIAGNOSTICS SHAPES stood here — `BleedRow`, `DiagnosticsSlice`, their zero — until
+// item 150 removed the panel alongside item 145's cut of the Diagnostics tech and the
+// sim-side `bleedCentsLast60s` that fed it.
 
 // --- commerce ----------------------------------------------------------------------
 
@@ -321,25 +189,12 @@ export interface CommerceSlice {
 }
 
 export interface ReportsSnapshot {
-  readonly shift: ShiftSlice;
   readonly dawn: DawnSlice;
   readonly boards: BoardsSlice;
   readonly commerce: CommerceSlice;
-  readonly diagnostics: DiagnosticsSlice;
 }
 
 export type ReportsSliceName = keyof ReportsSnapshot;
-
-export const ZERO_SHIFT: ShiftSlice = Object.freeze({
-  version: 0,
-  current: ZERO_BUCKET,
-  history: Object.freeze([]),
-  centsPerHour: 0,
-  settled: 0,
-  bestCentsPerHour: 0,
-  waste: NO_THROUGHPUT,
-  ticksUntilDawn: 0,
-});
 
 export const ZERO_DAWN: DawnSlice = Object.freeze({ version: 0, card: null });
 
@@ -361,12 +216,6 @@ export const ZERO_COMMERCE: CommerceSlice = Object.freeze({
   wired: 0,
 });
 
-export const ZERO_DIAGNOSTICS: DiagnosticsSlice = Object.freeze({
-  version: 0,
-  unlocked: 0,
-  rows: Object.freeze([]),
-});
-
 /**
  * The server snapshot, frozen and shared.
  *
@@ -375,9 +224,7 @@ export const ZERO_DIAGNOSTICS: DiagnosticsSlice = Object.freeze({
  * infinite-loop error rather than a hydration warning.
  */
 export const ZERO_REPORTS: ReportsSnapshot = Object.freeze({
-  shift: ZERO_SHIFT,
   dawn: ZERO_DAWN,
   boards: ZERO_BOARDS,
   commerce: ZERO_COMMERCE,
-  diagnostics: ZERO_DIAGNOSTICS,
 });

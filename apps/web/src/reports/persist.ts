@@ -16,20 +16,21 @@
 // not for a save: the reports keep working for the session and forget afterwards, which is
 // strictly better than an error card over a game that is otherwise fine.
 //
-// WHEN THE SIM OWNS THE BUCKETS, HALF OF THIS GOES AWAY. Work item 033 wants the hourly
-// ledger inside `WorldStats`, in the hash, where it rides along in the ordinary save for
-// free. The personal bests stay here regardless — they are cross-world records and do not
-// belong in any one world's state.
+// THE HOURLY LEDGER IS GONE (item 150). This store used to persist the Shift Report's
+// buckets per world; the report was removed, so the per-world record keeps only First Ten —
+// a reports-side reading nothing in the sim holds. A stale stored ledger blob inside an old
+// record is IGNORED, not migrated: the reader below simply never looks at the field.
 
 import { type DBSchema, type IDBPDatabase, openDB } from 'idb';
 
 import type { PersonalBests } from './boards';
-import type { PersistedLedger } from './shift';
 
 const DB_NAME = 'snack-mogul-reports';
 const DB_VERSION = 1;
 
 const BESTS_STORE = 'bests';
+// The store keeps its released name — renaming an object store is a DB_VERSION bump spent
+// on cosmetics. What it holds per world is the record below, ledger no longer included.
 const LEDGER_STORE = 'ledgers';
 
 /**
@@ -38,18 +39,24 @@ const LEDGER_STORE = 'ledgers';
  */
 const BESTS_KEY = 'personal';
 
-/** What a stored ledger carries beyond the ledger itself. */
-export interface StoredLedger {
+/**
+ * The per-world reports record: First Ten and nothing else.
+ *
+ * `firstTenCents` lives here rather than in the save because it is a READING, not state —
+ * taken once, by this store, at the moment the world crosses ten active hours. Old records
+ * on disk also carry a `ledger` field from the removed Shift Report; it is dead weight that
+ * the next write drops.
+ */
+export interface StoredWorldRecord {
   readonly worldSeed: number;
-  readonly ledger: PersistedLedger;
   /** Value captured when the world crossed ten active hours, or −1 before it did. */
   readonly firstTenCents: number;
 }
 
 interface ReportsDB extends DBSchema {
   [BESTS_STORE]: { key: string; value: PersonalBests };
-  /** Keyed by world seed: the hourly ledger belongs to one lot, unlike the bests. */
-  [LEDGER_STORE]: { key: number; value: StoredLedger };
+  /** Keyed by world seed: First Ten belongs to one lot, unlike the bests. */
+  [LEDGER_STORE]: { key: number; value: StoredWorldRecord };
 }
 
 let connection: Promise<IDBPDatabase<ReportsDB>> | null = null;
@@ -105,16 +112,19 @@ export async function saveBests(bests: PersonalBests): Promise<void> {
   }
 }
 
-export async function loadLedger(worldSeed: number): Promise<StoredLedger | null> {
+export async function loadWorldRecord(worldSeed: number): Promise<StoredWorldRecord | null> {
   try {
     const stored = await (await db()).get(LEDGER_STORE, worldSeed);
-    return stored ?? null;
+    if (stored === undefined) return null;
+    // Read ONLY the surviving fields. An old record carries the removed Shift Report's
+    // ledger blob; passing it through would keep dead data alive on every rewrite.
+    return { worldSeed: stored.worldSeed, firstTenCents: stored.firstTenCents };
   } catch {
     return null;
   }
 }
 
-export async function saveLedger(entry: StoredLedger): Promise<void> {
+export async function saveWorldRecord(entry: StoredWorldRecord): Promise<void> {
   try {
     await (await db()).put(LEDGER_STORE, entry, entry.worldSeed);
   } catch {

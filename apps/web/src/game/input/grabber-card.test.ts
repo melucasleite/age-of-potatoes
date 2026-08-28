@@ -152,18 +152,18 @@ describe('grabberCard — which tile the arm reads', () => {
   });
 
   // The reason the four cases above had to loosen, pinned on purpose so it is a decision
-  // rather than a casualty: an arm at a Bagger between batches must still be tunable to a
-  // flavour that machine has not made yet, because a filter is a standing instruction and a
-  // player sets one up BEFORE the first chili is grown. `outputItem` alone is the basket, and
-  // a basket is empty most of the time.
-  it('offers every flavour a machine can make, not only the one in its basket ([[111]])', () => {
+  // rather than a casualty — re-pinned on the Washer since [[145]] cut the flavour tier: an
+  // arm at a Washer mid-potato must still be tunable to the clean bottles it has not made
+  // yet, because a filter is a standing instruction and a player sets one up BEFORE the
+  // first empty comes back. `outputItem` alone is the basket, and a basket is empty most of
+  // the time.
+  it('offers every product a machine can make, not only the one in its basket ([[111]])', () => {
     const view = withArm(createWorldView(), 5, 5, Direction.East, GrabberTier.Mk2);
-    withMachine(view, 4, 5, MachineKind.Bagger, { outputItem: ItemId.BaggedChips });
+    withMachine(view, 4, 5, MachineKind.Washer, { outputItem: ItemId.WashedPotato });
 
     const candidates = grabberCard(view, 1)!.candidates;
-    expect(candidates).toContain(ItemId.BaggedChiliChips);
-    expect(candidates).toContain(ItemId.BaggedSweetcornChips);
-    expect(candidates).toContain(ItemId.BaggedGoldChips);
+    expect(candidates).toContain(ItemId.WashedPotato);
+    expect(candidates).toContain(ItemId.Bottle);
   });
 });
 

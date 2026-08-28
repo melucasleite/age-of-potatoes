@@ -346,13 +346,8 @@ export class WorldObserver {
         continue;
       }
 
-      // A batch landing. `progress -= workPerOperation` wraps the bar downward, and nothing
-      // else moves it backwards, so a drop is a completed operation and only that.
-      if (machine.progressPermille < previous.progressPermille) {
-        if (machine.kind === MachineKind.ChipKitchen) {
-          this.emitAtMachine(SoundId.MachineCycleKitchen, view.tick, machine, 1, 1, rect);
-        }
-      }
+      // The Chip Kitchen's batch-complete accent fired here on `progress` wrapping downward,
+      // until [[145]] cut the machine and both its sounds.
 
       if (machine.lamp === LampState.Jammed && previous.lamp !== LampState.Jammed) {
         this.emitAtMachine(SoundId.MachineJam, view.tick, machine, 1, 1, rect);
@@ -600,9 +595,15 @@ function departingDepotId(view: WorldView): number {
   return depot === undefined ? 0 : depot.id;
 }
 
-/** Which instrument a machine kind plays, or `null` for the ones that just sit there. */
-function ensemblePart(kind: number): SoundId | null {
-  return kind === MachineKind.ChipKitchen ? SoundId.MachineWorkKitchen : null;
+/**
+ * Which instrument a machine kind plays, or `null` for the ones that just sit there.
+ *
+ * EMPTY SINCE [[145]]: the Chip Kitchen was the only kind with a part, and it went with the
+ * cut. The ensemble plumbing (rebuild, scheduler voices, culling) is kept warm on purpose —
+ * the next machine that earns a heartbeat gets it by adding one branch here.
+ */
+function ensemblePart(_kind: number): SoundId | null {
+  return null;
 }
 
 function onScreen(worldX: number, worldY: number, rect: WorldRect): boolean {

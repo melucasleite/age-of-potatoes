@@ -71,7 +71,13 @@ import { ToolMode } from './tools';
 function world(): WorldState {
   const state = createWorld(9137);
   state.moneyCents = 100_000_000;
-  state.unlocked = [TechId.Belts, TechId.Pumps, TechId.PipedSprinklers, TechId.IrrigationHub];
+  state.unlocked = [
+    TechId.Belts,
+    TechId.Pumps,
+    TechId.PipedSprinklers,
+    TechId.IrrigationHub,
+    TechId.WashAndSlice,
+  ];
   return state;
 }
 
@@ -236,7 +242,8 @@ describe('the farm mirror agrees with `machineFootprintFree`', () => {
 
     const v = project(state);
     const sprinkler = machineSpec(MachineKind.Sprinkler)!;
-    const kitchen = machineSpec(MachineKind.ChipKitchen)!;
+    // The Washer stands in for "any unflagged machine" — the Chip Kitchen did until [[145]].
+    const washer = machineSpec(MachineKind.Washer)!;
 
     let checked = 0;
     for (let i = 0; i < v.field.count; i++) {
@@ -250,9 +257,9 @@ describe('the farm mirror agrees with `machineFootprintFree`', () => {
       expect(ghostFlagged === null ? null : ghostFlagged.tone === 'zone').toBe(simFlagged);
 
       // The unflagged one: refused, and refused for the reason the tag gives.
-      const simPlain = machineFootprintFree(state, x, y, 1, 1, 0, kitchen.fieldPlaceable);
+      const simPlain = machineFootprintFree(state, x, y, 1, 1, 0, washer.fieldPlaceable);
       expect(simPlain).toBe(false);
-      const ghostPlain = ghostBand(v, { tileX: x, tileY: y }, ToolMode.PlaceChipKitchen, 0);
+      const ghostPlain = ghostBand(v, { tileX: x, tileY: y }, ToolMode.PlaceWasher, 0);
       expect(ghostPlain!.tone).toBe('blocked');
       expect(ghostPlain!.label).toContain('not on farmland');
       checked += 1;

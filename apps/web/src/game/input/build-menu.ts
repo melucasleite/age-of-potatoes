@@ -62,22 +62,11 @@ export interface BuildEntry {
  * on this side of the seam, so this map is the right shape rather than a missing feature.
  */
 const TECH_LABELS: Readonly<Record<string, string>> = {
+  // The final-stretch cuts ([[145]], [[146]], [[150]]) removed nine slugs from this table:
+  // corn, chili, gold potato, the seed hopper (auto-replant), the root cellar, the orchard,
+  // the recirculator, diagnostics, and the corporate charter. A slug the sim no longer has
+  // is a row no entry below can require, so the label would be dead weight, not a tombstone.
   'agronomy-cane': 'Sugar Cane',
-  'agronomy-corn': 'Corn',
-  'agronomy-chili': 'Chili',
-  // [[133]]. THE SLUG SAYS HOPPER AND THERE IS NO HOPPER. `agronomy-seed-hopper` is
-  // `TechId.AutoReplant`, and everything it buys is the legality of one toggle on a Grow
-  // Zone's panel — no machine anywhere in `data.ts` requires it, so a player who reads
-  // "Seed Hopper" and goes looking for a thing to build is looking for something this game
-  // does not contain. The slug is the sim's and stays; the words are ours, and they now say
-  // what the node does. Renamed on ALL THREE surfaces at once (here, `hud/tech-copy.ts`'s
-  // card title, and `hud/ZonePanel.tsx`'s locked line) for the reason the note below this
-  // table already gives about `commerce-trucking`: a name that appears on only one of them
-  // sends the player hunting for a node that, under that name, is nowhere.
-  'agronomy-seed-hopper': 'Auto-Replant',
-  'agronomy-gold-potato': 'Gold Potato',
-  'agronomy-root-cellar': 'Root Cellar',
-  'agronomy-orchard': 'The Orchard',
   'agronomy-kola-tree': 'The Kola Tree',
   'agronomy-agri-bots': 'Agri-Bots',
   'agronomy-planter-bot': 'The Planter Bot',
@@ -89,7 +78,6 @@ const TECH_LABELS: Readonly<Record<string, string>> = {
   'logistics-belts-express': 'Express Belts',
   'logistics-splitters': 'Splitters',
   'commerce-upgrade-bench': 'Upgrade Bench',
-  'fabrication-diagnostics': 'Diagnostics',
   'commerce-repair-drones': 'Repair Drones',
   // [[100]]. THE WORDS ARE THE TECH PANEL'S OWN TITLES, not new ones invented here — the lock
   // reason exists so the player can go and FIND the node, and a name that appears on only one
@@ -103,7 +91,6 @@ const TECH_LABELS: Readonly<Record<string, string>> = {
   // — not even a locked one — because the pipe had no build verb to gate them behind.
   'hydraulics-pumps': 'Pumps & Pipes',
   'hydraulics-piped-sprinklers': 'Piped Sprinklers',
-  'hydraulics-recirculator': 'Recirculator',
   'hydraulics-irrigation-hub': 'Irrigation Hub',
   'hydraulics-soda-press': 'Press & Kettle',
   'hydraulics-soda-mixing': 'Mixing & Bottling',
@@ -217,11 +204,8 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   // the Pump is the expensive half of a purchase that is useless without the cheap half, and a
   // player who buys a $200 pump before they know pipe exists has bought a statue.
   //
-  // The Recirculator is here rather than in "Chip line", where its recipe argues it belongs (it
-  // catches the WASHER'S runoff and its node needs Wash & Slice as well as Pumps). This group's
-  // claim is "things that only make sense once you have pipe", and the Recirculator is exactly
-  // that: it returns water to a TANK, not to a machine, so it is plumbing that happens to be
-  // fed by a washer rather than chip-line kit that happens to be plumbed.
+  // The Recirculator sat at the bottom of this group until [[145]] cut it with the graywater
+  // loop it ran.
   pipeEntry(),
   machineEntry('Plumbing', ToolMode.PlacePump),
   // THE WELL THAT USED TO SIT HERE IS GONE ([[140]]). It was the answer to "how do I boost the
@@ -230,14 +214,14 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   // is now the only thing between the pond and the pipes, and the Tank below, which is still how
   // you ride out a stall.
   machineEntry('Plumbing', ToolMode.PlaceTank),
-  machineEntry('Plumbing', ToolMode.PlaceRecirculator),
 
+  // The Chip Kitchen closed this group until [[145]]: the starter machine is cut, so the
+  // researched five ARE the chip line now, and the early game sells raw produce instead.
   machineEntry('Chip line', ToolMode.PlaceWasher),
   machineEntry('Chip line', ToolMode.PlaceSlicer),
   machineEntry('Chip line', ToolMode.PlaceFryer),
   machineEntry('Chip line', ToolMode.PlaceSeasoner),
   machineEntry('Chip line', ToolMode.PlaceBagger),
-  machineEntry('Chip line', ToolMode.PlaceChipKitchen),
 
   // THE THREE WATERING MACHINES ARE NOW A LADDER AND THEY ARE ADJACENT ([[101]]). §3 runs
   // manual → assisted → automated through every system in the game, and this is the water
@@ -255,12 +239,12 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   machineEntry('Field', ToolMode.PlaceHarvesterDock),
   machineEntry('Field', ToolMode.PlacePlanterDock),
 
-  machineEntry('Orchard', ToolMode.PlaceOrangeTree),
-  machineEntry('Orchard', ToolMode.PlaceLemonTree),
+  // The Orchard keeps only the Kola Tree ([[145]]): the Orange and Lemon trees grew fruit
+  // nothing consumed, and the group's one survivor is the tree the soda line actually wants.
   machineEntry('Orchard', ToolMode.PlaceKolaTree),
 
+  // The Root Cellar's five hundred slots went with it ([[145]]); the cart is the storage row.
   machineEntry('Storage', ToolMode.PlaceHandCart),
-  machineEntry('Storage', ToolMode.PlaceRootCellar),
 
   // THE SODA LINE, IN THE ORDER THE LIQUID TRAVELS ([[100]] opened the group with the Grinder;
   // [[101]] filled the other five seats). Cane becomes juice becomes syrup; kola becomes powder;
@@ -293,13 +277,9 @@ export const BUILD_CATALOGUE: readonly BuildEntry[] = [
   machineEntry('Dispatch', ToolMode.PlaceDeliveryCart),
   machineEntry('Dispatch', ToolMode.PlaceTruckDepot),
 
-  // The maintenance ladder ([[039]], [[090]]): the station that spends kits, and above it the
-  // bay whose drone spends nothing. It was three rows in supply-chain order until item 090
-  // retired the Parts Bench — repair drones fix machines for free, so the bench had no
-  // customer and a menu row offering a machine whose product does nothing would be selling
-  // the player $800 of scenery. Two rows still make the group's argument, and better: the
-  // cheap rung is a supply line you keep feeding, and the dear one is the end of the chore.
-  machineEntry('Maintenance', ToolMode.PlaceMaintenanceStation),
+  // The maintenance ladder ([[039]], [[090]], [[145]]) is down to its top rung. Item 090
+  // retired the Parts Bench; item 145 cut the Maintenance Station, so the hand-thrown kit is
+  // the assisted rung now and the bay's drone is the end of the chore.
   machineEntry('Maintenance', ToolMode.PlaceDroneBay),
 
   // The one row whose price is not a constant. See `dynamicCostCents` below. Drawn as the

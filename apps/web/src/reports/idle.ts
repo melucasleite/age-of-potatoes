@@ -252,7 +252,7 @@ function operationRecipe(spec: MachineSpec, held: ItemId | 0): MachineRecipe {
 
 const KIND_LABELS: Readonly<Record<number, string>> = {
   1: 'Sell bin',
-  2: 'Chip Kitchen',
+  // 2 was the Chip Kitchen, cut by [[145]]; the id stays spent in the sim.
   3: 'Sprinkler',
   4: 'Washer',
   5: 'Slicer',

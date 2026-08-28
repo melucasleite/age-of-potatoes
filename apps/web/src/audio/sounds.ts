@@ -21,10 +21,8 @@ export const SoundId = {
   /** Rises in pitch on a streak — audio only, never a mechanical bonus. */
   HarvestPop: 'harvest-pop',
   SellKaching: 'sell-kaching',
-  /** The Chip Kitchen's chug. One per beat while it is Running; silence while it is not. */
-  MachineWorkKitchen: 'machine-work-kitchen',
-  /** The brighter accent when a batch actually completes. */
-  MachineCycleKitchen: 'machine-cycle-kitchen',
+  // The Chip Kitchen's chug and its batch-complete accent sat here until [[145]] cut the
+  // machine. The kitchen was the only instrument in the ensemble; the plumbing survives it.
   /** The sprinkler doing the thing the whole v0.1 design gate is about. */
   SprinklerPour: 'sprinkler-pour',
   /** Plan §3's ~10 seconds of in-world ceremony, first time a sprinkler runs. */
@@ -156,20 +154,8 @@ const SPECS: readonly SoundSpec[] = [
   },
 
   // --- the factory. On the grid, which is the entire point. --------------------------
-  {
-    id: SoundId.MachineWorkKitchen,
-    quantize: Quantize.Beat,
-    maxConcurrent: 4,
-    minIntervalMs: 120,
-    gain: 0.5,
-  },
-  {
-    id: SoundId.MachineCycleKitchen,
-    quantize: Quantize.Beat,
-    maxConcurrent: 3,
-    minIntervalMs: 150,
-    gain: 0.42,
-  },
+  // The kitchen's two beat-quantized rows sat here until [[145]]; the jam alarm below is
+  // the machine sound that still rides the grid.
   // A sixteenth is 150 ms, so the sprinkler still reads as a response to the machine
   // rather than a downbeat, while staying locked to the same grid everything else is on.
   {

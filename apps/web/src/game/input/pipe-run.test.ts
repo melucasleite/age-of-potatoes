@@ -128,7 +128,7 @@ function worldOf(placements: PlacePipeEntry[]): WorldView {
  * production lookup can agree with a bug rather than catch one.
  */
 const MACHINE_FOOTPRINTS: Readonly<Record<number, { w: number; h: number }>> = {
-  [MachineKind.ChipKitchen]: { w: 2, h: 2 },
+  [MachineKind.Washer]: { w: 2, h: 2 },
   [MachineKind.Pump]: { w: 1, h: 1 },
   [MachineKind.Tank]: { w: 2, h: 2 },
   [MachineKind.PipedSprinkler]: { w: 1, h: 1 },

@@ -86,9 +86,9 @@ export function blockedStatus(name: string, m: MachineView): string {
  * and a Six-Packer one soda short, and telling an empty machine it needs "1 more" would be a new,
  * smaller version of the same lie.
  *
- * The thirsty branch lets a throttled PORT name its own liquid. The two machines with no
- * `ports` list — the piped head and the Recirculator — are water by spec and by construction,
- * so the fallback names water rather than saying "liquid" and sending the player to look it up.
+ * The thirsty branch lets a throttled PORT name its own liquid. A machine with no `ports`
+ * list — the piped head — is water by spec and by construction, so the fallback names water
+ * rather than saying "liquid" and sending the player to look it up.
  */
 export function starvedStatus(name: string, m: MachineView): string {
   if (m.wantsItem !== 0) {

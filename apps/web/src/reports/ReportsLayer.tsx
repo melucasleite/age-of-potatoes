@@ -37,24 +37,21 @@ import {
 import { BoardsPanel } from './BoardsPanel';
 import { CommercePanel } from './CommercePanel';
 import { DawnCard } from './DawnCard';
-import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { LeaderboardPanel } from './LeaderboardPanel';
-import { ShiftReport } from './ShiftReport';
 import { r, cx } from './styles';
 
-type Tab = 'shift' | 'boards' | 'ranks' | 'dispatch' | 'diagnostics';
+// Two tabs fewer since item 150: Shift and Diagnostics went with their ledgers and slices,
+// and Dispatch is next to leave — a later item moves it out of the dock into its own
+// sidebar panel under Build.
+type Tab = 'boards' | 'ranks' | 'dispatch';
 
 const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
-  { id: 'shift', label: 'Shift' },
   { id: 'boards', label: 'Bests' },
   // The cloud half of the leaderboard work, beside the local half it grew out of. The
   // panel degrades to one quiet sentence when Supabase is absent, so the tab earns its
-  // place even in a fork with no backend — same argument as the locked Diagnostics tab.
+  // place even in a fork with no backend.
   { id: 'ranks', label: 'Ranks' },
   { id: 'dispatch', label: 'Dispatch' },
-  // Present even before its node is researched — the panel renders its locked state, for
-  // the same reason a locked build-menu row stays visible ([[039]], `DiagnosticsPanel`).
-  { id: 'diagnostics', label: 'Diagnostics' },
 ];
 
 /** The one key this layer claims. The game does not use it; see the header. */
@@ -82,7 +79,9 @@ export default function ReportsLayer() {
       // Deliberately no `preventDefault()`. Nothing in the browser does anything with a bare
       // P, and a layer that swallows keys is one bug away from swallowing a key the game
       // needed.
-      setOpen((current) => (current === null ? 'shift' : null));
+      // P opens Bests now that its old meaning (the Shift Report) is gone; a later lane
+      // re-points P to the dispatch panel when dispatch leaves this dock.
+      setOpen((current) => (current === null ? 'boards' : null));
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -116,16 +115,14 @@ export default function ReportsLayer() {
               }}
             >
               {tab.label}
-              {tab.id === 'shift' ? <span className={r.tabKey}>P</span> : null}
+              {tab.id === 'boards' ? <span className={r.tabKey}>P</span> : null}
             </button>
           ))}
         </div>
 
-        {open === 'shift' ? <ShiftReport /> : null}
         {open === 'boards' ? <BoardsPanel /> : null}
         {open === 'ranks' ? <LeaderboardPanel /> : null}
         {open === 'dispatch' ? <CommercePanel /> : null}
-        {open === 'diagnostics' ? <DiagnosticsPanel /> : null}
       </div>
     </div>
   );

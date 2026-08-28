@@ -21,10 +21,11 @@
 //
 //  `WorldView` — one additive field, plus a handful of optional stats fields:
 //      commerce?: CommerceView                 (shape below)
-//      stats.lifetimeEarnedCents?: number      (Shift Report's GROSS line — see below)
-//      stats.lifetimeSpentCents?:  number      (Shift Report's KIT SPEND line)
+//      stats.lifetimeEarnedCents?: number      (Dawn Report's gross split — see below)
+//      stats.lifetimeSpentCents?:  number      (the other half of that split)
 //      stats.salesByItem?: ItemSaleView[]      (Dawn Report's best seller)
-//      stats.hours?: HourBucketView[]          (Shift Report, hash-exact — see `shift.ts`)
+//  (`stats.hours` was read here too, for the Shift Report's ledger, until item 150 removed
+//  the report; the sim still projects it, and nothing on this side consumes it now.)
 //
 //  THE GROSS/SPEND SPLIT IS NOT DERIVABLE HERE, and it is worth saying why rather than
 //  leaving the next reader to rediscover it. `StatsView` projects `lifetimeNetEarningsCents`
@@ -116,29 +117,9 @@ export interface ItemSaleView {
   readonly dayGrossCents: number;
 }
 
-/**
- * A closed active hour, as the sim would project it.
- *
- * When this arrives, `shift.ts` stops deriving buckets and reads these instead — the same
- * two-branch shape `hud/rate.ts` uses. It is the better home for them: work item 033 wants
- * the buckets inside `WorldStats` and inside `hashState()`, which is the only way they
- * survive a reload without a second store and the only way a later refactor cannot silently
- * change what a receipt says.
- */
-export interface HourBucketView {
-  readonly hour: number;
-  readonly grossCents: number;
-  readonly spendCents: number;
-  readonly waterMl: number;
-  readonly itemsSold: number;
-  readonly ticks: number;
-  /**
-   * Permille of this hour's machine throughput destroyed, or −1 when the hour had no
-   * throughput at all. Real and landed: `tick.ts` counts `inputsWastedByMachine`, `stats.ts`
-   * telescopes it per hour, and `view.ts` takes the ratio.
-   */
-  readonly wastePermille: number;
-}
+// (`HourBucketView` and `readHourBuckets` stood here for the Shift Report's ledger until
+// item 150 removed the report. The sim still projects `stats.hours`; the day this side
+// wants receipts again, this is the seam they re-enter through.)
 
 /**
  * `WorldView`, widened by everything the sim MIGHT have grown since this file was written.
@@ -153,14 +134,10 @@ export type ExtendedWorldView = WorldView & {
     readonly lifetimeEarnedCents?: number;
     readonly lifetimeSpentCents?: number;
     readonly salesByItem?: readonly ItemSaleView[];
-    readonly hours?: readonly HourBucketView[];
-    // There was a `wastePermille?: number` here, read by a `readWastePermille()` that this
-    // file also owned. `StatsView` never had that field, so the read returned `undefined`
-    // forever and the Shift Report's Waste row said "not yet measured" for a system that
-    // had already shipped. WIDENING IS NOT FREE: an optional field costs nothing to declare
-    // and, when the sim never grows it, silently pins a row to its absent state with no
-    // type error and no test to fail. Waste is real and is measured PER HOUR — see
-    // `HourBucketView.wastePermille` above, which is what the row reads now.
+    // A lesson kept from the removed Shift Report's seam: WIDENING IS NOT FREE. An optional
+    // field costs nothing to declare and, when the sim never grows it, silently pins a row
+    // to its absent state with no type error and no test to fail. Declare only what a
+    // reader below actually consumes.
   };
 };
 
@@ -188,12 +165,6 @@ export function readCommerce(view: WorldView): CommerceView | null {
 export function readSalesByItem(view: WorldView): readonly ItemSaleView[] | null {
   const sales = (view as ExtendedWorldView).stats.salesByItem;
   return Array.isArray(sales) ? sales : null;
-}
-
-/** Sim-owned hour buckets, or null while the renderer-side ledger is doing the work. */
-export function readHourBuckets(view: WorldView): readonly HourBucketView[] | null {
-  const hours = (view as ExtendedWorldView).stats.hours;
-  return Array.isArray(hours) ? hours : null;
 }
 
 // --- the commands this UI will enqueue ----------------------------------------------

@@ -33,19 +33,12 @@ import { DEFAULT_CROP, ToolMode } from './tools';
 /**
  * Cycle order for `C`. Locked crops are skipped, not shown greyed — this is a toggle.
  *
- * **THE GOLD POTATO WAS MISSING FROM THIS ARRAY** ([[103]]), and one absent element was a whole
- * crop's exile: `C` could never select it, no zone could ever hold it, and the planter bot reads
- * `zone.crop`, so there was no route to it anywhere in the game — era IV included — for the
- * highest-priced crop on the roster ($6.00) behind a $150 node. It needs no extra gating here:
- * `nextCrop` already skips anything unresearched.
+ * TWO CROPS SINCE [[145]]: corn, chili and the gold potato were cut with their whole flavour
+ * chains, so the dial swings between the potato and the cane and nothing else. The lesson
+ * [[103]] recorded here still stands — a crop absent from this array is a crop exiled from
+ * the game — which is exactly why the roster shrank in the sim first and this array follows.
  */
-const CROP_CYCLE: readonly CropId[] = [
-  Crop.RussetPotato,
-  Crop.SugarCane,
-  Crop.Corn,
-  Crop.ChiliPepper,
-  Crop.GoldPotato,
-];
+const CROP_CYCLE: readonly CropId[] = [Crop.RussetPotato, Crop.SugarCane];
 
 /**
  * The next crop after `current` that this world can actually plant, or `current` when it is the

@@ -28,7 +28,6 @@ import {
   CropId,
   GrabberTier,
   MachineKind,
-  MachineRole,
   PIPE_PRICE_CENTS_PER_TILE,
   beltSpec,
   grabberSpec,
@@ -42,6 +41,19 @@ export const ToolMode = {
   Plant: 2,
   Harvest: 3,
   PlaceSprinkler: 4,
+
+  /**
+   * **RETIRED** ([[145]]). The Chip Kitchen was the starter machine, and the owner cut it with
+   * the rest of the vestigial roster: the researched Wash & Slice → Fryer → Finishing line is
+   * the only chip route now, and the early game sells raw produce until research.
+   * `MachineKind.ChipKitchen` is gone from the sim, so there is no kind to place and no price
+   * to quote.
+   *
+   * **THE ID STAYS SPENT.** See `ToolMode.PlacePartsBench` for why an enum member outlives its
+   * feature: a saved hotbar is validated whole, and one unknown number discards all of it. This
+   * one shipped as slot six of the original fixed belt, so it is the single most likely number
+   * to be pinned on a veteran's toolbar.
+   */
   PlaceChipKitchen: 5,
 
   /**
@@ -114,6 +126,15 @@ export const ToolMode = {
   // command, or a branch anywhere in `pointer.ts` — which is exactly the claim `machineEntry`
   // and `toolFootprint` were written to make, finally being cashed.
   PlaceHandCart: 22,
+
+  /**
+   * **RETIRED** ([[145]]). The Root Cellar went with the harvest-bigger-than-the-line era it
+   * was built for — `MachineKind.RootCellar` and its tech node are gone from the sim. The Hand
+   * Cart is the storage that remains.
+   *
+   * **THE ID STAYS SPENT**, per `ToolMode.PlacePartsBench`: a saved hotbar is validated whole,
+   * and one unknown number discards all of it.
+   */
   PlaceRootCellar: 23,
 
   /**
@@ -130,8 +151,17 @@ export const ToolMode = {
    */
   PlaceComposter: 24,
 
+  /**
+   * **RETIRED** ([[145]]), both trees at once: the Orange and Lemon items had no consumer, so
+   * the trees that grew them went with the orchard tech. `MachineKind.OrangeTree` and
+   * `MachineKind.LemonTree` are gone from the sim; the Kola Tree below is the whole orchard now.
+   *
+   * **BOTH IDS STAY SPENT**, per `ToolMode.PlacePartsBench`: a saved hotbar is validated whole,
+   * and one unknown number discards all of it.
+   */
   PlaceOrangeTree: 25,
   PlaceLemonTree: 26,
+
   PlaceKolaTree: 27,
   PlaceHarvesterDock: 28,
   PlacePlanterDock: 29,
@@ -168,11 +198,16 @@ export const ToolMode = {
   UseRepairKit: 30,
 
   // --- the maintenance chain ([[039]]) -------------------------------------------------
-  //
-  // Three more rows of pure data, exactly like the eight above: ordinary `PlaceMachine`s on
-  // spec-published footprints, so nothing here needed a gesture, a command, or a `pointer.ts`
-  // branch. The one wrinkle is the station's coverage preview — it shows the same 7×7 cell a
-  // hand kit services, and `toolCoverageVerb` below keeps the ghost from claiming it "waters".
+
+  /**
+   * **RETIRED** ([[145]]). The Maintenance Station threw kits so the player did not have to
+   * walk; the owner cut it, so automated repair is the Drone Bay's job alone and the hand kit
+   * is the assisted rung. `MachineKind.MaintenanceStation` and `MachineRole.MaintenanceStation`
+   * are gone from the sim, and `toolCoverageVerb` lost its one non-"waters" sentence with them.
+   *
+   * **THE ID STAYS SPENT**, per `ToolMode.PlacePartsBench`: a saved hotbar is validated whole,
+   * and one unknown number discards all of it.
+   */
   PlaceMaintenanceStation: 31,
   PlaceDroneBay: 32,
 
@@ -240,7 +275,17 @@ export const ToolMode = {
   PlaceTank: 42,
   PlacePipedSprinkler: 43,
   PlaceIrrigationHub: 44,
+
+  /**
+   * **RETIRED** ([[145]]). The Recirculator caught the Washer's runoff; the owner cut it with
+   * the rest of the vestigial roster, so `MachineKind.Recirculator` and
+   * `MachineRole.Recirculator` are gone from the sim and the graywater loop with them.
+   *
+   * **THE ID STAYS SPENT**, per `ToolMode.PlacePartsBench`: a saved hotbar is validated whole,
+   * and one unknown number discards all of it.
+   */
   PlaceRecirculator: 45,
+
   PlaceJuicer: 46,
   PlaceKettle: 47,
   PlaceSyrupMixer: 48,
@@ -326,7 +371,7 @@ export const TOOL_ORDER: readonly ToolMode[] = [
   ToolMode.Plant,
   ToolMode.Harvest,
   ToolMode.PlaceSprinkler,
-  ToolMode.PlaceChipKitchen,
+  // The sixth slot was the Chip Kitchen, retired with the machine ([[145]]).
 ];
 
 /**
@@ -420,10 +465,11 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     costCents: machinePrice(MachineKind.Sprinkler),
     gesture: 'click',
   },
+  /** The retired kitchen's tombstone row — see `ToolMode.PlaceChipKitchen`. Nothing offers it. */
   [ToolMode.PlaceChipKitchen]: {
-    label: 'Buy Chip Kitchen',
-    hint: 'click 2x2 of clear ground ($100)',
-    costCents: machinePrice(MachineKind.ChipKitchen),
+    label: 'Chip Kitchen',
+    hint: 'retired — the researched chip line makes the chips now',
+    costCents: 0,
     gesture: 'click',
   },
 
@@ -498,13 +544,9 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
   },
   [ToolMode.PlaceSeasoner]: {
     label: 'Seasoner',
-    // THE ONLY MACHINE ON THE LOT WITH A DECISION IN IT (item 111), and the row is where a
-    // player finds that out — nothing else on this menu is bought for what you can choose to
-    // put in it. Its neighbours on the chip line still say "click 2x2 of clear ground",
-    // correctly: they have nothing to tell you, and a hint that repeats the obvious for every
-    // row is a hint nobody reads on the row that matters. Same shape as the Grinder's
-    // "kola nuts in, kola powder out" — both ends of the recipe, in the player's words.
-    hint: 'salt by default — add a chili or corn to flavour the batch',
+    // The flavour tier went with the cut crops ([[145]]), so the decision this hint used to
+    // sell ("add a chili or corn") is gone: the Seasoner salts, full stop.
+    hint: 'click 2x2 of clear ground',
     costCents: machinePrice(MachineKind.Seasoner),
     gesture: 'click',
   },
@@ -530,10 +572,11 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     costCents: machinePrice(MachineKind.HandCart),
     gesture: 'click',
   },
+  /** The retired cellar's tombstone row — see `ToolMode.PlaceRootCellar`. Nothing offers it. */
   [ToolMode.PlaceRootCellar]: {
     label: 'Root Cellar',
-    hint: 'five hundred slots for a harvest bigger than the line can eat',
-    costCents: machinePrice(MachineKind.RootCellar),
+    hint: 'retired — the Hand Cart is the storage that remains',
+    costCents: 0,
     gesture: 'click',
   },
   /** The retired composter's tombstone row — see `ToolMode.PlaceComposter`. Nothing offers it. */
@@ -543,16 +586,17 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     costCents: 0,
     gesture: 'click',
   },
+  /** Two tombstone rows — see `ToolMode.PlaceOrangeTree`. Nothing offers either tree. */
   [ToolMode.PlaceOrangeTree]: {
     label: 'Orange Tree',
-    hint: 'plant it once — it fruits on its own forever',
-    costCents: machinePrice(MachineKind.OrangeTree),
+    hint: 'retired — the Kola Tree is the whole orchard now',
+    costCents: 0,
     gesture: 'click',
   },
   [ToolMode.PlaceLemonTree]: {
     label: 'Lemon Tree',
-    hint: 'plant it once — it fruits on its own forever',
-    costCents: machinePrice(MachineKind.LemonTree),
+    hint: 'retired — the Kola Tree is the whole orchard now',
+    costCents: 0,
     gesture: 'click',
   },
   [ToolMode.PlaceKolaTree]: {
@@ -576,12 +620,11 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     gesture: 'click',
   },
 
+  /** The retired station's tombstone row — see `ToolMode.PlaceMaintenanceStation`. */
   [ToolMode.PlaceMaintenanceStation]: {
     label: 'Maintenance Station',
-    // The cell sentence again, because the station IS the kit: same radius, same service,
-    // minus the walk. What the hint must say is what keeps it alive — the belt of kits.
-    hint: 'clear 2x2 — it throws kits at whatever nearby needs one',
-    costCents: machinePrice(MachineKind.MaintenanceStation),
+    hint: 'retired — drones fix machines for free now',
+    costCents: 0,
     gesture: 'click',
   },
   [ToolMode.PlaceDroneBay]: {
@@ -679,10 +722,11 @@ export const TOOL_INFO: Readonly<Record<ToolMode, ToolInfo>> = {
     costCents: machinePrice(MachineKind.IrrigationHub),
     gesture: 'click',
   },
+  /** The retired recirculator's tombstone row — see `ToolMode.PlaceRecirculator`. */
   [ToolMode.PlaceRecirculator]: {
     label: 'Recirculator',
-    hint: 'catches the Washer’s runoff and sends it back up the pipe',
-    costCents: machinePrice(MachineKind.Recirculator),
+    hint: 'retired — the graywater loop went with it',
+    costCents: 0,
     gesture: 'click',
   },
   [ToolMode.PlaceJuicer]: {
@@ -796,8 +840,6 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
   switch (tool) {
     case ToolMode.PlaceSprinkler:
       return MachineKind.Sprinkler;
-    case ToolMode.PlaceChipKitchen:
-      return MachineKind.ChipKitchen;
     case ToolMode.PlaceWasher:
       return MachineKind.Washer;
     case ToolMode.PlaceSlicer:
@@ -812,20 +854,12 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       return MachineKind.BeltJunction;
     case ToolMode.PlaceHandCart:
       return MachineKind.HandCart;
-    case ToolMode.PlaceRootCellar:
-      return MachineKind.RootCellar;
-    case ToolMode.PlaceOrangeTree:
-      return MachineKind.OrangeTree;
-    case ToolMode.PlaceLemonTree:
-      return MachineKind.LemonTree;
     case ToolMode.PlaceKolaTree:
       return MachineKind.KolaTree;
     case ToolMode.PlaceHarvesterDock:
       return MachineKind.HarvesterDock;
     case ToolMode.PlacePlanterDock:
       return MachineKind.PlanterDock;
-    case ToolMode.PlaceMaintenanceStation:
-      return MachineKind.MaintenanceStation;
     case ToolMode.PlaceDroneBay:
       return MachineKind.DroneBay;
     case ToolMode.PlaceGrinder:
@@ -846,8 +880,6 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       return MachineKind.PipedSprinkler;
     case ToolMode.PlaceIrrigationHub:
       return MachineKind.IrrigationHub;
-    case ToolMode.PlaceRecirculator:
-      return MachineKind.Recirculator;
     case ToolMode.PlaceJuicer:
       return MachineKind.Juicer;
     case ToolMode.PlaceKettle:
@@ -862,12 +894,13 @@ export function toolMachineKind(tool: ToolMode): MachineKind | null {
       // `ToolMode.PlacePipe` reaches this line and MUST: a pipe is not a `MachineKind` and
       // never will be, so it has no spec, no footprint and no place in `PLACEMENT_TOOLS`.
       // Its command is `PlacePipe`, built in `pointer.ts` from the drag.
-      // `ToolMode.PlacePartsBench`, `ToolMode.PlaceComposter`, `ToolMode.ApplyFertilizer` and
-      // `ToolMode.PlaceArtesianWell` reach this line ON PURPOSE and stay here: all four are
-      // retired ([[090]], [[124]], [[140]]), so none has a kind, a row or a membership below —
-      // but the enum members survive because a saved hotbar is validated against
-      // `Object.values(ToolMode)` and one unknown number rejects the WHOLE layout. See each
-      // member's own note.
+      // The RETIRED tools reach this line ON PURPOSE and stay here: `PlacePartsBench`,
+      // `PlaceComposter`, `ApplyFertilizer`, `PlaceArtesianWell` ([[090]], [[124]], [[140]]),
+      // and since [[145]] also `PlaceChipKitchen`, `PlaceRootCellar`, `PlaceOrangeTree`,
+      // `PlaceLemonTree`, `PlaceMaintenanceStation` and `PlaceRecirculator`. None has a kind,
+      // a row or a membership below — but the enum members survive because a saved hotbar is
+      // validated against `Object.values(ToolMode)` and one unknown number rejects the WHOLE
+      // layout. See each member's own note.
       return null;
   }
 }
@@ -894,7 +927,6 @@ export function toolForMachineKind(kind: MachineKind): ToolMode | null {
 
 const PLACEMENT_TOOLS: readonly ToolMode[] = [
   ToolMode.PlaceSprinkler,
-  ToolMode.PlaceChipKitchen,
   ToolMode.PlaceWasher,
   ToolMode.PlaceSlicer,
   ToolMode.PlaceFryer,
@@ -902,13 +934,9 @@ const PLACEMENT_TOOLS: readonly ToolMode[] = [
   ToolMode.PlaceBagger,
   ToolMode.PlaceBeltJunction,
   ToolMode.PlaceHandCart,
-  ToolMode.PlaceRootCellar,
-  ToolMode.PlaceOrangeTree,
-  ToolMode.PlaceLemonTree,
   ToolMode.PlaceKolaTree,
   ToolMode.PlaceHarvesterDock,
   ToolMode.PlacePlanterDock,
-  ToolMode.PlaceMaintenanceStation,
   ToolMode.PlaceDroneBay,
   ToolMode.PlaceGrinder,
   ToolMode.PlaceSixPacker,
@@ -919,7 +947,6 @@ const PLACEMENT_TOOLS: readonly ToolMode[] = [
   ToolMode.PlaceTank,
   ToolMode.PlacePipedSprinkler,
   ToolMode.PlaceIrrigationHub,
-  ToolMode.PlaceRecirculator,
   ToolMode.PlaceJuicer,
   ToolMode.PlaceKettle,
   ToolMode.PlaceSyrupMixer,
@@ -972,16 +999,14 @@ export function toolCoverageRadius(tool: ToolMode): number {
 /**
  * What the coverage preview's label says the machine DOES to its square.
  *
- * The sprinklers water theirs; the Maintenance Station ([[039]]) reuses the same
- * `coverageRadiusTiles` plumbing to declare its service cell, and a ghost that said the
- * repair bench "waters 7×7" would be the preview lying about the one fact it exists to
- * state. Decided by the spec's role rather than by tool id, so the next coverage machine
- * gets the right sentence for free — or is at worst damp instead of wrong.
+ * ONE SENTENCE NOW. The Maintenance Station was the single coverage machine that did not
+ * water — it "serviced" its 7×7 — and it went with [[145]], taking
+ * `MachineRole.MaintenanceStation` out of the sim entirely. Every machine that declares
+ * `coverageRadiusTiles` today is a watering head, so the verb is a constant again; a future
+ * non-watering coverage machine reopens the role-based branch this function used to have.
  */
-export function toolCoverageVerb(tool: ToolMode): string {
-  const kind = toolMachineKind(tool);
-  const role = kind === null ? null : machineSpec(kind)?.role;
-  return role === MachineRole.MaintenanceStation ? 'services' : 'waters';
+export function toolCoverageVerb(_tool: ToolMode): string {
+  return 'waters';
 }
 
 /**

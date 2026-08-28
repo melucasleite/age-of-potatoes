@@ -100,21 +100,19 @@ describe('the build catalogue', () => {
   });
 });
 
-describe('the maintenance rows ([[039]], [[090]])', () => {
+describe('the maintenance rows ([[039]], [[090]], [[145]])', () => {
   // Presence is the one thing the generic gates above cannot check: a row that was never
-  // added passes every per-row assertion by not being there. The machines and their tech
-  // gates are pinned against the sim's own specs — the generic tests then prove the prices,
-  // footprints and gates are the sim's numbers and not typed twice.
-  it('sells the station and the bay, behind their nodes', () => {
+  // added passes every per-row assertion by not being there. Down to one row: item 090
+  // retired the Parts Bench, item 145 cut the Maintenance Station, so the Drone Bay is the
+  // whole group and its gate is pinned against the sim's own spec.
+  it('sells the bay, behind its node, and no station beside it', () => {
     const rows = new Map(BUILD_CATALOGUE.map((entry) => [entry.tool, entry]));
-    const station = rows.get(ToolMode.PlaceMaintenanceStation);
     const bay = rows.get(ToolMode.PlaceDroneBay);
 
-    expect(station?.requiresTech).toBe(machineSpec(MachineKind.MaintenanceStation)?.requiresTech);
     expect(bay?.requiresTech).toBe(machineSpec(MachineKind.DroneBay)?.requiresTech);
-    // One group, ladder order: the rung that costs, then the rung that does not.
-    expect(station?.group).toBe('Maintenance');
     expect(bay?.group).toBe('Maintenance');
+    expect(rows.has(ToolMode.PlaceMaintenanceStation)).toBe(false);
+    expect(toolMachineKind(ToolMode.PlaceMaintenanceStation)).toBe(null);
   });
 
   it('offers no row for a retired machine, and none at all for the Parts Bench', () => {
@@ -264,18 +262,12 @@ describe('every machine the sim ships ([[100]])', () => {
  * trade [[100]] is making; the frames are an art-lane errand and this list is the reminder.
  */
 const KNOWN_FRAMELESS: readonly ToolMode[] = [
-  // [[101]] left three here, and the two that stung are GONE — the art lane drew
-  // `machine_piped_sprinkler` (32×32) and `machine_irrigation_hub` (64×64, sized to its 2×2
-  // footprint) on the owner's 2026-08-17 reskin ask, so the Field group no longer seats two
-  // grey boxes beside a barrel Sprinkler that draws beautifully. This is the list shortening
-  // exactly the way the fixture story above says it should.
-  //
-  // The Recirculator is what remains of that three: still no `machine_recirculator` in
-  // `art/manifest.json`.
-  ToolMode.PlaceRecirculator,
-  // [[130]]'s Artesian Well was the other entry here and it is GONE ([[140]]) — retired with the
-  // water scarcity it existed to relieve, so it has no catalogue row to be frameless in. The
-  // art-lane errand it named retires with it: nobody needs `machine_artesian_well` drawn now.
+  // EMPTY, and the emptiness is the assertion: every row in the catalogue resolves against
+  // the atlas. [[101]] left three names here; the art lane drew two ([[071]]'s degradation
+  // working as designed), the Artesian Well retired with [[140]], and the last holdout — the
+  // Recirculator, still unpainted — was cut outright by [[145]], taking its catalogue row and
+  // its art-lane errand with it. A new name appearing here is news, and the comment beside it
+  // had better say which item is going to remove it again.
 ];
 
 describe('the build menu icons ([[071]])', () => {

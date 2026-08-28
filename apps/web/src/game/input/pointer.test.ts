@@ -323,14 +323,14 @@ describe('hoppers answer the door', () => {
     expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Hand, Direction.East)).toBe(null);
   });
 
-  // Item 111, and the third instance of this same door being shut. A pepper is not part of
-  // the Seasoner's plain recipe, so the old chip-line switch answered `PlainChips`, the
-  // player holding only chilis had none of those, and the click produced nothing — the
-  // flavour tier reachable by conveyor and not by hand.
-  it('a Hand click on a Seasoner takes the chili in your arms ([[111]])', () => {
+  // Item 111, and the third instance of this same door being shut — re-pinned on the Washer
+  // since [[145]] cut the flavour tier: the used bottle is not the Washer's spec input, so a
+  // kind-keyed switch would answer `RussetPotato`, the player holding only empties had none,
+  // and the click produced nothing. The load branch reads the machine's hoppers instead.
+  it('a Hand click on a Washer takes the empties in your arms ([[111]])', () => {
     const view = withItem(
-      withMachine(standingOn(4, 4), 4, 5, MachineKind.Seasoner, 12),
-      ItemId.ChiliPepper,
+      withMachine(standingOn(4, 4), 4, 5, MachineKind.Washer, 12),
+      ItemId.UsedBottle,
       4,
       1,
     );
@@ -341,23 +341,23 @@ describe('hoppers answer the door', () => {
     });
   });
 
-  // The chip hopper is the Seasoner's first, so a full one used to be the end of the story.
+  // The potato hopper is the Washer's first, so a full one used to be the end of the story.
   // `applyLoadMachine` skips a hopper with no room and moves down the list; this side has to
   // agree with it, or the click is refused on arrival after a walk across the lot.
   it('offers the next hopper when the first one is full', () => {
     const view = withItem(
       withItem(
-        withMachine(standingOn(4, 4), 4, 5, MachineKind.Seasoner, 12),
-        ItemId.PlainChips,
+        withMachine(standingOn(4, 4), 4, 5, MachineKind.Washer, 12),
+        ItemId.RussetPotato,
         9,
         1,
       ),
-      ItemId.ChiliPepper,
+      ItemId.UsedBottle,
       4,
       1,
     );
-    const seasoner = view.machines[0]!;
-    seasoner.recipe[0]!.count = seasoner.inputCapacity;
+    const washer = view.machines[0]!;
+    washer.recipe[0]!.count = washer.inputCapacity;
 
     expect(primaryCommand(view, { tileX: 4, tileY: 5 }, ToolMode.Hand, Direction.East)).toEqual({
       type: 'LoadMachine',
