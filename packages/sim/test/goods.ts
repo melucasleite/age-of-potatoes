@@ -872,7 +872,8 @@ export const BAG_DOOR_VERDICTS: Readonly<Record<string, BagDoorVerdict>> = {
   'tick:clearFieldTileForMachine:addItem#2': BagDoorVerdict.In, // and the seed of whatever was growing.
   'tick:harvestOneTile:addItem': BagDoorVerdict.In, // the crop leaving the ground.
   'tick:harvestOneTile:addItem#2': BagDoorVerdict.In, // the replanting seed.
-  'zones:replantOneTile:removeItem': BagDoorVerdict.Out,
+  // `zones:replantOneTile:removeItem` was the seed hopper's door until item 146 retired
+  // auto-replant; planter bots draw from the dock's hopper, not the bag.
 };
 
 // --- the ledger: how much of everything a world is holding, and how fresh -------------------
@@ -1384,13 +1385,13 @@ export function containersFilledWorld(seed: number): WorldState {
   const { state, dock } = farmWithHarvester(seed);
   const bot = state.bots[0]!;
   // Jam the shelf so the bot stalls holding an armful and a seed pocket.
-  dock.cargoItem = ItemId.ChiliPepper;
+  dock.cargoItem = ItemId.SugarCane;
   dock.cargoCount = 4;
   dock.seedShelfItem = ItemId.PotatoSeed;
   dock.seedShelfCount = 7;
   stepUntil(state, 20_000, () => bot.carryCount > 0 && bot.seedCount > 0);
 
-  const cellar = spawnMachine(state, MachineKind.RootCellar, 8, 8)!;
+  const cellar = spawnMachine(state, MachineKind.HandCart, 8, 8)!;
   cellar.cargoItem = ItemId.RussetPotato;
   cellar.cargoCount = 9;
 
@@ -1479,7 +1480,6 @@ export const UNFILLED_BY_DESIGN: readonly string[] = [
   'machines[].skippedCount',
   'machines[].speedLevel',
   'machines[].tankMl',
-  'machines[].untouchedTicks',
   'machines[].wateredCount',
   'player.moveAccum',
   'player.moveDir',
@@ -1501,7 +1501,6 @@ export const UNFILLED_BY_DESIGN: readonly string[] = [
   'stats.itemsSold',
   'stats.lifetimeEarnedCents',
   'stats.lifetimeSpentCents',
-  'stats.longestUntouchedMachineTicks',
   'stats.repairKitSpendCents',
   'stats.repairKitsUsed',
   'stats.touches.handCarry',
@@ -1512,7 +1511,6 @@ export const UNFILLED_BY_DESIGN: readonly string[] = [
   'stats.touches.hopperRefill',
   'stats.touches.jamWhack',
   'stats.waterDrawnMl',
-  'zones[].replantCooldown',
 ];
 
 /**

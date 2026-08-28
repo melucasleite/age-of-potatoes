@@ -1478,8 +1478,8 @@ describe('a pipe is a layer above the ground', () => {
     const state = piped(1_204);
     // Every tile of a multi-tile footprint, not just its origin: `machineAt` covers the whole
     // rectangle, and a 3×2 Bottler's far corner is as much a port surface as its near one.
-    const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 3, 1)!;
-    const spec = machineSpec(MachineKind.ChipKitchen)!;
+    const kitchen = spawnMachine(state, MachineKind.Washer, 3, 1)!;
+    const spec = machineSpec(MachineKind.Washer)!;
     for (let dy = 0; dy < spec.tilesHigh; dy++) {
       for (let dx = 0; dx < spec.tilesWide; dx++) {
         expect(
@@ -1501,9 +1501,9 @@ describe('a pipe is a layer above the ground', () => {
     const state = piped(1_205);
     run(state, [{ type: 'PlacePipe', path: at(4, 12), liquid: LiquidId.Water }]);
     expect(state.pipes).toHaveLength(1);
-    run(state, [{ type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: 4, tileY: 12 }]);
+    run(state, [{ type: 'PlaceMachine', kind: MachineKind.HandCart, tileX: 4, tileY: 12 }]);
     expect(
-      state.machines.some((machine) => machine.kind === MachineKind.ChipKitchen),
+      state.machines.some((machine) => machine.kind === MachineKind.HandCart),
       'a machine was built on top of a pipe run',
     ).toBe(false);
   });

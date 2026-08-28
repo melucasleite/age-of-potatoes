@@ -287,9 +287,9 @@ describe('the load errand carries what the click carried (item 105)', () => {
     return state;
   }
 
-  it('walks to a Root Cellar and actually fills it', () => {
+  it('walks to a Hand Cart and actually fills it', () => {
     const state = farmerAt(90);
-    const cellar = spawnMachine(state, MachineKind.RootCellar, 12, 10)!;
+    const cellar = spawnMachine(state, MachineKind.HandCart, 12, 10)!;
     addItem(state, ItemId.RussetPotato, 20);
 
     step(state, { tick: state.tick, commands: [loadErrand(12, 10, ItemId.RussetPotato, 20)] });
@@ -307,7 +307,7 @@ describe('the load errand carries what the click carried (item 105)', () => {
     // caller is what had to change. Pinned so a future "helpful" default in `applyLoadMachine`
     // has to argue with a test rather than with a comment.
     const state = farmerAt(91);
-    const cellar = spawnMachine(state, MachineKind.RootCellar, 12, 10)!;
+    const cellar = spawnMachine(state, MachineKind.HandCart, 12, 10)!;
     addItem(state, ItemId.RussetPotato, 20);
 
     step(state, { tick: state.tick, commands: [loadErrand(12, 10, 0, 20)] });

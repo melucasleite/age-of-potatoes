@@ -270,7 +270,7 @@ const CHECKS: readonly MoveCheck[] = [
     covers: ['state:putStorage:cargoCount', 'state:removeItem:count'],
     build() {
       const state = agedBag(12_001, ItemId.RussetPotato, 8);
-      const cellar = spawnMachine(state, MachineKind.RootCellar, 6, 6)!;
+      const cellar = spawnMachine(state, MachineKind.HandCart, 6, 6)!;
       return {
         state,
         act: () =>
@@ -288,7 +288,7 @@ const CHECKS: readonly MoveCheck[] = [
     covers: ['state:takeStorage:cargoCount', 'state:addItem:count'],
     build() {
       const state = agedBag(12_002, ItemId.RussetPotato, 8);
-      const cellar = spawnMachine(state, MachineKind.RootCellar, 6, 6)!;
+      const cellar = spawnMachine(state, MachineKind.HandCart, 6, 6)!;
       run(state, {
         type: 'LoadMachine',
         machineId: cellar.id,
@@ -309,10 +309,11 @@ const CHECKS: readonly MoveCheck[] = [
     // Until item 121 numbered the bag doors, the bare key covered both and this claim read as
     // coverage of a basket nobody had put anything in.
     build() {
-      // A Seasoner with peppers but no chips is starved, so it never runs and stays boxable —
-      // `freshness-doors.test.ts`' trick, and the supported way to hold a hopper still.
-      const state = agedBag(12_003, ItemId.ChiliPepper, 6);
-      const seasoner = spawnMachine(state, MachineKind.Seasoner, 6, 6)!;
+      // A Six-Packer five sodas short of an operation is starved, so it never runs and stays
+      // boxable — the supported way to hold a hopper still. (It was a Seasoner with peppers
+      // until item 145 cut the flavour tier and the Seasoner's second hopper with it.)
+      const state = agedBag(12_003, ItemId.Soda, 5);
+      const seasoner = spawnMachine(state, MachineKind.SixPacker, 6, 6)!;
       return {
         state,
         // **BOTH HALVES INSIDE `act`, AND ITEM 123 IS WHY.** The load used to sit up in `build`,
@@ -324,8 +325,8 @@ const CHECKS: readonly MoveCheck[] = [
           run(state, {
             type: 'LoadMachine',
             machineId: seasoner.id,
-            item: ItemId.ChiliPepper,
-            count: 6,
+            item: ItemId.Soda,
+            count: 5,
           });
           run(state, { type: 'DeconstructMachine', machineId: seasoner.id });
         },
@@ -387,7 +388,7 @@ const CHECKS: readonly MoveCheck[] = [
       const upstream = spawnBelt(state, BeltTier.Basic, 2, 4, Direction.East, 3)!;
       spawnBelt(state, BeltTier.Basic, 5, 4, Direction.East, 1);
       spawnGrabber(state, GrabberTier.Mk1, 6, 4, Direction.East, 0);
-      spawnMachine(state, MachineKind.RootCellar, 7, 4);
+      spawnMachine(state, MachineKind.HandCart, 7, 4);
       beltInsert(upstream, 0, ItemId.RussetPotato);
       return { state, act: () => stepMany(state, 800) };
     },
@@ -1002,7 +1003,7 @@ describe('the save/load round trip', () => {
     expect(unnamedGoods(deserialize(serialize(state)))).toEqual([]);
 
     // And the guard can actually see one, so it is not a function that returns `[]` forever.
-    const cellar = state.machines.find((machine) => machine.kind === MachineKind.RootCellar)!;
+    const cellar = state.machines.find((machine) => machine.kind === MachineKind.HandCart)!;
     cellar.cargoItem = 0;
     expect(unnamedGoods(state)).toEqual(['machines[].cargoItem: 9 units with no item id']);
   });

@@ -1,23 +1,15 @@
-// Item 039's maintenance tier, as item 090 left it: the Maintenance Station, the repair
-// drones, and the retirement of the parts line that used to sit under them.
+// Item 039's maintenance tier, as items 090 and 145 left it: the repair drone alone, and the
+// retirement of everything that used to sit beside it.
 //
-// **THE THESIS THIS FILE MEASURES CHANGED, AND IT SAYS SO RATHER THAN QUIETLY DRIFTING.** Item
-// 039 built the whole tier around §4's *"automation saves your hands, not the bill"* and pinned
-// it as an acceptance bar: no service was ever free, a bay without parts sat there while the
-// factory rotted, and one test measured that the automated bill did NOT fall. The owner
-// repealed that for drones — *"The drone bay shouldn't require parts. It should just fix
-// stuff."* — so the ladder's two rungs now say different things, and both are tested:
+// **THE LADDER LOST ITS MIDDLE RUNG.** Item 090 made the drone free after the capital ("The
+// drone bay shouldn't require parts. It should just fix stuff."); item 145 then cut the
+// Maintenance Station outright with its Diagnostics node, so the ladder is now hand kits →
+// drones and nothing between. The tests that measured the station's honest starve went with
+// the machine; the tests that measure the drone's free service stay, and the hour-by-hand
+// versus hour-by-drone comparison below is still a comparison rather than a comment.
 //
-//   * **The Maintenance Station still buys its way.** Real $8 kits off a real belt, and it
-//     starves honestly: no kits, no service, amber lamp, a factory that degrades exactly as if
-//     it were scenery. Every "nothing is free" test here that survives is about the station.
-//   * **The drone is free after the capital.** Buy the node and the hangar and maintenance
-//     stops being a running cost at all. The test that used to prove the bill did not fall now
-//     proves the opposite by the same method, which is the honest way to record a repeal — the
-//     measurement stays, the expectation flips, and nobody has to take a comment's word for it.
-//
-// What did NOT change is anything about hands: no manual touch is ever counted and no untouched
-// clock is ever reset, so the Hands-Free board and the Corporate Charter are unaffected.
+// What did NOT change is anything about hands: no manual touch is ever counted, so the
+// Hands-Free board is unaffected.
 //
 // The closing test is this feature's golden fixture in the `factory.test.ts` story-watching
 // tradition, pinned with an inline hash the way `sim.test.ts` pins its canary: a
@@ -29,7 +21,6 @@ import { describe, expect, it } from 'vitest';
 import {
   type Machine,
   type WorldState,
-  BLEED_WINDOW_TICKS,
   BeltTier,
   BotKind,
   BotPhase,
@@ -98,102 +89,6 @@ function viewRowFor(state: WorldState, machineId: number) {
   return row!;
 }
 
-describe('the Maintenance Station', () => {
-  function stationWorld(): { state: WorldState; station: Machine; kitchen: Machine } {
-    const state = createWorld(7100);
-    const station = spawnMachine(state, MachineKind.MaintenanceStation, 0, 0)!;
-    // Footprint x 3..4 — Chebyshev 3 from the station's anchor tile, inside the cell.
-    const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 3, 3)!;
-    return { state, station, kitchen };
-  }
-
-  it('services a wrench-due cell with no player input, for exactly one kit', () => {
-    const { state, station, kitchen } = stationWorld();
-    station.inputCounts[0] = 2;
-    kitchen.condition = 300;
-    kitchen.jammed = true;
-    kitchen.untouchedTicks = 500;
-    const touchesBefore = { ...state.stats.touches };
-
-    stepMany(state, 2);
-
-    expect(kitchen.condition).toBe(CONDITION_MAX);
-    expect(kitchen.jammed).toBe(false);
-    expect(station.inputCounts[0]).toBe(1);
-    expect(state.stats.repairKitsUsed).toBe(1);
-    expect(station.opCount).toBe(1);
-    // The station is a machine: its own service pass costs its own wear.
-    expect(station.condition).toBe(CONDITION_MAX - 2);
-    // NOT A HAND. No touch was counted and the serviced machine's untouched clock survives —
-    // an automated line being automatically maintained still demonstrates the Corporate
-    // Charter's milestone.
-    expect(state.stats.touches).toEqual(touchesBefore);
-    expect(kitchen.untouchedTicks).toBe(500);
-  });
-
-  it('fires when a player would: wrench-due or jammed, never as a top-up', () => {
-    const { state, station, kitchen } = stationWorld();
-    station.inputCounts[0] = 6;
-
-    // Merely used is not wrench-due. A player does not throw $8 at a machine at 90%.
-    kitchen.condition = 900;
-    stepMany(state, 50);
-    expect(state.stats.repairKitsUsed).toBe(0);
-    expect(kitchen.condition).toBe(900);
-
-    // At the threshold exactly the wrench is not yet due (`condition < threshold` is the
-    // overlay's own test); one point below it is.
-    kitchen.condition = CONDITION_EFFECT_THRESHOLD;
-    stepMany(state, 10);
-    expect(state.stats.repairKitsUsed).toBe(0);
-    kitchen.condition = CONDITION_EFFECT_THRESHOLD - 1;
-    stepMany(state, 2);
-    expect(state.stats.repairKitsUsed).toBe(1);
-    expect(kitchen.condition).toBe(CONDITION_MAX);
-  });
-
-  it('starves honestly: no kits means the amber lamp, no service, and real degradation', () => {
-    const { state, station, kitchen } = stationWorld();
-    station.inputCounts[0] = 0;
-    kitchen.condition = 300;
-
-    // The kitchen keeps working — and keeps wearing — while the station stands there starved.
-    for (let i = 0; i < 2_000; i++) {
-      feedAndDrain(kitchen);
-      stepEmpty(state);
-    }
-
-    expect(state.stats.repairKitsUsed).toBe(0);
-    expect(kitchen.condition).toBeLessThan(300);
-    expect(state.stats.inputsWastedByMachine).toBeGreaterThan(0);
-    expect(viewRowFor(state, station.id).lamp).toBe(LampState.Starved);
-
-    // And the moment the belt delivers again, service resumes — the lamp was the whole story.
-    station.inputCounts[0] = 1;
-    stepMany(state, 2);
-    expect(state.stats.repairKitsUsed).toBe(1);
-    expect(kitchen.condition).toBe(CONDITION_MAX);
-    expect(viewRowFor(state, station.id).lamp).toBe(LampState.Starved); // hopper spent again
-  });
-
-  it('is belt-fed through the ordinary grabber door, and the belt path costs no touch', () => {
-    const state = createWorld(7101);
-    const station = spawnMachine(state, MachineKind.MaintenanceStation, 10, 10)!;
-    // Belt runs east along y=10 into the grabber at (9,10), which reaches back to (8,10) and
-    // places forward onto the station's (10,10) tile — the same recipe-line door a Fryer's
-    // potatoes arrive through, because the kit hopper IS a recipe line.
-    const belt = spawnBelt(state, BeltTier.Basic, 6, 10, Direction.East, 3)!; // tiles (6..8,10)
-    spawnGrabber(state, GrabberTier.Mk1, 9, 10, Direction.East, 0)!;
-    belt.items.push({ dist: 700, item: ItemId.RepairKit });
-
-    const touchesBefore = totalManualTouches(state.stats.touches);
-    stepMany(state, 100);
-
-    expect(station.inputCounts[0]).toBe(1);
-    expect(totalManualTouches(state.stats.touches)).toBe(touchesBefore);
-  });
-});
-
 describe('the repair drone', () => {
   function droneWorld(): {
     state: WorldState;
@@ -203,7 +98,7 @@ describe('the repair drone', () => {
     const state = createWorld(7200);
     const bay = spawnMachine(state, MachineKind.DroneBay, 0, 0)!;
     spawnBot(state, BotKind.Repair, bay);
-    const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 20, 20)!;
+    const kitchen = spawnMachine(state, MachineKind.Fryer, 20, 20)!;
     return { state, bay, kitchen };
   }
 
@@ -216,7 +111,6 @@ describe('the repair drone', () => {
     expect(bay.cargoCount).toBe(0);
     kitchen.condition = 300;
     kitchen.jammed = true;
-    kitchen.untouchedTicks = 777;
 
     expect(state.ceremonies).not.toContain(CeremonyId.FirstDrone);
     stepMany(state, 1_500);
@@ -224,7 +118,6 @@ describe('the repair drone', () => {
     const drone = state.bots[0]!;
     expect(kitchen.condition).toBe(CONDITION_MAX);
     expect(kitchen.jammed).toBe(false);
-    expect(kitchen.untouchedTicks).toBe(777);
     expect(bay.cargoCount).toBe(0);
     expect(drone.opCount).toBe(1);
     expect(drone.condition).toBe(CONDITION_MAX - 2);
@@ -250,7 +143,7 @@ describe('the repair drone', () => {
     withBay.kitchen.condition = 350;
 
     const control = createWorld(7200);
-    const controlKitchen = spawnMachine(control, MachineKind.ChipKitchen, 20, 20)!;
+    const controlKitchen = spawnMachine(control, MachineKind.Fryer, 20, 20)!;
     controlKitchen.condition = 350;
 
     for (let i = 0; i < 3_000; i++) {
@@ -395,88 +288,38 @@ describe('the parts line, retired (item 090)', () => {
     expect(consumers).toHaveLength(0);
 
     // §5's ~50-item recipe-graph cap, counted the way `data.ts` counts it: real items plus
-    // liquids, boxed machines excluded (nothing eats one, nothing makes one).
-    // 35 until item 111 spent nine of the remaining ten on the flavour tier, and 44 until item
-    // 131 spent **THE LAST ONE** on `ItemId.UsedBottle`. The two assertions below now meet:
-    // 45 + 5 was exactly 50 and the cap had stopped being a headroom note.
-    //
-    // **AND THEN ITEM 124 HANDED SEVEN BACK.** Deleting the waste loop deleted seven graph
-    // nodes with it — the five Day-Old grades, `Compost` and `Fertilizer` — so the count is 38,
-    // the graph stands at 43 of ~50, and there is real room again for the first time since item
-    // 111. That is a side effect rather than an aim, and it is pinned here precisely because it
-    // is the kind of headroom somebody spends without noticing where it came from.
+    // liquids, boxed machines excluded (nothing eats one, nothing makes one). The census hit
+    // 50 at item 131, item 124 handed seven back, and item 145's cut list handed back
+    // seventeen more — the corn/chili/gold seed-and-produce pairs, the two tree fruits, and
+    // the whole nine-node flavour tier — so the graph stands at 26 of ~50.
     const graphItems = ITEM_SPECS.filter((spec) => !isBoxedMachineItem(spec.id)).length;
-    expect(graphItems).toBe(38);
-    expect(graphItems + LIQUID_SPECS.length).toBe(43);
+    expect(graphItems).toBe(21);
+    expect(graphItems + LIQUID_SPECS.length).toBe(26);
     expect(graphItems + LIQUID_SPECS.length).toBeLessThanOrEqual(50);
   });
 });
 
 describe('the tech joints (§3, by name)', () => {
-  it('drones need diagnostics AND trucking, and every new machine hangs off a real node', () => {
+  it('drones need trucking AND the Assembly Charter, and the bay hangs off a real node', () => {
+    // Item 145 cut the diagnostics leg of §3's "drones need diagnostics AND trucking" with the
+    // Diagnostics node itself; the Assembly Charter holds the node's Era-3 seat in its place.
     const drones = techNode(TechId.Drones)!;
-    expect(drones.requires).toContain(TechId.Diagnostics);
     expect(drones.requires).toContain(TechId.Trucking);
+    expect(drones.requires).toContain(TechId.AssemblyCharter);
 
-    const diagnostics = techNode(TechId.Diagnostics)!;
-    expect(diagnostics).not.toBeNull();
-
-    expect(machineSpec(MachineKind.MaintenanceStation)!.requiresTech).toBe(TechId.Diagnostics);
     expect(machineSpec(MachineKind.DroneBay)!.requiresTech).toBe(TechId.Drones);
     expect(machineSpec(MachineKind.PartsBench)!.requiresTech).toBe(TechId.Drones);
 
-    // Every new machine has a box, so pick-up-and-move works on day one.
-    expect(boxedItemForMachine(MachineKind.MaintenanceStation)).toBe(
-      ItemId.BoxedMaintenanceStation,
-    );
+    // Every machine has a box, so pick-up-and-move works on day one.
     expect(boxedItemForMachine(MachineKind.DroneBay)).toBe(ItemId.BoxedDroneBay);
     expect(boxedItemForMachine(MachineKind.PartsBench)).toBe(ItemId.BoxedPartsBench);
   });
 });
 
-describe('diagnostics: cash bled in the last 60 seconds', () => {
-  it('prices wasted inputs per machine, and the window forgets what has aged out', () => {
-    const state = createWorld(7400);
-    const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
-    kitchen.condition = 350;
-
-    for (let i = 0; i < 2_000; i++) {
-      feedAndDrain(kitchen);
-      kitchen.jammed = false; // the subject is the waste cadence, not the jam
-      stepEmpty(state);
-    }
-
-    expect(state.stats.inputsWastedByMachine).toBeGreaterThan(0);
-    const bleeding = viewRowFor(state, kitchen.id).bleedCentsLast60s;
-    expect(bleeding).toBeGreaterThan(0);
-    // Every wasted operation swallowed one 200¢ potato; the window is a multiple of that.
-    expect(bleeding % 200).toBe(0);
-
-    // Left alone for a full window — hopper emptied, so no new operations and no new waste —
-    // the ledger reads zero: "right now", not "ever".
-    kitchen.inputCounts[0] = 0;
-    stepMany(state, BLEED_WINDOW_TICKS + 10);
-    expect(viewRowFor(state, kitchen.id).bleedCentsLast60s).toBe(0);
-  });
-
-  it('never reaches the hash or the save, like every presentation signal', () => {
-    const state = createWorld(7401);
-    const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
-    const before = hashState(state);
-    kitchen.bleedEvents.push({ tick: 1, cents: 12_345 });
-    expect(hashState(state)).toBe(before);
-
-    const restored = fromPayload(toPayload(state));
-    expect(restored.machines[restored.machines.length - 1]!.bleedEvents).toEqual([]);
-    expect(hashState(restored)).toBe(before);
-  });
-});
-
 describe('format-12 rides for the new roster', () => {
-  it('a world with all three machines and a mid-flight drone round-trips byte-for-byte', () => {
+  it('a world with the surviving roster and a mid-flight drone round-trips byte-for-byte', () => {
     const state = createWorld(7500);
-    const station = spawnMachine(state, MachineKind.MaintenanceStation, 0, 0)!;
-    station.inputCounts[0] = 3;
+    // (A Maintenance Station stood here too, until item 145 deleted the kind outright.)
     spawnMachine(state, MachineKind.PartsBench, 5, 0);
     const bay = spawnMachine(state, MachineKind.DroneBay, 10, 0)!;
     const drone = spawnBot(state, BotKind.Repair, bay);
@@ -504,7 +347,8 @@ describe('§4 repealed at the top rung: the drone hour costs nothing (item 090)'
   /**
    * **THE MEASUREMENT ITEM 039 BUILT, KEPT, AND POINTING THE OTHER WAY.**
    *
-   * Four Chip Kitchens run flat out for one active hour, serviced two ways. The MANUAL world
+   * Four Fryers run flat out for one active hour, serviced two ways. (They were Chip
+   * Kitchens until item 145 cut that kind.) The MANUAL world
    * throws $8 kits by hand through the real reducer whenever the wrench comes due; the
    * AUTOMATED world has a drone bay watching, and — the change — nothing feeding it, because
    * there is nothing to feed it with.
@@ -525,10 +369,10 @@ describe('§4 repealed at the top rung: the drone hour costs nothing (item 090)'
   function runManualHour(): { spendCents: number; kitchens: Machine[] } {
     const state = createWorld(7600);
     const kitchens = [
-      spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!,
-      spawnMachine(state, MachineKind.ChipKitchen, 2, 0)!,
-      spawnMachine(state, MachineKind.ChipKitchen, 4, 0)!,
-      spawnMachine(state, MachineKind.ChipKitchen, 6, 0)!,
+      spawnMachine(state, MachineKind.Fryer, 0, 0)!,
+      spawnMachine(state, MachineKind.Fryer, 2, 0)!,
+      spawnMachine(state, MachineKind.Fryer, 4, 0)!,
+      spawnMachine(state, MachineKind.Fryer, 6, 0)!,
     ];
     // The farmer stands in the middle of the cell for the whole shift.
     state.player.xSub = tileCentreSubtiles(3);
@@ -555,10 +399,10 @@ describe('§4 repealed at the top rung: the drone hour costs nothing (item 090)'
   function runAutomatedHour(): { spendCents: number; kitchens: Machine[] } {
     const state = createWorld(7600);
     const kitchens = [
-      spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!,
-      spawnMachine(state, MachineKind.ChipKitchen, 2, 0)!,
-      spawnMachine(state, MachineKind.ChipKitchen, 4, 0)!,
-      spawnMachine(state, MachineKind.ChipKitchen, 6, 0)!,
+      spawnMachine(state, MachineKind.Fryer, 0, 0)!,
+      spawnMachine(state, MachineKind.Fryer, 2, 0)!,
+      spawnMachine(state, MachineKind.Fryer, 4, 0)!,
+      spawnMachine(state, MachineKind.Fryer, 6, 0)!,
     ];
     const bay = spawnMachine(state, MachineKind.DroneBay, 10, 0)!;
     spawnBot(state, BotKind.Repair, bay);
@@ -728,6 +572,11 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
     // This watch has no pump, no pipe and no `Cheat`, so those are the only three numbers in it
     // that could have moved: the pond it never touched is the pond it still never touches, the
     // wrench still came due, and the drone still answered.
-    expect(hashState(state)).toBe('ea5cf066');
+    // ea5cf066 -> 88389c6f (save format 24, items 145/146/147): the digest LOST
+    // `machine.untouchedTicks`, `stats.longestUntouchedMachineTicks` (the Corporate Charter's
+    // counter chain, cut with the Charter) and the two zone auto-replant fields (retired).
+    // This watch has no zones, and every machine in it kept doing exactly what it did — every
+    // story assertion above still passes untouched, so the move is shape, not behaviour.
+    expect(hashState(state)).toBe('88389c6f');
   });
 });

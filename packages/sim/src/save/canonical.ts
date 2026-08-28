@@ -199,8 +199,8 @@ export interface SaveMachine {
   throttled: boolean;
   tileX: number;
   tileY: number;
-  /** Consecutive ticks of work with no hand on this machine. The Corporate Charter's counter. */
-  untouchedTicks: number;
+  // `untouchedTicks` (the Corporate Charter's counter) was saved here through format 23; the
+  // Charter and the counter chain were cut in item 147 and the 23 → 24 migration drops it.
   wateredCount: number;
 }
 
@@ -271,12 +271,12 @@ export interface SaveGrabber {
 }
 
 export interface SaveZone {
-  autoReplant: boolean;
+  // `autoReplant` and `replantCooldown` were saved here through format 23; item 146 retired
+  // auto-replant and the 23 → 24 migration drops both.
   crop: number;
   id: number;
   name: string;
   priority: number;
-  replantCooldown: number;
 }
 
 /**
@@ -397,8 +397,8 @@ export interface SaveStats {
   lifetimeEarnedCents: number;
   lifetimeSpentCents: number;
   longestHandsFreeTicks: number;
-  /** The best run of untouched work any one machine has managed, in ticks. */
-  longestUntouchedMachineTicks: number;
+  // `longestUntouchedMachineTicks` was saved here through format 23; cut with the Corporate
+  // Charter (item 147) and dropped by the 23 → 24 migration.
   netWorthCents: number;
   netWorthSamples: number[];
   nextNetWorthSampleTick: number;
@@ -550,7 +550,6 @@ export function toPayload(state: WorldState): SavePayload {
       throttled: machine.throttled,
       tileX: machine.tileX,
       tileY: machine.tileY,
-      untouchedTicks: machine.untouchedTicks,
       wateredCount: machine.wateredCount,
     });
   }
@@ -595,12 +594,10 @@ export function toPayload(state: WorldState): SavePayload {
   for (let i = 0; i < state.zones.length; i++) {
     const zone = state.zones[i]!;
     zones.push({
-      autoReplant: zone.autoReplant,
       crop: zone.crop,
       id: zone.id,
       name: zone.name,
       priority: zone.priority,
-      replantCooldown: zone.replantCooldown,
     });
   }
 
@@ -784,7 +781,6 @@ export function toPayload(state: WorldState): SavePayload {
       lifetimeEarnedCents: stats.lifetimeEarnedCents,
       lifetimeSpentCents: stats.lifetimeSpentCents,
       longestHandsFreeTicks: stats.longestHandsFreeTicks,
-      longestUntouchedMachineTicks: stats.longestUntouchedMachineTicks,
       netWorthCents: stats.netWorthCents,
       netWorthSamples: samples,
       nextNetWorthSampleTick: stats.nextNetWorthSampleTick,
@@ -972,11 +968,11 @@ const CROP_IDS: readonly number[] = [
   CropId.None,
   CropId.RussetPotato,
   CropId.SugarCane,
-  CropId.Corn,
-  CropId.ChiliPepper,
-  CropId.GoldPotato,
+  // Corn (3), ChiliPepper (4) and GoldPotato (5) were DELETED by item 145 and are off this
+  // list on the Artesian Well's precedent below: the 23 → 24 migration clears every field
+  // tile and zone that names them, so a payload that still does is one this build cannot
+  // honour twice.
 ];
-/** The roster's other three are machines, not crops — see `CropId`. */
 const SOIL_TYPES: readonly number[] = [SoilType.Loam, SoilType.Sand, SoilType.Clay];
 const BOT_KINDS: readonly number[] = [BotKind.Harvester, BotKind.Planter, BotKind.Repair];
 const BOT_PHASES: readonly number[] = [
@@ -1003,7 +999,6 @@ const ITEM_IDS: readonly number[] = ITEM_SPECS.map((spec) => spec.id);
 const ITEM_IDS_OR_NONE: readonly number[] = [0, ...ITEM_IDS];
 const MACHINE_KINDS: readonly number[] = [
   MachineKind.SellBin,
-  MachineKind.ChipKitchen,
   MachineKind.Sprinkler,
   MachineKind.Washer,
   MachineKind.Slicer,
@@ -1014,7 +1009,6 @@ const MACHINE_KINDS: readonly number[] = [
   MachineKind.Tank,
   MachineKind.PipedSprinkler,
   MachineKind.IrrigationHub,
-  MachineKind.Recirculator,
   MachineKind.Juicer,
   MachineKind.Kettle,
   MachineKind.Grinder,
@@ -1026,15 +1020,15 @@ const MACHINE_KINDS: readonly number[] = [
   MachineKind.DeliveryCart,
   MachineKind.TruckDepot,
   MachineKind.BeltJunction,
-  MachineKind.RootCellar,
   MachineKind.HandCart,
-  MachineKind.OrangeTree,
-  MachineKind.LemonTree,
   MachineKind.KolaTree,
   MachineKind.HarvesterDock,
   MachineKind.PlanterDock,
-  MachineKind.MaintenanceStation,
   MachineKind.DroneBay,
+  // ChipKitchen (2), Recirculator (13), RootCellar (25), OrangeTree (28), LemonTree (29) and
+  // MaintenanceStation (33) were DELETED by item 145 and are off this list on the Artesian
+  // Well's precedent below: the 23 → 24 migration pays every one out, so a payload that still
+  // names one is one this build cannot honour twice.
   // RETIRED ([[090]]) AND STILL ALLOWED, which is exactly the case this list was hand-written
   // for — see the comment above `ITEM_IDS`: "deriving the guard from today's table would mean a
   // kind retired in 2029 silently stops being loadable." That day came early. A format-17 world
@@ -1235,14 +1229,9 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       skippedCount: int(machine, 'skippedCount', path),
       seedShelfItem: idInt(machine, 'seedShelfItem', path, ITEM_IDS_OR_NONE) as ItemId | 0,
       seedShelfCount: int(machine, 'seedShelfCount', path),
-      untouchedTicks: int(machine, 'untouchedTicks', path),
       junctionInCursor: int(machine, 'junctionInCursor', path),
       junctionOutCursor: int(machine, 'junctionOutCursor', path),
       boundZone: int(machine, 'boundZone', path),
-      // Presentation data, never saved and never read (see `Machine.bleedEvents`). A loaded
-      // world opens with an empty diagnostics window: money that bled before the save owes no
-      // alert after it.
-      bleedEvents: [],
     });
   }
 
@@ -1417,8 +1406,6 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
       name: str(zone, 'name', path),
       crop: idInt(zone, 'crop', path, CROP_IDS) as CropId,
       priority: int(zone, 'priority', path),
-      autoReplant: bool(zone, 'autoReplant', path),
-      replantCooldown: int(zone, 'replantCooldown', path),
     });
   }
 
@@ -1574,7 +1561,6 @@ export function fromPayload(value: unknown, trace: readonly TraceLike[] = []): W
     nextNetWorthSampleTick: int(statsRaw, 'nextNetWorthSampleTick', 'payload.stats'),
     ticksSinceManualTouch: int(statsRaw, 'ticksSinceManualTouch', 'payload.stats'),
     longestHandsFreeTicks: int(statsRaw, 'longestHandsFreeTicks', 'payload.stats'),
-    longestUntouchedMachineTicks: int(statsRaw, 'longestUntouchedMachineTicks', 'payload.stats'),
     touches,
     salesByItem,
     cheatsUsed: int(statsRaw, 'cheatsUsed', 'payload.stats'),

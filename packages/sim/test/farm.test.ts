@@ -109,11 +109,12 @@ describe('soil and fertility', () => {
     expect(clayTile.moisture).toBeLessThan(3_600);
   });
 
-  it('makes a Gold Potato drink more than a Russet over the same period', () => {
-    // §5: "Gold Potato (premium, thirsty)", and item 030's criterion states it as a comparison.
+  it('makes Sugar Cane drink more than a Russet over the same period', () => {
+    // §5's "thirsty" clause, as a comparison. (It was written against the Gold Potato until
+    // item 145 cut that crop; cane is the roster's thirsty one now.)
     const state = world(21);
     const russet = cropSpec(CropId.RussetPotato)!;
-    const gold = cropSpec(CropId.GoldPotato)!;
+    const gold = cropSpec(CropId.SugarCane)!;
     expect(gold.moistureDrainPerTick).toBeGreaterThan(russet.moistureDrainPerTick);
 
     const a = state.field[0]!;
@@ -193,14 +194,14 @@ describe('the armful, unlimited', () => {
     // A box is not a good: the bin refuses one, and demolishing a factory must not fill your
     // hands with turnips. See `carriedCount`.
     const state = emptyHanded(32);
-    const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
+    const kitchen = spawnMachine(state, MachineKind.Washer, 0, 0)!;
     state.player.xSub = 128;
     state.player.ySub = 128;
     step(state, {
       tick: state.tick,
       commands: [{ type: 'DeconstructMachine', machineId: kitchen.id }],
     });
-    expect(itemCount(state, ItemId.BoxedChipKitchen)).toBe(1);
+    expect(itemCount(state, ItemId.BoxedWasher)).toBe(1);
     expect(carriedCount(state), 'a boxed machine filled the arms').toBe(0);
   });
 
@@ -351,26 +352,17 @@ describe('the orchard', () => {
     expect(tree.jammed).toBe(false);
   });
 
-  it('earns no untouched-work credit, so a sapling cannot buy the Corporate Charter', () => {
-    // The reason `MachineRole.Orchard` exists rather than reusing `Converter`: the Charter's claim
-    // is that a machine cannot advance work for 96,000 ticks unless something is FEEDING it, and a
-    // tree needs nothing feeding it.
-    const state = world(62);
-    const tree = spawnMachine(state, MachineKind.OrangeTree, 20, 20)!;
-    stepMany(state, 5_000);
-    expect(tree.outputCount).toBeGreaterThan(0);
-    expect(tree.untouchedTicks).toBe(0);
-    expect(state.stats.longestUntouchedMachineTicks).toBe(0);
-  });
+  // (The untouched-work-credit test lived here until item 147 cut the Corporate Charter's
+  // clock; `MachineRole.Orchard` stays for the reasons on the role itself.)
 
   it('takes 2×2 and comes back in a box with its fruit in your hands', () => {
     const state = world(63);
-    const spec = machineSpec(MachineKind.LemonTree)!;
+    const spec = machineSpec(MachineKind.KolaTree)!;
     expect(spec.tilesWide).toBe(2);
     expect(spec.tilesHigh).toBe(2);
 
-    const tree = spawnMachine(state, MachineKind.LemonTree, 0, 0)!;
-    stepMany(state, 300);
+    const tree = spawnMachine(state, MachineKind.KolaTree, 0, 0)!;
+    stepMany(state, 40_000);
     const fruit = tree.outputCount;
     expect(fruit).toBeGreaterThan(0);
 
@@ -380,8 +372,8 @@ describe('the orchard', () => {
       tick: state.tick,
       commands: [{ type: 'DeconstructMachine', machineId: tree.id }],
     });
-    expect(itemCount(state, ItemId.Lemon)).toBe(fruit);
-    expect(itemCount(state, ItemId.BoxedLemonTree)).toBe(1);
+    expect(itemCount(state, ItemId.KolaNut)).toBe(fruit);
+    expect(itemCount(state, ItemId.BoxedKolaTree)).toBe(1);
   });
 });
 

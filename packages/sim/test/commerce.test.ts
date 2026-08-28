@@ -693,7 +693,9 @@ function soldUnits(state: WorldState, item: ItemId): number {
 
 function chipLineToBin(seed: number, potatoes = 12) {
   const state = createWorld(seed);
-  const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 6, 14)!;
+  // A Bagger stands where the Chip Kitchen did until item 145 cut that kind: same one-hopper
+  // shape, same BaggedChips out the far end.
+  const kitchen = spawnMachine(state, MachineKind.Bagger, 6, 14)!;
   kitchen.inputCounts[0] = potatoes;
   const feeder = spawnGrabber(state, GrabberTier.Mk1, 6, 13, Direction.North, 0)!;
   const belt = spawnBelt(state, BeltTier.Basic, 6, 12, Direction.West, 3)!;

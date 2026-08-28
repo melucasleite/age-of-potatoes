@@ -72,7 +72,6 @@ import {
   type SetDockZoneCommand,
   type SetGrabberFilterCommand,
   type SetMoveDirectionCommand,
-  type SetZoneAutoReplantCommand,
   type SetZoneCropCommand,
   type SetZonePriorityCommand,
   type SwingScytheCommand,
@@ -88,7 +87,6 @@ import {
 } from './commands';
 import {
   BELT_MAX_LENGTH_TILES,
-  BLEED_WINDOW_TICKS,
   SCYTHE_SWATHE_TILES,
   TOW_SPEED_PENALTY_SUBTILES_PER_100_TICKS,
   CAN_CHARGES_MAX,
@@ -116,13 +114,11 @@ import {
   PIPE_MAX_PATH_TILES,
   PIPE_PRICE_CENTS_PER_TILE,
   PLAYER_SPEED_SUBTILES_PER_100_TICKS,
-  RECIRCULATOR_ML_PER_MINUTE,
   REPAIR_KIT_RADIUS_TILES,
   REPAIR_PER_TOUCH,
   SPRINKLER_CHARGE_ML,
   SPRINKLER_POUR_ML,
   SPRINKLER_PERIOD_TICKS,
-  STATION_SERVICE_PERIOD_TICKS,
   UPGRADE_MAX_LEVEL,
   WALK_ERRAND_TIMEOUT_TICKS,
   WORLD_TILES_HIGH,
@@ -284,14 +280,13 @@ import {
 } from './upgrades';
 import {
   SUBTILE,
-  TICKS_PER_IN_GAME_DAY,
   TICKS_PER_MINUTE,
   clampInt,
   distanceSquaredSubtiles,
   divFloor,
   tileCentreSubtiles,
 } from './units';
-import { PaintMode, advanceZones, clipRectToField, paintZoneRect, pruneEmptyZones } from './zones';
+import { PaintMode, clipRectToField, paintZoneRect, pruneEmptyZones } from './zones';
 
 /** What the host hands `step()` for one tick. */
 export interface TickInput {
@@ -330,7 +325,8 @@ export function step(state: WorldState, input: TickInput): void {
   advanceJunctions(state);
   advanceGrabbers(state);
   advanceCommerce(state);
-  advanceZones(state);
+  // The zones phase (`advanceZones`) ran here until item 146 retired auto-replant: a zone
+  // acts on nothing now, and the planter bot reads it on its own clock.
   advanceCrops(state);
   advanceStats(state);
 
@@ -449,8 +445,6 @@ function applyCommand(state: WorldState, command: Command): boolean {
       return applySetZonePriority(state, command);
     case 'RenameZone':
       return applyRenameZone(state, command);
-    case 'SetZoneAutoReplant':
-      return applySetZoneAutoReplant(state, command);
     case 'PlacePipe':
       return applyPlacePipe(state, command);
     case 'RemovePipe':
@@ -483,21 +477,9 @@ function touch(state: WorldState, kind: ManualTouchKind): void {
   recordManualTouch(state.stats, kind);
 }
 
-/**
- * A hand landed on this machine: its untouched-work clock starts again from zero.
- *
- * SEPARATE FROM `touch()`, WHICH IS WORLD-LEVEL. Hands-Free asks "did the player do anything";
- * the Corporate Charter asks "was anybody's hand on *this machine*", and the two answers differ
- * on every tick the player is out harvesting a field while the line runs itself. Called beside
- * `touch()` at each of the eight verbs that reach a machine — load, unload, refill, repair, kit,
- * whack, upgrade, move — because those are precisely the ones plan §3 means by *untouched*.
- *
- * Note what is deliberately NOT here: a grabber feeding the hopper, and a truck taking the output
- * away. Those are the machinery doing its job, which is the thing being demonstrated.
- */
-function handsOn(machine: Machine): void {
-  machine.untouchedTicks = 0;
-}
+// `handsOn` — the per-machine "a hand landed here" reset for the Corporate Charter's
+// untouched-work clock — lived here until item 147 cut the Charter and the clock. `touch()`
+// above remains the world-level Hands-Free counter; the eight machine verbs now call only it.
 
 /** Tech gates are money-only outside the Charters, but they are gates (plan §7 ruling 3). */
 function unlocked(state: WorldState, required: string | null): boolean {
@@ -1301,7 +1283,6 @@ function applyMoveMachine(state: WorldState, command: MoveMachineCommand): boole
   // Moving is free and always will be (plan §4), but a moved pump has left its network and a
   // moved head may have joined one. Recompute rather than guess.
   if (spec.liquid !== 0) rebuildNetworks(state);
-  handsOn(machine);
   touch(state, 'handCarry');
   return true;
 }
@@ -1347,7 +1328,6 @@ function applyLoadMachine(state: WorldState, command: LoadMachineCommand): boole
 
     removeItem(state, command.item, moved);
     putStorage(machine, spec, command.item, moved);
-    handsOn(machine);
     touch(state, 'handCarry');
     return true;
   }
@@ -1371,7 +1351,6 @@ function applyLoadMachine(state: WorldState, command: LoadMachineCommand): boole
 
     removeItem(state, line.item, moved);
     putHopper(machine, i, line.item, moved);
-    handsOn(machine);
     touch(state, 'handCarry');
     return true;
   }
@@ -1391,7 +1370,6 @@ function applyHitchCart(state: WorldState, command: HitchCartCommand): boolean {
   if (state.player.towedCartId === cart.id) return false;
 
   state.player.towedCartId = cart.id;
-  handsOn(cart);
   touch(state, 'handCarry');
   return true;
 }
@@ -1446,7 +1424,6 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
     if (took === null) return false;
 
     addItem(state, took.item, took.taken);
-    handsOn(machine);
     touch(state, 'handCarry');
     return true;
   }
@@ -1466,7 +1443,6 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
     if (took === null && seeds === null) return false;
     if (took !== null) addItem(state, took.item, took.taken);
     if (seeds !== null) addItem(state, seeds.item, seeds.taken);
-    handsOn(machine);
     touch(state, 'handCarry');
     return true;
   }
@@ -1494,7 +1470,6 @@ function applyUnloadMachine(state: WorldState, command: UnloadMachineCommand): b
     addItem(state, item, 1);
   }
 
-  handsOn(machine);
   touch(state, 'handCarry');
   return true;
 }
@@ -1545,7 +1520,6 @@ function applyRefillHopper(state: WorldState, command: RefillHopperCommand): boo
     removeItem(state, wanted, moved);
     machine.cargoItem = wanted;
     machine.cargoCount += moved;
-    handsOn(machine);
     touch(state, 'hopperRefill');
     return true;
   }
@@ -1565,7 +1539,6 @@ function applyRefillHopper(state: WorldState, command: RefillHopperCommand): boo
   if (poured <= 0) return false;
 
   machine.tankMl += poured;
-  handsOn(machine);
   touch(state, 'hopperRefill');
   return true;
 }
@@ -1582,14 +1555,12 @@ function applyRepairMachine(state: WorldState, command: RepairMachineCommand): b
   const serviced = repairBotsAtDock(state, machine);
   if (machine.condition >= CONDITION_MAX) {
     if (!serviced) return false;
-    handsOn(machine);
     touch(state, 'handRepair');
     return true;
   }
 
   // Hold-to-repair is free and always available. Hand tools never rot (plan §1).
   machine.condition = Math.min(CONDITION_MAX, machine.condition + REPAIR_PER_TOUCH);
-  handsOn(machine);
   touch(state, 'handRepair');
   return true;
 }
@@ -1642,7 +1613,6 @@ function applyUseRepairKit(state: WorldState, command: UseRepairKitCommand): boo
     machine.condition = CONDITION_MAX;
     machine.jammed = false;
     restoreDockedBots(state, machine);
-    handsOn(machine);
     serviced += 1;
   }
 
@@ -1680,7 +1650,6 @@ function applyWhackJam(state: WorldState, command: WhackJamCommand): boolean {
   if (!machine.jammed) return false;
 
   machine.jammed = false;
-  handsOn(machine);
   touch(state, 'jamWhack');
   return true;
 }
@@ -1764,7 +1733,6 @@ function applyUpgradeMachine(state: WorldState, command: UpgradeMachineCommand):
   recordSpend(state.stats, cost);
   machine.investedCents += cost;
   setUpgradeLevel(machine, command.dial, level + 1);
-  handsOn(machine);
   touch(state, 'handCarry');
   return true;
 }
@@ -1780,10 +1748,6 @@ function applyResearchTech(state: WorldState, command: ResearchTechCommand): boo
       state.stats.itemsSold,
       workingMachineCount(state),
       state.stats.itemsProducedByMachine,
-      // Ticks to whole in-game days, converted HERE so `tech.ts` stays a leaf that has never
-      // heard of a tick. Plan §3 quotes the Corporate Charter in days and this is the one place
-      // that unit is turned into the other.
-      divFloor(state.stats.longestUntouchedMachineTicks, TICKS_PER_IN_GAME_DAY),
     )
   ) {
     return false;
@@ -2392,15 +2356,8 @@ function applyRenameZone(state: WorldState, command: RenameZoneCommand): boolean
   return true;
 }
 
-/** Locked in the simulation, not just in the UI, until the seed hopper is researched. */
-function applySetZoneAutoReplant(state: WorldState, command: SetZoneAutoReplantCommand): boolean {
-  if (!hasTech(state.unlocked, TechId.AutoReplant)) return false;
-  const zone = zoneById(state, command.zoneId);
-  if (zone === null || zone.autoReplant === command.on) return false;
-  zone.autoReplant = command.on;
-  if (!command.on) zone.replantCooldown = 0;
-  return true;
-}
+// `applySetZoneAutoReplant` lived here until item 146 retired auto-replant. A stored trace
+// naming the command replays as a refused no-op through the dispatch's default case.
 
 // --- 2. player --------------------------------------------------------------------
 //
@@ -2816,84 +2773,17 @@ function advanceMachines(state: WorldState): void {
       if (machine.wateredCount > 0) markCeremony(state, CeremonyId.Sprinkler);
     } else if (spec.role === MachineRole.PipedSprinkler) {
       advancePipedSprinkler(state, machine, spec);
-    } else if (spec.role === MachineRole.Recirculator) {
-      advanceRecirculator(state, machine);
     } else if (spec.role === MachineRole.Converter) {
       advanceConverter(state, machine);
     } else if (spec.role === MachineRole.Orchard) {
       advanceOrchard(machine, spec);
-    } else if (spec.role === MachineRole.MaintenanceStation) {
-      advanceMaintenanceStation(state, machine, spec);
     }
   }
 }
 
-/**
- * One tick of the Maintenance Station: an automated hand throwing real kits (item 039).
- *
- * **IT FIRES WHEN A PLAYER WOULD AND ONLY THEN** — something in its cell is wrench-due
- * (condition below `CONDITION_EFFECT_THRESHOLD`) or jammed, or a dock's bot in the cell is —
- * and what it does then is EXACTLY what `applyUseRepairKit` does from a hand: one kit off the
- * shelf, every machine and dock-bot in the cell back to full, jams cleared. Same radius, same
- * kit, same rate; the only thing removed is the walk.
- *
- * **WHAT IT DELIBERATELY DOES NOT DO:** no `touch` and no `handsOn` — a station's service is
- * not a hand, so the Hands-Free board keeps running and the serviced machines' untouched
- * clocks keep climbing — and NO SERVICE WITHOUT A KIT, ever. An empty hopper is the amber
- * starved lamp and a cell that degrades exactly as if the station were not there, which is
- * what makes the kit belt a supply line rather than scenery.
- *
- * Kit accounting: the kit was bought at the till, where `repairKitSpendCents` counted it, so
- * consumption here adds only to `repairKitsUsed` — the same split a hand-thrown kit gets.
- */
-function advanceMaintenanceStation(state: WorldState, machine: Machine, spec: MachineSpec): void {
-  // At zero it halts and costs nothing, like everything else at zero (plan §4). It cannot
-  // service itself back from the floor — its own arm is the one thing it cannot reach with a
-  // dead motor — so hands or another station bring it back.
-  if (machine.condition <= 0) return;
-  if (machine.cooldown > 0) {
-    machine.cooldown -= 1;
-    return;
-  }
-  if ((machine.inputCounts[0] ?? 0) <= 0) return;
-
-  // Anchored on the top-left tile, like every coverage radius in the game, so the placement
-  // overlay shows exactly the cell one kit will service.
-  const radius = spec.coverageRadiusTiles;
-  let due = false;
-  for (let i = 0; i < state.machines.length && !due; i++) {
-    const candidate = state.machines[i]!;
-    if (!machineWithinRadiusOfTile(candidate, machine.tileX, machine.tileY, radius)) continue;
-    if (machineWantsService(state, candidate)) due = true;
-  }
-  if (!due) return;
-
-  // Through the hopper's one door (item 112), like every other decrement. There was never a clock
-  // to spend here, and since item 124 there are no clocks anywhere — what the door still buys is
-  // that every hopper decrement in the game goes through one function.
-  takeHopper(machine, 0, 1);
-  for (let i = 0; i < state.machines.length; i++) {
-    const candidate = state.machines[i]!;
-    if (!machineWithinRadiusOfTile(candidate, machine.tileX, machine.tileY, radius)) continue;
-    let wantsBots = false;
-    for (let j = 0; j < state.bots.length; j++) {
-      const bot = state.bots[j]!;
-      if (bot.dockId === candidate.id && bot.condition < CONDITION_MAX) wantsBots = true;
-    }
-    if (candidate.condition >= CONDITION_MAX && !candidate.jammed && !wantsBots) continue;
-
-    candidate.condition = CONDITION_MAX;
-    candidate.jammed = false;
-    restoreDockedBots(state, candidate);
-  }
-
-  state.stats.repairKitsUsed += 1;
-  machine.opCount += 1;
-  // AFTER the cell service, so a station inside its own radius still pays its own wear for
-  // the operation it just performed — it is a machine, not an exception.
-  wear(machine, spec.wearPerOperation);
-  machine.cooldown = STATION_SERVICE_PERIOD_TICKS;
-}
+// `advanceMaintenanceStation` — the automated hand that spent real kits on its 7×7 cell — and
+// the `MachineRole.MaintenanceStation` dispatch branch lived here until item 145 cut the
+// station with its Diagnostics node. Drones (`bots.ts`) are the only automated repair now.
 
 /**
  * One tick of a fruit tree: §5's *"2×2 trees, permanent, fruit on a cycle"*.
@@ -2904,10 +2794,9 @@ function advanceMaintenanceStation(state: WorldState, machine: Machine, spec: Ma
  * pause rather than a loss, which is what §7 ruling 6 asks of every clock in this game.
  *
  * **IT IS NOT `advanceConverter` WITH AN EMPTY RECIPE**, and `MachineRole.Orchard` carries the
- * long version of why: a converter advancing work ticks `untouchedTicks`, and the Corporate
- * Charter's entire claim is that a machine cannot advance work for 96,000 straight ticks unless
- * something is *feeding* it. A tree needs nothing feeding it, so a tree on the converter path
- * would hand out that Charter for planting a sapling and running one belt.
+ * long version of why: a tree has no recipe, no wear, no jam, and no waste cadence, and the
+ * converter path assumes all four. (The role's original job — keeping free-fruiting trees off
+ * the Corporate Charter's untouched-work clock — retired with the Charter in item 147.)
  *
  * No wear, no jam, no waste cadence. A tree is not machinery, and §8 forbids landing a
  * maintenance system inside a release that is not about maintenance.
@@ -3176,106 +3065,10 @@ function advanceIrrigationHub(state: WorldState, machine: Machine, spec: Machine
   }
 }
 
-/**
- * The Recirculator: §4's "Recirculators reclaim washer graywater".
- *
- * IT FILLS A TANK, NOT A NETWORK, AND THAT IS NOT A BUG. Plan §5 allows exactly ONE PUMP PER
- * NETWORK, and a second source injecting straight into the pipes would break the single rule
- * that keeps the ledger a division instead of a solver. Pouring into an adjacent tank is the
- * sanctioned way to add supply — the tank is already the thing that covers a shortfall — and
- * it is the cleanest teaching example of why the one-pump rule exists. Anyone who reads this
- * and thinks "surely it should just feed the pipe" is exactly who this comment is for.
- *
- * It reclaims while the Washer is actually washing: has an input, is not blocked, is not
- * broken. An idle Washer produces no graywater, because there is no wash.
- */
-function advanceRecirculator(state: WorldState, machine: Machine): void {
-  if (!washerRunningBeside(state, machine)) {
-    machine.flowMlPerMinute = 0;
-    return;
-  }
-
-  const tank = tankBeside(state, machine);
-  if (tank === null) {
-    machine.flowMlPerMinute = 0;
-    return;
-  }
-
-  const tankSpec = machineSpec(tank.kind);
-  if (tankSpec === null) return;
-
-  // Per-minute rate through the same integer accumulator everything else uses — the machine's
-  // own `progress` field, which a Recirculator has no other use for.
-  machine.progress += RECIRCULATOR_ML_PER_MINUTE;
-  const whole = divFloor(machine.progress, TICKS_PER_MINUTE);
-  if (whole <= 0) return;
-  machine.progress -= whole * TICKS_PER_MINUTE;
-
-  const room = effectiveTankCapacityMl(tankSpec, tank) - tank.tankMl;
-  const put = room < whole ? room : whole;
-  if (put <= 0) {
-    machine.flowMlPerMinute = 0;
-    return;
-  }
-
-  tank.tankMl += put;
-  tank.flowMlPerMinute += put * TICKS_PER_MINUTE;
-  machine.flowMlPerMinute = put * TICKS_PER_MINUTE;
-  machine.opCount += 1;
-}
-
-/** Orthogonal neighbours of a machine's footprint, scanned in a fixed order. */
-function neighbourMachine(
-  state: WorldState,
-  machine: Machine,
-  match: (candidate: Machine, spec: MachineSpec) => boolean,
-): Machine | null {
-  const spec = machineSpec(machine.kind);
-  if (spec === null) return null;
-
-  let best: Machine | null = null;
-  for (let dy = -1; dy <= spec.tilesHigh; dy++) {
-    for (let dx = -1; dx <= spec.tilesWide; dx++) {
-      const x = machine.tileX + dx;
-      const y = machine.tileY + dy;
-      if (machineCoversTile(machine, x, y)) continue;
-      const candidate = machineAt(state, x, y);
-      if (candidate === null || candidate.id === machine.id) continue;
-      const candidateSpec = machineSpec(candidate.kind);
-      if (candidateSpec === null || !match(candidate, candidateSpec)) continue;
-      // Lowest id wins, so two eligible neighbours resolve by a total order rather than by
-      // which direction the scan happened to reach first.
-      if (best === null || candidate.id < best.id) best = candidate;
-    }
-  }
-  return best;
-}
-
-/** Anything at all in any hopper. A machine with several recipes is fed by any one of them. */
-function anyInputHeld(machine: Machine): boolean {
-  for (let i = 0; i < machine.inputCounts.length; i++) {
-    if ((machine.inputCounts[i] ?? 0) > 0) return true;
-  }
-  return false;
-}
-
-function washerRunningBeside(state: WorldState, machine: Machine): boolean {
-  return (
-    neighbourMachine(state, machine, (candidate, spec) => {
-      if (spec.kind !== MachineKind.Washer) return false;
-      if (candidate.jammed || candidate.condition <= 0) return false;
-      // ANY HOPPER, NOT HOPPER ZERO (item 111). A Washer running gold potatoes is a Washer
-      // running, and the day it gained a second hopper a `[0]` here started telling the
-      // Recirculator that a busy machine beside it was idle — reclaiming nothing, silently.
-      if (!anyInputHeld(candidate)) return false;
-      return candidate.outputCount < effectiveOutputCapacity(spec, candidate);
-    }) !== null
-  );
-}
-
-function tankBeside(state: WorldState, machine: Machine): Machine | null {
-  return neighbourMachine(state, machine, (_candidate, spec) => spec.role === MachineRole.Tank);
-}
+// `advanceRecirculator` and its neighbour-scanning helpers (`neighbourMachine`,
+// `anyInputHeld`, `washerRunningBeside`, `tankBeside`) lived here until item 145 cut the
+// Recirculator. Its fill-a-tank-never-a-network grammar survives in the soda line's outlet
+// ports, which adopted the precedent.
 
 /**
  * One converter's tick.
@@ -3303,16 +3096,8 @@ function advanceConverter(state: WorldState, machine: Machine): void {
   const recipe = selectRecipe(spec, machine);
   if (recipe === null) return;
 
-  // THE UNTOUCHED-WORK CLOCK, AND THIS LINE IS THE WHOLE DEFINITION OF "A LINE RUNNING ITSELF".
-  // It ticks here — past demand-pull, past the recipe check, on a tick this machine genuinely
-  // moved an operation forward — and nowhere else, so a machine standing idle with nothing to
-  // eat earns the Corporate Charter nothing. Every hand-verb that reaches a machine calls
-  // `handsOn` and puts it back to zero. The high-water mark is what the milestone reads; see
-  // `WorldStats.longestUntouchedMachineTicks` for why it is a mark rather than a live maximum.
-  machine.untouchedTicks += 1;
-  if (machine.untouchedTicks > state.stats.longestUntouchedMachineTicks) {
-    state.stats.longestUntouchedMachineTicks = machine.untouchedTicks;
-  }
+  // The Corporate Charter's untouched-work clock ticked here — past demand-pull, past the
+  // recipe check — until item 147 cut the Charter and its whole counter chain.
 
   machine.progress += effectiveWorkRate(spec, machine);
   if (machine.progress < spec.workPerOperation) return;
@@ -3328,7 +3113,6 @@ function advanceConverter(state: WorldState, machine: Machine): void {
   const wastePeriod = effectiveWastePeriod(spec, machine);
   if (wastePeriod > 0 && machine.opCount % wastePeriod === 0) {
     state.stats.inputsWastedByMachine += 1;
-    recordBleed(state, machine, recipe);
   } else {
     produceRecipe(spec, recipe, machine);
     state.stats.itemsProducedByMachine += 1;
@@ -3484,35 +3268,10 @@ function wear(machine: Machine, amount: number): void {
   machine.condition = clampInt(machine.condition - amount, 0, CONDITION_MAX);
 }
 
-/**
- * One wasted operation, priced and remembered for the diagnostics window (item 039).
- *
- * THE CASH IS THE SOLID INPUTS AT LIST — the recipe was consumed and nothing came out, so what
- * bled is exactly what went in. Liquids are deliberately unpriced: there is no item id and no
- * price for a millilitre of anything in this game, and inventing one here would be a second
- * opinion about what water is worth. Written into `Machine.bleedEvents` (non-hashed
- * presentation data — see the field), pruned to the window on every write so the array stays
- * a handful of entries however long a worn machine is left grinding.
- */
-function recordBleed(state: WorldState, machine: Machine, recipe: MachineRecipe): void {
-  let cents = 0;
-  // THE RECIPE THAT ACTUALLY RAN, not every hopper the machine owns (item 111). A Seasoner has
-  // four hoppers and eats two of them; pricing the bleed off `spec.inputs` would invoice a
-  // wasted plain-chip operation for a pepper, a corn and a gold chip it never touched.
-  for (let i = 0; i < recipe.consumes.length; i++) {
-    const line = recipe.consumes[i]!;
-    cents += listPriceCents(line.item) * line.count;
-  }
-  if (cents <= 0) return;
-
-  machine.bleedEvents.push({ tick: state.tick, cents });
-  while (
-    machine.bleedEvents.length > 0 &&
-    machine.bleedEvents[0]!.tick <= state.tick - BLEED_WINDOW_TICKS
-  ) {
-    machine.bleedEvents.shift();
-  }
-}
+// `recordBleed` — the diagnostics window's priced wasted-operation writer — lived here until
+// item 145 cut the Diagnostics panel. Waste itself is unchanged: the cadence still spends the
+// recipe and `stats.inputsWastedByMachine` still counts it; only the per-machine cash window
+// is gone.
 
 // --- 8. crops ---------------------------------------------------------------------
 

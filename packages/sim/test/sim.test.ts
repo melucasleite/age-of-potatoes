@@ -123,7 +123,14 @@ describe('determinism', () => {
     // hashes exactly. (The two that do not, `flavour-line` and `bottle-return`, replay `Cheat`,
     // which unlocks every node in `TECH_NODES` — and there is one fewer node.) This script has
     // no pump, so it never drew a millilitre either way.
-    expect(hashState(runScript(1234, 1000))).toBe('dc4bb515');
+    //
+    // dc4bb515 -> e8b65fc7 (save format 24, items 145/146/147): the digest LOST three field
+    // families — `machine.untouchedTicks` and `stats.longestUntouchedMachineTicks` (the
+    // Corporate Charter's counter chain, cut with the Charter) and `zone.autoReplant` /
+    // `zone.replantCooldown` (the seed hopper, retired). Shape only, for this script: it owns
+    // one machine (the sell bin, which never works) and no zones, so every removed byte was a
+    // zero and the run's behaviour is unchanged. The hash moved because the digest did.
+    expect(hashState(runScript(1234, 1000))).toBe('e8b65fc7');
   });
 
   it('gives different seeds different worlds', () => {
@@ -489,15 +496,8 @@ describe('the view seam', () => {
     expect(feed.items).toHaveLength(1);
   });
 
-  it('projects the untouched-line counter the third Charter is read off', () => {
-    const state = createWorld(78);
-    state.stats.longestUntouchedMachineTicks = 3 * TICKS_PER_IN_GAME_DAY;
-
-    const projected = view(state, createWorldView());
-    expect(projected.stats.longestUntouchedMachineTicks).toBe(3 * TICKS_PER_IN_GAME_DAY);
-    // Published in ticks; the panel divides. Three whole days, and the sim never says "days".
-    expect(inGameDays(projected.stats.longestUntouchedMachineTicks)).toBe(3);
-  });
+  // (The untouched-line projection test lived here until item 147 cut the Corporate Charter
+  // and its counter chain.)
 
   it('projects the gross and spend halves of the lifetime ledger', () => {
     const state = runScript(11, 300);

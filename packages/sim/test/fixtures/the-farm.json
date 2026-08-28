@@ -3,7 +3,7 @@
   "description": "The farm release end to end: soil under the crops, an armful cap on the player, a push-scythe cutting three tiles in one swing, a crate bought and packed, a hand cart hitched and dragged and parked, a bag of goods left to spoil into Compost, and that Compost composted into Fertilizer and worked back into the ground. Pins the whole spoilage loop — nothing in it ends at zero value — and the assisted tier that softens it.",
   "seed": 90210,
   "ticks": 67284,
-  "expectedHash": "9af2d5bc",
+  "expectedHash": "259be95b",
   "commands": [
     {
       "tick": 0,

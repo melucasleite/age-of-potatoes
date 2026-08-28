@@ -1,11 +1,11 @@
 // Painted Grow Zones.
 //
-// A ZONE IS A PLAN, NOT A MACHINE (plan §5). Out of the box it plants nothing, waters
-// nothing, and harvests nothing — it is structure for manual work, and its card is the
-// to-do list that turns "click dirt" into "run a farm". The one thing that can ever make it
-// act on its own is the seed hopper, and that is a tech node the player buys, which is the
-// Assisted rung of plan §3's ladder arriving on schedule rather than a zone quietly
-// skipping it.
+// A ZONE IS A PLAN, NOT A MACHINE (plan §5). It plants nothing, waters nothing, and harvests
+// nothing on its own — it is structure for manual work, the to-do list that turns "click
+// dirt" into "run a farm", and the instruction set an Agri-Bot dock is bound to
+// (`Machine.boundZone`). It used to have one self-acting feature — the researched seed
+// hopper's auto-replant — and item 146 retired it: planter bots are the only automatic
+// planting now, so this module is pure geometry and bookkeeping.
 //
 // A DRAG IS ONE COMMAND. `paintZoneRect` takes a rect, so a sixty-tile drag appends exactly
 // one entry to the input trace instead of sixty. That is not an optimisation — it is what
@@ -16,16 +16,8 @@
 // "47 / 60 planted" is never ambiguous and painting over a neighbour reassigns rather than
 // overlaps. A zone that loses its last tile is deleted — an empty plan is not a plan.
 
-import {
-  AUTO_REPLANT_PERIOD_TICKS,
-  CropId,
-  WORLD_TILES_HIGH,
-  WORLD_TILES_WIDE,
-  ZONE_PAINT_MAX_SPAN,
-  cropSpec,
-} from './data';
-import { type WorldState, type Zone, fieldIndex, machineAt, plantCrop, removeItem } from './state';
-import { TechId, hasTech } from './tech';
+import { WORLD_TILES_HIGH, WORLD_TILES_WIDE, ZONE_PAINT_MAX_SPAN } from './data';
+import { type WorldState, fieldIndex } from './state';
 
 /** An integer tile rectangle. Width and height are counts, never coordinates. */
 export interface TileRect {
@@ -134,84 +126,10 @@ export function createZoneCounts(): ZoneCounts {
   return { tiles: 0, planted: 0, mature: 0, dry: 0 };
 }
 
-// --- auto-replant -----------------------------------------------------------------
-
-/**
- * The seed hopper.
- *
- * Only runs at all once `TechId.AutoReplant` is researched, and only for zones whose
- * auto-replant toggle is on and whose crop is assigned. It plants ONE tile per zone per
- * `AUTO_REPLANT_PERIOD_TICKS` from the player's own seed stock — it is a hopper, not a
- * farmhand, and plan §8 cuts hired workers forever precisely so that automation stays
- * "you → machines you earned".
- *
- * Zone priority is what decides who gets served when seeds are short. That is the only
- * thing priority drives today, and it is why the field is stored rather than decorative.
- *
- * An auto-replant is NOT a manual touch. The Hands-Free board (plan §6) exists to reward
- * exactly this, so counting it would make the automation the player bought score as if they
- * had bent down and done it themselves.
- */
-export function advanceZones(state: WorldState): void {
-  if (!hasTech(state.unlocked, TechId.AutoReplant)) return;
-
-  let anyArmed = false;
-  for (let i = 0; i < state.zones.length; i++) {
-    const zone = state.zones[i]!;
-    if (zone.autoReplant && zone.crop !== CropId.None) {
-      anyArmed = true;
-      break;
-    }
-  }
-  if (!anyArmed) return;
-
-  const order = zonesByPriority(state);
-  for (let i = 0; i < order.length; i++) {
-    const zone = order[i]!;
-    if (!zone.autoReplant || zone.crop === CropId.None) {
-      zone.replantCooldown = 0;
-      continue;
-    }
-    if (zone.replantCooldown > 0) {
-      zone.replantCooldown -= 1;
-      continue;
-    }
-    if (replantOneTile(state, zone)) {
-      zone.replantCooldown = AUTO_REPLANT_PERIOD_TICKS;
-    }
-  }
-}
-
-/**
- * Zones ordered by descending priority, then ascending id.
- *
- * A copied array sorted with a total-order comparator: ids are unique, so no two entries
- * ever compare equal and the result cannot depend on the sort's stability. Allocating here
- * is fine because the caller has already established that at least one zone is armed, which
- * is false for most of a world's life.
- */
-function zonesByPriority(state: WorldState): Zone[] {
-  const order: Zone[] = [];
-  for (let i = 0; i < state.zones.length; i++) order.push(state.zones[i]!);
-  order.sort((a, b) => (a.priority === b.priority ? a.id - b.id : b.priority - a.priority));
-  return order;
-}
-
-/** Plant the first empty tile of a zone, in field order. Returns false if it cannot. */
-function replantOneTile(state: WorldState, zone: Zone): boolean {
-  const spec = cropSpec(zone.crop);
-  if (spec === null) return false;
-
-  for (let i = 0; i < state.field.length; i++) {
-    const tile = state.field[i]!;
-    if (tile.zone !== zone.id) continue;
-    if (tile.crop !== CropId.None) continue;
-    // A farm tile hosting a field-placed machine (item 067) grows nothing while it stands —
-    // the hopper skips it exactly as the planter bot does, and keeps the seed.
-    if (machineAt(state, tile.tileX, tile.tileY) !== null) continue;
-    if (!removeItem(state, spec.seedItem, 1)) return false;
-    plantCrop(state, tile, spec);
-    return true;
-  }
-  return false;
-}
+// --- auto-replant: RETIRED (item 146) ---------------------------------------------
+//
+// `advanceZones` and its two helpers lived here: the researched seed hopper planted one tile
+// per armed zone per `AUTO_REPLANT_PERIOD_TICKS` from the player's own seed stock, served in
+// priority order. Planter bots are the only automatic planting now — cheaper and earlier to
+// make up for it — and the tick no longer has a zones phase at all: zones act on nothing,
+// and the bots read them through `Machine.boundZone` on their own clock.

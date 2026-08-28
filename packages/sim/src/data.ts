@@ -20,12 +20,14 @@ import { TICKS_PER_SECOND, divFloor } from './units';
 // and these ids are written into saves, so their numeric values are permanent.
 
 /**
- * The tilled-ground crops. **THE ROSTER IS EIGHT AND FIVE OF THEM ARE HERE.**
+ * The tilled-ground crops. **THE ROSTER IS NOW THREE: TWO SOWN AND ONE PLANTED** (items
+ * 145/147, owner cut list 2026-08-27).
  *
- * Plan §5 caps the roster at eight and names them: Russet Potato, Gold Potato, Chili Pepper,
- * Corn, Sugar Cane, and the three 2×2 trees — Orange, Lemon, Kola Nut. §7 ruling 8 restates the
- * cap as a decision that survived the critique. Five of the eight are `CropId`s; **the three
- * trees are `MachineKind`s**, and that split is a ruling rather than an implementation detail.
+ * Plan §5's cap of eight held until the final stretch; the cut list retired Corn, Chili and
+ * the Gold Potato with the flavour tier that consumed them, and the Orange and Lemon trees
+ * with the orchard node. What remains is Russet Potato, Sugar Cane, and the Kola Tree — the
+ * tree still a `MachineKind` rather than a `CropId`, and that split is a ruling rather than
+ * an implementation detail.
  *
  * **WHY A TREE IS NOT A `CropId`.** A `CropTile` is one tile with one crop on it, and the field
  * is a flat row-major array — so a 2×2 tree expressed as a crop would be four tiles each
@@ -38,18 +40,16 @@ import { TICKS_PER_SECOND, divFloor } from './units';
  * survives harvest and fruits on a cycle is *already* a machine in everything but name. Item 030
  * recommends exactly this and it is worth more than taxonomic purity.
  *
- * The count still comes to eight, and it is the eight §5 lists: five sown, three planted.
- *
  * Numeric values are written into saves and permanent. Never renumber 0 or 1.
  */
 export const CropId = {
   None: 0,
   RussetPotato: 1,
   SugarCane: 2,
-  Corn: 3,
-  ChiliPepper: 4,
-  /** §5: "Gold Potato (premium, thirsty)". Drinks three times what a Russet does. */
-  GoldPotato: 5,
+  // 3, 4 and 5 are SPENT AND UNSPELLED (item 145). They were `Corn`, `ChiliPepper` and
+  // `GoldPotato` — cut with their seeds, their produce and the flavour tier that ate them.
+  // The numbers stay burned because they are in old saves' fields and zones, and the 23 → 24
+  // migration is the only code that may name them.
 } as const;
 
 export type CropId = (typeof CropId)[keyof typeof CropId];
@@ -107,22 +107,13 @@ export function soilSpec(id: SoilType): SoilSpec | null {
 export const SOIL_ROLL_TABLE: readonly SoilType[] = [SoilType.Loam, SoilType.Sand, SoilType.Clay];
 
 /**
- * Plan §5 caps the recipe graph at ~50 items. We are at **38 items plus 5 liquids = 43 nodes**,
- * and `recycling.test.ts` asserts exactly that — a comment here that disagrees with that test is
- * the comment that is wrong. **IT READ 49, THEN 50, AND ITEM 124 HANDED SEVEN BACK**: the five
- * Day-Old grades, `Compost` and `Fertilizer` all left when the waste loop was deleted, which was
- * a side effect of that item and not its point. The census is the original 26 (the soda line
- * spent 6 item slots and 4 liquid slots), what is left of the crop roster's 8
- * (gold potato trio, two tree fruits, scythe, crate), item 039's drone part —
- * which [[090]] left with no producer and no consumer, but which still occupies its node because
- * a returning player's stock has to have a price to sell at — and item 111's flavour tier of 9.
- *
- * **THAT LEAVES ONE NODE, AND THE CAP IS NOW A REAL CONSTRAINT RATHER THAN A HEADROOM NOTE.**
- * Item 111 spent its nine deliberately and was shaped by this number: a premium BASE costs five
- * nodes and a SEASONING costs two, so the budget bought one base (the gold potato) and two
- * seasonings (chili, corn) instead of the two bases the item first proposed. The next feature
- * that wants a product tier does not have room for one — it either buys a raise from the owner
- * or spends the last node. See the flavour-tier block in `ItemId` for the whole argument.
+ * Plan §5 caps the recipe graph at ~50 items. The final-stretch cut list (item 145) took the
+ * census from 43 nodes to **21 items plus 5 liquids = 26 nodes**, and `recycling.test.ts`
+ * asserts exactly that — a comment here that disagrees with that test is the comment that is
+ * wrong. Item 124 had already handed seven back (the Day-Old grades, Compost, Fertilizer);
+ * item 145 handed back seventeen more: the corn/chili/gold-potato seed-and-produce pairs, the
+ * two tree fruits, and the whole nine-node flavour tier. What remains is the plain chip chain,
+ * the soda line, the tools, the drone part ([[090]]'s priced orphan) and the used bottle.
  *
  * Boxed machines are not graph nodes — nothing eats one, nothing makes one, no belt carries
  * one. Numeric values are permanent — they are in every save and on every belt.
@@ -148,11 +139,9 @@ export const ItemId = {
   CaneSeed: 10,
   SugarCane: 11,
 
-  CornSeed: 13,
-  Corn: 14,
-
-  ChiliSeed: 16,
-  ChiliPepper: 17,
+  // 13, 14, 16 and 17 are SPENT AND UNSPELLED (item 145). They were `CornSeed`, `Corn`,
+  // `ChiliSeed` and `ChiliPepper` — cut with their crops. The numbers stay burned because they
+  // are in old saves, and the 23 → 24 migration is the only code that may name them.
 
   /**
    * Chips that sat in a blocked Fryer until they caught colour. Plan §2: "overcooked chips
@@ -197,7 +186,10 @@ export const ItemId = {
   // the world starts with, it costs nothing, and it is the only way to sell or buy anything —
   // boxing it would be a single click that ends a save's economy, which is precisely the class
   // of thing plan §1's anti-softlock floor exists to refuse.
-  BoxedChipKitchen: 27,
+  // 27 was `BoxedChipKitchen` and is SPENT AND UNSPELLED (item 145): the v0.1 monolith is cut
+  // outright — the researched Wash & Slice → Fryer → Finishing line is the only chip route now,
+  // and the early game sells raw produce until research. The 23 → 24 migration pays out every
+  // box and every placed kitchen off its own invoice before the id stops existing.
   BoxedSprinkler: 28,
   BoxedWasher: 29,
   BoxedSlicer: 30,
@@ -208,7 +200,8 @@ export const ItemId = {
   BoxedTank: 35,
   BoxedPipedSprinkler: 36,
   BoxedIrrigationHub: 37,
-  BoxedRecirculator: 38,
+  // 38 was `BoxedRecirculator` and is SPENT AND UNSPELLED (item 145): the graywater loop is
+  // cut. The 23 → 24 migration pays out every box and every placed one.
   BoxedJuicer: 39,
   BoxedKettle: 40,
   BoxedGrinder: 41,
@@ -221,16 +214,11 @@ export const ItemId = {
   BoxedTruckDepot: 48,
   BoxedBeltJunction: 49,
 
-  // --- the roster's last crop, and the orchard ----------------------------------------
-  //
-  // §5's "Gold Potato (premium, thirsty)" and the fruit the three 2×2 trees drop. The trees
-  // themselves are machines (see `CropId`); these are what comes out of them.
-  GoldPotatoSeed: 50,
-  GoldPotato: 51,
-  // 52 was `DayOldGoldPotato` and is spent (item 124). See the note above `CaneSeed`.
-  /** Orange Tree fruit. Sellable produce, and nothing eats it — §8 defers fruit sodas past 1.0. */
-  Orange: 53,
-  Lemon: 54,
+  // 50, 51, 53 and 54 are SPENT AND UNSPELLED (item 145). They were `GoldPotatoSeed`,
+  // `GoldPotato`, `Orange` and `Lemon` — the premium crop pair cut with its tier, and the two
+  // tree fruits nothing ever ate (clean cuts; §8 deferred fruit sodas past 1.0 and the cut
+  // list closed the question). 52 was `DayOldGoldPotato`, spent earlier still (item 124).
+  // The numbers stay burned; the 23 → 24 migration pays the stock out at list.
 
   // 55 was `Fertilizer` and is spent (item 124). Fertility is not a feature, so nothing
   // restores it and nothing is made of compost. The 21 → 22 migration pays out any a
@@ -264,12 +252,14 @@ export const ItemId = {
   Crate: 57,
 
   // --- boxes for everything above ------------------------------------------------------
-  BoxedRootCellar: 58,
+  // 58 was `BoxedRootCellar` and is SPENT AND UNSPELLED (item 145): the cellar's freeze died
+  // with spoilage (item 124), and its bulk-storage second act is now cut too. Refunded by the
+  // 23 → 24 migration, box and placed machine alike.
   // 59 was `BoxedComposter` and is spent (item 124): the machine is gone, so its box is
   // too. A boxed one in a returning player's bag is refunded by the 21 → 22 migration.
   BoxedHandCart: 60,
-  BoxedOrangeTree: 61,
-  BoxedLemonTree: 62,
+  // 61 and 62 were `BoxedOrangeTree` and `BoxedLemonTree`, SPENT AND UNSPELLED (item 145) with
+  // their trees. Refunded by the 23 → 24 migration.
   BoxedKolaTree: 63,
   BoxedHarvesterDock: 64,
   BoxedPlanterDock: 65,
@@ -291,53 +281,19 @@ export const ItemId = {
    */
   DronePart: 66,
 
-  BoxedMaintenanceStation: 67,
+  // 67 was `BoxedMaintenanceStation` and is SPENT AND UNSPELLED (item 145): the station is cut
+  // and drones are the only automated repair. Refunded by the 23 → 24 migration. Hand-thrown
+  // repair kits (`ItemId.RepairKit`) are untouched.
   BoxedDroneBay: 68,
   BoxedPartsBench: 69,
 
-  // --- the flavour tier (item 111) -----------------------------------------------------
-  //
-  // Nine nodes that end the roster's museum problem: before this block, `Corn`, `ChiliPepper`
-  // and `GoldPotato` appeared nowhere in `src/` outside their own rows. Nothing ate them. Corn
-  // took 210 s to grow and sold for twenty cents more than a potato that took 90 s AND fed a
-  // line that multiplied it; the gold potato was the sharpest joke of the three — **a potato
-  // the potato line refused**, because the Washer's recipe named `RussetPotato` specifically.
-  //
-  // WHY THE GOLD POTATO IS A BASE AND THE OTHER TWO ARE SEASONINGS — the ruling, in one place.
-  // A seasoning is something you add to a finished chip; a base is what the chip is made of.
-  // Chili and corn can flavour a chip. A gold potato cannot flavour anything: it is a potato,
-  // and the only honest thing to do with it is fry it. Forcing all three through one door
-  // would mean lying about at least one of them — sprinkling a potato on a crisp, or frying a
-  // pepper into a base nobody would eat.
-  //
-  // AND THE ~50-NODE CAP DECIDED THE SHAPE, not taste. Plan §5 caps the recipe graph and the
-  // header comment above counts it. An alternate BASE costs FIVE nodes, because identity has
-  // to survive every rung from the Washer to the Bagger; a SEASONING costs two, because it
-  // joins at the Seasoner and only the last two rungs differ. Two base chains would have cost
-  // ten and put the graph at 52. One base plus two seasonings costs nine and lands at 49. The
-  // budget permits exactly one premium base, and the gold potato is the only crop that has to
-  // be one.
-  //
-  // The gold rungs are the plain rungs shifted up by one constant (`GOLD_POTATO_PREMIUM_CENTS`)
-  // — every machine adds exactly the value it adds to a russet, and the premium rides through
-  // untouched. See `FLAVOUR_PREMIUM_NUMERATOR` for where that constant and the two seasoned
-  // prices come from, and for the margin arithmetic in full.
-  WashedGoldPotato: 70,
-  GoldPotatoSlices: 71,
-  GoldChips: 72,
-  SeasonedGoldChips: 73,
-  BaggedGoldChips: 74,
-
-  /** Plain chips seasoned with a pepper instead of salt. One pepper per chip — see the recipe. */
-  ChiliChips: 75,
-  BaggedChiliChips: 76,
-  /**
-   * Corn as a FLAVOUR rather than a base, which is the one place this design bends toward the
-   * node budget — and it bends honestly: sweetcorn is an ordinary crisp flavour, sold in every
-   * corner shop. A corn-chip BASE would have been the other five nodes the graph does not have.
-   */
-  SweetcornChips: 77,
-  BaggedSweetcornChips: 78,
+  // 70 THROUGH 78 ARE SPENT AND UNSPELLED (item 145): the whole of item 111's flavour tier —
+  // `WashedGoldPotato`, `GoldPotatoSlices`, `GoldChips`, `SeasonedGoldChips`, `BaggedGoldChips`,
+  // `ChiliChips`, `BaggedChiliChips`, `SweetcornChips`, `BaggedSweetcornChips`. The tier
+  // existed to give Corn, Chili and the Gold Potato something to feed, and it left with them:
+  // nine dangling nodes whose every input was cut. The numbers stay burned — they are in old
+  // saves' hoppers, belts and bags — and the 23 → 24 migration pays the stock out at the list
+  // prices this build no longer carries.
 
   // 79 was `BoxedArtesianWell` and is SPENT AND UNSPELLED (item 140). The pond it existed to
   // enlarge is now unlimited, so the machine is retired and its box has nothing to unpack into.
@@ -383,8 +339,9 @@ export type ItemId = (typeof ItemId)[keyof typeof ItemId];
 
 export const MachineKind = {
   SellBin: 1,
-  /** The v0.1 monolith. Still buildable, still the cheapest way to a bag (see below). */
-  ChipKitchen: 2,
+  // 2 was `ChipKitchen`, the v0.1 monolith, and is SPENT AND UNSPELLED (item 145). It carried
+  // a "kept buildable forever" promise and the owner cut it anyway: the researched line is the
+  // only chip route now. The 23 → 24 migration refunds every placed one and every box.
   Sprinkler: 3,
 
   // The production line. Plan §5: "Washer→Slicer→Fryer→Seasoner→Bagger, canonical ratio
@@ -403,7 +360,8 @@ export const MachineKind = {
   Tank: 10,
   PipedSprinkler: 11,
   IrrigationHub: 12,
-  Recirculator: 13,
+  // 13 was `Recirculator` and is SPENT AND UNSPELLED (item 145). It reclaimed Washer graywater
+  // into a tank; the loop is cut and the 23 → 24 migration refunds it, placed and boxed.
 
   // The soda line — plan §5's PIPE ORGAN, where the chip line is a belt cathedral. Every one
   // of these is an ordinary `Converter`: the roles, the buffers, the dials, the wear, and the
@@ -452,20 +410,9 @@ export const MachineKind = {
   // exactly the code that does all of that for a Fryer, and loaded and emptied by
   // `LoadMachine`/`UnloadMachine`, which already exist, already count a `handCarry` touch, and
   // already have a walk-to errand wired. Not one line of any of that was written for these.
-  /**
-   * **BULK STORAGE, AND THAT IS NOW ITS WHOLE JOB** (item 124, and flagged for the owner).
-   *
-   * It used to be the fridge: §4's *"frozen in a Root Cellar"*, the only 0 in the storage
-   * ageing table. Nothing spoils any more, so the freeze it sold is a freeze everything gets
-   * for free, and a $250 machine whose entire pitch has evaporated is a machine a player was
-   * robbed of. Deleting it was the other option and it is the worse one — somebody built this.
-   *
-   * So it keeps its price, its four tiles and its Agronomy node, and what it sells instead is
-   * the half of its old pitch that survives intact: **capacity**. `inputCapacity` goes from a
-   * hundred to `ROOT_CELLAR_CAPACITY`, which is what makes it the one place to put a harvest
-   * you cannot process yet against a hand cart's twenty-four.
-   */
-  RootCellar: 25,
+  // 25 was `RootCellar` and is SPENT AND UNSPELLED (item 145). Item 124 took its freeze (the
+  // fridge died with spoilage) and re-purposed it as bulk storage; the cut list ends the second
+  // act too. The 23 → 24 migration refunds it and hands back whatever it held.
   // 26 was `Composter` and is SPENT AND UNSPELLED (item 124). It converted Compost to
   // Fertilizer; both ends of that recipe are gone, so it is not tombstoned the way the Parts
   // Bench is — a headstone exists to price a box a player still holds, and the 21 → 22
@@ -480,13 +427,14 @@ export const MachineKind = {
    */
   HandCart: 27,
 
-  // --- the orchard (plan §5's three 2×2 trees) -------------------------------------------
+  // --- the orchard, now a single tree ----------------------------------------------------
   //
-  // See `CropId` for why a permanent multi-tile plant is a machine rather than a crop. Each one
-  // is `MachineRole.Orchard`: no inputs, no plumbing, a footprint, and an output buffer that
-  // fills on a cycle and that a belt or a grabber can drain.
-  OrangeTree: 28,
-  LemonTree: 29,
+  // See `CropId` for why a permanent multi-tile plant is a machine rather than a crop. The
+  // Kola Tree is `MachineRole.Orchard`: no inputs, no plumbing, a footprint, and an output
+  // buffer that fills on a cycle and that a belt or a grabber can drain.
+  // 28 and 29 were `OrangeTree` and `LemonTree`, SPENT AND UNSPELLED (item 145): their fruit
+  // fed nothing and the orchard node went with them. The 23 → 24 migration refunds both,
+  // planted and boxed, fruit handed back with the rest.
   /**
    * **PLANTING THE FIRST ONE IS AN EVENT** (§5, by name), because it is the gate on the cola
    * line: the Grinder eats kola nuts, and until now the only kola in the world was bought at the
@@ -508,17 +456,12 @@ export const MachineKind = {
   /** And this one puts them back, from a seed hopper you keep filled — by hand, or by belt. */
   PlanterDock: 32,
 
-  // --- automated maintenance (item 039, plan §3's ladder topping out) ---------------------
+  // --- automated maintenance (item 039, halved by item 145) -------------------------------
   //
-  // The Maintenance Station is an arm that does what your hand did: it spends REAL repair kits
-  // from a belt-fed hopper on the same 7×7 cell a hand-thrown kit services, at the same cadence
-  // a player would (when the wrench lamp is due), and it starves honestly — no kits on the belt,
-  // no service, ever. That rung is now the ladder's whole argument about cost, because the rung
-  // above it stopped having one: the Drone Bay's drone flies to whichever machine on the lot
-  // wants a wrench and fixes it for FREE (item 090), so the bay is a `BotDock` with no cargo at
-  // all — nothing goes in, nothing comes out, and the only bill is the hangar and the node.
-  /** Belt-fed kits in, serviced cell out. §3's first automated maintenance rung. */
-  MaintenanceStation: 33,
+  // 33 was `MaintenanceStation` and is SPENT AND UNSPELLED (item 145). It was the belt-fed
+  // middle rung — real kits, a 7×7 cell, honest starvation — and it went with its Diagnostics
+  // node: the drone is now the only automated repair, and the hand kit the only other rung.
+  // The 23 → 24 migration refunds it, hopper contents included.
   /** One bay, one drone, no hopper. The tech tree's capstone (§3). */
   DroneBay: 34,
   /**
@@ -698,67 +641,11 @@ export const WASHED_POTATO_PRICE_CENTS = 300;
 export const POTATO_SLICES_PRICE_CENTS = 450;
 export const PLAIN_CHIPS_PRICE_CENTS = 900;
 
-/** The three crops item 111 gave a job to, hoisted so the premiums below are computed, not typed. */
-export const GOLD_POTATO_PRICE_CENTS = 600;
-export const CHILI_PEPPER_PRICE_CENTS = 300;
-export const CORN_PRICE_CENTS = 220;
-
-/**
- * **WHAT A FLAVOUR IS WORTH, AND THE ONLY NUMBER IN ITEM 111 THAT WAS CHOSEN RATHER THAN
- * DERIVED.** Everything else in the tier is arithmetic on this and on the ladder above.
- *
- * The rule: a flavoured or premium product is worth its plain counterpart **plus 150% of the
- * extra input that went into it**. Priced off the INPUT cost, which is what item 111 demanded,
- * and 150% is not a vibe — it is the next rung of a ladder this file already climbs. The
- * six-pack pays **110%** for bundling a product with itself (throughput). The Snack Combo pays
- * **125%** for bundling two districts (breadth). A flavour asks for strictly more than either:
- * a second crop, on a second tile, with its own growth clock and its own belt into the line.
- * So it pays more than both, and 150 is the next step in 110 → 125 → 150.
- *
- * **WHY THIS CANNOT ACCELERATE AN ECONOMY ALREADY RUNNING ~5× TOO FAST** (item 046 inherits the
- * sweep; this tier must not make its job worse):
- *
- * - A russet becomes a bag: 200 → 2000, a **10× multiplier** across five operations.
- * - A pepper becomes flavour: 300 → 450 of added bag value, a **1.5× multiplier**. It rides the
- *   two rungs it joins at and is multiplied by nothing, because it enters at the Seasoner
- *   rather than at the head of the line.
- * - The gold potato costs $4.00 more than a russet and returns $6.00 more per bag: **+$2.00 of
- *   margin on a plain bag's $18.00**, or +11%, for a crop that takes 180 s against a russet's
- *   90 s. Per *tile*-second the gold line is therefore WORSE than the plain one; per *machine*
- *   operation it is 30% better ($5.20 vs $4.00 an op). That is the trade on purpose — gold is
- *   what you plant when your line outruns your field, and a straight upgrade would have been
- *   both a balance bug and a boring decision.
- *
- * No number below beats the plain line on the axis the plain line wins on. If item 046's sweep
- * finds the economy still hot, this tier is not why.
- */
-export const FLAVOUR_PREMIUM_NUMERATOR = 150;
-export const FLAVOUR_PREMIUM_DENOMINATOR = 100;
-
-/** 150% of what the extra ingredient cost, floored to the cent. */
-export function flavourPremiumCents(extraInputCents: number): number {
-  return divFloor(extraInputCents * FLAVOUR_PREMIUM_NUMERATOR, FLAVOUR_PREMIUM_DENOMINATOR);
-}
-
-/**
- * **$6.00, and it is added to every rung of the gold line identically.**
- *
- * `flavourPremiumCents(600 − 200)` — 150% of what a gold potato costs over the russet it
- * replaces. A flat shift rather than a per-rung markup is the whole design: it means each
- * machine adds *exactly* the value it adds to a russet (+100 washed, +150 sliced, +450 fried,
- * +500 seasoned, +600 bagged), and the premium the player paid for at the seed shop rides
- * through the line untouched. A proportional markup would have quietly multiplied the premium
- * five times over and handed item 046 a second runaway.
- */
-export const GOLD_POTATO_PREMIUM_CENTS = flavourPremiumCents(
-  GOLD_POTATO_PRICE_CENTS - RUSSET_POTATO_PRICE_CENTS,
-);
-
-/** $4.50 — 150% of one pepper. One pepper seasons one chip; see the Seasoner's recipes. */
-export const CHILI_PREMIUM_CENTS = flavourPremiumCents(CHILI_PEPPER_PRICE_CENTS);
-
-/** $3.30 — 150% of one corn. */
-export const SWEETCORN_PREMIUM_CENTS = flavourPremiumCents(CORN_PRICE_CENTS);
+// THE FLAVOUR-PRICING BLOCK IS RETIRED WITH ITS TIER (items 111 → 145). `GOLD_POTATO_PRICE_CENTS`,
+// `CHILI_PEPPER_PRICE_CENTS`, `CORN_PRICE_CENTS`, `FLAVOUR_PREMIUM_NUMERATOR/DENOMINATOR`,
+// `flavourPremiumCents` and the three `*_PREMIUM_CENTS` all priced crops and products that item
+// 145 cut; the 150% premium rule (the 110 → 125 → 150 ladder above the two bundle premiums) is
+// recorded in item 111's log if a future tier ever wants it back.
 
 /** Plan §4: "syrup + carbonated water + bottle → soda (~$16)". This is the ~$16. */
 export const SODA_PRICE_CENTS = 1600;
@@ -894,83 +781,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     sellable: true,
   },
 
-  // --- item 111's flavour tier ----------------------------------------------------------
-  //
-  // NOT ONE LITERAL IN THE WHOLE BLOCK. Every price is `plain rung + premium`, so the tier
-  // cannot drift away from the ladder it is priced against: reprice seasoned chips and the
-  // chili bag follows on the same line. See `FLAVOUR_PREMIUM_NUMERATOR` for where the premiums
-  // come from and why they do not accelerate the economy.
-
-  // The gold line — the plain line shifted up by a flat $6.00 at every rung. 600 → 900 →
-  // 1050 → 1500 → 2000 → 2600, which adds +100/+150/+450/+500/+600 exactly as the russet
-  // line does. The machines do not know the potato was expensive; only the ledger does.
-  {
-    id: ItemId.WashedGoldPotato,
-    slug: 'washed-gold-potato',
-    listPriceCents: WASHED_POTATO_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.GoldPotatoSlices,
-    slug: 'gold-potato-slices',
-    listPriceCents: POTATO_SLICES_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.GoldChips,
-    slug: 'gold-chips',
-    listPriceCents: PLAIN_CHIPS_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.SeasonedGoldChips,
-    slug: 'seasoned-gold-chips',
-    listPriceCents: SEASONED_CHIPS_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.BaggedGoldChips,
-    slug: 'bagged-gold-chips',
-    listPriceCents: BAGGED_CHIPS_PRICE_CENTS + GOLD_POTATO_PREMIUM_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-
-  // The two seasonings. They join at the Seasoner, so only the last two rungs differ from
-  // plain: 1400 + 450 = 1850 seasoned and 2000 + 450 = 2450 bagged for chili, and the same
-  // arithmetic with corn's smaller premium.
-  {
-    id: ItemId.ChiliChips,
-    slug: 'chili-chips',
-    listPriceCents: SEASONED_CHIPS_PRICE_CENTS + CHILI_PREMIUM_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.BaggedChiliChips,
-    slug: 'bagged-chili-chips',
-    listPriceCents: BAGGED_CHIPS_PRICE_CENTS + CHILI_PREMIUM_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.SweetcornChips,
-    slug: 'sweetcorn-chips',
-    listPriceCents: SEASONED_CHIPS_PRICE_CENTS + SWEETCORN_PREMIUM_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.BaggedSweetcornChips,
-    slug: 'bagged-sweetcorn-chips',
-    listPriceCents: BAGGED_CHIPS_PRICE_CENTS + SWEETCORN_PREMIUM_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
   {
     id: ItemId.CaneSeed,
     slug: 'cane-seed',
@@ -982,34 +792,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     id: ItemId.SugarCane,
     slug: 'sugar-cane',
     listPriceCents: 250,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.CornSeed,
-    slug: 'corn-seed',
-    listPriceCents: 70,
-    purchasable: true,
-    sellable: false,
-  },
-  {
-    id: ItemId.Corn,
-    slug: 'corn',
-    listPriceCents: CORN_PRICE_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-  {
-    id: ItemId.ChiliSeed,
-    slug: 'chili-seed',
-    listPriceCents: 90,
-    purchasable: true,
-    sellable: false,
-  },
-  {
-    id: ItemId.ChiliPepper,
-    slug: 'chili-pepper',
-    listPriceCents: CHILI_PEPPER_PRICE_CENTS,
     purchasable: false,
     sellable: true,
   },
@@ -1074,7 +856,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   // takes goods, and a boxed machine is scrapped from the inventory panel with
   // `SellBoxedMachine` at 40% of its invoice. The bin refusing them is the same one line of
   // data doing the same job it already did for seeds.
-  { id: ItemId.BoxedChipKitchen, slug: 'boxed-chip-kitchen', ...BOXED },
   { id: ItemId.BoxedSprinkler, slug: 'boxed-sprinkler', ...BOXED },
   { id: ItemId.BoxedWasher, slug: 'boxed-washer', ...BOXED },
   { id: ItemId.BoxedSlicer, slug: 'boxed-slicer', ...BOXED },
@@ -1085,7 +866,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.BoxedTank, slug: 'boxed-tank', ...BOXED },
   { id: ItemId.BoxedPipedSprinkler, slug: 'boxed-piped-sprinkler', ...BOXED },
   { id: ItemId.BoxedIrrigationHub, slug: 'boxed-irrigation-hub', ...BOXED },
-  { id: ItemId.BoxedRecirculator, slug: 'boxed-recirculator', ...BOXED },
   { id: ItemId.BoxedJuicer, slug: 'boxed-juicer', ...BOXED },
   { id: ItemId.BoxedKettle, slug: 'boxed-kettle', ...BOXED },
   { id: ItemId.BoxedGrinder, slug: 'boxed-grinder', ...BOXED },
@@ -1098,43 +878,10 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
   { id: ItemId.BoxedTruckDepot, slug: 'boxed-truck-depot', ...BOXED },
   { id: ItemId.BoxedBeltJunction, slug: 'boxed-belt-junction', ...BOXED },
 
-  // --- the roster's last crop and the orchard's fruit ---------------------------------
-  //
-  // ART MANIFEST, DECLARED HERE AND NOWHERE ELSE. The slugs below are the ids the art pipeline
-  // reads: `gold-potato-seed`, `gold-potato`, `orange`, `lemon`, `push-scythe` as item sprites,
-  // plus the growth strip `crop_gold_potato_strip` (one horizontal strip per crop, one generation
-  // call — §15, and never four separate calls) and three tree sprites for `orange-tree`,
-  // `lemon-tree`, `kola-tree` in `MACHINE_SPECS`.
-  // Nothing here generates art; this table is the declaration the art pass reads off.
-  //
-  // **`day-old-gold-potato` AND `fertilizer` WERE ON THIS LIST AND ARE GONE** (item 124). Both
-  // items were deleted, and `item_day_old_gold_potato`, `item_fertilizer` and `machine_composter`
-  // were pulled out of `art/manifest.json` with them — the atlas went 170 → 167 frames. The
-  // committed originals and their prompt sidecars stay on disk in `art/originals/`, so the art is
-  // re-bakeable if the ruling is ever reversed; nothing in the atlas claims the game draws them.
-  //
-  // ⚠️ `crop_gold_potato_strip` IS FIVE CELLS AND THE GAME DRAWS FOUR. Cell 5 is the withered
-  // plant, generated for the wilt state that no longer exists. It stays because it is inside one
-  // image with the four cells that ARE drawn: separating it means cropping a committed original
-  // or re-rolling the whole plant. `growthStage` caps at `stageCount - 1`, so nothing can ask for
-  // it. Cost: 32×32 px on a page that is 44% full.
-  {
-    id: ItemId.GoldPotatoSeed,
-    slug: 'gold-potato-seed',
-    listPriceCents: 200,
-    purchasable: true,
-    sellable: false,
-  },
-  {
-    // §5's "premium". Three times a Russet at the till, and three times the water in the ground.
-    id: ItemId.GoldPotato,
-    slug: 'gold-potato',
-    listPriceCents: GOLD_POTATO_PRICE_CENTS,
-    purchasable: false,
-    sellable: true,
-  },
-  { id: ItemId.Orange, slug: 'orange', listPriceCents: 260, purchasable: false, sellable: true },
-  { id: ItemId.Lemon, slug: 'lemon', listPriceCents: 240, purchasable: false, sellable: true },
+  // The gold potato pair, the orange and the lemon had their rows here until item 145. Their
+  // art (`item_gold_potato*`, `item_orange`, `item_lemon`, `crop_gold_potato_strip`, the two
+  // tree sprites) goes stale in place — harmless; the atlas shrinks on the next pack, and the
+  // committed originals in `art/originals/` keep everything re-bakeable.
   {
     // §3's 15-Minute Rule against the $150 barrel sprinkler's anchor: era-1 income is about $10 a
     // minute, so an assisted tool wants to sit near $60–$100. The scythe is the cheapest of the
@@ -1158,10 +905,7 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     sellable: true,
   },
 
-  { id: ItemId.BoxedRootCellar, slug: 'boxed-root-cellar', ...BOXED },
   { id: ItemId.BoxedHandCart, slug: 'boxed-hand-cart', ...BOXED },
-  { id: ItemId.BoxedOrangeTree, slug: 'boxed-orange-tree', ...BOXED },
-  { id: ItemId.BoxedLemonTree, slug: 'boxed-lemon-tree', ...BOXED },
   { id: ItemId.BoxedKolaTree, slug: 'boxed-kola-tree', ...BOXED },
   { id: ItemId.BoxedHarvesterDock, slug: 'boxed-harvester-dock', ...BOXED },
   { id: ItemId.BoxedPlanterDock, slug: 'boxed-planter-dock', ...BOXED },
@@ -1175,7 +919,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
     purchasable: false,
     sellable: true,
   },
-  { id: ItemId.BoxedMaintenanceStation, slug: 'boxed-maintenance-station', ...BOXED },
   { id: ItemId.BoxedDroneBay, slug: 'boxed-drone-bay', ...BOXED },
   { id: ItemId.BoxedPartsBench, slug: 'boxed-parts-bench', ...BOXED },
 
@@ -1201,7 +944,6 @@ export const ITEM_SPECS: readonly ItemSpec[] = [
  */
 export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly item: ItemId }[] =
   [
-    { kind: MachineKind.ChipKitchen, item: ItemId.BoxedChipKitchen },
     { kind: MachineKind.Sprinkler, item: ItemId.BoxedSprinkler },
     { kind: MachineKind.Washer, item: ItemId.BoxedWasher },
     { kind: MachineKind.Slicer, item: ItemId.BoxedSlicer },
@@ -1212,7 +954,6 @@ export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly
     { kind: MachineKind.Tank, item: ItemId.BoxedTank },
     { kind: MachineKind.PipedSprinkler, item: ItemId.BoxedPipedSprinkler },
     { kind: MachineKind.IrrigationHub, item: ItemId.BoxedIrrigationHub },
-    { kind: MachineKind.Recirculator, item: ItemId.BoxedRecirculator },
     { kind: MachineKind.Juicer, item: ItemId.BoxedJuicer },
     { kind: MachineKind.Kettle, item: ItemId.BoxedKettle },
     { kind: MachineKind.Grinder, item: ItemId.BoxedGrinder },
@@ -1224,17 +965,13 @@ export const BOXED_MACHINE_ROWS: readonly { readonly kind: MachineKind; readonly
     { kind: MachineKind.DeliveryCart, item: ItemId.BoxedDeliveryCart },
     { kind: MachineKind.TruckDepot, item: ItemId.BoxedTruckDepot },
     { kind: MachineKind.BeltJunction, item: ItemId.BoxedBeltJunction },
-    { kind: MachineKind.RootCellar, item: ItemId.BoxedRootCellar },
     { kind: MachineKind.HandCart, item: ItemId.BoxedHandCart },
     // A boxed tree. It is a sapling in a sack, and it keeps nothing but its invoice — the fruit
     // in its buffer comes back to the player's hands with everything else `DeconstructMachine`
     // empties, exactly as a Fryer's basket does.
-    { kind: MachineKind.OrangeTree, item: ItemId.BoxedOrangeTree },
-    { kind: MachineKind.LemonTree, item: ItemId.BoxedLemonTree },
     { kind: MachineKind.KolaTree, item: ItemId.BoxedKolaTree },
     { kind: MachineKind.HarvesterDock, item: ItemId.BoxedHarvesterDock },
     { kind: MachineKind.PlanterDock, item: ItemId.BoxedPlanterDock },
-    { kind: MachineKind.MaintenanceStation, item: ItemId.BoxedMaintenanceStation },
     { kind: MachineKind.DroneBay, item: ItemId.BoxedDroneBay },
     { kind: MachineKind.PartsBench, item: ItemId.BoxedPartsBench },
   ];
@@ -1434,56 +1171,7 @@ export const CROP_SPECS: readonly CropSpec[] = [
     moistureDrainPerTick: 2,
     requiresTech: TechId.Cane,
   },
-  {
-    // Dual use: oil at the press now, corn syrup later.
-    id: CropId.Corn,
-    slug: 'corn',
-    growthTicks: 210 * TICKS_PER_SECOND,
-    growthVariancePermille: 100,
-    seedItem: ItemId.CornSeed,
-    yieldItem: ItemId.Corn,
-    stageCount: 5,
-    regrowTicks: 0,
-    moistureDrainPerTick: 1,
-    requiresTech: TechId.Corn,
-  },
-  {
-    id: CropId.ChiliPepper,
-    slug: 'chili-pepper',
-    growthTicks: 120 * TICKS_PER_SECOND,
-    growthVariancePermille: 150,
-    seedItem: ItemId.ChiliSeed,
-    yieldItem: ItemId.ChiliPepper,
-    stageCount: 5,
-    regrowTicks: 45 * TICKS_PER_SECOND,
-    moistureDrainPerTick: 1,
-    requiresTech: TechId.Chili,
-  },
-  {
-    // §5: "Gold Potato (premium, thirsty)". The roster's fifth sown crop and its last.
-    //
-    // **THIRST IS A DRAIN RATE, NOT A SPRINKLER SPECIAL CASE** (item 030's constraint). Three
-    // moisture a tick against a Russet's one, so on the same watering schedule a gold row runs
-    // dry three times as fast and stops growing while it waits — visible in the ground as cracked
-    // earth at `MOISTURE_DRY_THRESHOLD`, which is the same threshold the renderer already draws
-    // and the Irrigation Hub already senses. Nothing anywhere knows this crop is special; it just
-    // drinks, and the sprinkler you already own is suddenly not enough, which is the decision §5
-    // wants placement to be.
-    //
-    // A one-shot, like the Russet: §5 gives regrowth to cane and chili only, and the crop list is
-    // the pacing mechanism for the Agri-Bots — a premium one-shot is precisely the crop that
-    // waits for the planter bot.
-    id: CropId.GoldPotato,
-    slug: 'gold-potato',
-    growthTicks: 180 * TICKS_PER_SECOND,
-    growthVariancePermille: 150,
-    seedItem: ItemId.GoldPotatoSeed,
-    yieldItem: ItemId.GoldPotato,
-    stageCount: 5,
-    regrowTicks: 0,
-    moistureDrainPerTick: 3,
-    requiresTech: TechId.GoldPotato,
-  },
+  // Corn, Chili and the Gold Potato had their rows here until item 145 cut all three crops.
 ];
 
 export function cropSpec(id: CropId): CropSpec | null {
@@ -1616,9 +1304,6 @@ export const PUMP_RATE_ML_PER_MINUTE = 600_000;
  */
 export const PIPE_RR_MODULUS = 720_720;
 
-/** How much the Recirculator reclaims while an adjacent Washer is actually washing. */
-export const RECIRCULATOR_ML_PER_MINUTE = 90_000;
-
 /** Chebyshev radius of the Irrigation Hub's coverage, in tiles. A 9×9 patch. */
 export const IRRIGATION_HUB_RADIUS_TILES = 4;
 /**
@@ -1632,8 +1317,9 @@ export const IRRIGATION_HUB_SCAN_PER_TICK = 8;
 
 // --- zones ------------------------------------------------------------------------
 //
-// A zone is a PLAN, NOT A MACHINE (plan §5). It plants nothing on its own; the seed hopper
-// tech is what turns the auto-replant toggle from a locked promise into a verb.
+// A zone is a PLAN, NOT A MACHINE (plan §5). It plants nothing on its own — it is the
+// instruction set an Agri-Bot dock is bound to (`Machine.boundZone`). The zone seed hopper
+// (auto-replant) was retired in item 146: planter bots are the only automatic planting.
 
 /** Longest zone name the sim will store. Longer names are clipped, never rejected. */
 export const ZONE_NAME_MAX_LENGTH = 24;
@@ -1642,13 +1328,6 @@ export const ZONE_PRIORITY_MAX = 9;
 export const ZONE_PRIORITY_DEFAULT = 5;
 /** Widest rect one paint drag may cover. A drag is one command, so this bounds its cost. */
 export const ZONE_PAINT_MAX_SPAN = 64;
-
-/**
- * How often a zone with auto-replant on plants one tile, once the seed hopper is
- * researched. Deliberately unhurried: this is the Assisted rung of plan §3's ladder, not a
- * replacement for the player.
- */
-export const AUTO_REPLANT_PERIOD_TICKS = 40;
 
 // --- machines ---------------------------------------------------------------------
 
@@ -1675,8 +1354,9 @@ export const MachineRole = {
    * simply never needs filling. The Hub is the same role with a dry-tile predicate.
    */
   PipedSprinkler: 5,
-  /** Reclaims Washer graywater into a TANK, never into a network (plan §5, and see below). */
-  Recirculator: 6,
+  // 6 was `Recirculator` and is spent (item 145): the graywater loop is cut with its machine.
+  // Its tank-not-network grammar survives in the outlet ports of the soda line, which adopted
+  // the precedent it set.
 
   // Selling. Both roles hold goods and run a round-trip timer, and NEITHER has a work cycle:
   // `workPerOperation` is 0, so nothing here wears, jams, overcooks, or takes a dial. A vehicle
@@ -1710,12 +1390,11 @@ export const MachineRole = {
    *
    * **NOT `Converter` WITH AN EMPTY RECIPE, THOUGH THAT WOULD HAVE COMPILED AND RUN.**
    * `recipeSatisfied` is vacuously true on an empty input list, so a tree dropped into the
-   * converter path would fruit correctly — and it would also advance `untouchedTicks` every tick
-   * it fruited, which would hand the Corporate Charter to a player who planted a tree and ran one
-   * belt off it. That milestone's entire claim is *"a machine cannot advance work for 96,000
-   * straight ticks unless something is feeding it and something is emptying it, so what the
-   * counter certifies **is** a line"* — and a tree needs nothing feeding it. One extra role is
-   * cheaper than a Charter that means something different than it says.
+   * converter path would fruit correctly. The role earned its keep guarding the Corporate
+   * Charter's untouched-work clock from free-fruiting trees; the Charter and its clock are gone
+   * (item 147), and the role stays because it is still the honest description — a tree has no
+   * recipe, no wear, no jam, and no waste cadence, and the converter path assumes all four.
+   * The Kola Tree is its one machine now (item 145 cut the other two).
    */
   Orchard: 11,
   /**
@@ -1724,17 +1403,8 @@ export const MachineRole = {
    * the bot is an entity rather than a number on this machine.
    */
   BotDock: 12,
-  /**
-   * The Maintenance Station: an automated hand with a kit hopper.
-   *
-   * ITS OWN ROLE RATHER THAN A CONVERTER WITH A STRANGE RECIPE, because it consumes on a
-   * different clock: a converter eats when its recipe is full and its output has room; this
-   * eats a kit only when something in its cell is wrench-due, and it produces nothing a belt
-   * could take. Its "operation" is `applyUseRepairKit`'s cell service with the hand taken out —
-   * no touch, no `handsOn`, and therefore no reset of any machine's untouched clock, which is
-   * what lets an automated factory hold the Corporate Charter's milestone while being serviced.
-   */
-  MaintenanceStation: 13,
+  // 13 was `MaintenanceStation` and is spent (item 145): the automated hand with a kit hopper
+  // is cut with its Diagnostics node, and drones are the only automated repair.
 
   // 14 was `Well` and is spent (item 140): the Artesian Well is retired with the scarcity it
   // existed to relieve, and no other machine ever wanted the role.
@@ -1822,7 +1492,8 @@ export type PortFlow = (typeof PortFlow)[keyof typeof PortFlow];
  * it is not a pump. That is what lets the whole soda line run on the existing one-ledger model
  * with no second source anywhere: a juice network has **no pump at all**, and plan §5's "one
  * pump per network" is not bent, it is unused. The Recirculator established this exact grammar
- * a release early — a producer pours into a tank, never into the pipes.
+ * a release early — a producer pours into a tank, never into the pipes — and the grammar
+ * outlives the machine (cut in item 145).
  */
 export interface LiquidPortSpec {
   readonly liquid: LiquidId;
@@ -1864,8 +1535,8 @@ export interface MachineSpec {
    * line with a count of six.
    *
    * **THIS IS THE MACHINE'S PLAIN RECIPE, NOT ITS HOPPER LIST**, and since item 111 those are
-   * two different things: five machines know several recipes, so a Seasoner eats one chip here
-   * and can *hold* peppers, corn and gold chips besides. `machine.inputCounts` is sized from
+   * two different things: the Washer knows two recipes, so it eats one potato here and can
+   * *hold* used bottles besides. `machine.inputCounts` is sized from
    * and indexed by `machineHoppers()`, never by this. Walk this list when you mean "what one
    * ordinary operation costs" — pricing, value-added, the Dawn Report's idle flag — and walk
    * the hoppers when you mean "what is inside the machine". The header above `machineHoppers`
@@ -1901,7 +1572,7 @@ export interface MachineSpec {
   /**
    * The liquid this machine's pipe port accepts, or `LiquidId.None` for no port.
    *
-   * For the plumbing machines — Pump, Tank, heads, Recirculator — this IS their port, driven by
+   * For the plumbing machines — Pump, Tank, heads — this IS their port, driven by
    * `role` in the ledger, exactly as it has been since the liquid layer shipped. For a machine
    * with a `ports` list this field is the FIRST port's liquid, restated: the renderer reads it
    * as "does this machine have a typed port at all", and `test/factory.test.ts` pins the two to
@@ -2013,25 +1684,9 @@ export const WASTE_PERIOD_AT_ZERO = 2;
  */
 export const REPAIR_KIT_RADIUS_TILES = 3;
 
-/**
- * One Maintenance Station service cycle: ten active seconds per kit application.
- *
- * The station consumes kits AT THE RATE A PLAYER WOULD (item 039 instruction 2): it fires only
- * when something in its cell is actually wrench-due — condition below
- * `CONDITION_EFFECT_THRESHOLD`, or jammed — never on a timer and never to top up a machine
- * that merely did some work. The cooldown is the arm resetting between applications, roughly
- * the walk-and-hold a hand service costs, so a cell that falls apart faster than a person
- * could kit it does not get super-human service either.
- */
-export const STATION_SERVICE_PERIOD_TICKS = 200;
-
-/**
- * The diagnostics window: 60 active seconds, plan §5's own number ("alerts only when money
- * bleeds >60s, phrased in cash"). `MachineView.bleedCentsLast60s` sums each machine's wasted
- * inputs over this many trailing ticks. Presentation cadence, not balance — it prices nothing
- * and is deliberately NOT folded into `BALANCE_HASH`.
- */
-export const BLEED_WINDOW_TICKS = 60 * TICKS_PER_SECOND;
+// `STATION_SERVICE_PERIOD_TICKS` (the Maintenance Station's service cadence) and
+// `BLEED_WINDOW_TICKS` (the diagnostics bleed window) were retired with their machine and
+// panel in item 145.
 
 /**
  * How long a full output buffer stands still before one more unit of it overcooks.
@@ -2271,23 +1926,8 @@ export function emptiesForDelivery(
  */
 export const VEHICLE_EMPTIES_CAPACITY = 120;
 
-/**
- * **WHAT THE ROOT CELLAR SELLS NOW THAT NOTHING SPOILS** (item 124 — flagged for the owner as a
- * decision, not presented as settled).
- *
- * The cellar's entire pitch was §4's *"frozen in a Root Cellar"*: it was the only container in
- * the game whose clock ran at zero. Item 124 deleted every clock, which left a $250 four-tile
- * machine, gated behind an Agronomy node, selling a property that dirt now has. Deleting it was
- * the alternative and it is worse — a player who saved up for one would open the game and find
- * it gone — so it keeps its price and takes a new job.
- *
- * Five hundred, against the hundred it used to hold and the hand cart's twenty-four. The
- * multiple is chosen so the sentence *"the one place to put a harvest you cannot process yet"*
- * stays true of it and only it: twenty carts' worth in four tiles, which no amount of barrows
- * reproduces. It is not derived from anything, and it is a number the owner should feel free to
- * move — that is what makes it a constant here rather than a literal in the spec row.
- */
-export const ROOT_CELLAR_CAPACITY = 500;
+// `ROOT_CELLAR_CAPACITY` (the cellar's item 124 bulk-storage second act) was retired with the
+// machine in item 145.
 
 export const MACHINE_SPECS: readonly MachineSpec[] = [
   {
@@ -2315,36 +1955,9 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     moistureSensing: false,
     fieldPlaceable: false,
   },
-  {
-    // The v0.1 monolith, kept buildable forever. It is strictly worse than the line — one
-    // bag per 60 ticks against the line's one per 30 — but it needs no belts, no grabbers,
-    // and no research, so it stays the honest early-game answer and every v0.1 save that
-    // has one keeps working.
-    kind: MachineKind.ChipKitchen,
-    slug: 'chip-kitchen',
-    role: MachineRole.Converter,
-    tilesWide: 2,
-    tilesHigh: 2,
-    priceCents: 10_000,
-    workPerOperation: 60 * WORK_RATE_SCALE,
-    workRatePerTick: WORK_RATE_SCALE,
-    inputCapacity: 20,
-    outputCapacity: 20,
-    tankCapacityMl: 0,
-    /** Deliberately above the time rule's 3 — the monolith nags; see the wear derivation. */
-    wearPerOperation: 5,
-    inputs: [{ item: ItemId.RussetPotato, count: 1 }],
-    outputItem: ItemId.BaggedChips,
-    overcookOutputItem: null,
-    requiresTech: null,
-    liquid: LiquidId.None,
-    ports: [],
-    pumpRateMlPerMinute: 0,
-    intakeMlPerTick: 0,
-    coverageRadiusTiles: 0,
-    moistureSensing: false,
-    fieldPlaceable: false,
-  },
+  // The ChipKitchen's spec stood here from v0.1 until item 145. It was the monolith that made
+  // a bag with no belts and no research; the researched line is the only chip route now, and
+  // the early game sells raw produce until Wash & Slice.
   {
     // The $150 sprinkler of plan §7 — the whole v0.1 design gate. You fill its barrel by
     // can; piped sprinklers arrive at v0.4.
@@ -2660,36 +2273,8 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     moistureSensing: true,
     fieldPlaceable: true,
   },
-  {
-    // Reclaims Washer graywater — plan §4. IT FEEDS A TANK, NOT A NETWORK, and that is not a
-    // bug: plan §5 allows exactly ONE PUMP PER NETWORK, so a second source injecting straight
-    // into the pipes would break the rule that makes the ledger comprehensible. Pouring into
-    // a tank is the sanctioned way to add a source, and it is the cleanest possible teaching
-    // example of why the rule exists. Put a Recirculator beside a Washer and a Tank.
-    kind: MachineKind.Recirculator,
-    slug: 'recirculator',
-    role: MachineRole.Recirculator,
-    tilesWide: 1,
-    tilesHigh: 1,
-    priceCents: 30_000,
-    workPerOperation: 0,
-    workRatePerTick: 0,
-    inputCapacity: 0,
-    outputCapacity: 0,
-    tankCapacityMl: 0,
-    wearPerOperation: 0,
-    inputs: [],
-    outputItem: null,
-    overcookOutputItem: null,
-    requiresTech: TechId.Recirculator,
-    liquid: LiquidId.Water,
-    ports: [],
-    pumpRateMlPerMinute: 0,
-    intakeMlPerTick: 0,
-    coverageRadiusTiles: 0,
-    moistureSensing: false,
-    fieldPlaceable: false,
-  },
+  // The Recirculator's spec stood here until item 145. Its tank-not-network grammar survives
+  // in the soda line's outlet ports, which adopted the precedent it set a release early.
 
   // --- the soda line (plan §5's pipe organ) ---------------------------------------------
   //
@@ -3147,35 +2732,9 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
   // They hold ONE PRODUCT AT A TIME, in `cargoItem`/`cargoCount`, which is the delivery cart's
   // pair doing a second job. That is a container, not a warehouse: "what is in this" stays one
   // word and one number, and a player who wants two products puts down a second box.
-  {
-    // **BULK STORAGE** (item 124). The clock it used to stop no longer exists, so what it sells
-    // is `ROOT_CELLAR_CAPACITY` — see `MachineKind.RootCellar` for why it was re-purposed rather
-    // than deleted, and note that the price, footprint and tech node are all exactly what they
-    // were: this is a machine finding a new job, not a machine being re-costed.
-    kind: MachineKind.RootCellar,
-    slug: 'root-cellar',
-    role: MachineRole.Storage,
-    tilesWide: 2,
-    tilesHigh: 2,
-    priceCents: 25_000,
-    workPerOperation: 0,
-    workRatePerTick: 0,
-    inputCapacity: ROOT_CELLAR_CAPACITY,
-    outputCapacity: 0,
-    tankCapacityMl: 0,
-    wearPerOperation: 0,
-    inputs: [],
-    outputItem: null,
-    overcookOutputItem: null,
-    requiresTech: TechId.RootCellar,
-    liquid: LiquidId.None,
-    ports: [],
-    pumpRateMlPerMinute: 0,
-    intakeMlPerTick: 0,
-    coverageRadiusTiles: 0,
-    moistureSensing: false,
-    fieldPlaceable: false,
-  },
+  // The Root Cellar's spec stood here until item 145: first the fridge (item 124 took the
+  // freeze with spoilage), then bulk storage, now cut. The hand cart below is the whole of
+  // `MachineRole.Storage`.
   {
     // Plan §3's assisted rung of the TRANSPORT ladder. Storage that follows you.
     //
@@ -3212,64 +2771,17 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
 
   // --- the orchard ----------------------------------------------------------------------
   //
-  // Three 2×2 permanent plants that survive harvest and fruit on a cycle (§5). The cycle is
+  // One 2×2 permanent plant that survives harvest and fruits on a cycle (§5). The cycle is
   // `workPerOperation ÷ workRatePerTick`, exactly as a Fryer's is — a tree is a machine that
-  // takes four active minutes to make one fruit out of nothing — so the Speed dial works on it,
-  // the progress bar means what it means everywhere else, and `MachineSpec` needed no new field.
+  // takes minutes to make one fruit out of nothing — so the Speed dial works on it, the
+  // progress bar means what it means everywhere else, and `MachineSpec` needed no new field.
   //
   // NO WEAR AND NO JAM: `wearPerOperation` is 0, because a tree is not machinery and §8 forbids
-  // hanging a maintenance chore off a feature in the release that is not about maintenance. They
-  // are dear to plant and free to keep, which is what makes planting one a decision.
-  {
-    kind: MachineKind.OrangeTree,
-    slug: 'orange-tree',
-    role: MachineRole.Orchard,
-    tilesWide: 2,
-    tilesHigh: 2,
-    priceCents: 20_000,
-    workPerOperation: 240 * WORK_RATE_SCALE,
-    workRatePerTick: WORK_RATE_SCALE,
-    inputCapacity: 0,
-    outputCapacity: 12,
-    tankCapacityMl: 0,
-    wearPerOperation: 0,
-    inputs: [],
-    outputItem: ItemId.Orange,
-    overcookOutputItem: null,
-    requiresTech: TechId.Orchard,
-    liquid: LiquidId.None,
-    ports: [],
-    pumpRateMlPerMinute: 0,
-    intakeMlPerTick: 0,
-    coverageRadiusTiles: 0,
-    moistureSensing: false,
-    fieldPlaceable: false,
-  },
-  {
-    kind: MachineKind.LemonTree,
-    slug: 'lemon-tree',
-    role: MachineRole.Orchard,
-    tilesWide: 2,
-    tilesHigh: 2,
-    priceCents: 20_000,
-    workPerOperation: 240 * WORK_RATE_SCALE,
-    workRatePerTick: WORK_RATE_SCALE,
-    inputCapacity: 0,
-    outputCapacity: 12,
-    tankCapacityMl: 0,
-    wearPerOperation: 0,
-    inputs: [],
-    outputItem: ItemId.Lemon,
-    overcookOutputItem: null,
-    requiresTech: TechId.Orchard,
-    liquid: LiquidId.None,
-    ports: [],
-    pumpRateMlPerMinute: 0,
-    intakeMlPerTick: 0,
-    coverageRadiusTiles: 0,
-    moistureSensing: false,
-    fieldPlaceable: false,
-  },
+  // hanging a maintenance chore off a feature in the release that is not about maintenance. It
+  // is dear to plant and free to keep, which is what makes planting one a decision.
+  //
+  // The Orange and Lemon trees stood here until item 145: their fruit fed nothing, and they
+  // went with the orchard node. The Kola Tree survives because the cola line eats what it drops.
   {
     // **THE GATE ON THE COLA LINE, AND THE ONLY TREE WHOSE FRUIT ANYTHING EATS.** A kola nut off
     // this tree and a kola nut off the roadside stand are the same `ItemId`, deliberately: the
@@ -3315,11 +2827,11 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     role: MachineRole.BotDock,
     tilesWide: 2,
     tilesHigh: 2,
-    // The automated rung, priced above every assisted tool on the same ladder and above the
-    // Truck Depot beside it: what it buys is the one chore nothing in this game has ever done for
-    // the player. Plan §3 prices the automated rung above the assisted one it replaces, and the
-    // assisted one here is a $60 scythe you still have to swing.
-    priceCents: 60_000,
+    // The automated rung, priced above every assisted tool on the same ladder — the assisted
+    // one here is a $60 scythe you still have to swing. Item 146 cut it from $600 to $400 with
+    // the whole bot family's re-pricing: with auto-replant retired, bots arrive earlier and
+    // cheaper so mid-game keeps automatic planting.
+    priceCents: 40_000,
     workPerOperation: 0,
     workRatePerTick: 0,
     inputCapacity: 0,
@@ -3339,15 +2851,17 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     fieldPlaceable: false,
   },
   {
-    // The seed hopper on legs. §5: "regrowing crops automate first; one-shots wait for the
-    // seed-hopper bot — the crop list itself paces the arc", so this is the machine that makes
-    // potatoes, corn and gold potatoes automatable, and chili and cane never needed it.
+    // The seed hopper on legs — and since item 146 the ONLY seed hopper: the zone toggle is
+    // retired, so this is the machine that makes one-shot potatoes automatable, and regrowing
+    // cane never needed it. §5: "regrowing crops automate first; one-shots wait for the
+    // seed-hopper bot — the crop list itself paces the arc."
     kind: MachineKind.PlanterDock,
     slug: 'planter-dock',
     role: MachineRole.BotDock,
     tilesWide: 2,
     tilesHigh: 2,
-    priceCents: 50_000,
+    // $500 → $350 in item 146, with the rest of the bot family's re-pricing.
+    priceCents: 35_000,
     workPerOperation: 0,
     workRatePerTick: 0,
     /** Seeds the hopper holds. Hand-filled counts a touch; belt-filled does not. */
@@ -3368,41 +2882,11 @@ export const MACHINE_SPECS: readonly MachineSpec[] = [
     fieldPlaceable: false,
   },
 
-  // --- automated maintenance (item 039) --------------------------------------------------
-  {
-    // An arm that throws repair kits. `coverageRadiusTiles` is EXACTLY the hand kit's radius,
-    // deliberately: the station is not a better kit, it is the same kit without the walk, so
-    // one station services precisely the cell one trip would have. `inputs` names the kit so
-    // the ordinary grabber recipe-line door belt-feeds the hopper with no new plumbing; the
-    // consumption clock is `advanceMaintenanceStation`'s, not the converter's.
-    kind: MachineKind.MaintenanceStation,
-    slug: 'maintenance-station',
-    role: MachineRole.MaintenanceStation,
-    tilesWide: 2,
-    tilesHigh: 2,
-    // Above the dearest assisted tool on the ladder (the $80 kit is per-trip; this is the
-    // trip removed), below the drone bay that outranks it. Era-3 money by the 15-Minute Rule.
-    priceCents: 120_000,
-    workPerOperation: 0,
-    workRatePerTick: 0,
-    /** The kit hopper. Hand-filled counts a touch; belt-filled does not. */
-    inputCapacity: 6,
-    outputCapacity: 0,
-    tankCapacityMl: 0,
-    /** Per service, like every wear rate in this file. It can service itself — for a kit. */
-    wearPerOperation: 2,
-    inputs: [{ item: ItemId.RepairKit, count: 1 }],
-    outputItem: null,
-    overcookOutputItem: null,
-    requiresTech: TechId.Diagnostics,
-    liquid: LiquidId.None,
-    ports: [],
-    pumpRateMlPerMinute: 0,
-    intakeMlPerTick: 0,
-    coverageRadiusTiles: REPAIR_KIT_RADIUS_TILES,
-    moistureSensing: false,
-    fieldPlaceable: false,
-  },
+  // --- automated maintenance (item 039, halved by item 145) -------------------------------
+  //
+  // The Maintenance Station's spec stood here until item 145 — the hand kit's cell with the
+  // walk removed, belt-fed and honestly starving. Cut with its Diagnostics node; the drone bay
+  // below is the whole automated rung now, and the hand kit is the rung under it.
   {
     // One bay, one drone, AND AN EMPTY SHELF ([[090]]). Its `cargoItem`/`cargoCount` pair used
     // to be a parts hopper sitting exactly where the planter keeps its seeds; drone service is
@@ -3486,11 +2970,11 @@ export function machineSpec(kind: MachineKind): MachineSpec | null {
   return null;
 }
 
-// --- what a machine knows how to make (item 111) -------------------------------------
+// --- what a machine knows how to make (item 111, thinned by item 145) ------------------
 //
-// **A SIDE TABLE RATHER THAN A FIELD ON EVERY SPEC, AND THAT IS A DELIBERATE TRADE.** Five
-// machines in a roster of forty know more than one recipe; a `recipes` field on `MachineSpec`
-// would have put an empty list on the other thirty-five and asked every future machine to
+// **A SIDE TABLE RATHER THAN A FIELD ON EVERY SPEC, AND THAT IS A DELIBERATE TRADE.** One
+// machine now knows more than one recipe — the Washer — and a `recipes` field on `MachineSpec`
+// would have put an empty list on every other machine and asked every future machine to
 // answer a question it does not have. `BOXED_MACHINE_ROWS` and `RETIRED_MACHINE_KINDS` are
 // already keyed-by-kind side tables for the same reason, so this is the file's own idiom.
 //
@@ -3500,15 +2984,15 @@ export function machineSpec(kind: MachineKind): MachineSpec | null {
 // machine actually has a hopper for.
 //
 // ORDER IS THE PRIORITY, AND IT IS THE ONLY TIE-BREAK IN THE FEATURE. The first recipe whose
-// hoppers are full enough runs, so **the flavoured lines are declared before the plain one** —
-// a Seasoner holding chips and peppers makes chili chips, and falls back to plain the moment
-// the peppers run out rather than stopping. A line never stalls for want of a seasoning; it
-// just quietly goes back to salt, which is a supply problem the player can see in the hopper.
+// hoppers are full enough runs, so the scarce input is declared before the staple.
 //
-// FLAVOURS DO NOT COMBINE, and that is why the chili and corn lines name `PlainChips`
-// specifically rather than "any chip". Letting a seasoning meet the premium base would have
-// turned nine items into a matrix — spicy gold, sweetcorn gold, and a bag for each — and the
-// recipe graph has ONE node left (see the `ItemId` header). One flavour per bag.
+// ITEM 145 TOOK THE FLAVOUR TIER'S NINE LINES OUT OF THIS TABLE — the gold rungs on Washer,
+// Slicer, Fryer, Seasoner and Bagger, and the chili and sweetcorn rungs on Seasoner and
+// Bagger. The Slicer/Fryer/Seasoner/Bagger rows then said nothing their specs did not, so
+// the rows are gone and those machines run the implied single recipe again. Survivor order
+// inside the Washer row is unchanged (bottles before potatoes) — hopper index order is a
+// save-compat rule, and the 23 → 24 migration remaps saved `inputCounts` onto the shrunk
+// hopper lists.
 
 export interface MachineRecipeRow {
   readonly kind: MachineKind;
@@ -3545,71 +3029,8 @@ export const MACHINE_RECIPES: readonly MachineRecipeRow[] = [
     // everywhere else.
     kind: MachineKind.Washer,
     recipes: [
-      { consumes: [{ item: ItemId.GoldPotato, count: 1 }], output: ItemId.WashedGoldPotato },
       { consumes: [{ item: ItemId.UsedBottle, count: 1 }], output: ItemId.Bottle },
       { consumes: [{ item: ItemId.RussetPotato, count: 1 }], output: ItemId.WashedPotato },
-    ],
-  },
-  {
-    kind: MachineKind.Slicer,
-    recipes: [
-      {
-        consumes: [{ item: ItemId.WashedGoldPotato, count: 1 }],
-        output: ItemId.GoldPotatoSlices,
-      },
-      { consumes: [{ item: ItemId.WashedPotato, count: 1 }], output: ItemId.PotatoSlices },
-    ],
-  },
-  {
-    kind: MachineKind.Fryer,
-    recipes: [
-      { consumes: [{ item: ItemId.GoldPotatoSlices, count: 1 }], output: ItemId.GoldChips },
-      { consumes: [{ item: ItemId.PotatoSlices, count: 1 }], output: ItemId.PlainChips },
-    ],
-  },
-  {
-    // The machine item 111 was written to make interesting. It had one input, one output and no
-    // decision in it; it now has the only ingredient choice on the lot.
-    //
-    // ONE PEPPER PER CHIP, and it is a limit of the model rather than a claim about cooking: an
-    // operation makes exactly one unit, and there is no fractional consumption anywhere in this
-    // sim, so a pepper cannot season four chips without inventing a second kind of recipe. The
-    // premium is priced against that full pepper — see `CHILI_PREMIUM_CENTS`.
-    kind: MachineKind.Seasoner,
-    recipes: [
-      {
-        consumes: [
-          { item: ItemId.PlainChips, count: 1 },
-          { item: ItemId.ChiliPepper, count: 1 },
-        ],
-        output: ItemId.ChiliChips,
-      },
-      {
-        consumes: [
-          { item: ItemId.PlainChips, count: 1 },
-          { item: ItemId.Corn, count: 1 },
-        ],
-        output: ItemId.SweetcornChips,
-      },
-      { consumes: [{ item: ItemId.GoldChips, count: 1 }], output: ItemId.SeasonedGoldChips },
-      // Last, and unchanged since v0.1. Plain chips keep working exactly as they always have:
-      // a Seasoner fed nothing but chips reaches this line every time.
-      { consumes: [{ item: ItemId.PlainChips, count: 1 }], output: ItemId.SeasonedChips },
-    ],
-  },
-  {
-    kind: MachineKind.Bagger,
-    recipes: [
-      { consumes: [{ item: ItemId.ChiliChips, count: 1 }], output: ItemId.BaggedChiliChips },
-      {
-        consumes: [{ item: ItemId.SweetcornChips, count: 1 }],
-        output: ItemId.BaggedSweetcornChips,
-      },
-      {
-        consumes: [{ item: ItemId.SeasonedGoldChips, count: 1 }],
-        output: ItemId.BaggedGoldChips,
-      },
-      { consumes: [{ item: ItemId.SeasonedChips, count: 1 }], output: ItemId.BaggedChips },
     ],
   },
 ];
@@ -4396,7 +3817,7 @@ function balanceDigest(): string {
   );
   h = fnv1aString(
     h,
-    `${AUTO_REPLANT_PERIOD_TICKS}:${ZONE_PAINT_MAX_SPAN}:${BELT_ITEM_SPACING_SUBTILES}:${BELT_MAX_LENGTH_TILES}:${WORK_RATE_SCALE}`,
+    `${ZONE_PAINT_MAX_SPAN}:${BELT_ITEM_SPACING_SUBTILES}:${BELT_MAX_LENGTH_TILES}:${WORK_RATE_SCALE}`,
   );
   h = fnv1aString(
     h,
@@ -4406,7 +3827,7 @@ function balanceDigest(): string {
   // the world numbers; everything a worn or neglected machine actually *does* is here.
   h = fnv1aString(
     h,
-    `${REPAIR_PER_TOUCH}:${JAM_EVERY_N_OPERATIONS_WHEN_WORN}:${WASTE_PERIOD_AT_THRESHOLD}:${WASTE_PERIOD_AT_ZERO}:${REPAIR_KIT_PRICE_CENTS}:${REPAIR_KIT_RADIUS_TILES}:${OVERCOOK_BLOCKED_TICKS}:${RUSTIC_STYLE_NUMERATOR}/${RUSTIC_STYLE_DENOMINATOR}:${STATION_SERVICE_PERIOD_TICKS}:${DRONE_PART_PRICE_CENTS}`,
+    `${REPAIR_PER_TOUCH}:${JAM_EVERY_N_OPERATIONS_WHEN_WORN}:${WASTE_PERIOD_AT_THRESHOLD}:${WASTE_PERIOD_AT_ZERO}:${REPAIR_KIT_PRICE_CENTS}:${REPAIR_KIT_RADIUS_TILES}:${OVERCOOK_BLOCKED_TICKS}:${RUSTIC_STYLE_NUMERATOR}/${RUSTIC_STYLE_DENOMINATOR}:${DRONE_PART_PRICE_CENTS}`,
   );
   // The soda line's derived prices. The bundle premiums are ratios rather than literals, so the
   // digest folds in the ratio — a repriced bag of chips moves the Combo, and the digest with it.
@@ -4471,8 +3892,9 @@ function balanceDigest(): string {
   // fertility block that used to be digested here — the per-item windows, the bucket, the stack
   // cap, the crate, the compost ratios, the fertility bounds and the container ageing table —
   // and it is load-bearing for the one reason any of those were: a saved world's next harvest is
-  // counted with it, so a build that changed it would pay a saved field differently.
-  h = fnv1aString(h, `harvest:${HARVEST_BASE_COUNT}:cellar:${ROOT_CELLAR_CAPACITY}`);
+  // counted with it, so a build that changed it would pay a saved field differently. (The
+  // cellar's capacity rode along here until item 145 cut the machine.)
+  h = fnv1aString(h, `harvest:${HARVEST_BASE_COUNT}`);
   // The assisted tier and the bots. Every one of these is a rate or a capacity a saved world is
   // mid-way through spending: a hitched cart's next step, a bot's next harvest, a swing's width.
   h = fnv1aString(

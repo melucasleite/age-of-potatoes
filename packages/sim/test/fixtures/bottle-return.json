@@ -3,7 +3,7 @@
   "description": "Item 131's loop, and the only fixture in the set whose ends meet: four bottles are bought at the stand, filled with soda by a five-network liquid build (Juicer → Kettle → Syrup Mixer → Bottler, with a Grinder and a pond-fed Carbonator), driven off the lot on a delivery cart, and come home as four used bottles in the cart’s own basket. A Washer turns them back into the same ItemId.Bottle they started as, and they go back into the Bottler. Pins the return leg, the vehicle basket both vehicles now have, the Washer’s third recipe, and the two take-gates that used to refuse a machine whose spec makes nothing. Recorded by `scripts/record-bottle-return.ts`, which asserts every beat of the circle before writing.",
   "seed": 131131,
   "ticks": 8735,
-  "expectedHash": "9a5e1304",
+  "expectedHash": "dce03aef",
   "commands": [
     {
       "tick": 0,

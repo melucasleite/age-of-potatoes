@@ -4,19 +4,24 @@
 //     ./packages/sim/scripts/record-mid-field.ts
 //
 // THE STORY (item 067's golden-fixture instruction): earn the $150 honestly on the gardener
-// loop — plant, water, harvest, fry, sell, exactly `economy-walk.ts`'s beats — then WALK to
+// loop — plant, water, harvest, sell — then WALK to
 // the middle of the field on a no-op walk errand (item 070's action, absorbed here rather
 // than given a fixture of its own), hand-water the centre tile, stand a barrel sprinkler ON
 // it, fill the barrel at the pond, watch the cycles water all 24 farm neighbours and never
 // the machine's own feet, box the sprinkler back up, and replant the freed tile. The
 // recorder asserts every beat — and asserts the REFUSALS (crop tile, non-flagged machine)
-// before recording, which never enter the trace because a refused command appends nothing.
+// before recording (the crop-tile placement refusal became item 121's hand-back and left this script).
 //
 // RE-RECORDED 2026-08-16 for item 097, over item 086's re-recording of the same morning. A
 // charge is an ACTIVATION again — one charge waters the whole 5×5 — so the three hauls of ten,
 // ten and four collapse back into ONE haul and one cycle. What the story keeps from 086 is the
 // half that outlived it: the cycle AFTER, which finds all 24 tiles wet, spends nothing and
 // marks nothing. Section 5 carries the details.
+//
+// RE-RECORDED 2026-08-27 for item 145: the loop's Chip Kitchen middleman was deleted, so the
+// gardener loop now sells its potatoes raw — more cycles, same $150, and the fixture's story
+// (the barrel, the walk, the deconstruct) is untouched. The old "non-flagged machine refuses
+// farmland" refusal witness went with the kitchen; `field-machines.test.ts` holds that rule.
 //
 // Every command in the fixture is one the sim actually accepted, following
 // `record-the-till.ts`.
@@ -52,8 +57,6 @@ const CROPPED = { x: 8, y: 7 };
 
 const state: WorldState = createWorld(SEED);
 
-let kitchenTile: { x: number; y: number } | null = null;
-
 function run(commands: Command[]): void {
   step(state, { tick: state.tick, commands });
 }
@@ -86,7 +89,6 @@ const row: { x: number; y: number }[] = [];
 for (let i = 0; i < 8; i++) row.push({ x: FIELD_ORIGIN_X + i, y: FIELD_ORIGIN_Y });
 const binTile = { x: FIELD_ORIGIN_X - 2, y: FIELD_ORIGIN_Y + 8 };
 const shoreTile = { x: 12, y: 12 };
-const kitchenPrice = machineSpec(MachineKind.ChipKitchen)!.priceCents;
 
 function sellAll(item: ItemId): void {
   const carried = itemCount(state, item);
@@ -95,11 +97,6 @@ function sellAll(item: ItemId): void {
 
 while (state.moneyCents < TARGET_CENTS) {
   if (state.tick > 150_000) throw new Error('the economy walk never reached the sprinkler');
-
-  if (kitchenTile === null && state.moneyCents >= kitchenPrice + 1_000) {
-    run([{ type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: 0, tileY: 0 }]);
-    kitchenTile = { x: 0, y: 0 };
-  }
 
   for (const { x, y } of row) {
     const tile = tileAt(state, x, y);
@@ -132,25 +129,7 @@ while (state.moneyCents < TARGET_CENTS) {
     if (tile !== null && isTileReady(tile)) errand(IntentAction.Harvest, x, y);
   }
 
-  if (kitchenTile === null) {
-    sellAll(ItemId.RussetPotato);
-  } else {
-    const kitchen = state.machines.find((m) => m.kind === MachineKind.ChipKitchen);
-    let potatoes = itemCount(state, ItemId.RussetPotato);
-    while (kitchen !== undefined && potatoes > 0 && state.moneyCents < TARGET_CENTS) {
-      errand(IntentAction.Load, kitchenTile.x, kitchenTile.y, 0, potatoes);
-      let cycles = 0;
-      while (cycles < 3_000 && kitchen.outputCount === 0) {
-        run([]);
-        cycles += 1;
-      }
-      if (kitchen.outputCount > 0) {
-        errand(IntentAction.Unload, kitchenTile.x, kitchenTile.y, 0, kitchen.outputCount);
-        sellAll(ItemId.BaggedChips);
-      }
-      potatoes = itemCount(state, ItemId.RussetPotato);
-    }
-  }
+  sellAll(ItemId.RussetPotato);
 }
 if (state.moneyCents < SPRINKLER_CENTS) throw new Error('arithmetic lied about the target');
 
@@ -180,20 +159,11 @@ if (!errand(IntentAction.Water, CENTRE.x, CENTRE.y)) throw new Error('the centre
 
 const before = tileAt(state, CENTRE.x, CENTRE.y)!;
 const bornSoil = before.soil;
-const bornFertility = before.fertility;
 
-// --- 4. The refusals, asserted and deliberately NOT in the trace ------------------------
-if (
-  apply({ type: 'PlaceMachine', kind: MachineKind.Sprinkler, tileX: CROPPED.x, tileY: CROPPED.y })
-) {
-  throw new Error('a sprinkler squatted a growing crop');
-}
-const kitchen = state.machines.find((m) => m.kind === MachineKind.ChipKitchen);
-if (kitchen !== undefined) {
-  if (apply({ type: 'MoveMachine', machineId: kitchen.id, tileX: 5, tileY: 6 })) {
-    throw new Error('a non-flagged machine moved onto farmland');
-  }
-}
+// (The old beat 4 asserted a refusal here — a sprinkler may not squat a growing crop — and
+// item 121 deleted that refusal on purpose: placement over a crop now hands the seed and any
+// ripe produce back instead. The witness crop stays where it is, so nothing is placed on it;
+// field-machines.test.ts holds item 121's hand-back rule.)
 
 // --- 5. Place mid-field, fill once, and watch ONE charge do the whole patch --------------
 //
@@ -264,7 +234,6 @@ if (itemCount(state, ItemId.BoxedSprinkler) !== 1) throw new Error('the box neve
 const freed = tileAt(state, CENTRE.x, CENTRE.y);
 if (freed === null) throw new Error('the freed tile vanished');
 if (freed.soil !== bornSoil) throw new Error('deconstruction changed the soil');
-if (freed.fertility !== bornFertility) throw new Error('deconstruction changed fertility');
 if (freed.moisture <= 0 || freed.moisture >= MOISTURE_MAX) {
   throw new Error('the moisture under the machine was reset rather than kept');
 }
@@ -287,8 +256,8 @@ const fixture: GoldenFixture = {
     'hand-watered farm tile, and ONE haul from the pond buys ONE charge that waters all 24 ' +
     'farm neighbours in a single cycle — including a growing crop, and never the machine’s ' +
     'own tile — after which the next cycle looks at the same 24 soaked tiles and spends ' +
-    'nothing at all. Deconstruction hands the tile back with its soil, fertility, and ' +
-    'decayed moisture untouched, and the freed ground takes a seed again. Pins the ' +
+    'nothing at all. Deconstruction hands the tile back with its soil and decayed moisture ' +
+    'untouched, and the freed ground takes a seed again. Pins the ' +
     'fieldPlaceable footprint rule, the occupied-tile watering skip, item 097’s ' +
     'charge-per-activation barrel with item 086’s thirst rule inside it, and ' +
     'IntentAction.Walk in the trace and the save shape.',

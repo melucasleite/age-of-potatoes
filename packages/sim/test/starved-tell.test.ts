@@ -1,11 +1,12 @@
 // **WHAT A STOPPED MACHINE SAYS ABOUT ITSELF** (item 113), and it is one file because the two
 // halves item 111's verifier found are one state seen twice.
 //
-// The state: a Seasoner whose basket holds a single chili chip, twelve plain chips in hopper
-// zero, and no peppers left. Item 111's own header promises "a line never stalls for want of a
-// seasoning; it just quietly goes back to salt". It does not. `runnableRecipe` returns null,
-// the lamp goes AMBER — the game's grammar for "look upstream" — and the sentence under the
-// cursor reads "seasoner wants plain chips" while twelve plain chips sit in the hopper.
+// The state (updated for item 145, which cut the Seasoner's flavour recipes and left the
+// Washer as the game's one multi-recipe machine): a Washer whose basket holds a single clean
+// bottle, twelve russet potatoes in hopper zero, and no empties left. Item 111's own header
+// promised the fallback recipe runs; without the fix, `runnableRecipe` returns null, the lamp
+// goes AMBER — the game's grammar for "look upstream" — and the sentence under the cursor
+// reads "washer wants potatoes" while twelve potatoes sit in the hopper.
 //
 // Both defects have the same root and it is NOT the recipe table: the basket holds one product
 // at a time, so the plain recipe is skipped for its label rather than for any missing
@@ -13,9 +14,9 @@
 // pins the corrected reading — a red lamp, a sentence about the basket, and a `wantsItem` that
 // only ever names something the machine is genuinely short of.
 //
-// The tell is checked on every machine in the roster, not just the Seasoner, because
+// The tell is checked on every machine in the roster, not just the Washer, because
 // `MachineView.inputItem` was one field answering a question that grew several answers the day
-// item 111 shipped, and the Seasoner is merely where it was noticed first.
+// item 111 shipped, and the (since-cut) Seasoner is merely where it was noticed first.
 
 import { describe, expect, it } from 'vitest';
 
@@ -53,34 +54,34 @@ function machineView(state: WorldState, machine: Machine) {
 }
 
 /**
- * The exact state item 111's verifier measured: one chili chip in the basket, twelve plain
- * chips in the hopper, the peppers gone.
+ * The shape item 111's verifier measured, on the machine that still has it: one clean bottle
+ * in the basket, twelve potatoes in the hopper, the empties gone.
  */
 function strandedSeasoner(seed: number): { state: WorldState; seasoner: Machine } {
   const state = createWorld(seed);
-  const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
+  const seasoner = spawnMachine(state, MachineKind.Washer, 0, 0)!;
   seasoner.outputCount = 1;
-  seasoner.outputItem = ItemId.ChiliChips;
-  seasoner.inputCounts[hopper(MachineKind.Seasoner, ItemId.PlainChips)] = 12;
-  seasoner.inputCounts[hopper(MachineKind.Seasoner, ItemId.ChiliPepper)] = 0;
+  seasoner.outputItem = ItemId.Bottle;
+  seasoner.inputCounts[hopper(MachineKind.Washer, ItemId.RussetPotato)] = 12;
+  seasoner.inputCounts[hopper(MachineKind.Washer, ItemId.UsedBottle)] = 0;
   return { state, seasoner };
 }
 
-describe('a Seasoner that has run out of chili', () => {
+describe('a Washer that has run out of empties', () => {
   it('is stopped by the basket, not by the recipe table', () => {
     // The verifier's read, confirmed here rather than taken on trust — and this is the half
     // that decides what the fix is. Every INGREDIENT the plain recipe wants is present; what
     // is missing is somewhere to put a chip that is not a chili chip.
     const { state, seasoner } = strandedSeasoner(101);
 
-    expect(runnableRecipe(machineSpec(MachineKind.Seasoner)!, seasoner)).toBeNull();
+    expect(runnableRecipe(machineSpec(MachineKind.Washer)!, seasoner)).toBeNull();
 
     // Proof that the ingredients are not the problem: the same hoppers with an empty basket
     // run the plain line immediately.
     seasoner.outputCount = 0;
     seasoner.outputItem = 0;
-    const recipe = runnableRecipe(machineSpec(MachineKind.Seasoner)!, seasoner);
-    expect(recipe?.output).toBe(ItemId.SeasonedChips);
+    const recipe = runnableRecipe(machineSpec(MachineKind.Washer)!, seasoner);
+    expect(recipe?.output).toBe(ItemId.WashedPotato);
 
     void state;
   });
@@ -94,56 +95,56 @@ describe('a Seasoner that has run out of chili', () => {
     expect(machineView(state, seasoner).lamp).toBe(LampState.Blocked);
   });
 
-  it('does not claim to want plain chips while holding twelve of them', () => {
+  it('does not claim to want potatoes while holding twelve of them', () => {
     // The item's third criterion, at the machine it was found on.
     const { state, seasoner } = strandedSeasoner(103);
 
     expect(machineView(state, seasoner).wantsItem).toBe(0);
   });
 
-  it('goes back to salt the moment the basket is clear', () => {
+  it('goes back to potatoes the moment the basket is clear', () => {
     // ITEM 111'S PROMISE, MADE TRUE AT THE POINT IT CAN BE TRUE. One pull off the basket — a
-    // grabber's, a bagger's, or the player's own hand — and the plain line runs on its own.
+    // grabber's, a hand's — and the staple line runs on its own.
     const { state, seasoner } = strandedSeasoner(104);
-    const spec = machineSpec(MachineKind.Seasoner)!;
+    const spec = machineSpec(MachineKind.Washer)!;
 
-    expect(takeOneOutput(seasoner, spec)).toBe(ItemId.ChiliChips);
+    expect(takeOneOutput(seasoner, spec)).toBe(ItemId.Bottle);
     stepMany(state, 120);
 
-    expect(seasoner.outputItem).toBe(ItemId.SeasonedChips);
+    expect(seasoner.outputItem).toBe(ItemId.WashedPotato);
     expect(seasoner.outputCount).toBeGreaterThan(0);
     expect(machineView(state, seasoner).lamp).toBe(LampState.Running);
   });
 
-  it('makes salted chips with no pepper in sight and an empty basket', () => {
+  it('washes potatoes with no empty in sight and an empty basket', () => {
     // The acceptance criterion in its plainest form, with no leftovers anywhere.
     const state = createWorld(105);
-    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
-    seasoner.inputCounts[hopper(MachineKind.Seasoner, ItemId.PlainChips)] = 6;
+    const seasoner = spawnMachine(state, MachineKind.Washer, 0, 0)!;
+    seasoner.inputCounts[hopper(MachineKind.Washer, ItemId.RussetPotato)] = 6;
 
     stepMany(state, 120);
 
-    expect(seasoner.outputItem).toBe(ItemId.SeasonedChips);
+    expect(seasoner.outputItem).toBe(ItemId.WashedPotato);
     expect(seasoner.outputCount).toBeGreaterThan(0);
   });
 });
 
 describe('a stopped machine names the thing it is actually short of', () => {
-  it('an empty Seasoner asks for chips, not for the pepper it never needed', () => {
-    // The tie-break that matters: four recipes, four missing ingredients, and the honest
-    // answer is the one that would get the machine running on its own.
+  it('an empty Washer asks for potatoes, not for the empty it never needed', () => {
+    // The tie-break that matters: two recipes, two missing ingredients, and the honest
+    // answer is the one that would get the machine running on its own — the staple.
     const state = createWorld(111);
-    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
+    const seasoner = spawnMachine(state, MachineKind.Washer, 0, 0)!;
 
     const mv = machineView(state, seasoner);
     expect(mv.lamp).toBe(LampState.Starved);
-    expect(mv.wantsItem).toBe(ItemId.PlainChips);
+    expect(mv.wantsItem).toBe(ItemId.RussetPotato);
   });
 
-  it('a Seasoner with gold chips only is running, and asks for nothing', () => {
+  it('a Washer with used bottles only is running, and asks for nothing', () => {
     const state = createWorld(112);
-    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
-    seasoner.inputCounts[hopper(MachineKind.Seasoner, ItemId.GoldChips)] = 3;
+    const seasoner = spawnMachine(state, MachineKind.Washer, 0, 0)!;
+    seasoner.inputCounts[hopper(MachineKind.Washer, ItemId.UsedBottle)] = 3;
 
     const mv = machineView(state, seasoner);
     expect(mv.lamp).toBe(LampState.Running);
@@ -173,31 +174,19 @@ describe('a stopped machine names the thing it is actually short of', () => {
     expect(mv.wantsItem).toBe(ItemId.KolaPowder);
   });
 
-  it('a Washer holding washed potatoes with only gold ones left is blocked, not starved', () => {
-    // The same defect as the Seasoner's, on the machine at the other end of the line — and
-    // proof the fix is about the basket rather than about seasonings. Telling this player to
-    // fetch russet potatoes would send them to the wrong end of the factory; the gold potatoes
-    // are already here and the basket is what is in the way.
+  it('a Washer holding washed potatoes with only empties left is blocked, not starved', () => {
+    // The mirror of the stranded scenario — proof the fix is about the basket rather than
+    // about any particular recipe. Telling this player to fetch potatoes would send them to
+    // the wrong end of the factory; the empties are already here and the basket is in the way.
     const state = createWorld(115);
     const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
     washer.outputCount = 1;
     washer.outputItem = ItemId.WashedPotato;
-    washer.inputCounts[hopper(MachineKind.Washer, ItemId.GoldPotato)] = 5;
+    washer.inputCounts[hopper(MachineKind.Washer, ItemId.UsedBottle)] = 5;
 
     const mv = machineView(state, washer);
     expect(mv.lamp).toBe(LampState.Blocked);
     expect(mv.wantsItem).toBe(0);
-  });
-
-  it('a Maintenance Station out of kits asks for a kit', () => {
-    // A machine with no work cycle at all, whose amber lamp has its own clause — it must still
-    // answer the question the sentence asks.
-    const state = createWorld(116);
-    const station = spawnMachine(state, MachineKind.MaintenanceStation, 0, 0)!;
-
-    const mv = machineView(state, station);
-    expect(mv.lamp).toBe(LampState.Starved);
-    expect(mv.wantsItem).toBe(ItemId.RepairKit);
   });
 
   it('a throttled piped head asks for no ITEM at all', () => {

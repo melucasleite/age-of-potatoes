@@ -76,7 +76,10 @@ export const FIXTURE_NAMES = [
   'junction-loop',
   'the-till',
   'mid-field',
-  'flavour-line',
+  // `flavour-line` was the twentieth fixture and is DELETED with its subject (item 145): its
+  // one job was the flavour tier — chili, sweetcorn and gold chips down one line — and a
+  // trace whose every beat is a refusal pins refusals, which `the-farm` already does with a
+  // story left over. Its file is gone; this comment is the tombstone.
   'bottle-return',
 ] as const;
 
@@ -140,7 +143,6 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
   SetZoneCrop: true,
   SetZonePriority: true,
   RenameZone: true,
-  SetZoneAutoReplant: true,
   PlacePipe: true,
   RemovePipe: true,
   SwingScythe: true,
@@ -154,14 +156,13 @@ export const REQUIRED_COMMAND_COVERAGE: Record<CommandType, true> = {
  * shrug** — this list is the escape hatch the test above warns against, so it is deliberately
  * hard to add to and every entry says what pins the verb instead.
  *
- * `SetDockZone` — the Agri-Bot dock is gated on `TechId.AgriBots`, which requires the **Corporate
- * Charter**, whose milestone is *one line untouched for ten in-game days*: 96,000 consecutive
- * ticks of one machine advancing work with something feeding it and something emptying it. A
- * golden fixture that reached this verb honestly would be a six-figure-tick recording of a belt
- * loop built for no reason but to satisfy a checklist, and it would take longer to replay than
- * the rest of the set combined. The alternative — putting the command in a fixture where it is
- * refused — would leave the coverage test passing while guarding nothing, which is worse than
- * this list.
+ * `SetDockZone` — the Agri-Bot dock is gated on `TechId.AgriBots`, behind the Workshop Charter
+ * (item 147 re-parented it there when the Corporate Charter and its ten-untouched-days
+ * milestone were cut — the original argument here cited that milestone, and it no longer
+ * exists). What remains true is the cost/benefit: a golden fixture reaching this verb honestly
+ * is a long bot-economy recording built for no reason but a checklist, and putting the command
+ * in a fixture where it is refused would leave the coverage test passing while guarding
+ * nothing, which is worse than this list.
  *
  * **What pins it instead:** `test/bots.test.ts` builds a docked world directly through the
  * exported spawn helpers, binds a zone, runs ten thousand ticks, and asserts the same thing a

@@ -371,19 +371,19 @@ describe('the till un-plants before it un-tills', () => {
   });
 
   it('un-plants a REGROWING crop and pays the seed, exactly as a placement does', () => {
-    // Cane and chili regrow, so a hand harvest leaves the plant standing and returns no seed.
+    // Cane regrows, so a hand harvest leaves the plant standing and returns no seed.
     // The till uproots it, and the seed is what the plant is worth — `clearFieldTileForMachine`'s
     // rule, reached through a second trigger rather than a second copy of the rule.
     const state = world(1279);
-    state.unlocked = [TechId.Chili];
-    const spec = cropSpec(CropId.ChiliPepper)!;
+    state.unlocked = [TechId.Cane];
+    const spec = cropSpec(CropId.SugarCane)!;
     const tile = tileAt(state, 6, 6)!;
     plantCrop(state, tile, spec);
     tile.growth = tile.growthTarget;
 
     expect(tillOne(state, 6, 6, TillMode.Unplant)).toBe(true);
-    expect(itemCount(state, ItemId.ChiliPepper), 'the ripe chilis vanished').toBeGreaterThan(0);
-    expect(itemCount(state, ItemId.ChiliSeed), 'the uprooted plant paid nothing back').toBe(1);
+    expect(itemCount(state, ItemId.SugarCane), 'the ripe cane vanished').toBeGreaterThan(0);
+    expect(itemCount(state, ItemId.CaneSeed), 'the uprooted plant paid nothing back').toBe(1);
     expect(tileAt(state, 6, 6)!.crop).toBe(CropId.None);
   });
 

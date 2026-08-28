@@ -149,6 +149,8 @@ describe('the shortfall is honest on every machine in the roster', () => {
       }
     }
 
-    expect(starved, 'the sweep actually found starved machines to check').toBeGreaterThan(20);
+    // The bound tracks the roster: item 145 cut six machines and the flavour recipes, so the
+    // sweep finds fewer starved rigs than it did — what matters is that it still finds plenty.
+    expect(starved, 'the sweep actually found starved machines to check').toBeGreaterThan(15);
   });
 });

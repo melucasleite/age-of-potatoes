@@ -3,7 +3,7 @@
   "description": "Six potatoes planted, watered once, and then LEFT — 60,212 ticks, about fifty simulated minutes, with nobody coming back. It was named `withering` and it pinned the opposite of what it pins now: the crop used to mature, drool past a 30-minute grace, turn to a Day-Old grade at half list, and finally collapse into Compost. Item 124 deleted all of that, so this world is now the executable form of the ruling itself — a ripe crop abandoned for a simulated day is the same crop, at the same value, as the moment it ripened. Renamed rather than retired: the scenario did not go obsolete, it INVERTED, and it is still the only golden that abandons a ripe field for this long.",
   "seed": 31337,
   "ticks": 60212,
-  "expectedHash": "ea007b6c",
+  "expectedHash": "d43aee46",
   "commands": [
     {
       "tick": 0,

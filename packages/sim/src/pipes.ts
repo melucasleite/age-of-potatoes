@@ -17,8 +17,9 @@
 //
 // ONE PUMP AND ONE LIQUID PER NETWORK, ENFORCED AT PLACEMENT. Not warned about, not resolved
 // afterwards: `pipePathRefusal()` refuses the pipe that would create the situation, before it
-// exists. That single rule is what kills most fluid-sim confusion, and it is the reason the
-// Recirculator feeds a TANK rather than the pipes (see `data.ts`).
+// exists. That single rule is what kills most fluid-sim confusion, and it is the reason a
+// producer (once the Recirculator, now the soda line's outlets) feeds a TANK rather than the
+// pipes (see `data.ts`).
 // ────────────────────────────────────────────────────────────────────────────────────────
 //
 // DETERMINISM NOTES, because this is exactly the shape of code that goes subtly wrong:
@@ -703,9 +704,10 @@ function planNetwork(state: WorldState, network: PipeNetwork): NetworkPlan {
    *
    * THEY ARE TANKS THAT FILL THEMSELVES, AND THEY ARE NOT PUMPS. A juice network has no pump on
    * it at all — plan §5's "one pump per network" is not stretched here, it is unspent. The
-   * Recirculator set this precedent a release early: a producer pours into a tank, never into
-   * the pipes, because a second *source* on a pumped network would turn the ledger into a
-   * solver. A source list plus a demand list is still one division.
+   * Recirculator set this precedent a release early (and item 145 has since retired the
+   * machine): a producer pours into a tank, never into the pipes, because a second *source* on
+   * a pumped network would turn the ledger into a solver. A source list plus a demand list is
+   * still one division.
    */
   const sources: PortRef[] = [];
   let pump: Machine | null = null;

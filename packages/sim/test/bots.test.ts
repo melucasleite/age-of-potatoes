@@ -213,8 +213,8 @@ describe('the roster paces the automation', () => {
   it('sustains a regrowing crop with only a harvester, and runs a one-shot out', () => {
     // §5: "Regrowing crops automate first; one-shots wait for the seed-hopper bot — the crop list
     // itself paces the arc." This is that sentence as an assertion.
-    const regrow = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester, CropId.ChiliPepper);
-    const chili = cropSpec(CropId.ChiliPepper)!;
+    const regrow = farmWithDock(MachineKind.HarvesterDock, BotKind.Harvester, CropId.SugarCane);
+    const chili = cropSpec(CropId.SugarCane)!;
     for (let i = 0; i < regrow.state.field.length; i++) {
       const tile = regrow.state.field[i]!;
       if (tile.zone !== regrow.zoneId) continue;
@@ -227,7 +227,7 @@ describe('the roster paces the automation', () => {
     let stillPlanted = 0;
     for (let i = 0; i < regrow.state.field.length; i++) {
       const tile = regrow.state.field[i]!;
-      if (tile.zone === regrow.zoneId && tile.crop === CropId.ChiliPepper) stillPlanted += 1;
+      if (tile.zone === regrow.zoneId && tile.crop === CropId.SugarCane) stillPlanted += 1;
     }
     expect(stillPlanted, 'a regrowing crop keeps its plant, so the bot can come back').toBe(
       FIELD_TILES_WIDE * 2,
@@ -483,7 +483,7 @@ describe('the dock shelf (item 083)', () => {
     expect(shelf).toBeGreaterThan(0);
 
     spawnBelt(state, BeltTier.Basic, 3, 1, Direction.East, 2)!;
-    spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, ItemId.Corn);
+    spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, ItemId.Bottle);
     stepMany(state, 400);
     expect(dock.cargoCount, 'a filtered arm took goods its filter refuses').toBe(shelf);
 
@@ -953,8 +953,8 @@ describe('an arm at a dock looks before it grabs (item 085)', () => {
     expect(dock.cargoCount).toBeGreaterThan(0);
     expect(dock.seedShelfCount).toBeGreaterThan(0);
 
-    // A Chip Kitchen wants potatoes and has no line for a seed.
-    spawnMachine(state, MachineKind.ChipKitchen, 3, 1);
+    // A Washer wants potatoes and has no line for a seed.
+    spawnMachine(state, MachineKind.Washer, 3, 1);
     const arm = spawnGrabber(state, GrabberTier.Mk1, 2, 1, Direction.East, 0)!;
     const seedsBefore = dock.seedShelfCount;
 
@@ -1172,7 +1172,7 @@ describe('an unfiltered arm at a two-shelf dock reads the shelf its destination 
         build: (s) => void spawnMachine(s, MachineKind.PlanterDock, 3, 1),
       },
       { name: 'sell bin', build: (s) => void spawnMachine(s, MachineKind.SellBin, 3, 1) },
-      { name: 'chip kitchen', build: (s) => void spawnMachine(s, MachineKind.ChipKitchen, 3, 1) },
+      { name: 'washer', build: (s) => void spawnMachine(s, MachineKind.Washer, 3, 1) },
       { name: 'bagger', build: (s) => void spawnMachine(s, MachineKind.Bagger, 3, 1) },
       {
         name: 'belt',

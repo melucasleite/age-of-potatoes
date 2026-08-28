@@ -630,18 +630,9 @@ export interface RenameZoneCommand {
   name: string;
 }
 
-/**
- * Arm or disarm auto-replant.
- *
- * REJECTED BY THE REDUCER until the seed hopper is researched, so the locked toggle is
- * locked in the simulation rather than only in the UI — a disabled button is a suggestion,
- * and this is the rule.
- */
-export interface SetZoneAutoReplantCommand {
-  type: 'SetZoneAutoReplant';
-  zoneId: number;
-  on: boolean;
-}
+// `SetZoneAutoReplant` — the seed hopper's arm/disarm toggle — lived here until item 146
+// retired auto-replant. The type name is burned with the feature: a stored trace may still
+// carry one, and it replays as a refused no-op (the-farm.json's dead-ResearchTech precedent).
 
 // --- pipes ----------------------------------------------------------------------------
 //
@@ -781,7 +772,6 @@ export type Command =
   | SetZoneCropCommand
   | SetZonePriorityCommand
   | RenameZoneCommand
-  | SetZoneAutoReplantCommand
   | PlacePipeCommand
   | RemovePipeCommand;
 

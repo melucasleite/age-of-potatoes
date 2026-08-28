@@ -24,6 +24,7 @@ import {
   POND_TILES_HIGH,
   POND_TILES_WIDE,
   STARTING_PARCEL,
+  TechId,
   WORLD_TILES_HIGH,
   WORLD_TILES_WIDE,
   computeNetWorthCents,
@@ -225,7 +226,7 @@ describe('the ownership gate', () => {
     const state = richWorld();
     const x = PARCEL_TILES + 2;
 
-    send(state, { type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: x, tileY: 4 });
+    send(state, { type: 'PlaceMachine', kind: MachineKind.HandCart, tileX: x, tileY: 4 });
     send(state, {
       type: 'PlaceBelt',
       tier: BeltTier.Basic,
@@ -243,12 +244,13 @@ describe('the ownership gate', () => {
 
   it('refuses a footprint that straddles the fence, then accepts it once the deed is bought', () => {
     const state = richWorld();
+    state.unlocked = [TechId.WashAndSlice];
     // A 2×2 with its left column on owned land and its right column on the neighbour's.
     const straddle = PARCEL_TILES - 1;
 
     send(state, {
       type: 'PlaceMachine',
-      kind: MachineKind.ChipKitchen,
+      kind: MachineKind.Washer,
       tileX: straddle,
       tileY: 2,
     });
@@ -257,7 +259,7 @@ describe('the ownership gate', () => {
     send(state, { type: 'BuyDeed', parcel: 1 });
     send(state, {
       type: 'PlaceMachine',
-      kind: MachineKind.ChipKitchen,
+      kind: MachineKind.Washer,
       tileX: straddle,
       tileY: 2,
     });

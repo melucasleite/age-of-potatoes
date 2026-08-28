@@ -116,7 +116,7 @@ function farmWithHarvester(seed: number): { state: WorldState; dock: Machine } {
  * hold a settled armful still long enough to age it and then box the shed around it.
  */
 function jamProduceShelf(state: WorldState, dock: Machine): void {
-  dock.cargoItem = ItemId.ChiliPepper;
+  dock.cargoItem = ItemId.KolaNut;
   dock.cargoCount = machineSpec(MachineKind.HarvesterDock)!.outputCapacity;
 }
 
@@ -142,12 +142,12 @@ function stepUntil(state: WorldState, limit: number, done: () => boolean): numbe
  *   * `applyPlantTile` puts any seed in any farm tile, zone or no zone, and `SetZoneCrop`
  *     re-points a zone while a bot is already out on its round holding the last crop.
  *
- * So a bot with potatoes in its arms still walks onto a tile whose produce is a chili, and still
+ * So a bot with potatoes in its arms still walks onto a tile whose produce is cane, and still
  * has to send the armful home whole rather than overwrite it. Same door, same deletion, same
  * four tests — one keypress instead of half an hour of not looking.
  */
 function foreignCropEveryRow(state: WorldState): void {
-  const foreign = cropSpec(CropId.ChiliPepper)!;
+  const foreign = cropSpec(CropId.SugarCane)!;
   for (let i = 0; i < state.field.length; i++) {
     const tile = state.field[i]!;
     if (tile.crop === CropId.None) continue;
@@ -212,14 +212,14 @@ describe('boxing a dock that still has a laden bot in it', () => {
     const held = bot.carryCount;
     const pocketed = bot.seedCount;
     const seedsBefore = itemCount(state, ItemId.PotatoSeed);
-    const chilliBefore = itemCount(state, ItemId.ChiliPepper);
+    const chilliBefore = itemCount(state, ItemId.KolaNut);
 
     standOn(state, 0, 0);
     run(state, { type: 'DeconstructMachine', machineId: dock.id });
 
     expect(itemCount(state, ItemId.RussetPotato)).toBe(held);
     expect(itemCount(state, ItemId.PotatoSeed)).toBe(seedsBefore + pocketed + 5);
-    expect(itemCount(state, ItemId.ChiliPepper), 'and the jammed shelf as ever').toBe(
+    expect(itemCount(state, ItemId.KolaNut), 'and the jammed shelf as ever').toBe(
       chilliBefore + machineSpec(MachineKind.HarvesterDock)!.outputCapacity,
     );
   });
@@ -494,7 +494,7 @@ describe('the goods ledger', () => {
     expect(ledgerCount(ledger, ItemId.RussetPotato), 'the armful is in the books').toBe(
       bot.carryCount,
     );
-    expect(ledgerCount(ledger, ItemId.ChiliPepper), 'and so is the jam').toBe(dock.cargoCount);
+    expect(ledgerCount(ledger, ItemId.KolaNut), 'and so is the jam').toBe(dock.cargoCount);
     expect(ledgerCount(ledger, ItemId.PotatoSeed), 'bag plus pocket').toBe(
       itemCount(state, ItemId.PotatoSeed) + bot.seedCount,
     );
@@ -546,7 +546,7 @@ describe('the goods ledger', () => {
     spawnGrabber(state, GrabberTier.Mk1, 1, 0, Direction.East, 0);
     spawnBelt(state, BeltTier.Basic, 2, 0, Direction.East, 4);
     spawnGrabber(state, GrabberTier.Mk1, 6, 0, Direction.East, 0);
-    spawnMachine(state, MachineKind.RootCellar, 7, 0)!;
+    spawnMachine(state, MachineKind.HandCart, 7, 0)!;
 
     addItem(state, ItemId.RussetPotato, 10);
     standOn(state, 0, 0);

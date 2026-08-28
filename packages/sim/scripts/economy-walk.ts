@@ -3,11 +3,13 @@
 //
 //   node --import ./packages/sim/scripts/node-resolve-hook.mjs ./packages/sim/scripts/economy-walk.ts
 //
-// THE LOOP, exactly as the item names it: plant, water with the 8-pour can, refill at the
-// shore, harvest, hand-process through a Chip Kitchen bought mid-run, sell. Everything is a
-// walk-to errand, so every beat includes the walking time — nobody teleports — and a small
-// reaction pause is added between actions, because a human does not issue the next command
-// on the tick the last one resolved.
+// THE LOOP, as item 011 named it — minus one machine: plant, water with the 8-pour can,
+// refill at the shore, harvest, sell. The "hand-process through a Chip Kitchen bought
+// mid-run" step died with the kitchen (item 145 deleted the kind), so since 2026-08-27 this
+// walks the RAW gardener loop; the measurement is slower and the number is not comparable to
+// pre-145 runs. Everything is a walk-to errand, so every beat includes the walking time —
+// nobody teleports — and a small reaction pause is added between actions, because a human
+// does not issue the next command on the tick the last one resolved.
 //
 // This is a MEASUREMENT SCRIPT, not a golden fixture: it asserts nothing and pins nothing.
 // Target band (item 011): 30,000–48,000 ticks (25–40 min at 20 Hz). If the number lands
@@ -20,12 +22,11 @@ import {
   CropId,
   IntentAction,
   ItemId,
-  MachineKind,
   TICKS_PER_SECOND,
   createWorld,
   step,
 } from '../src/index';
-import { FIELD_ORIGIN_X, FIELD_ORIGIN_Y, machineSpec } from '../src/data';
+import { FIELD_ORIGIN_X, FIELD_ORIGIN_Y } from '../src/data';
 import { isTileReady, itemCount, tileAt } from '../src/state';
 
 const TARGET_CENTS = 15_000;
@@ -37,7 +38,6 @@ const state: WorldState = createWorld(20260813);
 let commandsIssued = 0;
 let refills = 0;
 let batches = 0;
-let kitchenBoughtAtTick = -1;
 
 function run(commands: Command[]): void {
   step(state, { tick: state.tick, commands });
@@ -73,19 +73,7 @@ function sellAll(item: ItemId): void {
   if (carried > 0) errand(IntentAction.Sell, binTile.x, binTile.y, item, carried);
 }
 
-const kitchenPrice = machineSpec(MachineKind.ChipKitchen)!.priceCents;
-let kitchenTile: { x: number; y: number } | null = null;
-
 while (state.moneyCents < TARGET_CENTS && state.tick < 200_000) {
-  // Buy the Chip Kitchen the moment it is affordable with a margin for seeds — the v0.1
-  // monolith is the hand-process step the loop names.
-  if (kitchenTile === null && state.moneyCents >= kitchenPrice + 1_000) {
-    idle(REACTION_TICKS * 3); // opening the shop, reading the price, deciding
-    run([{ type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: 0, tileY: 0 }]);
-    kitchenTile = { x: 0, y: 0 };
-    kitchenBoughtAtTick = state.tick;
-  }
-
   for (const { x, y } of row) {
     const tile = tileAt(state, x, y);
     if (tile !== null && tile.crop === CropId.None && itemCount(state, ItemId.PotatoSeed) > 0) {
@@ -102,7 +90,7 @@ while (state.moneyCents < TARGET_CENTS && state.tick < 200_000) {
     errand(IntentAction.Water, x, y);
   }
 
-  // While the row grows: feed the kitchen, collect bags, sell — or just wait like a person.
+  // While the row grows: wait like a person.
   let waited = 0;
   while (
     waited < 4_000 &&
@@ -112,17 +100,6 @@ while (state.moneyCents < TARGET_CENTS && state.tick < 200_000) {
       return tile !== null && isTileReady(tile);
     })
   ) {
-    if (kitchenTile !== null) {
-      const kitchen = state.machines.find((m) => m.kind === MachineKind.ChipKitchen);
-      const potatoes = itemCount(state, ItemId.RussetPotato);
-      if (kitchen !== undefined && potatoes > 0) {
-        errand(IntentAction.Load, kitchenTile.x, kitchenTile.y, 0, potatoes);
-      }
-      if (kitchen !== undefined && kitchen.outputCount > 0) {
-        errand(IntentAction.Unload, kitchenTile.x, kitchenTile.y, 0, kitchen.outputCount);
-        sellAll(ItemId.BaggedChips);
-      }
-    }
     run([]);
     waited += 1;
   }
@@ -136,33 +113,14 @@ while (state.moneyCents < TARGET_CENTS && state.tick < 200_000) {
   }
   batches += 1;
 
-  if (kitchenTile === null) {
-    sellAll(ItemId.RussetPotato);
-  } else {
-    // Hand-process: everything through the kitchen, bags to the bin as they come out.
-    const kitchen = state.machines.find((m) => m.kind === MachineKind.ChipKitchen);
-    let potatoes = itemCount(state, ItemId.RussetPotato);
-    while (kitchen !== undefined && potatoes > 0 && state.moneyCents < TARGET_CENTS) {
-      errand(IntentAction.Load, kitchenTile.x, kitchenTile.y, 0, potatoes);
-      let cycles = 0;
-      while (cycles < 3_000 && kitchen.outputCount === 0) {
-        run([]);
-        cycles += 1;
-      }
-      if (kitchen.outputCount > 0) {
-        errand(IntentAction.Unload, kitchenTile.x, kitchenTile.y, 0, kitchen.outputCount);
-        sellAll(ItemId.BaggedChips);
-      }
-      potatoes = itemCount(state, ItemId.RussetPotato);
-    }
-  }
+  sellAll(ItemId.RussetPotato);
 }
 
 const minutes = state.tick / (TICKS_PER_SECOND * 60);
 console.log(`ticks to $150 cash: ${state.tick} (${minutes.toFixed(1)} min at 20 Hz)`);
 console.log(
   `money ${state.moneyCents}c, batches ${batches}, refills ${refills}, ` +
-    `commands ${commandsIssued}, kitchen bought at tick ${kitchenBoughtAtTick}`,
+    `commands ${commandsIssued}`,
 );
 console.log(
   `sold: ${state.stats.salesByItem

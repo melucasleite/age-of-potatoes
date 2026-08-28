@@ -662,26 +662,10 @@ export interface Machine {
   seedShelfItem: ItemId | 0;
   seedShelfCount: number;
 
-  /**
-   * Consecutive ticks this machine has ADVANCED WORK with nobody's hands on it.
-   *
-   * The demonstrated half of the Corporate Charter (plan §3: *"one line untouched for 10 in-game
-   * days"*), and `MilestoneKind.UntouchedLine` carries the full argument for the shape. Two rules
-   * and no others: it advances on a tick the machine actually moved an operation forward, and it
-   * drops to zero the moment a hand-verb lands on this machine — load, unload, refill, repair,
-   * whack, upgrade, move.
-   *
-   * IT COUNTS WORK RATHER THAN TIME, which is what makes it a *production* line. A machine
-   * standing idle in a corner is untouched in the sense that nobody visits it, and that is
-   * exactly the sense the plan does not mean; ten days of a Fryer with nothing to fry would be a
-   * charter earned by neglect. Because it only runs while the machine is producing, and a machine
-   * cannot produce for 96,000 straight ticks unless something is feeding it and something is
-   * taking the output away, the thing it certifies is a line.
-   *
-   * A closed tab advances it by nothing, like every other clock here: `step()` is the only thing
-   * that moves it.
-   */
-  untouchedTicks: number;
+  // `untouchedTicks` — consecutive ticks of work with no hand on this machine, the Corporate
+  // Charter's counter — lived here until item 147 cut the Charter, the milestone, and the
+  // whole chain (`WorldStats.longestUntouchedMachineTicks` included). The 23 → 24 migration
+  // drops the saved field in silence under the quantity-of-state rule.
 
   // --- the belt junction (plan §5's splitter and merger, one tile) ---
   //
@@ -726,20 +710,9 @@ export interface Machine {
    */
   boundZone: number;
 
-  /**
-   * Recent wasted-input events — `{ tick, cents }`, oldest first — feeding the diagnostics
-   * ranked list (item 039 instruction 5): `MachineView.bleedCentsLast60s` sums the entries
-   * newer than `BLEED_WINDOW_TICKS`.
-   *
-   * **NON-HASHED, NON-SAVED PRESENTATION DATA**, the `CropTile.lastPouredTick` precedent: it
-   * is written only inside `step()` (the waste cadence in `advanceConverter`), so it is
-   * deterministic under replay, and it is excluded from `hash.ts` and from the save payload,
-   * so a loaded world starts with an empty window — which is correct, because money that bled
-   * before the save owes no alert after it. The write site prunes entries older than the
-   * window, so the array is bounded by the fastest waste cadence (one entry per two
-   * operations, worst case).
-   */
-  bleedEvents: { tick: number; cents: number }[];
+  // `bleedEvents` — the diagnostics panel's non-hashed wasted-input window — lived here until
+  // item 145 cut the Diagnostics node and the ranked bleed list with it. It was presentation
+  // state, never saved, so nothing in any save format carries it.
 }
 
 /** What a bot is for. One dock, one bot, one job. */
@@ -969,12 +942,11 @@ export interface Zone {
   name: string;
   /** What the player intends to grow here. `CropId.None` means undecided. */
   crop: CropId;
-  /** 0..9. Higher goes first when the seed hopper decides which zone to serve. */
+  /** 0..9. Kept for the card's sort and any future consumer; nothing in the sim reads it now. */
   priority: number;
-  /** Rejected until the seed hopper is researched — locked in the sim, not just the UI. */
-  autoReplant: boolean;
-  /** Ticks until this zone's next auto-replant attempt. */
-  replantCooldown: number;
+  // `autoReplant` and `replantCooldown` — the zone seed hopper's toggle and clock — lived here
+  // until item 146 retired auto-replant. Planter bots are the only automatic planting; the
+  // 23 → 24 migration drops both saved fields in silence.
 }
 
 /**
@@ -1391,11 +1363,9 @@ export function spawnMachine(
     runTicksRemaining: 0,
     seedShelfItem: 0,
     seedShelfCount: 0,
-    untouchedTicks: 0,
     junctionInCursor: 0,
     junctionOutCursor: 0,
     boundZone: 0,
-    bleedEvents: [],
   };
   state.nextMachineId += 1;
   // Ids only increase, so appending keeps the array sorted by id.
@@ -1559,8 +1529,6 @@ export function spawnZone(state: WorldState, crop: CropId): Zone {
     name: clipZoneName(`Zone ${String(id)}`),
     crop,
     priority: ZONE_PRIORITY_DEFAULT,
-    autoReplant: false,
-    replantCooldown: 0,
   };
   state.nextZoneId += 1;
   state.zones.push(zone);

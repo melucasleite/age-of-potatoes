@@ -240,10 +240,9 @@ export function advanceBots(state: WorldState): void {
 // below — the Maintenance Station spends real $8 kits off a real belt and starves honestly —
 // which is now the ladder's whole argument, and the capstone is the reward for finishing it.
 //
-// **A DRONE'S SERVICE IS NOT A HAND.** It calls no `touch`, no `handsOn`: the Hands-Free board
-// keeps running and — deliberately — the serviced machine's `untouchedTicks` keeps climbing,
-// so an automated line being automatically maintained still demonstrates the Corporate
-// Charter's milestone. That is the whole promotion: the hands left; the bill stayed.
+// **A DRONE'S SERVICE IS NOT A HAND.** It calls no `touch`: the Hands-Free board keeps
+// running while an automated line is automatically maintained. (It used to also spare the
+// serviced machine's untouched-work clock, until item 147 cut that clock with its Charter.)
 
 /**
  * **DOES THIS MACHINE WANT SERVICE? ONE ANSWER, FOR EVERY THING THAT SERVICES** — the hand's

@@ -17,7 +17,6 @@
 
 import {
   BELT_ITEM_SPACING_SUBTILES,
-  BLEED_WINDOW_TICKS,
   CAN_CHARGES_MAX,
   CART_CAPACITY,
   CONDITION_EFFECT_THRESHOLD,
@@ -342,17 +341,8 @@ export interface MachineView {
   seedShelfItem: number;
   seedShelfCount: number;
 
-  /**
-   * DIAGNOSTICS (item 039): cents of input value this machine wasted over the trailing
-   * `BLEED_WINDOW_TICKS` (60 active seconds) — wasted operations priced at the list value of
-   * the solids they consumed. **This is the sim's half of the ranked bleed list**: the HUD
-   * sorts machines on this number and phrases every entry in cash (§5). Idle-time bleed is
-   * deliberately NOT in it — `apps/web/src/reports/idle.ts` already prices idleness at the
-   * realised rate from view data it has, and two sources for one number is how a report
-   * disagrees with itself. Projected from non-hashed presentation state
-   * (`Machine.bleedEvents`); resets to 0 on load.
-   */
-  bleedCentsLast60s: number;
+  // `bleedCentsLast60s` — the ranked bleed list's per-machine cash window — lived here until
+  // item 145 cut the Diagnostics panel with its node.
 
   /**
    * Every line of the recipe and every typed port, for the machines that have more than one of
@@ -503,8 +493,7 @@ export interface ZoneView {
   name: string;
   crop: number;
   priority: number;
-  /** 1 when auto-replant is armed. */
-  autoReplant: number;
+  // `autoReplant` was published here until item 146 retired the seed hopper.
   tiles: number;
   planted: number;
   mature: number;
@@ -618,16 +607,8 @@ export interface StatsView {
   itemsHarvestedByHand: number;
   totalManualTouches: number;
   longestHandsFreeTicks: number;
-  /**
-   * The best run of untouched work any one machine has managed, in ticks — the Corporate
-   * Charter's demonstrated half, published so the panel can show the counter climbing from the
-   * first time it is opened (plan §7 ruling 3 forbids a milestone you discover by accident).
-   *
-   * TICKS RATHER THAN DAYS, because the projection publishes facts and leaves units to the
-   * reader: the panel divides by `TICKS_PER_IN_GAME_DAY` to say "3 of 10 days", and a progress
-   * bar that wants the fraction between two days has the numerator it needs.
-   */
-  longestUntouchedMachineTicks: number;
+  // `longestUntouchedMachineTicks` was published here for the Corporate Charter's panel until
+  // item 147 cut the Charter and the counter chain.
   /**
    * Lifetime cheat commands that took effect (item 075). Published so any surface that shows
    * a personal best can annotate a cheated session honestly rather than adjudicate it.
@@ -951,7 +932,6 @@ export function createWorldView(): WorldView {
       itemsHarvestedByHand: 0,
       totalManualTouches: 0,
       longestHandsFreeTicks: 0,
-      longestUntouchedMachineTicks: 0,
       cheatsUsed: 0,
       salesByItem: [],
       hours: [],
@@ -1143,7 +1123,6 @@ function projectMachines(state: WorldState, out: WorldView): void {
         cargoCount: 0,
         seedShelfItem: 0,
         seedShelfCount: 0,
-        bleedCentsLast60s: 0,
         recipe: [],
         ports: [],
       };
@@ -1234,26 +1213,11 @@ function projectMachines(state: WorldState, out: WorldView): void {
     mv.cargoCount = machine.cargoCount;
     mv.seedShelfItem = machine.seedShelfItem;
     mv.seedShelfCount = machine.seedShelfCount;
-    mv.bleedCentsLast60s = bleedCentsWithinWindow(machine, state.tick);
     projectRecipe(machine, spec, mv);
     projectPorts(machine, spec, mv);
   }
 
   out.machines.length = count;
-}
-
-/**
- * Cash wasted inside the trailing diagnostics window. A read-time sum over the machine's
- * pruned event list — the projection mutates nothing, and events that have aged past the
- * window but not yet been pruned by a newer write are filtered here rather than deleted.
- */
-function bleedCentsWithinWindow(machine: Machine, tick: number): number {
-  let cents = 0;
-  for (let i = 0; i < machine.bleedEvents.length; i++) {
-    const event = machine.bleedEvents[i]!;
-    if (event.tick > tick - BLEED_WINDOW_TICKS) cents += event.cents;
-  }
-  return cents;
 }
 
 /**
@@ -1640,7 +1604,6 @@ function projectZones(state: WorldState, out: WorldView): void {
         name: '',
         crop: 0,
         priority: 0,
-        autoReplant: 0,
         tiles: 0,
         planted: 0,
         mature: 0,
@@ -1653,7 +1616,6 @@ function projectZones(state: WorldState, out: WorldView): void {
     zv.name = zone.name;
     zv.crop = zone.crop;
     zv.priority = zone.priority;
-    zv.autoReplant = zone.autoReplant ? 1 : 0;
     zv.tiles = 0;
     zv.planted = 0;
     zv.mature = 0;
@@ -1773,16 +1735,8 @@ function lampFor(state: WorldState, index: number): LampState {
     return machine.tankMl <= 0 ? LampState.UtilityMissing : LampState.Running;
   }
 
-  if (spec.role === MachineRole.Recirculator) {
-    return machine.flowMlPerMinute <= 0 ? LampState.Starved : LampState.Running;
-  }
-
-  // The Maintenance Station starves on kits exactly as a converter starves on inputs — AMBER,
-  // "look upstream", and upstream of a station is its kit belt (item 039's criterion: the lamp
-  // is the honest half of "repairs halt, never free service"). Jammed/Halted are handled above.
-  if (spec.role === MachineRole.MaintenanceStation) {
-    return (machine.inputCounts[0] ?? 0) <= 0 ? LampState.Starved : LampState.Running;
-  }
+  // The Recirculator's starved lamp and the Maintenance Station's kit-starved lamp were
+  // decided here until item 145 cut both machines.
 
   // **THE DRONE BAY HAS NO LAMP OF ITS OWN ANY MORE** (item 090). It used to show the blue
   // "a utility is missing" light on an empty parts hopper — the honest half of "repairs halt,
@@ -2018,7 +1972,6 @@ function projectStats(state: WorldState, out: WorldView): void {
   s.itemsHarvestedByHand = stats.itemsHarvestedByHand;
   s.totalManualTouches = totalManualTouches(stats.touches);
   s.longestHandsFreeTicks = stats.longestHandsFreeTicks;
-  s.longestUntouchedMachineTicks = stats.longestUntouchedMachineTicks;
   s.cheatsUsed = stats.cheatsUsed;
 
   // The per-item ledger, with "today" subtracted here so the Dawn Report's card reads two

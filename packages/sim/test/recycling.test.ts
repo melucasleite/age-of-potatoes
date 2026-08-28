@@ -104,23 +104,23 @@ function loadedDepot(state: WorldState, item: ItemId, quantityPerRun: number): M
 
 // --- the node budget --------------------------------------------------------------------------
 
-describe('the recipe graph after item 131', () => {
-  it('STANDS AT 43 OF ~50 — it was 50 until item 124 deleted seven nodes', () => {
+describe('the recipe graph after item 145', () => {
+  it("STANDS AT 26 OF ~50 — 50 at item 131, minus item 124's seven and item 145's seventeen", () => {
     // Plan §5 caps the graph at ~50 items and `data.ts`'s `ItemId` header calls the cap "a real
     // constraint". The count is non-boxed items plus liquids: a boxed machine is not a node,
     // because nothing eats one, nothing makes one, and no belt will ever carry one.
     const nodes = ITEM_SPECS.filter((spec) => !spec.slug.startsWith('boxed-')).length;
     const liquids = Object.values(LiquidId).filter((id) => id !== LiquidId.None).length;
 
-    expect(nodes).toBe(38);
+    expect(nodes).toBe(21);
     expect(liquids).toBe(5);
-    expect(nodes + liquids).toBe(43);
+    expect(nodes + liquids).toBe(26);
 
-    // **THE HEADROOM CAME BACK, AND IT CAME BACK BY ACCIDENT.** This read 45 + 5 = 50 with no
-    // room left at all, which is why item 131 put its recipe on the Washer rather than building
-    // a Recycling Centre. Item 124 then deleted the waste loop and took seven nodes out with it
-    // — `DayOldPotato`, `DayOldCane`, `DayOldCorn`, `DayOldChili`, `DayOldGoldPotato`, `Compost`
-    // and `Fertilizer` — none of which was the point of that item.
+    // **THE HEADROOM CAME BACK TWICE.** This read 45 + 5 = 50 with no room at all, which is why
+    // item 131 put its recipe on the Washer rather than building a Recycling Centre. Item 124
+    // deleted the waste loop's seven nodes; item 145's cut list then handed back seventeen more
+    // — the corn/chili/gold seed-and-produce pairs, the two tree fruits, and the whole
+    // nine-node flavour tier.
     //
     // The ceiling assertion below is the one that matters and it has not moved: the next feature
     // that wants a node still finds out here rather than in a paragraph nobody re-read.
@@ -130,29 +130,24 @@ describe('the recipe graph after item 131', () => {
   it('spent that node on the item and NOT on a machine — the Washer grew a recipe instead', () => {
     const washer = machineSpec(MachineKind.Washer)!;
     const recipes = machineRecipes(washer);
-    expect(recipes.map((recipe) => recipe.output)).toEqual([
-      ItemId.WashedGoldPotato,
-      ItemId.Bottle,
-      ItemId.WashedPotato,
-    ]);
+    // (The gold-potato line led this list until item 145 cut the flavour tier.)
+    expect(recipes.map((recipe) => recipe.output)).toEqual([ItemId.Bottle, ItemId.WashedPotato]);
     // No Recycling Centre, and the negative is the assertion: the roster gained no machine.
     expect(Object.keys(MachineKind).some((kind) => /recycl/i.test(kind))).toBe(false);
   });
 
-  it('KEEPS THE EXISTING HOPPER INDICES, which is a save-compatibility rule and not a preference', () => {
-    // `machine.inputCounts` is stored parallel to `machineHoppers()` in every save on disk. The
-    // bottle recipe is declared SECOND precisely so the new hopper lands on the end: declared
-    // first, it would have inserted at index 1 and slid the gold-potato line to index 2, which
-    // silently relabels every saved Washer's gold potatoes as used bottles.
+  it('KEEPS THE SURVIVING HOPPER ORDER, which is a save-compatibility rule and not a preference', () => {
+    // `machine.inputCounts` is stored parallel to `machineHoppers()` in every save on disk.
+    // Item 145 cut the gold-potato hopper out of the middle — the 23 → 24 migration remaps
+    // saved counts onto this shrunk list — and the survivors keep their relative order:
+    // potatoes first, bottles after.
     const washer = machineSpec(MachineKind.Washer)!;
     expect(machineHoppers(washer).map((line) => line.item)).toEqual([
       ItemId.RussetPotato,
-      ItemId.GoldPotato,
       ItemId.UsedBottle,
     ]);
     expect(hopperIndexFor(washer, ItemId.RussetPotato)).toBe(0);
-    expect(hopperIndexFor(washer, ItemId.GoldPotato)).toBe(1);
-    expect(hopperIndexFor(washer, ItemId.UsedBottle)).toBe(2);
+    expect(hopperIndexFor(washer, ItemId.UsedBottle)).toBe(1);
   });
 });
 
@@ -339,7 +334,7 @@ describe('the empties come out of the vehicle', () => {
 
     // The depot is 2×2 at (6,6); an arm at (8,6) reaches back into (7,6) and forward to (9,6).
     spawnGrabber(state, GrabberTier.Mk1, 8, 6, Direction.East, 0);
-    spawnMachine(state, MachineKind.RootCellar, 9, 6);
+    spawnMachine(state, MachineKind.HandCart, 9, 6);
 
     stepUntil(state, 2_000, () => depot.outputCount < 4);
     expect(depot.outputCount).toBeLessThan(4);
@@ -554,7 +549,7 @@ describe('the save', () => {
     const washerBack = restored.machines.find((machine) => machine.id === washer.id)!;
     const line = hopperIndexFor(machineSpec(MachineKind.Washer)!, ItemId.UsedBottle);
     expect(washerBack.inputCounts[line]).toBe(5);
-    expect(washerBack.inputCounts).toHaveLength(3);
+    expect(washerBack.inputCounts).toHaveLength(2);
   });
 
   it('GIVES A FORMAT-7 WASHER ITS THIRD HOPPER WITHOUT MOVING THE POTATOES IN THE FIRST', () => {
@@ -572,10 +567,10 @@ describe('the save', () => {
     const restored = restoreWorld(formatSeven).state;
     const washer = restored.machines.find((machine) => machine.kind === MachineKind.Washer)!;
 
-    expect(washer.inputCounts).toEqual([11, 0, 0]);
+    // Two hoppers since item 145 cut the gold line; the potatoes are still at index 0.
+    expect(washer.inputCounts).toEqual([11, 0]);
     const spec = machineSpec(MachineKind.Washer)!;
     expect(washer.inputCounts[hopperIndexFor(spec, ItemId.RussetPotato)]).toBe(11);
-    expect(washer.inputCounts[hopperIndexFor(spec, ItemId.GoldPotato)]).toBe(0);
     expect(washer.inputCounts[hopperIndexFor(spec, ItemId.UsedBottle)]).toBe(0);
   });
 });

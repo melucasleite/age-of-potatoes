@@ -51,7 +51,7 @@ import { SaveCorruptError, SaveFormatTooNewError, SaveMigrationMissingError } fr
  * Bump it in the same commit that adds the migration step which reaches it. A bump without
  * a step is a hole in the chain, and `migrate` throws rather than guessing.
  */
-export const CURRENT_FORMAT_VERSION = 23;
+export const CURRENT_FORMAT_VERSION = 24;
 
 /**
  * A pure `payload -> payload` transform. It receives whatever the previous version wrote and
@@ -2250,6 +2250,510 @@ const migrateFormat22To23: SaveMigration = (payload) => {
   };
 };
 
+// --- format 23 → 24: the flavour cut (items 145, 146, 147) -------------------------------
+//
+// Frozen ids and prices, because a migration describes the world it is READING. Every one of
+// these was true when format 23 was current, and not one of them exists in `data.ts` any more.
+
+/**
+ * **THE SIX MACHINE KINDS ITEM 145 DELETED, AND WHAT EACH COST NEW.** The floor a refund may
+ * never fall below, per kind — `FORMAT_23_WELL_PRICE_CENTS`'s rule, six times over.
+ */
+const FORMAT_24_DELETED_MACHINE_PRICE_CENTS: Readonly<Record<number, number>> = {
+  2: 10_000, // ChipKitchen
+  13: 30_000, // Recirculator
+  25: 25_000, // RootCellar
+  28: 20_000, // OrangeTree
+  29: 20_000, // LemonTree
+  33: 120_000, // MaintenanceStation
+};
+
+/**
+ * **WHAT A VANISHED GOOD IS WORTH, IN CENTS**, at the list price format 23 posted for it.
+ * `FORMAT_22_PAYOUT_CENTS`'s rule at item-145 scale. The six boxed-machine ids are listed at
+ * their MACHINE'S price — a boxed machine's own `listPriceCents` was always 0, and paying a
+ * player nothing for a Root Cellar in a box would be the exact robbery this table prevents.
+ */
+const FORMAT_24_PAYOUT_CENTS: Readonly<Record<number, number>> = {
+  13: 70, // CornSeed
+  14: 220, // Corn
+  16: 90, // ChiliSeed
+  17: 300, // ChiliPepper
+  27: 10_000, // BoxedChipKitchen
+  38: 30_000, // BoxedRecirculator
+  50: 200, // GoldPotatoSeed
+  51: 600, // GoldPotato
+  53: 260, // Orange
+  54: 240, // Lemon
+  58: 25_000, // BoxedRootCellar
+  61: 20_000, // BoxedOrangeTree
+  62: 20_000, // BoxedLemonTree
+  67: 120_000, // BoxedMaintenanceStation
+  70: 900, // WashedGoldPotato
+  71: 1_050, // GoldPotatoSlices
+  72: 1_500, // GoldChips
+  73: 2_000, // SeasonedGoldChips
+  74: 2_600, // BaggedGoldChips
+  75: 1_850, // ChiliChips
+  76: 2_450, // BaggedChiliChips
+  77: 1_730, // SweetcornChips
+  78: 2_330, // BaggedSweetcornChips
+};
+
+/**
+ * The boxed-item id each deleted kind came off the lot as. A bag slot holding one of these
+ * pays per BOX, off each box's own invoice, floored at the machine's list — the Composter's
+ * and the Artesian Well's rule, per kind.
+ */
+const FORMAT_24_BOXED_FOR_KIND: Readonly<Record<number, number>> = {
+  2: 27,
+  13: 38,
+  25: 58,
+  28: 61,
+  29: 62,
+  33: 67,
+};
+
+/**
+ * **THE NINE TECH NODES ITEMS 146/147 DELETED, AT THE PRICES FORMAT 23 SOLD THEM FOR.** Every
+ * one refunded and spliced out of `unlocked` — a node whose machine, crop, or era no longer
+ * exists is money spent on nothing, the Composting and Artesian Well rule nine times over.
+ * The Corporate Charter is the big one: $20,000, era IV's gate, refunded like the rest.
+ */
+const FORMAT_24_TECH_PRICE_CENTS: Readonly<Record<string, number>> = {
+  'agronomy-corn': 3_000,
+  'agronomy-chili': 4_000,
+  'agronomy-gold-potato': 15_000,
+  'agronomy-seed-hopper': 120_000,
+  'agronomy-root-cellar': 55_000,
+  'agronomy-orchard': 80_000,
+  'hydraulics-recirculator': 90_000,
+  'fabrication-diagnostics': 120_000,
+  'charter-corporate': 2_000_000,
+};
+
+/**
+ * **THE THREE CROPS ITEM 145 PULLED UP, AND THE SEED EACH TILE GETS PAID FOR.** Corn (3),
+ * ChiliPepper (4) and GoldPotato (5), paid at their seed's format-23 list price.
+ *
+ * THE GENTLER READING, CHOSEN AND ARGUED: a tile growing a cut crop is cleared to TILLED
+ * EARTH — not grass, so nobody re-tills ground they already broke — and the seed that was
+ * actually spent on it comes back in cash. The read this rejects is paying the mature YIELD
+ * for a ripe tile: the sim has never minted an unharvested good, a migration that did would
+ * pay a corn field more than the player could have earned by clicking, and the seed is the
+ * only thing the player verifiably PAID. Growth clocks are dropped in silence — clocks, not
+ * property.
+ */
+const FORMAT_24_SEED_CENTS_FOR_CROP: Readonly<Record<number, number>> = {
+  3: 70, // Corn -> CornSeed
+  4: 90, // ChiliPepper -> ChiliSeed
+  5: 200, // GoldPotato -> GoldPotatoSeed
+};
+
+/**
+ * **THE HOPPER LISTS AS FORMAT 23 STORED THEM**, for every machine whose list this step
+ * shrinks — `machine.inputCounts[i]` is the count of `FORMAT_24_OLD_HOPPERS[kind][i]`.
+ * Derived the way `machineHoppers()` derived them on the day (primary ingredient first, then
+ * recipe order, appending unseen), and frozen because that derivation now gives a different
+ * answer.
+ *
+ * **THIS REMAP MUST HAPPEN IN THE PAYLOAD, AND HERE IS THE TRAP IT DEFUSES**: canonical's
+ * `readHopperArray` sizes from TODAY's spec and silently truncates a longer saved array. A
+ * format-23 Washer's `[russets, gold, bottles]` read raw would come back as `[russets, gold]`
+ * — the gold count mislabelled as bottles and the real bottle count dropped. So the dead
+ * lines are paid out and the survivors are re-seated BEFORE the loader ever sees the array.
+ */
+const FORMAT_24_OLD_HOPPERS: Readonly<Record<number, readonly number[]>> = {
+  2: [2], // ChipKitchen: RussetPotato (survives; handed back through the bag)
+  4: [2, 51, 80], // Washer: RussetPotato, GoldPotato, UsedBottle
+  5: [4, 70], // Slicer: WashedPotato, WashedGoldPotato
+  6: [5, 71], // Fryer: PotatoSlices, GoldPotatoSlices
+  7: [6, 17, 14, 72], // Seasoner: PlainChips, ChiliPepper, Corn, GoldChips
+  8: [7, 75, 77, 73], // Bagger: SeasonedChips, ChiliChips, SweetcornChips, SeasonedGoldChips
+  33: [20], // MaintenanceStation: RepairKit (survives; handed back through the bag)
+};
+
+/**
+ * Which old hopper indices SURVIVE into format 24, in the new order. Every index not listed
+ * holds a deleted good and is paid out. The Washer is the one with a real remap — its
+ * UsedBottle line moves from slot 2 to slot 1; everyone else just loses their tail.
+ */
+const FORMAT_24_KEPT_HOPPERS: Readonly<Record<number, readonly number[]>> = {
+  4: [0, 2],
+  5: [0],
+  6: [0],
+  7: [0],
+  8: [0],
+};
+
+function format24Int(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) ? value : 0;
+}
+
+/** A running wallet, so every payout in this step is one addition at the end. */
+interface Format24Purse {
+  cents: number;
+}
+
+/** True for an id this step deletes outright. Nothing item 145 cut has a successor. */
+function format24Doomed(item: number): boolean {
+  return FORMAT_24_PAYOUT_CENTS[item] !== undefined;
+}
+
+/** Pay a doomed good out at its format-23 list. Silently ignores a survivor. */
+function format24PayOut(purse: Format24Purse, item: number, count: number): void {
+  if (count <= 0) return;
+  const cents = FORMAT_24_PAYOUT_CENTS[item];
+  if (cents !== undefined) purse.cents += cents * count;
+}
+
+/** The slot for an item, created in canonical (ascending-id) position. `format22Slot`, restated. */
+function format24Slot(slots: Record<string, unknown>[], item: number): Record<string, unknown> {
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i]!;
+    if (format24Int(slot['item']) === item) return slot;
+  }
+  const created: Record<string, unknown> = { boxes: [], count: 0, item };
+  let insertAt = slots.length;
+  for (let i = 0; i < slots.length; i++) {
+    if (format24Int(slots[i]!['item']) > item) {
+      insertAt = i;
+      break;
+    }
+  }
+  slots.splice(insertAt, 0, created);
+  return created;
+}
+
+/** Put goods in the bag, paying out a doomed id on the way. Never writes a dead id. */
+function format24Give(
+  slots: Record<string, unknown>[],
+  purse: Format24Purse,
+  item: number,
+  count: number,
+): void {
+  if (count <= 0 || item === 0) return;
+  if (format24Doomed(item)) {
+    format24PayOut(purse, item, count);
+    return;
+  }
+  const slot = format24Slot(slots, item);
+  slot['count'] = format24Int(slot['count']) + count;
+}
+
+/**
+ * Empty one of a machine's item/count pairs into the bag or the wallet if what it holds is
+ * doomed. Cargo hold, output basket and seed shelf — the same three doors format 22 → 23
+ * swept, except this sweep GIVES a survivor back instead of only paying box ids out, because
+ * a deleted CONTAINER (the Root Cellar) can be holding anything at all.
+ */
+function format24EmptySlotIfDoomed(
+  machine: Record<string, unknown>,
+  purse: Format24Purse,
+  itemKey: string,
+  countKey: string,
+): void {
+  const item = format24Int(machine[itemKey]);
+  if (!format24Doomed(item)) return;
+  format24PayOut(purse, item, format24Int(machine[countKey]));
+  machine[itemKey] = 0;
+  machine[countKey] = 0;
+}
+
+/**
+ * Format 23 → 24: **six machines, three crops, twenty-three goods, nine research nodes and one
+ * era leave the game, and every one of them is paid for** (items 145, 146, 147; owner rulings
+ * 2026-08-26). The largest deletion the save chain has ever carried — larger than item 124 —
+ * and its only job is item 124's job restated: **no player is worse off for having saved.**
+ *
+ * **THE SAME TWO KINDS OF FIELD, AND THE SAME RULE.** A field that recorded a QUANTITY OF
+ * STATE nobody bought is dropped in silence; a thing a player PAID FOR is bought back at the
+ * price format 23 posted. Nothing item 145 cut has a successor, so unlike format 21 → 22 there
+ * is no conversion table — everything doomed becomes cents.
+ *
+ * **DROPPED IN SILENCE, NOTHING OWED:** `machines[].untouchedTicks` and
+ * `stats.longestUntouchedMachineTicks` (the Corporate Charter's clock and its high-water mark
+ * — the milestone is gone, and nobody bought a counter), and `zones[].autoReplant` /
+ * `zones[].replantCooldown` (item 146 retired auto-replant; a toggle is a setting, and its
+ * cooldown is a clock). A zone whose CROP was cut keeps its tiles and its name and is set to
+ * `CropId.None` — a zone's crop is a setting too, and "no crop, pick one" is the value that
+ * keeps the paint without inventing a choice the player never made.
+ *
+ * **BOUGHT BACK, EVERYWHERE IT CAN SIT** — the bag (per box, off each box's own invoice,
+ * floored at list), built machines (at `investedCents`, floored at list), machine cargo /
+ * output baskets / seed shelves, hopper lines, belts (off the run, not a hole in it), grabber
+ * hands, bot arms and seed pockets, truck contracts (stocked and in-transit, and the route
+ * torn up), and the tech list. A grabber FILTERED to a dead good is set to "anything" — a
+ * setting, not property. A `salesByItem` row naming a dead good is dropped — history, not
+ * property, and the loader would refuse the save over a number in a report. A saved errand
+ * whose `item` names a dead good is cancelled outright — the Fertilize rule: the player stops
+ * walking, and nothing was spent because an errand had not spent it yet.
+ *
+ * **A DELETED MACHINE'S CONTENTS COME OUT THROUGH THE COMPOSTER'S DOOR**: hopper lines and
+ * baskets holding SURVIVORS (a Chip Kitchen's potatoes, a Maintenance Station's repair kits,
+ * anything in a Root Cellar) go back into the bag; doomed contents (an Orange Tree's basket)
+ * become cents. Nothing vanishes.
+ *
+ * **THE HOPPER REMAP IS THE ONE PIECE OF REAL SURGERY** — see `FORMAT_24_OLD_HOPPERS`. Five
+ * surviving machine kinds lose recipe lines, and their saved `inputCounts` arrays must be
+ * re-seated in the payload before canonical's spec-sized reader truncates them into
+ * mislabelled counts. Dead lines are paid at list; the Washer's bottle count slides from
+ * slot 2 to slot 1.
+ *
+ * **A TILE GROWING A CUT CROP BECOMES TILLED EARTH PLUS ITS SEED'S PRICE IN CASH** — see
+ * `FORMAT_24_SEED_CENTS_FOR_CROP` for why the seed and not the yield.
+ *
+ * `payload.version` is NOT rewritten — format 14 → 15's reason, unchanged.
+ */
+const migrateFormat23To24: SaveMigration = (payload) => {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new SaveCorruptError('Cannot migrate a format-23 save whose payload is not an object.');
+  }
+  const p = payload as Record<string, unknown>;
+  const purse: Format24Purse = { cents: 0 };
+
+  // --- the bag ------------------------------------------------------------------------
+  const inventory: Record<string, unknown>[] = [];
+  const oldInventory = rows(p, 'inventory');
+  for (let i = 0; i < oldInventory.length; i++) {
+    const slot = oldInventory[i]!;
+    const item = format24Int(slot['item']);
+    if (!format24Doomed(item)) {
+      inventory.push(slot);
+      continue;
+    }
+    const kindEntry = Object.entries(FORMAT_24_BOXED_FOR_KIND).find(([, boxed]) => boxed === item);
+    if (kindEntry === undefined) {
+      // An ordinary dead good: seeds, produce, a premium chip. Paid at list, per unit.
+      format24PayOut(purse, item, format24Int(slot['count']));
+      continue;
+    }
+    // A boxed deleted machine: per box, off each box's own invoice, floored at the machine's
+    // list — and a payload whose `boxes` list is short of `count` still pays every unit.
+    const floor = FORMAT_24_DELETED_MACHINE_PRICE_CENTS[Number(kindEntry[0])]!;
+    const boxes = Array.isArray(slot['boxes']) ? (slot['boxes'] as Record<string, unknown>[]) : [];
+    for (let b = 0; b < boxes.length; b++) {
+      const invoice = format24Int(boxes[b]!['investedCents']);
+      purse.cents += invoice > floor ? invoice : floor;
+    }
+    const unboxed = format24Int(slot['count']) - boxes.length;
+    if (unboxed > 0) purse.cents += floor * unboxed;
+  }
+
+  // --- the field and the zones ----------------------------------------------------------
+  const field = rows(p, 'field').map((tile) => {
+    const seedCents = FORMAT_24_SEED_CENTS_FOR_CROP[format24Int(tile['crop'])];
+    if (seedCents === undefined) return tile;
+    purse.cents += seedCents;
+    return { ...tile, crop: 0, growth: 0, growthTarget: 0 };
+  });
+
+  const zones = rows(p, 'zones').map((zone) => {
+    const next = { ...zone };
+    delete next['autoReplant'];
+    delete next['replantCooldown'];
+    if (FORMAT_24_SEED_CENTS_FOR_CROP[format24Int(next['crop'])] !== undefined) next['crop'] = 0;
+    return next;
+  });
+
+  // --- machines -----------------------------------------------------------------------
+  const machines: Record<string, unknown>[] = [];
+  const oldMachines = rows(p, 'machines');
+  for (let i = 0; i < oldMachines.length; i++) {
+    const machine = oldMachines[i]!;
+    const kind = format24Int(machine['kind']);
+    const listPrice = FORMAT_24_DELETED_MACHINE_PRICE_CENTS[kind];
+
+    if (listPrice !== undefined) {
+      // A DELETED KIND: the deconstruct path, in cash. Invoice floored at list, then every
+      // door emptied — hopper lines by the frozen list, basket and cargo and shelf by id.
+      const invoice = format24Int(machine['investedCents']);
+      purse.cents += invoice > listPrice ? invoice : listPrice;
+
+      const oldHoppers = FORMAT_24_OLD_HOPPERS[kind] ?? [];
+      const inputCounts = machine['inputCounts'];
+      if (Array.isArray(inputCounts)) {
+        for (let line = 0; line < oldHoppers.length; line++) {
+          format24Give(inventory, purse, oldHoppers[line]!, format24Int(inputCounts[line]));
+        }
+      }
+      format24Give(
+        inventory,
+        purse,
+        format24Int(machine['outputItem']),
+        format24Int(machine['outputCount']),
+      );
+      format24Give(
+        inventory,
+        purse,
+        format24Int(machine['cargoItem']),
+        format24Int(machine['cargoCount']),
+      );
+      format24Give(
+        inventory,
+        purse,
+        format24Int(machine['seedShelfItem']),
+        format24Int(machine['seedShelfCount']),
+      );
+      continue;
+    }
+
+    const next = { ...machine };
+    delete next['untouchedTicks'];
+
+    // The hopper surgery, for the five kinds whose lists shrank.
+    const kept = FORMAT_24_KEPT_HOPPERS[kind];
+    if (kept !== undefined) {
+      const oldHoppers = FORMAT_24_OLD_HOPPERS[kind]!;
+      const counts = next['inputCounts'];
+      const oldCounts = Array.isArray(counts) ? counts : [];
+      const newCounts: number[] = [];
+      for (let k = 0; k < kept.length; k++) newCounts.push(format24Int(oldCounts[kept[k]!]));
+      for (let line = 0; line < oldHoppers.length; line++) {
+        if (!kept.includes(line)) {
+          format24PayOut(purse, oldHoppers[line]!, format24Int(oldCounts[line]));
+        }
+      }
+      next['inputCounts'] = newCounts;
+    }
+
+    // A surviving machine holding a dead good: a Seasoner's basket of chili chips, a dock
+    // shelf of corn seed, a cart's cargo of gold bags. Paid out where it stands.
+    format24EmptySlotIfDoomed(next, purse, 'cargoItem', 'cargoCount');
+    format24EmptySlotIfDoomed(next, purse, 'outputItem', 'outputCount');
+    format24EmptySlotIfDoomed(next, purse, 'seedShelfItem', 'seedShelfCount');
+    machines.push(next);
+  }
+
+  // --- belts, claws and robots ---------------------------------------------------------
+  const belts = rows(p, 'belts').map((belt) => {
+    const items = belt['items'];
+    if (!Array.isArray(items)) return belt;
+    const kept: unknown[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const raw = items[i];
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) continue;
+      const item = format24Int((raw as Record<string, unknown>)['item']);
+      if (format24Doomed(item)) {
+        format24PayOut(purse, item, 1);
+        continue;
+      }
+      kept.push(raw);
+    }
+    return { ...belt, items: kept };
+  });
+
+  const grabbers = rows(p, 'grabbers').map((grabber) => {
+    const next = { ...grabber };
+    const held = format24Int(next['held']);
+    if (format24Doomed(held)) {
+      format24PayOut(purse, held, 1);
+      next['held'] = 0;
+    }
+    // A filter is a setting, not property: an arm told to move only gold bags is told to
+    // move anything instead, which is the value that keeps it working.
+    if (format24Doomed(format24Int(next['filter']))) next['filter'] = 0;
+    return next;
+  });
+
+  const bots = rows(p, 'bots').map((bot) => {
+    const next = { ...bot };
+    const carryItem = format24Int(next['carryItem']);
+    if (format24Doomed(carryItem)) {
+      format24PayOut(purse, carryItem, format24Int(next['carryCount']));
+      next['carryItem'] = 0;
+      next['carryCount'] = 0;
+    }
+    const seedItem = format24Int(next['seedItem']);
+    if (format24Doomed(seedItem)) {
+      format24PayOut(purse, seedItem, format24Int(next['seedCount']));
+      next['seedItem'] = 0;
+      next['seedCount'] = 0;
+    }
+    return next;
+  });
+
+  // --- routes --------------------------------------------------------------------------
+  const contracts: Record<string, unknown>[] = [];
+  const oldContracts = rows(p, 'contracts');
+  for (let i = 0; i < oldContracts.length; i++) {
+    const contract = oldContracts[i]!;
+    const item = format24Int(contract['item']);
+    if (!format24Doomed(item)) {
+      contracts.push(contract);
+      continue;
+    }
+    format24PayOut(purse, item, format24Int(contract['stocked']));
+    format24PayOut(purse, item, format24Int(contract['inTransit']));
+  }
+
+  // --- the errand, the tech list, the report, and the wallet -----------------------------
+  const playerRaw = p['player'];
+  let player = playerRaw;
+  if (typeof playerRaw === 'object' && playerRaw !== null && !Array.isArray(playerRaw)) {
+    const intent = (playerRaw as Record<string, unknown>)['intent'];
+    if (
+      typeof intent === 'object' &&
+      intent !== null &&
+      !Array.isArray(intent) &&
+      format24Doomed(format24Int((intent as Record<string, unknown>)['item']))
+    ) {
+      player = { ...(playerRaw as Record<string, unknown>), intent: null };
+    }
+  }
+
+  const unlockedRaw = p['unlocked'];
+  let unlocked = unlockedRaw;
+  if (Array.isArray(unlockedRaw)) {
+    const kept: unknown[] = [];
+    for (let i = 0; i < unlockedRaw.length; i++) {
+      const entry = unlockedRaw[i];
+      const refund = typeof entry === 'string' ? FORMAT_24_TECH_PRICE_CENTS[entry] : undefined;
+      if (refund !== undefined) {
+        purse.cents += refund;
+        continue;
+      }
+      kept.push(entry);
+    }
+    unlocked = kept;
+  }
+
+  let stats = p['stats'];
+  if (typeof stats === 'object' && stats !== null && !Array.isArray(stats)) {
+    const statsRecord = { ...(stats as Record<string, unknown>) };
+    delete statsRecord['longestUntouchedMachineTicks'];
+    const salesRaw = statsRecord['salesByItem'];
+    if (Array.isArray(salesRaw)) {
+      statsRecord['salesByItem'] = salesRaw.filter(
+        (row) =>
+          typeof row !== 'object' ||
+          row === null ||
+          Array.isArray(row) ||
+          !format24Doomed(format24Int((row as Record<string, unknown>)['item'])),
+      );
+    }
+    stats = statsRecord;
+  }
+
+  const moneyCents = format24Int(p['moneyCents']) + purse.cents;
+
+  return {
+    ...p,
+    belts,
+    bots,
+    contracts,
+    field,
+    grabbers,
+    inventory,
+    machines,
+    moneyCents,
+    player,
+    stats,
+    unlocked,
+    zones,
+  };
+};
+
 /**
  * Keyed by the version being migrated *from*: `MIGRATIONS[1]` turns a format-1 payload into
  * a format-2 payload, which `MIGRATIONS[2]` then turns into a format-3 one, and so on up the
@@ -2278,6 +2782,7 @@ export const MIGRATIONS: Readonly<Record<number, SaveMigration>> = {
   20: migrateFormat20To21,
   21: migrateFormat21To22,
   22: migrateFormat22To23,
+  23: migrateFormat23To24,
 };
 
 export interface MigrationOutcome {

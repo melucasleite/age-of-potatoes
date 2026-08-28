@@ -49,19 +49,18 @@ describe('who may stand on farmland', () => {
     expect(machineSpec(MachineKind.Sprinkler)!.fieldPlaceable).toBe(true);
     expect(machineSpec(MachineKind.PipedSprinkler)!.fieldPlaceable).toBe(true);
     expect(machineSpec(MachineKind.IrrigationHub)!.fieldPlaceable).toBe(true);
-    expect(machineSpec(MachineKind.ChipKitchen)!.fieldPlaceable).toBe(false);
+    expect(machineSpec(MachineKind.Washer)!.fieldPlaceable).toBe(false);
     expect(machineSpec(MachineKind.Fryer)!.fieldPlaceable).toBe(false);
     expect(machineSpec(MachineKind.SellBin)!.fieldPlaceable).toBe(false);
   });
 
-  it('places a barrel sprinkler on an empty farm tile, and a kitchen nowhere near one', () => {
+  it('places a barrel sprinkler on an empty farm tile, and a cart nowhere near one', () => {
     const state = funded(671);
     expect(place(state, MachineKind.Sprinkler, 7, 7), 'the sprinkler was turned away').toBe(true);
     expect(machineAt(state, 7, 7)).not.toBeNull();
-    // The non-flagged machine keeps meeting the fence, one tile over.
-    expect(place(state, MachineKind.ChipKitchen, 9, 9), 'the kitchen squatted the field').toBe(
-      false,
-    );
+    // The non-flagged machine keeps meeting the fence, one tile over. (A hand cart needs no
+    // research, which is what this helper's funded world assumes.)
+    expect(place(state, MachineKind.HandCart, 9, 9), 'the cart squatted the field').toBe(false);
   });
 
   it('takes a growing tile and hands the seed back — item 121 supersedes item 067’s refusal', () => {
@@ -115,15 +114,15 @@ describe('who may stand on farmland', () => {
     // Cane and chili regrow: `takeHarvest` leaves the plant standing and returns no seed, because
     // you still own the plant. A placement uproots it, so the seed is what the plant is worth.
     const state = funded(6724);
-    state.unlocked = [TechId.Chili];
-    const spec = cropSpec(CropId.ChiliPepper)!;
+    state.unlocked = [TechId.Cane];
+    const spec = cropSpec(CropId.SugarCane)!;
     const tile = tileAt(state, 6, 6)!;
     plantCrop(state, tile, spec);
     tile.growth = tile.growthTarget;
 
     expect(place(state, MachineKind.Sprinkler, 6, 6)).toBe(true);
-    expect(itemCount(state, ItemId.ChiliPepper), 'the ripe chilis vanished').toBeGreaterThan(0);
-    expect(itemCount(state, ItemId.ChiliSeed), 'the uprooted plant paid nothing back').toBe(1);
+    expect(itemCount(state, ItemId.SugarCane), 'the ripe cane vanished').toBeGreaterThan(0);
+    expect(itemCount(state, ItemId.CaneSeed), 'the uprooted plant paid nothing back').toBe(1);
     expect(tileAt(state, 6, 6)!.crop, 'the plant regrew under the machine').toBe(CropId.None);
   });
 
@@ -159,7 +158,7 @@ describe('who may stand on farmland', () => {
     }
   });
 
-  it('**DOES NOT WIDEN PAST `fieldPlaceable`** — a kitchen still cannot take a planted tile', () => {
+  it('**DOES NOT WIDEN PAST `fieldPlaceable`** — a cart still cannot take a planted tile', () => {
     // The one boundary item 121 draws explicitly. A machine that was never allowed on farmland is
     // not allowed on farmland now, and it certainly does not get to harvest one on the way.
     const state = funded(6725);
@@ -167,7 +166,7 @@ describe('who may stand on farmland', () => {
     plantCrop(state, tileAt(state, 6, 6)!, spec);
     const seedsBefore = itemCount(state, ItemId.PotatoSeed);
 
-    expect(place(state, MachineKind.ChipKitchen, 6, 6), 'the kitchen took a crop').toBe(false);
+    expect(place(state, MachineKind.HandCart, 6, 6), 'the cart took a crop').toBe(false);
     expect(tileAt(state, 6, 6)!.crop, 'a refused placement cleared the tile anyway').toBe(
       CropId.RussetPotato,
     );
@@ -251,31 +250,8 @@ describe('the occupied tile grows nothing', () => {
   });
 });
 
-describe('the seed hopper skips the obstruction', () => {
-  it('auto-replants around a machine-occupied zone tile and keeps the seed', () => {
-    const state = funded(679);
-    state.unlocked = [TechId.AutoReplant];
-    expect(place(state, MachineKind.Sprinkler, 7, 7)).toBe(true);
-    addItem(state, ItemId.PotatoSeed, 10);
-
-    step(state, {
-      tick: state.tick,
-      commands: [
-        { type: 'CreateZone', crop: CropId.RussetPotato, rect: { x: 6, y: 7, w: 2, h: 1 } },
-      ],
-    });
-    const zone = state.zones[state.zones.length - 1]!;
-    step(state, {
-      tick: state.tick,
-      commands: [{ type: 'SetZoneAutoReplant', zoneId: zone.id, on: true }],
-    });
-
-    // Plenty of periods for a hopper that wanted to plant both tiles.
-    stepMany(state, 500);
-    expect(tileAt(state, 6, 7)!.crop, 'the free tile went unplanted').toBe(CropId.RussetPotato);
-    expect(tileAt(state, 7, 7)!.crop, 'the hopper planted under the machine').toBe(CropId.None);
-  });
-});
+// The seed-hopper-skips-the-obstruction test lived here until item 146 retired auto-replant;
+// the planter bot's version of the same rule is covered in bots.test.ts.
 
 describe('watering around the obstruction', () => {
   it('a mid-field 5×5 sprinkler waters all 24 neighbours on one charge, never its own feet', () => {

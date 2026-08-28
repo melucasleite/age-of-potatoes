@@ -21,8 +21,6 @@ import {
   BuildRefusal,
   CONDITION_EFFECT_THRESHOLD,
   CONDITION_MAX,
-  CHILI_PREMIUM_CENTS,
-  CROP_SPECS,
   CropId,
   Direction,
   FIELD_ORIGIN_X,
@@ -33,10 +31,8 @@ import {
   ItemId,
   LampState,
   LiquidId,
-  GOLD_POTATO_PREMIUM_CENTS,
   MACHINE_SPECS,
   MachineKind,
-  SWEETCORN_PREMIUM_CENTS,
   PIPE_MAX_PATH_TILES,
   PortFlow,
   OVERCOOK_BLOCKED_TICKS,
@@ -141,14 +137,6 @@ describe('the chip line', () => {
     }
   });
 
-  it('leaves the monolithic Chip Kitchen buildable with no research at all', () => {
-    // Every v0.1 save has one, and the v0.1 loop has to keep working untouched.
-    const spec = machineSpec(MachineKind.ChipKitchen)!;
-    expect(spec.requiresTech).toBeNull();
-    expect(spec.inputs).toEqual([{ item: ItemId.RussetPotato, count: 1 }]);
-    expect(spec.outputItem).toBe(ItemId.BaggedChips);
-  });
-
   it('stops a converter dead when its output buffer is full rather than eating inputs', () => {
     // Demand-pull (plan §7 ruling 6): an idle machine teaches the ratio, a compost pile does
     // not. A blocked Slicer must not consume one more washed potato.
@@ -164,7 +152,7 @@ describe('the chip line', () => {
   });
 });
 
-// --- the flavour tier (item 111) ------------------------------------------------------
+// --- multi-recipe machines (item 111, thinned to the Washer by item 145) ---------------
 
 /** Run a machine until it has finished one operation, or give up. Returns what it made. */
 function runOneOperation(state: WorldState, machine: Machine): ItemId | 0 {
@@ -175,105 +163,48 @@ function runOneOperation(state: WorldState, machine: Machine): ItemId | 0 {
   return 0;
 }
 
-describe('the flavour tier', () => {
-  it('gives corn, chili and the gold potato a recipe that consumes them', () => {
-    // THE WHOLE POINT OF ITEM 111, pinned as a rule rather than as three separate examples.
-    // Before it, these three appeared nowhere in `src/` outside their own data rows: they grew,
-    // they sold, and nothing in the game wanted them. If this goes red, a crop went back to
-    // being decoration.
-    for (const crop of [ItemId.Corn, ItemId.ChiliPepper, ItemId.GoldPotato]) {
-      const eaten = MACHINE_SPECS.some((spec) =>
-        machineRecipes(spec).some((recipe) => recipe.consumes.some((line) => line.item === crop)),
-      );
-      expect(eaten).toBe(true);
-    }
-  });
-
-  it('leaves the plain line making plain chips, fed nothing but chips', () => {
-    // The non-negotiable: plain chips work end to end exactly as before. A Seasoner with three
-    // empty hoppers it never asked for must still reach the plain recipe every time.
-    const state = createWorld(11);
-    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
-    seasoner.inputCounts[0] = 4;
-
-    expect(runOneOperation(state, seasoner)).toBe(ItemId.SeasonedChips);
-  });
-
-  it('makes chili chips when a pepper is in the hopper, and falls back to salt when it is not', () => {
+describe('the multi-recipe Washer', () => {
+  it('washes a used bottle before it washes a potato, and falls back when the glass runs out', () => {
+    // The Washer is the one machine left with more than one recipe (item 145 cut the flavour
+    // tier), and order is priority: empties arrive in bursts and clear first, then the line
+    // goes straight back to potatoes.
     const state = createWorld(12);
-    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
-    const pepper = machineHoppers(machineSpec(MachineKind.Seasoner)!).findIndex(
-      (line) => line.item === ItemId.ChiliPepper,
+    const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
+    const bottle = machineHoppers(machineSpec(MachineKind.Washer)!).findIndex(
+      (line) => line.item === ItemId.UsedBottle,
     );
-    seasoner.inputCounts[0] = 2;
-    seasoner.inputCounts[pepper] = 1;
+    washer.inputCounts[0] = 2;
+    washer.inputCounts[bottle] = 1;
 
-    expect(runOneOperation(state, seasoner)).toBe(ItemId.ChiliChips);
-    expect(seasoner.inputCounts[pepper]).toBe(0);
+    expect(runOneOperation(state, washer)).toBe(ItemId.Bottle);
+    expect(washer.inputCounts[bottle]).toBe(0);
 
-    // One pepper, one chip. The second chip has nothing to be seasoned with, so the line does
-    // not stop — it goes back to salt. Drain the basket first, because a basket holds one
-    // product at a time.
-    seasoner.outputCount = 0;
-    seasoner.outputItem = 0;
-    expect(runOneOperation(state, seasoner)).toBe(ItemId.SeasonedChips);
-  });
-
-  it('turns corn into sweetcorn chips', () => {
-    const state = createWorld(13);
-    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
-    const corn = machineHoppers(machineSpec(MachineKind.Seasoner)!).findIndex(
-      (line) => line.item === ItemId.Corn,
-    );
-    seasoner.inputCounts[0] = 1;
-    seasoner.inputCounts[corn] = 1;
-
-    expect(runOneOperation(state, seasoner)).toBe(ItemId.SweetcornChips);
+    // Drain the basket first, because a basket holds one product at a time.
+    washer.outputCount = 0;
+    washer.outputItem = 0;
+    expect(runOneOperation(state, washer)).toBe(ItemId.WashedPotato);
   });
 
   it('will not mix two products in one basket', () => {
-    // `Machine.outputItem`'s rule, and the reason the field exists at all: a Seasoner holding
-    // plain chips finishes them before it starts a chili batch. Without this the basket would
-    // be a count with no name and a grabber could not say what it was pulling.
+    // `Machine.outputItem`'s rule, and the reason the field exists at all: a Washer holding
+    // washed potatoes finishes them before it starts on the glass. Without this the basket
+    // would be a count with no name and a grabber could not say what it was pulling.
     const state = createWorld(14);
-    const seasoner = spawnMachine(state, MachineKind.Seasoner, 0, 0)!;
-    const pepper = machineHoppers(machineSpec(MachineKind.Seasoner)!).findIndex(
-      (line) => line.item === ItemId.ChiliPepper,
+    const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
+    const bottle = machineHoppers(machineSpec(MachineKind.Washer)!).findIndex(
+      (line) => line.item === ItemId.UsedBottle,
     );
-    seasoner.outputCount = 1;
-    seasoner.outputItem = ItemId.SeasonedChips;
-    seasoner.inputCounts[0] = 4;
-    seasoner.inputCounts[pepper] = 4;
+    washer.outputCount = 1;
+    washer.outputItem = ItemId.WashedPotato;
+    washer.inputCounts[0] = 4;
+    washer.inputCounts[bottle] = 4;
 
     stepMany(state, 120);
     // It kept working — it just kept making the thing already in the basket, and did not touch
-    // a pepper to do it.
-    expect(seasoner.outputItem).toBe(ItemId.SeasonedChips);
-    expect(seasoner.outputCount).toBeGreaterThan(1);
-    expect(seasoner.inputCounts[pepper]).toBe(4);
-  });
-
-  it('runs a gold potato down the same five machines to a premium bag', () => {
-    // The alternate BASE, which is the half of the fork that could not be a seasoning: a gold
-    // potato is a potato, and the only honest thing to do with it is wash it and fry it.
-    const state = createWorld(15);
-    const chain: [MachineKind, ItemId, ItemId][] = [
-      [MachineKind.Washer, ItemId.GoldPotato, ItemId.WashedGoldPotato],
-      [MachineKind.Slicer, ItemId.WashedGoldPotato, ItemId.GoldPotatoSlices],
-      [MachineKind.Fryer, ItemId.GoldPotatoSlices, ItemId.GoldChips],
-      [MachineKind.Seasoner, ItemId.GoldChips, ItemId.SeasonedGoldChips],
-      [MachineKind.Bagger, ItemId.SeasonedGoldChips, ItemId.BaggedGoldChips],
-    ];
-
-    let x = 0;
-    for (const [kind, input, output] of chain) {
-      const machine = spawnMachine(state, kind, x, 0)!;
-      x += 3;
-      const hopper = machineHoppers(machineSpec(kind)!).findIndex((line) => line.item === input);
-      expect(hopper).toBeGreaterThanOrEqual(0);
-      machine.inputCounts[hopper] = 1;
-      expect(runOneOperation(state, machine)).toBe(output);
-    }
+    // an empty to do it.
+    expect(washer.outputItem).toBe(ItemId.WashedPotato);
+    expect(washer.outputCount).toBeGreaterThan(1);
+    expect(washer.inputCounts[bottle]).toBe(4);
   });
 
   it('keeps hopper zero where every save on disk already put it', () => {
@@ -292,55 +223,6 @@ describe('the flavour tier', () => {
         }
       }
     }
-  });
-
-  it('prices every new product off its input, and never off vibes', () => {
-    // Item 111's balance non-negotiable, checked as arithmetic rather than as literals: each
-    // flavoured rung is its plain counterpart plus 150% of the extra ingredient.
-    expect(listPriceCents(ItemId.ChiliChips)).toBe(
-      listPriceCents(ItemId.SeasonedChips) + CHILI_PREMIUM_CENTS,
-    );
-    expect(listPriceCents(ItemId.BaggedChiliChips)).toBe(
-      listPriceCents(ItemId.BaggedChips) + CHILI_PREMIUM_CENTS,
-    );
-    expect(listPriceCents(ItemId.SweetcornChips)).toBe(
-      listPriceCents(ItemId.SeasonedChips) + SWEETCORN_PREMIUM_CENTS,
-    );
-    expect(listPriceCents(ItemId.BaggedSweetcornChips)).toBe(
-      listPriceCents(ItemId.BaggedChips) + SWEETCORN_PREMIUM_CENTS,
-    );
-
-    // The gold line is the plain line shifted by ONE constant, which is what stops the premium
-    // being multiplied five times over on its way down the belt.
-    const gold: [ItemId, ItemId][] = [
-      [ItemId.WashedGoldPotato, ItemId.WashedPotato],
-      [ItemId.GoldPotatoSlices, ItemId.PotatoSlices],
-      [ItemId.GoldChips, ItemId.PlainChips],
-      [ItemId.SeasonedGoldChips, ItemId.SeasonedChips],
-      [ItemId.BaggedGoldChips, ItemId.BaggedChips],
-    ];
-    for (const [premium, plain] of gold) {
-      expect(listPriceCents(premium)).toBe(listPriceCents(plain) + GOLD_POTATO_PREMIUM_CENTS);
-    }
-  });
-
-  it('does not let the flavour tier out-earn the plain line per tile-second', () => {
-    // THE ANTI-ACCELERATION CHECK, and the one that would catch a well-meaning rebalance. Item
-    // 046 inherits an economy already paying ~5× too fast; this tier adds a decision, not a
-    // multiplier. A gold bag is worth more than a plain one — but the potato takes twice as
-    // long to grow, so per second of field it must NOT win.
-    const russet = CROP_SPECS.find((spec) => spec.yieldItem === ItemId.RussetPotato)!;
-    const goldCrop = CROP_SPECS.find((spec) => spec.yieldItem === ItemId.GoldPotato)!;
-
-    const plainPerTick = listPriceCents(ItemId.BaggedChips) / russet.growthTicks;
-    const goldPerTick = listPriceCents(ItemId.BaggedGoldChips) / goldCrop.growthTicks;
-    expect(goldPerTick).toBeLessThan(plainPerTick);
-
-    // What it DOES buy is more value per machine operation — five ops either way, more money
-    // out of them. That is the trade the player is being offered.
-    expect(listPriceCents(ItemId.BaggedGoldChips)).toBeGreaterThan(
-      listPriceCents(ItemId.BaggedChips),
-    );
   });
 });
 
@@ -804,7 +686,6 @@ describe('Rustic Style', () => {
       MachineKind.Slicer,
       MachineKind.Seasoner,
       MachineKind.Bagger,
-      MachineKind.ChipKitchen,
     ]) {
       expect(machineSpec(kind)!.overcookOutputItem).toBeNull();
     }
@@ -830,10 +711,13 @@ describe('wear and repair', () => {
     const fixture = loadFixture('idle-wear');
     const state = replay(fixture);
 
-    const kitchen = state.machines.find((machine) => machine.kind === MachineKind.ChipKitchen);
-    expect(kitchen).toBeDefined();
-    expect(kitchen!.opCount).toBe(0);
-    expect(kitchen!.condition).toBe(CONDITION_MAX);
+    // Whatever converter the fixture placed (a ChipKitchen until item 145 cut that kind).
+    const worker = state.machines.find(
+      (machine) => machineSpec(machine.kind)!.workPerOperation > 0,
+    );
+    expect(worker).toBeDefined();
+    expect(worker!.opCount).toBe(0);
+    expect(worker!.condition).toBe(CONDITION_MAX);
 
     // And the last ten thousand ticks of it really are untouched: no command lands after the
     // kitchen goes down, so nothing but time passed.
@@ -844,19 +728,19 @@ describe('wear and repair', () => {
   it('wastes an input on a cadence below the threshold, and never above it', () => {
     // Plan §4 says "waste chance"; plan §7 ruling 5 bans rolls. The reconciliation is a
     // period read off `opCount`, so the same world wastes the same potatoes every time.
-    const spec = machineSpec(MachineKind.ChipKitchen)!;
+    const spec = machineSpec(MachineKind.Fryer)!;
     const healthy = { condition: CONDITION_MAX } as never;
     expect(effectiveWastePeriod(spec, healthy)).toBe(0);
 
     const state = createWorld(82);
-    const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
+    const kitchen = spawnMachine(state, MachineKind.Fryer, 0, 0)!;
     kitchen.condition = CONDITION_EFFECT_THRESHOLD;
     kitchen.inputCounts[0] = 20;
-    stepMany(state, ticksPerOperation(MachineKind.ChipKitchen) * 3);
+    stepMany(state, ticksPerOperation(MachineKind.Fryer) * 3);
     expect(state.stats.inputsWastedByMachine).toBe(0);
 
     const worn = createWorld(83);
-    const spoiler = spawnMachine(worn, MachineKind.ChipKitchen, 0, 0)!;
+    const spoiler = spawnMachine(worn, MachineKind.Fryer, 0, 0)!;
     spoiler.condition = CONDITION_EFFECT_THRESHOLD - 1;
     spoiler.inputCounts[0] = 40;
     const period = effectiveWastePeriod(spec, spoiler);
@@ -865,7 +749,7 @@ describe('wear and repair', () => {
     // Run just past the operation the cadence lands on, at half speed because it is worn.
     // Short enough that wear has not moved the period underneath us, which is why the closed
     // form below is legitimate rather than approximately true.
-    stepMany(worn, ticksPerOperation(MachineKind.ChipKitchen) * 2 * period + period);
+    stepMany(worn, ticksPerOperation(MachineKind.Fryer) * 2 * period + period);
     expect(effectiveWastePeriod(spec, spoiler)).toBe(period);
     expect(spoiler.opCount).toBeGreaterThanOrEqual(period);
     expect(worn.stats.inputsWastedByMachine).toBeGreaterThan(0);
@@ -881,7 +765,7 @@ describe('wear and repair', () => {
     // disagree about arithmetic.
     const build = (): WorldState => {
       const state = createWorld(87);
-      const machine = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
+      const machine = spawnMachine(state, MachineKind.Fryer, 0, 0)!;
       machine.condition = 120;
       machine.inputCounts[0] = 30;
       stepMany(state, 4000);
@@ -895,7 +779,7 @@ describe('wear and repair', () => {
   });
 
   it('shortens the waste cadence as the machine falls further apart', () => {
-    const spec = machineSpec(MachineKind.ChipKitchen)!;
+    const spec = machineSpec(MachineKind.Fryer)!;
     const at = (condition: number): number =>
       effectiveWastePeriod(spec, { condition, efficiencyLevel: 0 } as never);
 
@@ -911,7 +795,7 @@ describe('wear and repair', () => {
     // PLAN §3: Efficiency reduces "both input waste and wear". Wear has always been cut in
     // `effectiveWear`; this is the other half. It stretches the PERIOD rather than lowering a
     // chance, because plan §7 ruling 5 means there is no chance in it to lower.
-    const spec = machineSpec(MachineKind.ChipKitchen)!;
+    const spec = machineSpec(MachineKind.Fryer)!;
     const at = (condition: number, efficiencyLevel: number): number =>
       effectiveWastePeriod(spec, { condition, efficiencyLevel } as never);
 
@@ -1019,7 +903,7 @@ describe('wear and repair', () => {
     // Plan §1: "Manual never rots." A player with $0 and no kits can bring a dead machine
     // all the way back, and it costs nothing but time.
     const state = createWorld(86);
-    const machine = spawnMachine(state, MachineKind.ChipKitchen, 4, 4)!;
+    const machine = spawnMachine(state, MachineKind.Fryer, 4, 4)!;
     machine.condition = 0;
     standOn(state, 4, 4);
 
@@ -1060,8 +944,16 @@ function replayWatching(fixture: GoldenFixture, onTick: (state: WorldState) => v
   return state;
 }
 
+/** The fixture's wearing converter, whichever kind the recording placed. */
+function wornWorkerOf(s: WorldState): Machine | undefined {
+  return s.machines.find((m) => {
+    const spec = machineSpec(m.kind);
+    return spec !== null && spec.workPerOperation > 0 && spec.wearPerOperation > 0;
+  });
+}
+
 describe('fixture stories', () => {
-  it('worn-to-zero: work drives a kitchen to zero, it halts, and hands alone restore it', () => {
+  it('worn-to-zero: work drives a machine to zero, it halts, and hands alone restore it', () => {
     const fixture = loadFixture('worn-to-zero');
     // Kit-free by construction — the fixture guards plan §1's "manual never rots", and a kit
     // slipping into a later re-recording would quietly change what it proves.
@@ -1070,18 +962,18 @@ describe('fixture stories', () => {
     let minCondition = Infinity;
     let haltedTicks = 0;
     const state = replayWatching(fixture, (s) => {
-      const kitchen = s.machines.find((m) => m.kind === MachineKind.ChipKitchen);
-      if (kitchen === undefined) return;
-      if (kitchen.condition < minCondition) minCondition = kitchen.condition;
-      if (kitchen.condition <= 0) haltedTicks += 1;
+      const worker = wornWorkerOf(s);
+      if (worker === undefined) return;
+      if (worker.condition < minCondition) minCondition = worker.condition;
+      if (worker.condition <= 0) haltedTicks += 1;
     });
 
-    const kitchen = state.machines.find((m) => m.kind === MachineKind.ChipKitchen)!;
+    const worker = wornWorkerOf(state)!;
     expect(minCondition).toBe(0);
     // It sat dead for a while — halted, costing nothing — rather than bouncing off zero.
     expect(haltedTicks).toBeGreaterThan(100);
-    expect(kitchen.opCount).toBeGreaterThan(0);
-    expect(kitchen.condition).toBe(CONDITION_MAX);
+    expect(worker.opCount).toBeGreaterThan(0);
+    expect(worker.condition).toBe(CONDITION_MAX);
     expect(state.stats.repairKitsUsed).toBe(0);
     expect(state.stats.touches.handRepair).toBeGreaterThan(0);
   });
@@ -1090,9 +982,9 @@ describe('fixture stories', () => {
     const fixture = loadFixture('maintenance');
     let minCondition = Infinity;
     const state = replayWatching(fixture, (s) => {
-      const kitchen = s.machines.find((m) => m.kind === MachineKind.ChipKitchen);
-      if (kitchen !== undefined && kitchen.condition < minCondition) {
-        minCondition = kitchen.condition;
+      const worker = wornWorkerOf(s);
+      if (worker !== undefined && worker.condition < minCondition) {
+        minCondition = worker.condition;
       }
     });
 
@@ -1106,8 +998,8 @@ describe('fixture stories', () => {
     expect(state.stats.repairKitsUsed).toBe(1);
     expect(state.stats.repairKitSpendCents).toBe(800);
     // Restored to full and back at work — the tail wears it a little, which is the point.
-    const kitchen = state.machines.find((m) => m.kind === MachineKind.ChipKitchen)!;
-    expect(kitchen.condition).toBeGreaterThan(CONDITION_EFFECT_THRESHOLD);
+    const worker = wornWorkerOf(state)!;
+    expect(worker.condition).toBeGreaterThan(CONDITION_EFFECT_THRESHOLD);
   });
 
   it('junction-loop: one junction alternates outputs, the other inputs, and goods reach every belt', () => {
@@ -1427,32 +1319,29 @@ describe('a grabber only takes what its destination will accept', () => {
     // the prediction and the outcome disagree, and it names the door.
     const destinations: readonly { name: string; build: (s: WorldState) => void }[] = [
       { name: 'Bagger hopper', build: (s) => void spawnMachine(s, MachineKind.Bagger, 2, 0) },
-      {
-        name: 'Chip Kitchen hopper',
-        build: (s) => void spawnMachine(s, MachineKind.ChipKitchen, 2, 0),
-      },
+      { name: 'Washer hopper', build: (s) => void spawnMachine(s, MachineKind.Washer, 2, 0) },
       { name: 'sell bin', build: (s) => void spawnMachine(s, MachineKind.SellBin, 2, 0) },
       { name: 'truck depot', build: (s) => void spawnMachine(s, MachineKind.TruckDepot, 2, 0) },
       { name: 'planter dock', build: (s) => void spawnMachine(s, MachineKind.PlanterDock, 2, 0) },
       { name: 'drone bay', build: (s) => void spawnMachine(s, MachineKind.DroneBay, 2, 0) },
-      // Item 105's door, and both machines that wear it — an empty box takes anything, so these
-      // rows are the ones that would catch a predicate that said yes and an accept that did not.
-      { name: 'root cellar', build: (s) => void spawnMachine(s, MachineKind.RootCellar, 2, 0) },
+      // Item 105's door, on the one storage machine left wearing it (item 145 cut the Root
+      // Cellar) — an empty box takes anything, so these rows are the ones that would catch a
+      // predicate that said yes and an accept that did not.
       { name: 'hand cart', build: (s) => void spawnMachine(s, MachineKind.HandCart, 2, 0) },
       {
-        name: 'root cellar (already holding potatoes)',
+        name: 'hand cart (already holding potatoes)',
         build: (s) => {
-          const cellar = spawnMachine(s, MachineKind.RootCellar, 2, 0)!;
-          cellar.cargoItem = ItemId.RussetPotato;
-          cellar.cargoCount = 1;
+          const cart = spawnMachine(s, MachineKind.HandCart, 2, 0)!;
+          cart.cargoItem = ItemId.RussetPotato;
+          cart.cargoCount = 1;
         },
       },
       {
-        name: 'root cellar (full)',
+        name: 'hand cart (full)',
         build: (s) => {
-          const cellar = spawnMachine(s, MachineKind.RootCellar, 2, 0)!;
-          cellar.cargoItem = ItemId.PlainChips;
-          cellar.cargoCount = machineSpec(MachineKind.RootCellar)!.inputCapacity;
+          const cart = spawnMachine(s, MachineKind.HandCart, 2, 0)!;
+          cart.cargoItem = ItemId.PlainChips;
+          cart.cargoCount = machineSpec(MachineKind.HandCart)!.inputCapacity;
         },
       },
       { name: 'belt', build: (s) => void spawnBelt(s, BeltTier.Basic, 2, 0, Direction.East, 1) },
@@ -1498,16 +1387,15 @@ describe('a grabber only takes what its destination will accept', () => {
 // `spec.outputItem === null`, which is exactly what a box's spec says), and a click from out of
 // reach walked the farmer over to do nothing, because the errand dropped the item on the way.
 //
-// These tests are written against the ROLE and run twice — once on the $250 shed, once on the $80
-// barrow — because the bug was never about cellars. If the Hand Cart row ever disagrees with the
-// Root Cellar row, somebody has special-cased a kind.
+// These tests are written against the ROLE, parametrised over every Storage kind — which item
+// 145 reduced to the $80 barrow alone (the Root Cellar is cut). The structure stays: a second
+// storage machine slots into the table below and inherits every door test.
 //
-// The one place they are allowed to differ is the last test, and it is not a special case: a cart
+// The one place a towed cart differs is the last test, and it is not a special case: a cart
 // in tow is in the player's hands rather than standing on the ground.
 
 describe('a container is a destination and a source (item 105)', () => {
   const BOXES: readonly { name: string; kind: MachineKind }[] = [
-    { name: 'Root Cellar', kind: MachineKind.RootCellar },
     { name: 'Hand Cart', kind: MachineKind.HandCart },
   ];
 
@@ -1900,52 +1788,9 @@ describe('zones', () => {
     expect(state.zones[0]!.id).not.toBe(first);
   });
 
-  it('refuses auto-replant until the seed hopper is researched', () => {
-    // Locked in the simulation, not just in the UI — a disabled button is a suggestion.
-    const state = createWorld(33);
-    run(state, [
-      {
-        type: 'CreateZone',
-        rect: { x: FIELD_ORIGIN_X, y: FIELD_ORIGIN_Y, w: 2, h: 2 },
-        crop: CropId.RussetPotato,
-      },
-    ]);
-    const zoneId = state.zones[0]!.id;
-
-    run(state, [{ type: 'SetZoneAutoReplant', zoneId, on: true }]);
-    expect(state.zones[0]!.autoReplant).toBe(false);
-
-    state.moneyCents = 10_000_000;
-    for (const id of [TechId.Finishing, TechId.WorkshopCharter]) void id;
-    state.unlocked = [TechId.AutoReplant];
-    run(state, [{ type: 'SetZoneAutoReplant', zoneId, on: true }]);
-    expect(state.zones[0]!.autoReplant).toBe(true);
-  });
-
-  it('plants an empty zone tile from the seed bag once the hopper is armed', () => {
-    const state = createWorld(34);
-    state.unlocked = [TechId.AutoReplant];
-    const seedsBefore = itemCount(state, ItemId.PotatoSeed);
-
-    run(state, [
-      {
-        type: 'CreateZone',
-        rect: { x: FIELD_ORIGIN_X, y: FIELD_ORIGIN_Y, w: 2, h: 2 },
-        crop: CropId.RussetPotato,
-      },
-    ]);
-    const zoneId = state.zones[0]!.id;
-    // The hopper serves the zone on the very tick it is armed — systems run after commands.
-    run(state, [{ type: 'SetZoneAutoReplant', zoneId, on: true }]);
-    stepMany(state, 200);
-
-    let planted = 0;
-    for (const tile of state.field) if (tile.crop !== CropId.None) planted += 1;
-    expect(planted).toBe(4);
-    expect(itemCount(state, ItemId.PotatoSeed)).toBe(seedsBefore - 4);
-    // Automation the player bought must not score as if they had bent down themselves.
-    expect(state.stats.touches.handPlant).toBe(0);
-  });
+  // The two auto-replant tests (the sim-side lock and the seed-bag hopper) lived here until
+  // item 146 retired the feature: a zone plants nothing now, and the planter bot's coverage
+  // lives in bots.test.ts.
 
   it('publishes a zone readout through the view as plain numbers', () => {
     const state = createWorld(35);
@@ -2020,86 +1865,9 @@ describe('tech and upgrades', () => {
     expect(state.unlocked).toContain(TechId.WorkshopCharter);
   });
 
-  it('holds the Corporate Charter behind a line that has run itself for ten days', () => {
-    // Plan §3's third Charter: money PLUS "one line untouched for 10 in-game days". The counter
-    // is `longestUntouchedMachineTicks`, an in-game day is 9,600 ticks (plan §2: the day runs
-    // eight real minutes), and ten of them is 96,000.
-    const state = createWorld(44);
-    state.moneyCents = 10_000_000;
-    state.unlocked = [
-      TechId.WashAndSlice,
-      TechId.Fryer,
-      TechId.Finishing,
-      TechId.WorkshopCharter,
-      TechId.Belts,
-      TechId.AssemblyCharter,
-    ];
-
-    // One day short. The money is fine and the node is still refused, which is the half of the
-    // gate that makes it a Charter rather than a purchase.
-    state.stats.longestUntouchedMachineTicks = 9 * TICKS_PER_IN_GAME_DAY;
-    run(state, [{ type: 'ResearchTech', techId: TechId.CorporateCharter }]);
-    expect(state.unlocked).not.toContain(TechId.CorporateCharter);
-    expect(state.moneyCents).toBe(10_000_000);
-
-    state.stats.longestUntouchedMachineTicks = 10 * TICKS_PER_IN_GAME_DAY;
-    run(state, [{ type: 'ResearchTech', techId: TechId.CorporateCharter }]);
-    expect(state.unlocked).toContain(TechId.CorporateCharter);
-  });
-
-  it('runs the untouched clock only while a machine is actually working', () => {
-    // The milestone is about a PRODUCTION line. A machine standing idle in a corner is untouched
-    // in the sense that nobody visits it, and that is exactly the sense plan §3 does not mean —
-    // ten days of a Fryer with nothing to fry would be a Charter earned by neglect.
-    const state = createWorld(45);
-    const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
-
-    stepMany(state, 200);
-    expect(washer.untouchedTicks).toBe(0);
-    expect(state.stats.longestUntouchedMachineTicks).toBe(0);
-
-    washer.inputCounts[0] = 4;
-    stepMany(state, 50);
-    expect(washer.untouchedTicks).toBeGreaterThan(0);
-    expect(state.stats.longestUntouchedMachineTicks).toBe(washer.untouchedTicks);
-  });
-
-  it('puts the untouched clock back to zero the moment a hand lands on the machine', () => {
-    const state = createWorld(46);
-    const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
-    standOn(state, 0, 0);
-    washer.inputCounts[0] = 20;
-    addItem(state, ItemId.RussetPotato, 1);
-
-    stepMany(state, 100);
-    const beforeTouch = washer.untouchedTicks;
-    expect(beforeTouch).toBeGreaterThan(0);
-
-    run(state, [{ type: 'LoadMachine', machineId: washer.id, count: 1 }]);
-    // Back to zero on the tick the hand landed — and then one tick of work, because `step()`
-    // applies the command and then advances the machine, in that order.
-    expect(washer.untouchedTicks).toBeLessThanOrEqual(1);
-    expect(washer.untouchedTicks).toBeLessThan(beforeTouch);
-
-    // The high-water mark survives the touch, which is the whole reason it is a mark: a player
-    // who demonstrated ten days and then refilled a hopper on the walk to the tech panel has
-    // still demonstrated ten days.
-    expect(state.stats.longestUntouchedMachineTicks).toBe(beforeTouch);
-  });
-
-  it('does not count a grabber feeding the hopper as a hand on the machine', () => {
-    // The line running itself is the thing being demonstrated, so the machinery doing its job
-    // must not reset the clock — only the player's hands do.
-    const state = createWorld(47);
-    const washer = spawnMachine(state, MachineKind.Washer, 0, 0)!;
-    const slicer = spawnMachine(state, MachineKind.Slicer, 3, 0)!;
-    spawnGrabber(state, GrabberTier.Mk1, 2, 0, Direction.East, 0);
-    washer.inputCounts[0] = 30;
-
-    stepMany(state, 400);
-    expect(slicer.inputCounts[0]! + slicer.opCount).toBeGreaterThan(0);
-    expect(washer.untouchedTicks).toBeGreaterThan(300);
-  });
+  // The Corporate Charter's ten-untouched-days gate and the untouched-clock tests lived here
+  // until item 147 cut the Charter, the UntouchedLine milestone, and the whole counter chain.
+  // The tree now has three eras and the Assembly Charter is the last gate.
 
   it('makes the Speed dial faster and hungrier, and Efficiency the antidote', () => {
     const state = createWorld(43);
@@ -2152,7 +1920,7 @@ describe('tech and upgrades', () => {
 
   it('refuses a dial until the upgrade bench is bought, then charges for it', () => {
     const state = createWorld(44);
-    const kitchen = spawnMachine(state, MachineKind.ChipKitchen, 0, 0)!;
+    const kitchen = spawnMachine(state, MachineKind.Washer, 0, 0)!;
     standOn(state, 0, 0);
     state.moneyCents = 100_000;
 
@@ -2165,7 +1933,7 @@ describe('tech and upgrades', () => {
     expect(kitchen.speedLevel).toBe(1);
     expect(state.moneyCents).toBeLessThan(before);
     // Net worth invoices the machine at what it cost, upgrades included.
-    expect(kitchen.investedCents).toBeGreaterThan(machineSpec(MachineKind.ChipKitchen)!.priceCents);
+    expect(kitchen.investedCents).toBeGreaterThan(machineSpec(MachineKind.Washer)!.priceCents);
   });
 });
 
@@ -2285,17 +2053,18 @@ describe('rotating a placed grabber', () => {
 // --- deconstruct to inventory (item 054) ----------------------------------------------
 
 describe('boxing a machine', () => {
-  /** How many Chip Kitchens are standing. The world always has a sell bin besides. */
+  /** How many Washers are standing. The world always has a sell bin besides. */
   function kitchens(state: WorldState): number {
-    return state.machines.filter((machine) => machine.kind === MachineKind.ChipKitchen).length;
+    return state.machines.filter((machine) => machine.kind === MachineKind.Washer).length;
   }
 
-  /** A kitchen the player is standing next to, with the given dials already bought. */
+  /** A Washer the player is standing next to, with the given dials already bought. */
   function kitchen(state: WorldState, speed: number, capacity: number): Machine {
-    const machine = spawnMachine(state, MachineKind.ChipKitchen, 1, 1)!;
+    const machine = spawnMachine(state, MachineKind.Washer, 1, 1)!;
     machine.speedLevel = speed;
     machine.capacityLevel = capacity;
-    machine.investedCents = machineSpec(MachineKind.ChipKitchen)!.priceCents + 18_000;
+    machine.investedCents = machineSpec(MachineKind.Washer)!.priceCents + 18_000;
+    state.unlocked = [TechId.WashAndSlice];
     standOn(state, 1, 1);
     return machine;
   }
@@ -2311,7 +2080,7 @@ describe('boxing a machine', () => {
 
     expect(kitchens(state)).toBe(0);
     expect(state.moneyCents).toBe(money);
-    expect(itemCount(state, ItemId.BoxedChipKitchen)).toBe(1);
+    expect(itemCount(state, ItemId.BoxedWasher)).toBe(1);
   });
 
   it('puts it back down for free, as the machine it was', () => {
@@ -2322,15 +2091,15 @@ describe('boxing a machine', () => {
 
     run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
     const money = state.moneyCents;
-    run(state, [{ type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: 5, tileY: 1 }]);
+    run(state, [{ type: 'PlaceMachine', kind: MachineKind.Washer, tileX: 5, tileY: 1 }]);
 
-    const back = state.machines.find((m) => m.kind === MachineKind.ChipKitchen)!;
+    const back = state.machines.find((m) => m.kind === MachineKind.Washer)!;
     expect(state.moneyCents).toBe(money);
     expect(back.speedLevel).toBe(2);
     expect(back.capacityLevel).toBe(1);
     expect(back.condition).toBe(640);
     expect(back.investedCents).toBe(invoice);
-    expect(itemCount(state, ItemId.BoxedChipKitchen)).toBe(0);
+    expect(itemCount(state, ItemId.BoxedWasher)).toBe(0);
   });
 
   it('leaves net worth exactly where it was, round trip', () => {
@@ -2344,7 +2113,7 @@ describe('boxing a machine', () => {
     run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
     expect(computeNetWorthCents(state)).toBe(before);
 
-    run(state, [{ type: 'PlaceMachine', kind: MachineKind.ChipKitchen, tileX: 5, tileY: 1 }]);
+    run(state, [{ type: 'PlaceMachine', kind: MachineKind.Washer, tileX: 5, tileY: 1 }]);
     expect(computeNetWorthCents(state)).toBe(before);
   });
 
@@ -2352,13 +2121,13 @@ describe('boxing a machine', () => {
     const state = createWorld(73);
     const machine = kitchen(state, 0, 0);
     machine.inputCounts[0] = 7;
-    machine.outputCount = machineSpec(MachineKind.ChipKitchen)!.outputCapacity;
+    machine.outputCount = machineSpec(MachineKind.Washer)!.outputCapacity;
     const bags = machine.outputCount;
 
     run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
 
     expect(itemCount(state, ItemId.RussetPotato)).toBe(7);
-    expect(itemCount(state, ItemId.BaggedChips)).toBe(bags);
+    expect(itemCount(state, ItemId.WashedPotato)).toBe(bags);
   });
 
   it('refuses a jammed machine, and a machine that is actually running', () => {
@@ -2432,29 +2201,29 @@ describe('boxing a machine', () => {
 describe('scrapping a boxed machine', () => {
   it('pays exactly 40% of the invoice, floored — item 037’s dangling criterion', () => {
     const state = createWorld(80);
-    const machine = spawnMachine(state, MachineKind.ChipKitchen, 1, 1)!;
+    const machine = spawnMachine(state, MachineKind.Washer, 1, 1)!;
     machine.investedCents = 28_333;
     standOn(state, 1, 1);
     run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
 
     const money = state.moneyCents;
-    run(state, [{ type: 'SellBoxedMachine', item: ItemId.BoxedChipKitchen }]);
+    run(state, [{ type: 'SellBoxedMachine', item: ItemId.BoxedWasher }]);
 
     expect(state.moneyCents - money).toBe(divFloor(28_333 * 40, 100));
-    expect(itemCount(state, ItemId.BoxedChipKitchen)).toBe(0);
+    expect(itemCount(state, ItemId.BoxedWasher)).toBe(0);
   });
 
   it('is booked as money back rather than as income', () => {
     // Gross receipts and the items-sold counter both feed Charter milestones and leaderboard
     // boards. Scrap is a partial reversal of a spend, so it lands on the spend side.
     const state = createWorld(81);
-    const machine = spawnMachine(state, MachineKind.ChipKitchen, 1, 1)!;
+    const machine = spawnMachine(state, MachineKind.Washer, 1, 1)!;
     standOn(state, 1, 1);
     run(state, [{ type: 'DeconstructMachine', machineId: machine.id }]);
 
     const earned = state.stats.lifetimeEarnedCents;
     const sold = state.stats.itemsSold;
-    run(state, [{ type: 'SellBoxedMachine', item: ItemId.BoxedChipKitchen }]);
+    run(state, [{ type: 'SellBoxedMachine', item: ItemId.BoxedWasher }]);
 
     expect(state.stats.lifetimeEarnedCents).toBe(earned);
     expect(state.stats.itemsSold).toBe(sold);

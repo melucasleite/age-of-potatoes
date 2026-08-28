@@ -315,3 +315,15 @@ one pump, a tank spent to zero, an amber head part-way through its own buffer, a
 **full 600,000 ml/min regardless**. Under format 22 that same world had a drained pond and a pump
 that was halved and then sipping; the tank is empty here because demand outruns the pump, which is a
 fact about the straw rather than about the glass.
+`format-24.json` was recorded by `scripts/record-format-24.ts` (2026-08-27, items 145/146/147). A
+format-24 save is a format-23 save with less in it — the flavour cut deleted six machine kinds,
+three crops, twenty-three goods, nine research nodes, the untouched-work clock family and the two
+zone auto-replant fields, and the 23 → 24 migration bought all of it back — so what this fixture
+pins is the states whose SPELLING moved: a **Washer caught mid-bottle with both surviving hoppers
+loaded** (russets in slot 0, used bottles at index 1, where the gold potatoes used to sit — a
+reader that mistook the old three-hopper layout for the new would hand the wash to the wrong
+goods), a zone that is paint, a crop and a name and nothing else, and a payload with no
+`untouchedTicks`, `longestUntouchedMachineTicks`, `autoReplant` or `replantCooldown` anywhere in
+it. The worst-case INPUT to the 23 → 24 step — every cut thing in one save — is deliberately not a
+recorded file (no build since the cut can write one): it is doctored onto `format-23.json` in
+`save.test.ts`, itemised and summed to the cent.

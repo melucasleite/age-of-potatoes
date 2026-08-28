@@ -218,11 +218,11 @@ export function hashStateUint32(state: WorldState): number {
     // for the reason directly above.
     d.num(machine.seedShelfItem);
     d.num(machine.seedShelfCount);
-    // The untouched-work clock, and the junction's two round-robin cursors. THE CURSORS ARE IN
+    // The junction's two round-robin cursors. THE CURSORS ARE IN
     // HERE BECAUSE THAT IS THE POINT OF THEM: a splitter's alternation is world state, so two
     // worlds that differ only in which output is next genuinely differ, and item 024's criterion
     // — same seed and command list, same hash across runs — is a statement about these bytes.
-    d.num(machine.untouchedTicks);
+    // (The untouched-work clock was digested just above them until item 147 cut its Charter.)
     d.num(machine.junctionInCursor);
     d.num(machine.junctionOutCursor);
     d.num(machine.boundZone);
@@ -395,8 +395,6 @@ export function hashStateUint32(state: WorldState): number {
     d.text(zone.name);
     d.num(zone.crop);
     d.num(zone.priority);
-    d.bool(zone.autoReplant);
-    d.num(zone.replantCooldown);
   }
 
   // The deeds. Sorted in `WorldState` for the same reason `unlocked` is: two players who
@@ -453,7 +451,6 @@ export function hashStateUint32(state: WorldState): number {
   d.num(stats.nextNetWorthSampleTick);
   d.num(stats.ticksSinceManualTouch);
   d.num(stats.longestHandsFreeTicks);
-  d.num(stats.longestUntouchedMachineTicks);
   // Item 075: a world that cheated carries the fact in its digest — see `WorldStats.cheatsUsed`.
   d.num(stats.cheatsUsed);
   d.num(stats.netWorthSamples.length);
@@ -603,7 +600,6 @@ export function findNonIntegerFields(state: WorldState): string[] {
     check(`machines[${i}].cargoCount`, machine.cargoCount);
     check(`machines[${i}].seedShelfCount`, machine.seedShelfCount);
     check(`machines[${i}].runTicksRemaining`, machine.runTicksRemaining);
-    check(`machines[${i}].untouchedTicks`, machine.untouchedTicks);
     check(`machines[${i}].junctionInCursor`, machine.junctionInCursor);
     check(`machines[${i}].junctionOutCursor`, machine.junctionOutCursor);
     check(`machines[${i}].boundZone`, machine.boundZone);

@@ -34,60 +34,52 @@
 export const TechId = {
   /** Sugar cane — regrows, thirsty, and the first crop worth automating (plan §5). */
   Cane: 'agronomy-cane',
-  /** Corn — dual use, oil now and corn syrup later. */
-  Corn: 'agronomy-corn',
-  /** Chili — regrows, and the seasoning line's other half. */
-  Chili: 'agronomy-chili',
-  /** The seed hopper: what makes a Grow Zone's auto-replant toggle legal. */
-  AutoReplant: 'agronomy-seed-hopper',
-  /** §5's "Gold Potato (premium, thirsty)" — the roster's fifth and last sown crop. */
-  GoldPotato: 'agronomy-gold-potato',
+  // `'agronomy-corn'`, `'agronomy-chili'` and `'agronomy-gold-potato'` were the roster's other
+  // three sown crops, and all three are gone (items 145/147, owner cut list 2026-08-27) along
+  // with the crops themselves and the whole flavour tier they fed. **THE STRINGS ARE NOT
+  // REUSED**: each can be sitting in a saved `unlocked` list, and the 23 → 24 migration takes
+  // them out and refunds what they cost.
+  // `'agronomy-seed-hopper'` was the AutoReplant node — the zone toggle it made legal is gone
+  // with it (item 146): planter bots are now the only automatic planting, re-priced and
+  // re-parented below to take its Era-2 seat. Refunded by the 23 → 24 migration.
   // `'agronomy-composting'` was the Composter node — spoiled goods became Fertilizer, and
   // Fertilizer went back in the ground. All three of those are gone (item 124). **THE STRING IS
   // NOT REUSED**: it can be sitting in a saved `unlocked` list, and the 21 → 22 migration takes
   // it out and refunds what it cost.
-  /** The Root Cellar. The one place in the game where a clock stops (plan §4). */
-  RootCellar: 'agronomy-root-cellar',
-  /** The Orange and Lemon trees — 2×2, permanent, fruiting on a cycle (§5). */
-  Orchard: 'agronomy-orchard',
+  // `'agronomy-root-cellar'` bought the Root Cellar, whose freeze died with spoilage (item 124)
+  // and whose bulk-storage second act is now cut too (item 145). Refunded by 23 → 24.
+  // `'agronomy-orchard'` bought the Orange and Lemon trees. Both trees are cut (item 145); the
+  // Kola Tree survives and re-parents onto the soda press below. Refunded by 23 → 24.
   /**
-   * The Kola Tree, and **PLAN §3'S JOINT RULE POINTED AT THE COLA LINE**: it requires the orchard
-   * *and* the soda press. You cannot plant the nut that feeds a cola line before you have a cola
-   * line to feed — until then, kola is a thing you buy at the stand for 150¢, which is §4's
-   * consumable ladder working exactly as written.
+   * The Kola Tree, and **PLAN §3'S JOINT RULE POINTED AT THE COLA LINE**: it requires the soda
+   * press. You cannot plant the nut that feeds a cola line before you have a cola line to feed —
+   * until then, kola is a thing you buy at the stand for 150¢, which is §4's consumable ladder
+   * working exactly as written. (It used to require `agronomy-orchard` as well; that node was
+   * cut with its two trees in item 145, and this is now the only tree in the game.)
    */
   KolaTree: 'agronomy-kola-tree',
   /**
-   * Agri-Bots: the dock and the harvester that patrols a zone. **THE FIRST NODE EVER TO SIT
-   * BEHIND THE CORPORATE CHARTER**, which shipped with nothing on the far side of it and said so.
+   * Agri-Bots: the dock and the harvester that patrols a zone.
    *
-   * The gate is fantasy-correct rather than administrative. The Charter's milestone is *one line
-   * untouched for ten in-game days* — a player who has demonstrated that a factory can run without
-   * them is exactly the player who is ready to be told the farm can too, and it is the one chore
-   * in this game that nothing has ever done for them.
+   * **RE-PARENTED ONTO THE WORKSHOP CHARTER AND RE-PRICED** (item 146): with auto-replant
+   * retired, the bot pair is the game's only automatic planting, so it takes the Era-2 seat the
+   * seed hopper held — arriving earlier and cheaper, while still sitting behind a demonstrated
+   * Charter and real money. (It used to be the first node behind the Corporate Charter; that
+   * Charter is gone too — item 147.)
    */
   AgriBots: 'agronomy-agri-bots',
   /**
-   * The planter bot. Requires the harvester **and** the seed hopper, because it is the seed hopper
-   * with legs — §5: *"regrowing crops automate first; one-shots wait for the seed-hopper bot — the
-   * crop list itself paces the arc."* A player with only a harvester keeps chili and cane running
-   * forever and watches their potatoes run out, which is the roster doing the pacing it was
-   * designed to do.
+   * The planter bot. Requires the harvester — it is the dock family's second half, and §5's
+   * *"one-shots wait for the seed-hopper bot"* now means this bot alone: the zone seed hopper
+   * it used to also require was retired in item 146.
    */
   PlanterBot: 'agronomy-planter-bot',
 
   /** Washer and Slicer — the front half of the chip line. */
   WashAndSlice: 'fabrication-wash-and-slice',
-  /**
-   * Diagnostics: the ranked list of machines by cash bled in the last 60 seconds, and the
-   * Maintenance Station that acts on what the list says.
-   *
-   * A VERB UNLOCK LIKE EVERY NODE HERE — it makes a panel and a machine legal, and carries no
-   * number. §5's readability rules describe the panel exactly: last-60s figures on an object,
-   * phrased in cash, a ranked list of bleeding machines and never a dashboard of graphs. The
-   * sim's half is `MachineView.bleedCentsLast60s`; the list itself is the HUD's.
-   */
-  Diagnostics: 'fabrication-diagnostics',
+  // `'fabrication-diagnostics'` bought the ranked bleed list and the Maintenance Station, and
+  // both are cut (item 145): drones are the only automated repair. **THE STRING IS NOT
+  // REUSED**; the 23 → 24 migration refunds it.
   /** The Fryer. Flashiest machine in the game and deliberately the bottleneck. */
   Fryer: 'fabrication-fryer',
   /** Seasoner and Bagger — the back half. */
@@ -129,11 +121,11 @@ export const TechId = {
   /**
    * Repair drones: the Drone Bay and its free-forever service ([[090]] retired the Parts Bench
    * and the drone part recipe that used to hang off this node) — the capstone of
-   * plan §3's Commerce & Operations column, and **THE THIRD NAMED JOINT, FINALLY MADE**:
-   * *"drones need diagnostics AND trucking."* You cannot buy a machine that dispatches flying
-   * service vehicles before you have read a diagnosis or dispatched a vehicle; both
-   * prerequisites are real nodes, exactly as §3 demands, and `TECH_NODES`' header comment has
-   * been promising this line since the branch shipped.
+   * plan §3's Commerce & Operations column. **RE-PARENTED** (item 145): the diagnostics half of
+   * §3's "drones need diagnostics AND trucking" joint was cut with the Maintenance Station, so
+   * the node keeps its trucking leg and takes the Assembly Charter in diagnostics' place —
+   * preserving its Era-3 seat, and keeping "you dispatch vehicles before you buy flying ones"
+   * true. Drones are now the only automated repair in the game.
    */
   Drones: 'commerce-repair-drones',
 
@@ -159,12 +151,8 @@ export const TechId = {
   Pumps: 'hydraulics-pumps',
   /** Piped sprinkler heads: the automated rung of plan §3's watering ladder. */
   PipedSprinklers: 'hydraulics-piped-sprinklers',
-  /**
-   * The Recirculator. Requires the Washer as well as the pumps — plan §3: "branches
-   * interlock at fantasy-correct joints". You cannot reclaim graywater with no wash to
-   * reclaim it from.
-   */
-  Recirculator: 'hydraulics-recirculator',
+  // `'hydraulics-recirculator'` bought the Recirculator, which is cut (item 145) with its
+  // graywater loop. **THE STRING IS NOT REUSED**; the 23 → 24 migration refunds it.
   /** The Irrigation Hub — moisture-sensing heads that water only dry tiles (plan §4). */
   IrrigationHub: 'hydraulics-irrigation-hub',
   // 'hydraulics-artesian-well' was `ArtesianWell` and is spent (item 140). It bought the only
@@ -173,17 +161,13 @@ export const TechId = {
 
   /** Era gate 1 → 2 (plan §3). Money plus a visible milestone. */
   WorkshopCharter: 'charter-workshop',
-  /** Era gate 2 → 3. */
+  /** Era gate 2 → 3, and now the last gate: the tree has three eras (item 147). */
   AssemblyCharter: 'charter-assembly',
-  /**
-   * Era gate 3 → 4, and plan §3's third Charter: *"+ one line untouched for 10 in-game days"*.
-   *
-   * ITS MILESTONE IS THE ONLY ONE IN THE GAME THAT MEASURES ABSENCE, which is what makes it the
-   * right gate for the era after the assembly line: the first two Charters ask the player to
-   * build and to sell, and this one asks them to walk away and let the thing they built run.
-   * `MilestoneKind.UntouchedLine` is where the counter behind it is described.
-   */
-  CorporateCharter: 'charter-corporate',
+  // `'charter-corporate'` was Era gate 3 → 4 — $20,000 plus the ten-untouched-days milestone,
+  // the only milestone that measured absence. Era 4 folded into Era 3 (item 147, owner: "The
+  // Era 4 should be combined with Era 3"), its two nodes re-parented into earlier eras, and the
+  // `MilestoneKind.UntouchedLine` counter chain left with it. **THE STRING IS NOT REUSED**; the
+  // 23 → 24 migration refunds an owned Charter at its full $20,000.
 } as const;
 
 export type TechId = (typeof TechId)[keyof typeof TechId];
@@ -212,34 +196,12 @@ export const MilestoneKind = {
   WorkingMachines: 2,
   /** Items produced by machines, lifetime. */
   MachineOutput: 3,
-  /**
-   * **In-game days one production line has run with nobody's hands on it** — plan §3's Corporate
-   * Charter, *"one line untouched for 10 in-game days"*, and the one milestone here that counts
-   * something not happening.
-   *
-   * THE COUNTER IS PER MACHINE AND THE MILESTONE READS THE BEST OF THEM. `Machine.untouchedTicks`
-   * advances on every tick a converter actually advances work and resets the moment a hand lands
-   * on that machine; `WorldStats.longestUntouchedMachineTicks` is the high-water mark across the
-   * lot. A machine cannot advance work for 96,000 consecutive ticks unless something is feeding
-   * it and something is emptying it, so what the counter demonstrates *is* a line — that is the
-   * cheapest true statement of the plan's requirement, and it needs no definition of where a line
-   * starts and stops.
-   *
-   * WHY NOT `longestHandsFreeTicks`, WHICH ALREADY EXISTS. That clock counts ticks since the
-   * player touched *anything*, and nothing in this game harvests a crop for you (see the
-   * README's note on the depot fixture), so ten days of world-wide zero-touch is not reachable by
-   * a player who is still farming. A gate nobody can pass is worse than no gate.
-   *
-   * WHY IT IS A HIGH-WATER MARK RATHER THAN A LIVE READING. Demonstrated is demonstrated: a
-   * player who runs a line untouched for ten days and then refills a hopper on the walk to the
-   * tech panel has still done the thing. A live maximum would let the gate close again between
-   * the achievement and the money, which is the kind of cruelty that gets read as a bug.
-   *
-   * **The amount on the node is DAYS, not ticks** — `milestoneMet` is handed a day count that
-   * `tick.ts` converts with `TICKS_PER_IN_GAME_DAY`, so this module still knows nothing about how
-   * long a tick is and the panel shows the number plan §3 actually wrote down.
-   */
-  UntouchedLine: 4,
+  // 4 was `UntouchedLine` — in-game days one production line ran with nobody's hands on it, the
+  // Corporate Charter's demonstrated half and the only milestone that counted absence. The
+  // Charter is gone (item 147) and it was this kind's sole consumer, so the whole counter chain
+  // went with it: `Machine.untouchedTicks`, `WorldStats.longestUntouchedMachineTicks`, and the
+  // day conversion in `tick.ts`. The number stays burned — it is in the balance digest of every
+  // pre-24 save.
 } as const;
 
 export type MilestoneKind = (typeof MilestoneKind)[keyof typeof MilestoneKind];
@@ -272,22 +234,6 @@ export const TECH_NODES: readonly TechNode[] = [
     branch: TechBranch.Agronomy,
     priceCents: 2_500,
     requires: [],
-    milestone: MilestoneKind.None,
-    milestoneAmount: 0,
-  },
-  {
-    id: TechId.Corn,
-    branch: TechBranch.Agronomy,
-    priceCents: 3_000,
-    requires: [],
-    milestone: MilestoneKind.None,
-    milestoneAmount: 0,
-  },
-  {
-    id: TechId.Chili,
-    branch: TechBranch.Agronomy,
-    priceCents: 4_000,
-    requires: [TechId.Cane],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },
@@ -366,14 +312,6 @@ export const TECH_NODES: readonly TechNode[] = [
     milestoneAmount: 0,
   },
   {
-    id: TechId.AutoReplant,
-    branch: TechBranch.Agronomy,
-    priceCents: 120_000,
-    requires: [TechId.WorkshopCharter],
-    milestone: MilestoneKind.None,
-    milestoneAmount: 0,
-  },
-  {
     // The liquid layer opens after the Workshop Charter, at roughly the same rung as belts:
     // plan §8 puts fluids at v0.4, after the belt factory and before soda, and the whole soda
     // line will stand on this plumbing.
@@ -389,14 +327,6 @@ export const TECH_NODES: readonly TechNode[] = [
     branch: TechBranch.Hydraulics,
     priceCents: 70_000,
     requires: [TechId.Pumps],
-    milestone: MilestoneKind.None,
-    milestoneAmount: 0,
-  },
-  {
-    id: TechId.Recirculator,
-    branch: TechBranch.Hydraulics,
-    priceCents: 90_000,
-    requires: [TechId.Pumps, TechId.WashAndSlice],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },
@@ -473,123 +403,57 @@ export const TECH_NODES: readonly TechNode[] = [
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },
-  {
-    // Era 3 → 4. Plan §3: "+ one line untouched for 10 in-game days".
-    //
-    // **$20,000, DERIVED RATHER THAN EXTRAPOLATED.** The ladder's own arithmetic: the Workshop
-    // Charter at $800 is about 4× the dearest node of era 1 ($200 Finishing) and the Assembly
-    // Charter at $6,000 is about 5× the dearest of era 2 ($1,200 Auto-Replant). Era 3's dearest
-    // is Express Belt at $2,500, so 4–5× lands between $10,000 and $12,500 — and this sits above
-    // that band on purpose, because it is the only Charter whose milestone takes 80 real minutes
-    // of *play* to demonstrate, and a fee the player clears long before the milestone would make
-    // the money half of the gate decorative. $20,000 is 4–5 hours of era-3 income at the ~$70–80
-    // a minute a running belt factory makes, which is plan §3's charter rule stated in its own
-    // units. Two-way door, like every price here.
-    //
-    // **WHAT IS BEHIND IT: THE AGRI-BOTS.** This Charter shipped with an empty era behind it, on
-    // the stated grounds that an era gate with nothing on the far side is an honest promise while
-    // a mid-game node dragged behind a late-game fee is a broken curve — and the promise was
-    // "when 038 and 039 land they hang off this id, and nothing renumbers". Item 038 landed:
-    // `TechId.AgriBots` requires this node, `TechId.PlanterBot` requires that, and nothing
-    // renumbered. The Maintenance Station and the repair drones (item 039) are still to come and
-    // hang off it too.
-    //
-    // The gate reads correctly, which is worth checking rather than assuming: the milestone is
-    // *one line untouched for ten in-game days*, so the player who opens era 4 is exactly the
-    // player who has proved a factory can run without them — and what era 4 sells is the farm
-    // learning the same trick.
-    id: TechId.CorporateCharter,
-    branch: TechBranch.Charter,
-    priceCents: 2_000_000,
-    requires: [TechId.AssemblyCharter],
-    milestone: MilestoneKind.UntouchedLine,
-    milestoneAmount: 10,
-  },
+  // `charter-corporate` (Era 3 → 4, $20,000, the ten-untouched-days milestone) stood here until
+  // item 147 folded Era 4 into Era 3. Its two dependants re-parented into earlier eras (see
+  // `TechId.AgriBots`), so no node lists it and the tree tops out at the Assembly Charter.
 
   // --- the rest of Agronomy ---------------------------------------------------------------
   //
-  // The branch that shipped with three crops and a hopper now carries the roster's last crop, the
-  // orchard, the Root Cellar and the bots. (It carried the spoilage loop's two answers too — the
-  // cellar's freeze and the Composting node — until item 124: the node is gone and refunded, and
-  // the cellar was re-purposed as bulk storage rather than deleted.) It is declared after the
-  // Charters
-  // because two of its nodes hang off them, and `TECH_NODES` is in panel order.
+  // The branch that shipped with three crops and a hopper now carries the Kola Tree and the
+  // bots — items 145/146 cut the other crops, the orchard pair, the hopper and the cellar. It
+  // is declared after the Charters because its nodes hang off them, and `TECH_NODES` is in
+  // panel order.
   {
-    // $150 against a $250 gold potato: one harvest of one 3★ tile pays it back twice over, which
-    // is the 15-Minute Rule landing on a crop rather than on a machine.
-    id: TechId.GoldPotato,
-    branch: TechBranch.Agronomy,
-    priceCents: 15_000,
-    requires: [TechId.WorkshopCharter],
-    milestone: MilestoneKind.None,
-    milestoneAmount: 0,
-  },
-  {
-    id: TechId.RootCellar,
-    branch: TechBranch.Agronomy,
-    priceCents: 55_000,
-    requires: [TechId.WorkshopCharter],
-    milestone: MilestoneKind.None,
-    milestoneAmount: 0,
-  },
-  {
-    id: TechId.Orchard,
-    branch: TechBranch.Agronomy,
-    priceCents: 80_000,
-    requires: [TechId.WorkshopCharter],
-    milestone: MilestoneKind.None,
-    milestoneAmount: 0,
-  },
-  {
-    // The joint: orchard AND soda press. See `TechId.KolaTree`.
+    // The joint: the soda press. See `TechId.KolaTree` — the orchard half of the old joint was
+    // cut with its trees (item 145).
     id: TechId.KolaTree,
     branch: TechBranch.Agronomy,
     priceCents: 200_000,
-    requires: [TechId.Orchard, TechId.SodaPress],
+    requires: [TechId.SodaPress],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },
   {
-    // **ERA 4 FINALLY HAS SOMETHING IN IT.** `TechId.CorporateCharter`'s comment promised that
-    // "when 038 and 039 land they hang off this id, and nothing renumbers" — this is 038 landing,
-    // and nothing renumbered.
+    // Item 146's re-parent and re-price: the Era-2 seat auto-replant held, at bot prices.
     id: TechId.AgriBots,
     branch: TechBranch.Agronomy,
-    priceCents: 400_000,
-    requires: [TechId.CorporateCharter],
+    priceCents: 150_000,
+    requires: [TechId.WorkshopCharter],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },
   {
     id: TechId.PlanterBot,
     branch: TechBranch.Agronomy,
-    priceCents: 300_000,
-    requires: [TechId.AgriBots, TechId.AutoReplant],
+    priceCents: 100_000,
+    requires: [TechId.AgriBots],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },
 
-  // --- automated maintenance (item 039) ---------------------------------------------------
+  // --- automated maintenance (item 039, halved by item 145) -------------------------------
+  //
+  // `fabrication-diagnostics` and the Maintenance Station it bought stood here until item 145;
+  // the drone capstone below is now the whole of the automated-maintenance story.
   {
-    // Behind the Assembly Charter rather than a cheaper gate, because a ranked list of
-    // bleeding machines means nothing on a lot with two machines: the player this node serves
-    // is the one whose factory is big enough that "which machine is costing me most" is a real
-    // question. Priced level with the Hub — an era-3 information tool, not a capstone.
-    id: TechId.Diagnostics,
-    branch: TechBranch.Fabrication,
-    priceCents: 120_000,
-    requires: [TechId.AssemblyCharter],
-    milestone: MilestoneKind.None,
-    milestoneAmount: 0,
-  },
-  {
-    // **THE CAPSTONE, AND §3'S THIRD JOINT: diagnostics AND trucking.** Fantasy-correct on both
-    // legs — a drone is a dispatched vehicle aimed by a diagnosis. Priced above the AgriBots
-    // node: the last thing the tree sells is the factory that keeps the factory alive.
+    // **THE CAPSTONE.** A drone is a dispatched vehicle, so the trucking leg of §3's joint
+    // survives; the diagnostics leg was cut with its node, and the Assembly Charter holds the
+    // node's Era-3 seat in its place (item 145's ruling). Priced above the AgriBots node: the
+    // last thing the tree sells is the factory that keeps the factory alive.
     id: TechId.Drones,
     branch: TechBranch.Commerce,
     priceCents: 500_000,
-    requires: [TechId.Diagnostics, TechId.Trucking],
+    requires: [TechId.Trucking, TechId.AssemblyCharter],
     milestone: MilestoneKind.None,
     milestoneAmount: 0,
   },
@@ -656,17 +520,6 @@ export function milestoneMet(
   itemsSold: number,
   workingMachines: number,
   machineOutput: number,
-  /**
-   * In-game DAYS the best production line has run untouched — `tick.ts` does the tick-to-day
-   * division, so this module still owes nothing to `units.ts`.
-   *
-   * **OPTIONAL, AND IT DEFAULTS TO THE PESSIMISTIC ANSWER.** A caller written before this
-   * milestone existed — the HUD's `derive-tech.ts` is one — still compiles and still refuses the
-   * Corporate Charter. That is the safe direction for a panel to be wrong in: it under-reports
-   * progress on a node the sim would also refuse, rather than lighting up a button that gets
-   * eaten. The day the panel passes the real number, both agree.
-   */
-  untouchedLineDays = 0,
 ): boolean {
   switch (node.milestone) {
     case MilestoneKind.None:
@@ -677,8 +530,6 @@ export function milestoneMet(
       return workingMachines >= node.milestoneAmount;
     case MilestoneKind.MachineOutput:
       return machineOutput >= node.milestoneAmount;
-    case MilestoneKind.UntouchedLine:
-      return untouchedLineDays >= node.milestoneAmount;
     default:
       return false;
   }
