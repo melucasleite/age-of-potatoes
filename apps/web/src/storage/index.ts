@@ -66,6 +66,7 @@ export {
   restoreDeletedWorld,
   setActiveWorldAvatar,
   sweepTombstones,
+  touchWorld,
   withWorld,
 } from './worlds';
 export type {
@@ -171,11 +172,13 @@ export type { NoticeTone, SaveNotice } from './notices';
 
 import { type WorldState, createWorld } from '@snack/sim';
 
-// The one place cloud sync is switched on. It is `void`ed at both call sites below and is
-// never awaited: work item 016's hard constraint is that no boot path may block on, await,
-// or fail because of a Supabase call. `startCloudSyncIfConfigured` does not even import the
-// Supabase SDK unless the env vars are set, so with no backend provisioned this costs one
-// synchronous check of `process.env` and nothing else.
+// The one place the RUNNING world's cloud sync is switched on. It is `void`ed at both call
+// sites below and is never awaited: the boot path still may not block on, await, or fail
+// because of a Supabase call — work item 143 moved the waiting to the sign-in door, not
+// into boot. `startCloudSyncIfConfigured` does not even import the Supabase SDK unless the
+// env vars are set. The handle it starts is retained in `bootstrap.ts`, where the ordered
+// exit (`exit.ts`) flushes and stops it; the lot picker reconciles the non-running worlds
+// separately (`supabase/worldsSync.ts`).
 import { startCloudSyncIfConfigured } from '@/supabase/bootstrap';
 
 import { type PersistenceResult, requestPersistentStorage, startPersistenceWatch } from './persist';
@@ -285,7 +288,7 @@ export async function bootWorld(options: BootOptions = {}): Promise<BootResult> 
     // request for the reason the line above exists: both only speak to a player who has a
     // world on disk to lose. A brand-new lot has nothing worth warning anybody about yet.
     startPersistenceWatch(persistence, warnPersistenceRevoked);
-    void startCloudSyncIfConfigured({ localTickAtBoot: outcome.state.tick });
+    void startCloudSyncIfConfigured({ worldId: world.id, localTickAtBoot: outcome.state.tick });
     return { state: outcome.state, fresh: false, outcome, persistence, world };
   }
 
@@ -315,7 +318,7 @@ export async function bootWorld(options: BootOptions = {}): Promise<BootResult> 
   // Null rather than 0: there is no envelope on disk to compare against, so a cloud save
   // has nothing to be "ahead of" and adoption is unambiguously safe. This is the new-device
   // case, and it is the one that makes sync feel like sync rather than like backup.
-  void startCloudSyncIfConfigured({ localTickAtBoot: null });
+  void startCloudSyncIfConfigured({ worldId: world.id, localTickAtBoot: null });
 
   return { state, fresh: true, outcome, persistence, world };
 }
@@ -346,7 +349,8 @@ function warnIfNotPersisted(persistence: PersistenceResult): void {
       'has not marked the game as permanent, which means that if you leave it alone for a ' +
       'long stretch it may clear the save out to reclaim space. Playing every so often — or ' +
       'bookmarking or installing the game — is usually enough to convince it to keep your ' +
-      'world for good.',
+      'world for good. Your lots are also backed up to the cloud under your account, so even ' +
+      'the worst case here is a re-download, not a loss.',
   });
 }
 
@@ -372,6 +376,7 @@ function warnPersistenceRevoked(): void {
       'browser had marked the game as permanent, and it has since changed its mind — usually ' +
       'because the device is running low on space. That means it may clear the save out to ' +
       'reclaim room if the game sits unused for a long stretch. Freeing up space on the ' +
-      'device, and playing every so often, is usually enough to win the promise back.',
+      'device, and playing every so often, is usually enough to win the promise back. Your ' +
+      'lots are also backed up to the cloud under your account either way.',
   });
 }

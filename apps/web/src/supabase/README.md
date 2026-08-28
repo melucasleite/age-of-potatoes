@@ -1,114 +1,103 @@
-# Cloud sync
+# Accounts and cloud saves
 
-**A Supabase project is live for this game now** (ref `fikglrbievvcutrsgrcp`), configured
-through `apps/web/.env.local`. The design below still holds for any fork without one:
-everything in this directory is inert until someone sets two environment variables, and
-"inert" is meant literally — with no keys configured the Supabase SDK is never even
-downloaded, because [`bootstrap.ts`](./bootstrap.ts) checks the env synchronously and only
-then dynamically imports the client.
+**Accounts are required** (work item 143, 2026-08-27). Every player signs in — GitHub,
+Google, or an email magic link — before anything else renders, and every world's save
+mirrors to the live Supabase project (`snack-mogul`, ref `fikglrbievvcutrsgrcp`,
+configured through `apps/web/.env.local`). A build with no Supabase env does not play
+local-only; it shows a plain "cloud is not configured" screen instead of the game.
 
-That is the design, not a temporary state. Plan §11: _"Deliberately small. Nothing about the
-game requires the server to be up."_ IndexedDB is the source of truth; this is a mirror.
+This reverses the v0.1 anonymous-first design on Lucas's direct instruction: _"I don't
+want anonymous login or anonymous gameplay. Every user should have an account and all
+saves should be persistent to the cloud."_ What did NOT reverse: **IndexedDB is still the
+read path the game boots from.** The cloud is a required mirror, not a required
+dependency mid-session — a network outage during play is still invisible, and every
+network error is still swallowed, logged once at debug level, and retried with backoff.
 
-## Why this exists at v0.1 when leaderboards arrive at v0.8
+## The door flow
 
-Plan §10.2: _"Retrofitting auth into a years-old persistent-world save format is the
-expensive path; doing it first is cheap."_ This is not a leaderboard prerequisite built
-early. It is an ownership column added to a save format while that format has exactly one
-released version, and an anonymous user id minted before there are any worlds that would
-need re-homing.
+1. `/play` mounts `app/play/play-client.tsx`, whose sign-in gate
+   (`supabase/authGate.ts`, pure and tested) runs before the lot picker, the game, and
+   every query-param bypass (`?artsheet` included).
+2. No env → the "cloud is not configured" screen. Env but no session → the sign-in door
+   (`hud/SignInDoor.tsx`): GitHub, Google, magic link. No guest path.
+3. OAuth and magic links use the **PKCE flow** with `detectSessionInUrl: true`
+   (`client.ts`): the return leg lands on `/play` carrying a `?code=`, the client
+   exchanges it during initialisation, and the gate's `onAuthChange` subscription
+   (`session.ts`) dismisses the door. The same subscription re-arms it on sign-out.
+4. Signed in → the lot picker, which also reconciles every lot with the cloud
+   (`worldsSync.ts`, below).
 
-[`linkEmailToCurrentUser()`](./session.ts) is the payoff and the reason the item is worth
-doing now: a player can attach an email to their **existing** anonymous user later, keeping
-the same `user.id`, and therefore the same `saves` row, with no migration and without losing
-a tick. The account screen that door was held open for exists now: the HUD's Account panel
-(`hud/AccountPanel.tsx`), which drives the rest of `session.ts` — `linkOAuthToCurrentUser`
-(GitHub / Google via `linkIdentity`, same user id), the deliberately-separate
-session-replacing pair `signInToExistingWithOAuth` / `sendMagicLinkToExisting`, and
-`signOut` — plus [`profile.ts`](./profile.ts) for the leaderboard display name.
+`getSession()` (`session.ts`) resolves a real persisted session or null — it never mints
+anything. `signInAnonymously` is gone from the codebase.
 
-## Real sign-in, and the dashboard switches it depends on
+## Sync: one row per world
 
-OAuth redirects and magic links use the **PKCE flow** with `detectSessionInUrl: true`
-(`client.ts`, verified against the Supabase PKCE guide on 2026-08-24): the redirect returns
-with a `?code=` that the client exchanges for a session on its own during initialisation,
-which `getSession()` awaits — so the boot path never mints an anonymous user over a session
-the player just linked. Three switches live in the dashboard and no client code can flip
-them:
+The `saves` table's key is `(user_id, slot)`, and **`slot` is the local world id** — no
+schema change was needed; the pre-143 code simply always wrote the one slot `'default'`.
 
-1. **Authentication → Sign In / Providers**: enable **GitHub** and **Google**, each with its
-   own OAuth app credentials.
-2. **Authentication → Settings**: enable **manual linking**, or `linkIdentity()` — the
-   upgrade path that keeps the anonymous `user.id` — answers every click with an error
-   (which the panel surfaces verbatim).
-3. **Authentication → URL Configuration**: the site URL and redirect allow-list must cover
-   wherever the game is served, or the `redirectTo` this code sends is ignored.
+- **The running world** mirrors through `cloudSync.ts`: one pull at start, then a 10s
+  poll that pushes whenever the committed local save's tick moved. `bootstrap.ts` retains
+  the handle now, and the ordered exit (`storage/exit.ts`) **flushes a final push after
+  the exit save verifies, before teardown** (bounded at 5s — a dead network delays an
+  exit, never traps one).
+- **Every other world** is reconciled at the lot picker (`worldsSync.ts`, called by
+  `FrontDoor.tsx`): lots the cloud has never seen are pushed, lots another device carried
+  further are adopted, and the pre-143 `'default'` row is **moved** under the world it
+  mirrors (matched by `world_seed`; see `worldsSyncPlan.ts` for the pure decisions). No
+  envelope is destroyed anywhere in that flow — losers park under the world's local
+  `conflict` key, and the `'default'` row is deleted only after its envelope verifiably
+  lives somewhere else.
 
-## Setup, when someone provisions a project
+### The conflict rule (unchanged since 016)
 
-1. Create the project. Note its ref.
-2. **Authentication → Sign In / Providers → enable Anonymous sign-ins.** It is off by
-   default and it is a dashboard setting — no client code can turn it on. Without it,
-   `signInAnonymously()` returns an `anonymous_provider_disabled` error, sync stays off, and
-   the game plays exactly as it does now.
-3. Apply [`supabase/migrations`](../../../../supabase/migrations) — see the README there.
-4. Copy `apps/web/.env.example` to `apps/web/.env.local` and fill in the URL and the
-   **publishable** key (`sb_publishable_…`, under Project Settings → API Keys).
+**The envelope with the higher `tick` wins**, tie-broken by `updated_at` (which is
+database-written, so no client clock is ever trusted). The loser is never destroyed: it
+goes under the world's `conflict` key in IndexedDB. `../storage/cloudHandoff.ts` is still
+the only seam between this directory and the save database. Adoption still takes effect
+on the next boot of that world; a world being actively played parks the cloud copy
+instead of swapping under the renderer.
 
-The legacy `anon` JWT key still works and is still accepted by [`env.ts`](./env.ts) as a
-fallback, but Supabase has it scheduled for retirement at the end of 2026.
+## Dashboard switches this code depends on
+
+These live in the dashboard and no client code can flip them — the full checklist with
+URLs is in [`supabase/README.md`](../../../../supabase/README.md):
+
+1. **Anonymous sign-ins: OFF** — the code no longer calls it, and leaving it on invites
+   rows no account can ever reach again.
+2. **GitHub and Google providers: ON**, each with its own OAuth app credentials.
+3. **Manual linking: ON** — `linkIdentity()` (the panel's "add a sign-in method") errors
+   without it.
+4. **URL Configuration** — Site URL plus a redirect allow-list covering production and
+   localhost, or the `redirectTo` this code sends is ignored.
 
 ## The rules this directory follows
 
-**Nothing on the critical path waits for a session.** The game renders, plays, and autosaves
-whether or not `getSession()` ever settles. It is called from the boot path with `void` and
-is never awaited. A player who meets a spinner before they meet a watering can fails work
-item 017's ship gate.
+**Boot never awaits the network.** The sign-in door awaits auth — that is its job — but
+once a session exists, `bootWorld` still `void`s `startCloudSyncIfConfigured` and the
+frame loop never waits on anything here.
 
-**Every network error is swallowed, logged once at `console.debug`, and retried with capped
-exponential backoff.** No toast, no modal, no banner, no error boundary. A player with the
-network off must not be able to tell this exists. A paused project and a plane with no wifi
-are normal operating conditions, not incidents.
+**Every network error is swallowed, logged once at `console.debug`, and retried with
+capped exponential backoff.** No toast, no modal, no error boundary mid-session.
 
 **`packages/sim` knows nothing about any of this.** No import, no user id, no field that
-varies with sync state. The state hash is identical online and offline, which is what keeps
-the golden determinism test meaningful.
+varies with sync state. The state hash is identical online and offline.
 
-**Rows are validated, never trusted.** A row coming back off the network is reassembled into
-an envelope and put through the sim's own `parseEnvelope()` — the same validator a save off
-the disk goes through. A malformed row is ignored exactly like a corrupt local save.
-
-## The conflict rule
-
-**The envelope with the higher `tick` wins**, tie-broken by `updated_at`.
-
-Ticks are the game's real clock (§6: an active hour is 72,000 ticks) and are monotonic
-within one world's lineage, which makes them a better ordering key than wall-clock time on a
-machine whose clock we do not control — a player whose laptop is set to 2019 still syncs
-correctly. `updated_at` is written by a database trigger rather than the client, so even the
-tie-break does not depend on that clock.
-
-**The loser is never destroyed.** It goes under the `conflict` key in IndexedDB, next to
-`current` and `previous`. See [`../storage/cloudHandoff.ts`](../storage/cloudHandoff.ts) —
-that file is the only seam between this directory and the save database.
-
-### The v0.1 narrowing, stated plainly
-
-Adoption swaps the record on disk; it does not hot-swap the world running under the
-renderer. So a cloud save that wins takes effect **on the next reload**, and the log says so.
-If the player has already played this session, the cloud copy is parked under `conflict`
-instead of being written and then immediately clobbered by the next autosave. Either way
-both envelopes survive. Rebuilding a live world underneath Pixi is well outside this item's
-scope and is not something a single-device v0.1 needs.
+**Rows are validated, never trusted.** A row coming back off the network is reassembled
+into an envelope and put through the sim's own `parseEnvelope()` — the same validator a
+save off the disk goes through. A malformed row is ignored exactly like a corrupt local
+save.
 
 ## Files
 
-| File           | What lives there                                            |
-| -------------- | ----------------------------------------------------------- |
-| `env.ts`       | Which keys we have. Imports no SDK, so the gate is free     |
-| `bootstrap.ts` | The gate: dynamically imports the rest only when configured |
-| `client.ts`    | The one browser client, memoised, or `null`                 |
-| `session.ts`   | Anonymous sign-in, the upgrade paths, sign-out              |
-| `profile.ts`   | The leaderboard display name, and the account status read   |
-| `cloudSync.ts` | Push, pull, the conflict rule, and the backoff policy       |
-| `log.ts`       | Deliberately quiet logging, and `once()`                    |
+| File                | What lives there                                                |
+| ------------------- | --------------------------------------------------------------- |
+| `env.ts`            | Which keys we have. Imports no SDK, so the gate is free         |
+| `authGate.ts`       | The sign-in gate's states, pure and import-free                 |
+| `bootstrap.ts`      | The dynamic-import gate, and the retained sync handle           |
+| `client.ts`         | The one browser client, memoised, or `null`                     |
+| `session.ts`        | Session reads, sign-in flows, linking, sign-out, `onAuthChange` |
+| `profile.ts`        | The leaderboard display name, and the account status read       |
+| `cloudSync.ts`      | The running world's loop: push, pull, conflict rule, backoff    |
+| `worldsSync.ts`     | The lot picker reconciliation, and legacy-row adoption          |
+| `worldsSyncPlan.ts` | That reconciliation's decisions, pure and import-free           |
+| `log.ts`            | Deliberately quiet logging, and `once()`                        |

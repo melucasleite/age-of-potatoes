@@ -1,12 +1,11 @@
 // The browser Supabase client, or null.
 //
-// NULL IS A FIRST-CLASS RETURN VALUE HERE, NOT AN ERROR PATH. There is no Supabase project
-// provisioned for Snack Mogul today, and plan §11 is explicit that there never needs to be
-// one: "Nothing about the game requires the server to be up." So a missing key degrades to
-// "no sync" — never to a throw, never to a white screen, never to a red console.
-//
-// If you find yourself adding a `!` or a `throw new Error('missing env')` below, stop: that
-// turns a game that plays fine on a plane into a game that shows a stack trace on a plane.
+// NULL IS STILL A FIRST-CLASS RETURN VALUE, NOT AN ERROR PATH — but what it means changed
+// with work item 143. Accounts are required now: a build with no Supabase env does not play
+// local-only, it shows the "cloud is not configured" screen (`play-client.tsx`) instead of
+// the game. This module still never throws about it, because the module that KNOWS what a
+// missing backend means for the player is the gate, not the client factory — a `throw new
+// Error('missing env')` here would be a white screen where a readable sentence belongs.
 
 import { type SupabaseClient, createClient } from '@supabase/supabase-js';
 
@@ -14,12 +13,11 @@ import { readSupabaseEnv } from './env';
 import { logDebug, once } from './log';
 
 /**
- * Where the anonymous session is parked in `localStorage`.
+ * Where the session is parked in `localStorage`.
  *
  * Named rather than defaulted so it is greppable in DevTools → Application, and so that
- * clearing it is an obvious, deliberate act. The session living here is what makes the
- * anonymous identity survive a reload — which is the whole reason the acceptance criteria
- * ask for one row and not one row per page load.
+ * clearing it is an obvious, deliberate act. The session living here is what makes a
+ * sign-in survive a reload — without it every refresh would mean the sign-in door again.
  */
 export const AUTH_STORAGE_KEY = 'snack-mogul.auth';
 
@@ -50,9 +48,9 @@ export function getSupabaseClient(): SupabaseClient | null {
   if (env === null) {
     once('unconfigured', () => {
       logDebug(
-        'No Supabase URL or key configured, so cloud save sync is off. The game is ' +
-          'local-first and plays and saves normally without it. Set ' +
-          'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY to enable it.',
+        'No Supabase URL or key configured. Accounts and cloud saves are required now ' +
+          '(work item 143), so the game will show its "cloud is not configured" screen. ' +
+          'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.',
       );
     });
     memo = null;
@@ -71,20 +69,20 @@ export function getSupabaseClient(): SupabaseClient | null {
 
   memo = createClient(env.url, env.key, {
     auth: {
-      // The anonymous identity must survive a reload, or every refresh mints a new user and
-      // a new row — which is exactly what acceptance criterion three forbids.
+      // The sign-in must survive a reload, or every refresh puts the door back up.
       persistSession: true,
       autoRefreshToken: true,
       storageKey: AUTH_STORAGE_KEY,
-      // OAUTH AND MAGIC LINKS EXIST NOW, so the two flags below stopped being dead weight.
-      // PKCE is the flow Supabase documents for a browser SPA (guides/auth/sessions/pkce-flow,
-      // verified 2026-08-24, not from memory): the sign-in redirect comes back carrying a
-      // `?code=` that is only useful together with the verifier this client stashed in
-      // localStorage, so a leaked URL is not a leaked session. With `detectSessionInUrl` on,
-      // the client exchanges that code for a session by itself during initialisation — no
-      // callback route, no manual `exchangeCodeForSession`, and `getSession()` in
-      // `session.ts` awaits that initialisation, which is what stops the boot path from
-      // minting a fresh anonymous user over the account the player just linked.
+      // OAUTH AND MAGIC LINKS ARE THE ONLY WAY IN NOW, so the two flags below are
+      // load-bearing. PKCE is the flow Supabase documents for a browser SPA
+      // (guides/auth/sessions/pkce-flow, verified 2026-08-24, not from memory): the sign-in
+      // redirect comes back carrying a `?code=` that is only useful together with the
+      // verifier this client stashed in localStorage, so a leaked URL is not a leaked
+      // session. With `detectSessionInUrl` on, the client exchanges that code for a session
+      // by itself during initialisation — no callback route, no manual
+      // `exchangeCodeForSession`. `getSession()` in `session.ts` awaits that
+      // initialisation, and the `onAuthChange` subscription in `play-client.tsx` is how the
+      // sign-in door finds out the return leg landed.
       flowType: 'pkce',
       detectSessionInUrl: true,
     },

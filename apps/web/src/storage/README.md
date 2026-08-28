@@ -1,9 +1,10 @@
 # Storage
 
 IndexedDB is where the world lives. Not localStorage — it is synchronous, capped around 5 MB,
-and evicted more aggressively. Not the network — plan §11 says the game must work with the
-network off, and Supabase sync (work item 016) is a mirror on top of this, never the source of
-truth.
+and evicted more aggressively. Not the network — the game must play through an outage, and
+Supabase sync (work items 016 and 143) is a mirror on top of this, never the read path the
+game boots from. (Since 143 the mirror is required — an account gates the game and every
+world syncs — but "required" changed who may play, not where the world lives.)
 
 The envelope format, the migration chain, and the canonical payload live in
 [`packages/sim/src/save`](../../../../packages/sim/src/save/README.md). `packages/sim` has a
@@ -61,10 +62,13 @@ are dropped only by `sweepTombstones()` on a later boot, once the tombstone is o
 The sweep runs on boot rather than on a timer, so a browser nobody reopens deletes nothing,
 which is the right behaviour for a window whose purpose is second thoughts.
 
-**Cloud sync is the active world only.** There is one row per player per slot on the server, and
-mirroring several worlds into one row is a merge problem with no right answer. The front door
-says so on the cards. Per-world cloud slots are a follow-up; the seam is `activeConflictKey` in
-`cloudHandoff.ts` plus a slot name.
+**Cloud sync is every world now** (work item 143). Each world has its own server row —
+`slot` = the world id — so the merge-into-one-row problem the old active-world-only rule
+existed to avoid no longer exists. The running world mirrors live (`supabase/cloudSync.ts`,
+handle retained by `supabase/bootstrap.ts`; the ordered exit in `exit.ts` flushes a final
+push before teardown), and the front door reconciles the rest on mount
+(`supabase/worldsSync.ts`). `adoptCloudEnvelope` takes an explicit `worldId` for that
+picker-side path; omitted, it still means the active world.
 
 **New Game never reuses a seed.** `freshSeed()` draws from `crypto`. Before the registry every
 new world was `createWorld(20260812)` — the same lot, weed for weed, for everyone.

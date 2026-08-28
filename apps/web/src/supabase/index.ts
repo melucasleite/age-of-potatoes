@@ -1,30 +1,32 @@
 // The cloud layer's public surface.
 //
-// Everything here is optional. There is no Supabase project provisioned for Snack Mogul
-// today, and the game is fully playable and fully saveable without one — see README.md in
-// this directory for what to set when that changes.
+// NOT OPTIONAL ANY MORE (work item 143): the game requires a signed-in account and a
+// configured Supabase project — an unconfigured build shows a plain "cloud is not
+// configured" screen instead of the game, and an unauthenticated player meets the sign-in
+// door before the lot picker. See README.md in this directory.
 
 export { AUTH_STORAGE_KEY, getSupabaseClient, resetSupabaseClient } from './client';
 export { isCloudSyncConfigured, readSupabaseEnv } from './env';
 export type { SupabaseEnv } from './env';
-export { startCloudSyncIfConfigured } from './bootstrap';
+export { flushCloudSyncIfRunning, startCloudSyncIfConfigured, stopCloudSync } from './bootstrap';
 export type { CloudSyncBootOptions } from './bootstrap';
 export {
   clearSessionMemo,
   getSession,
-  isAnonymous,
   linkEmailToCurrentUser,
   linkOAuthToCurrentUser,
+  onAuthChange,
   resetSession,
-  sendMagicLinkToExisting,
-  signInToExistingWithOAuth,
+  sendMagicLink,
+  signInWithOAuth,
   signOut,
 } from './session';
 export type { AccountActionResult, OAuthProvider } from './session';
 export { DISPLAY_NAME_MAX, getAccountStatus, getOwnProfile, setDisplayName } from './profile';
 export type { AccountStatus } from './profile';
 
-// `startCloudSync` and `remoteWins` are deliberately NOT re-exported here. They live in
-// `./cloudSync`, which is dynamically imported by `./bootstrap` so that an unconfigured
-// build never fetches `@supabase/supabase-js` at all. Re-exporting them from the index
-// would pull the SDK into every bundle that touches this file and quietly undo that.
+// `startCloudSync`, `remoteWins`, and the `worldsSync` reconciliation are deliberately NOT
+// re-exported here. They live in modules that are dynamically imported (`./bootstrap`, the
+// front door's effect) so that a page which never reaches them never fetches
+// `@supabase/supabase-js` up front. Re-exporting them from the index would pull the SDK
+// into every bundle that touches this file and quietly undo that.

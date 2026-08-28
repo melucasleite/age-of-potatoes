@@ -1,0 +1,182 @@
+'use client';
+
+// The sign-in door ([[143]]): the screen before every other screen.
+//
+// NOBODY FARMS ANONYMOUSLY ANY MORE. `play-client.tsx` renders this whenever `/play` has no
+// session — first visit, after a sign-out, after a session expires — and nothing else
+// mounts until one exists. There is deliberately NO guest button, no "skip for now", no
+// local-only path: Lucas's final-stretch ruling is that every player has an account and
+// every save lives in the cloud, and a door with a side gate is not a door.
+//
+// THIS COMPONENT NEVER DISMISSES ITSELF. Both OAuth buttons navigate away to the provider;
+// the magic link arrives by email and is clicked in this browser. Either way the session
+// materialises via the return leg (`detectSessionInUrl` in `supabase/client.ts` exchanges
+// the `?code=`), the `onAuthChange` subscription in `play-client.tsx` hears it, and the
+// gate swaps this screen for the lot picker. All this file owns is starting the flows and
+// wording their failures.
+//
+// It wears `FrontDoor.module.css` on purpose — same farm backdrop, same column, same
+// buttons, one screen earlier in the same flow.
+
+import { useState } from 'react';
+
+import {
+  type AccountActionResult,
+  type OAuthProvider,
+  sendMagicLink,
+  signInWithOAuth,
+} from '@/supabase/session';
+
+import raw from './FrontDoor.module.css';
+
+type StyleName =
+  | 'door'
+  | 'inner'
+  | 'wordmark'
+  | 'tagline'
+  | 'secondary'
+  | 'sectionHead'
+  | 'hint'
+  | 'note'
+  | 'nameInput'
+  | 'signinRow'
+  | 'signinSend'
+  | 'signinNotice'
+  | 'signinNoticeGood'
+  | 'signinNoticeWarn';
+
+// The same trick `FrontDoor.tsx` documents: Next types a CSS module as an index signature
+// and this workspace runs `noUncheckedIndexedAccess`, so every class would otherwise be
+// `string | undefined` and a renamed class would silently paint nothing.
+const s = raw as Readonly<Record<StyleName, string>>;
+
+interface Notice {
+  tone: 'good' | 'warn';
+  text: string;
+}
+
+export default function SignInDoor() {
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+
+  /**
+   * One action in flight at a time, its failure put where the player is looking. On OAuth
+   * success the page is about to navigate away, so `busy` deliberately stays true — a
+   * button that re-enables an instant before the browser leaves is an invitation to
+   * double-send.
+   */
+  const run = async (
+    action: () => Promise<AccountActionResult>,
+    doneText: string | null,
+  ): Promise<void> => {
+    setBusy(true);
+    setNotice(null);
+    const result = await action();
+    if (result.ok) {
+      if (doneText !== null) {
+        setNotice({ tone: 'good', text: doneText });
+        setBusy(false);
+      }
+      // doneText === null is the OAuth case: the redirect is underway. Stay busy.
+    } else {
+      setNotice({ tone: 'warn', text: result.reason });
+      setBusy(false);
+    }
+  };
+
+  const oauth = (provider: OAuthProvider): void => {
+    void run(async () => signInWithOAuth(provider), null);
+  };
+
+  const emailReady = email.trim().includes('@');
+  const magicLink = (): void => {
+    if (!emailReady || busy) return;
+    void run(
+      async () => sendMagicLink(email.trim()),
+      'Magic link sent. Open it in this browser and you will land in the game.',
+    );
+  };
+
+  return (
+    <div className={s.door}>
+      <div className={s.inner}>
+        <h1 className={s.wordmark}>AGE OF POTATOES</h1>
+        <p className={s.tagline}>Rent&rsquo;s paid through the month. Make chips.</p>
+
+        <div className={s.sectionHead}>
+          <span>Sign in to farm</span>
+        </div>
+
+        <button
+          type="button"
+          className={s.secondary}
+          // The one auto-focus on this screen, for the same reason Continue has it on the
+          // next one: a returning player presses Enter without reading anything.
+          autoFocus
+          disabled={busy}
+          onClick={() => {
+            oauth('github');
+          }}
+        >
+          CONTINUE WITH GITHUB
+        </button>
+        <button
+          type="button"
+          className={s.secondary}
+          disabled={busy}
+          onClick={() => {
+            oauth('google');
+          }}
+        >
+          CONTINUE WITH GOOGLE
+        </button>
+
+        <p className={s.hint}>or by email — no password, just a link:</p>
+
+        <div className={s.signinRow}>
+          <input
+            className={s.nameInput}
+            type="email"
+            value={email}
+            placeholder="you@somewhere.example"
+            aria-label="Email for a magic link"
+            spellCheck={false}
+            autoComplete="email"
+            disabled={busy}
+            onChange={(event) => {
+              setEmail(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') magicLink();
+            }}
+          />
+          <button
+            type="button"
+            className={s.signinSend}
+            disabled={busy || !emailReady}
+            onClick={magicLink}
+          >
+            send link
+          </button>
+        </div>
+
+        {notice !== null && (
+          <p
+            className={`${s.signinNotice} ${
+              notice.tone === 'good' ? s.signinNoticeGood : s.signinNoticeWarn
+            }`}
+          >
+            {notice.text}
+          </p>
+        )}
+
+        <p className={s.note}>
+          An account is how your lots follow you: every one of them is backed up to the cloud and
+          waiting on any browser you sign into. First time here? Any of the three doors above
+          creates your account on the way through.
+        </p>
+      </div>
+    </div>
+  );
+}

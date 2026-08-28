@@ -1,40 +1,40 @@
-// The anonymous session: something that ARRIVES, never something you WAIT FOR.
+// The session: a real, signed-in account, or nothing — and "nothing" means the door.
 //
-// Work item 017's ship gate is a fresh-eyes player grinning at a sprinkler. A player who
-// meets a signup form, a spinner, or a "connecting…" state before they meet a watering can
-// fails that gate outright — which is why sign-in here is invisible, asynchronous, and
-// entirely optional. `getSession()` resolving to null is a completely normal Tuesday: no
-// project provisioned, anonymous sign-ins switched off in the dashboard, offline, or a
-// paused free-tier project.
+// THE ANONYMOUS ERA IS OVER (work item 143). This file used to mint an anonymous user the
+// moment the game booted so that sign-in was invisible and optional. Lucas's final-stretch
+// ruling reverses that: every player has an account, every save mirrors to the cloud, and a
+// missing session is not a shrug — it is the sign-in door (`hud/SignInDoor.tsx`), rendered
+// by `app/play/play-client.tsx` before the front door ever mounts.
 //
-// NOTHING IN THE BOOT PATH MAY AWAIT THIS. The game renders, plays, and autosaves to
-// IndexedDB whether or not this promise ever settles.
+// What survives from the old design: `getSession()` NEVER REJECTS AND NEVER THROWS, every
+// deliberate account action answers `{ ok, reason }` rather than throwing, and nothing in
+// here ever manufactures a user. What is gone: `signInAnonymously`, the "guest" state, and
+// the upgrade-the-anonymous-user framing — linking is now plain account management for a
+// player who is already signed in.
 
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 
 import { getSupabaseClient } from './client';
 import { logDebug, once } from './log';
 
-// One in-flight sign-in per page, shared by every caller. Two concurrent
-// `signInAnonymously()` calls would mint two anonymous users and orphan the first one's
-// save row — a slow leak of abandoned rows that nobody would notice for months.
+// One in-flight read per page, shared by every caller. `client.auth.getSession()` awaits
+// the client's initialisation — which, with `detectSessionInUrl: true` in `client.ts`, is
+// where an OAuth or magic-link return leg's `?code=` gets exchanged for a session. Sharing
+// the promise keeps a burst of callers from each paying that wait separately.
 let pending: Promise<Session | null> | null = null;
 
 /**
- * The current session, signing in anonymously if there is not one yet.
+ * The current session, or null. NULL MEANS THE PLAYER IS NOT SIGNED IN — nothing here will
+ * sign them in; that is the sign-in door's job, through the deliberate actions below.
  *
- * NEVER REJECTS AND NEVER THROWS. Every failure resolves to null, because from the game's
- * point of view "the network is down" and "Supabase does not exist" are the same condition
- * and neither is worth a stack trace.
+ * Never rejects and never throws. Only a real session is memoised: a null result clears the
+ * memo so the next caller re-reads, which is what lets the gate poll cheaply while the
+ * player is off authenticating with a provider.
  */
 export function getSession(): Promise<Session | null> {
   pending ??= establish()
     .catch(() => null)
     .then((session) => {
-      // ONLY SUCCESS IS CACHED. A player who opened the tab in a tunnel should get a
-      // session when the train comes out of it, so a null result clears the memo and lets
-      // the next caller try again. Caching the in-flight promise still guarantees exactly
-      // one `signInAnonymously()` at a time, which is what stops duplicate anonymous users.
       if (session === null) pending = null;
       return session;
     });
@@ -46,42 +46,43 @@ async function establish(): Promise<Session | null> {
   if (client === null) return null;
 
   try {
-    // A persisted session in localStorage is the common case on every load after the first.
-    // Note this reads and refreshes local state rather than proving the user still exists
-    // server-side, which is exactly what we want here: it is fast, and sync failures are
-    // handled by the caller retrying anyway.
+    // A persisted session in localStorage, refreshed if stale — or the session the client
+    // just exchanged out of the return-leg URL. This reads local state rather than proving
+    // the user still exists server-side, which is what a boot-time check should cost.
     const existing = await client.auth.getSession();
     if (existing.data.session !== null) {
       logDebug(`Resumed session for user ${existing.data.session.user.id}.`);
       return existing.data.session;
     }
-
-    const created = await client.auth.signInAnonymously();
-    if (created.error !== null) {
-      // The overwhelmingly likely cause on a fresh project is that anonymous sign-ins are
-      // still switched off — it is off by default, and it is a DASHBOARD setting that no
-      // amount of client code can turn on. Say so once, at debug level, and carry on.
-      once('signin-failed', () => {
-        logDebug(
-          'Anonymous sign-in did not complete, so this session will not sync to the cloud. ' +
-            'If this is unexpected, check that Anonymous sign-ins are enabled under ' +
-            'Authentication → Sign In / Providers in the Supabase dashboard.',
-          created.error,
-        );
-      });
-      return null;
-    }
-
-    if (created.data.session !== null) {
-      logDebug(`Signed in anonymously as ${created.data.session.user.id}.`);
-    }
-    return created.data.session;
+    return null;
   } catch (error) {
     once('session-error', () => {
-      logDebug('Could not establish a session. Playing offline.', error);
+      logDebug('Could not read the session.', error);
     });
     return null;
   }
+}
+
+/**
+ * Run `listen` on every auth state change — sign-in (including the OAuth/magic-link return
+ * leg landing), sign-out, token refresh. Returns an unsubscribe function.
+ *
+ * THE GATE'S EAR. `play-client.tsx` subscribes so the sign-in door dismisses itself the
+ * moment a session arrives and re-arms the moment one goes. The memo above is cleared on
+ * every event BEFORE the listener runs, so a `getSession()` call made from inside the
+ * callback sees the world as the event described it rather than as it was memoised.
+ */
+export function onAuthChange(listen: (session: Session | null) => void): () => void {
+  const client = getSupabaseClient();
+  if (client === null) return () => {};
+
+  const { data } = client.auth.onAuthStateChange((_event, session) => {
+    clearSessionMemo();
+    listen(session);
+  });
+  return () => {
+    data.subscription.unsubscribe();
+  };
 }
 
 /**
@@ -90,7 +91,7 @@ async function establish(): Promise<Session | null> {
  */
 export type AccountActionResult = { ok: true } | { ok: false; reason: string };
 
-/** The two OAuth doors the account panel offers. A union, per the repo's no-`enum` rule. */
+/** The two OAuth doors the game offers. A union, per the repo's no-`enum` rule. */
 export type OAuthProvider = 'github' | 'google';
 
 /**
@@ -104,19 +105,60 @@ function returnHere(): string {
 }
 
 /**
- * Attach an email to the CURRENT anonymous user, keeping the same `user.id`.
+ * Sign in with GitHub or Google. THE FRONT HALF OF THE SIGN-IN DOOR.
  *
- * THIS IS THE ENTIRE REASON WORK ITEM 016 HAPPENS AT v0.1 RATHER THAN AT v0.8. Plan §10.2:
- * "Retrofitting auth into a years-old persistent-world save format is the expensive path;
- * doing it first is cheap." Because the user id does not change, the `saves` row this
- * player already owns keeps working with no data migration and without losing a tick.
+ * On success the browser NAVIGATES AWAY to the provider — `{ ok: true }` means "the
+ * redirect is underway", and the caller is about to stop existing. The return leg lands
+ * back on `/play` carrying a `?code=`, `client.ts` exchanges it during initialisation, and
+ * the `onAuthChange` subscription dismisses the door.
+ */
+export async function signInWithOAuth(provider: OAuthProvider): Promise<AccountActionResult> {
+  const client = getSupabaseClient();
+  if (client === null) return { ok: false, reason: 'Cloud accounts are not configured.' };
+
+  try {
+    const { error } = await client.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: returnHere() },
+    });
+    if (error !== null) return { ok: false, reason: error.message };
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * Email a magic link that signs this device in. THE OTHER HALF OF THE SIGN-IN DOOR, and the
+ * path for a player with no GitHub or Google. Signing in with an email that has no account
+ * yet CREATES the account — `signInWithOtp` with the default `shouldCreateUser` — which is
+ * exactly right for a game whose only alternative used to be anonymous play.
  *
- * The account screen this function waited for exists now (`hud/AccountPanel.tsx`), so the
- * confirmation email carries an `emailRedirectTo` that brings the player back to the game
- * rather than to the project's Site URL.
+ * Nothing changes locally until the player clicks the link, and the link must be opened in
+ * THIS browser — the PKCE verifier it completes lives in this browser's localStorage.
+ */
+export async function sendMagicLink(email: string): Promise<AccountActionResult> {
+  const client = getSupabaseClient();
+  if (client === null) return { ok: false, reason: 'Cloud accounts are not configured.' };
+
+  try {
+    const { error } = await client.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: returnHere() },
+    });
+    if (error !== null) return { ok: false, reason: error.message };
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * Attach an email to the CURRENT signed-in user, keeping the same `user.id`.
  *
- * Unlike the boot-path code in this file this one DOES report failure, because it is only
- * ever called from a deliberate user action that deserves an answer.
+ * Plain account management now: a player who signed in with GitHub adds an email address so
+ * a magic link works on a machine where GitHub does not. Same `user.id`, same `saves`
+ * rows, no migration. Reports failure because it only ever runs behind a deliberate button.
  */
 export async function linkEmailToCurrentUser(email: string): Promise<AccountActionResult> {
   const client = getSupabaseClient();
@@ -137,10 +179,9 @@ export async function linkEmailToCurrentUser(email: string): Promise<AccountActi
 /**
  * Attach a GitHub or Google identity to the CURRENT user, keeping the same `user.id`.
  *
- * THE UPGRADE PATH, same contract as `linkEmailToCurrentUser`: the anonymous user this
- * player has been all along becomes permanent, and their save row never notices. On success
- * the browser NAVIGATES AWAY to the provider — `{ ok: true }` here means "the redirect is
- * underway", and the function's caller is about to stop existing.
+ * The other half of plain account management: a second provider on the same account, so
+ * losing access to one is not losing the farm. On success the browser NAVIGATES AWAY to the
+ * provider — `{ ok: true }` means "the redirect is underway".
  *
  * `linkIdentity` needs manual linking enabled in the dashboard (Authentication → Settings).
  * When it is not, Supabase answers with an error naming it; that message is surfaced
@@ -168,65 +209,13 @@ export async function linkOAuthToCurrentUser(
 }
 
 /**
- * Sign this DEVICE into a different, already-existing account via OAuth.
- *
- * NOT THE UPGRADE PATH, AND THE PANEL SAYS SO OUT LOUD. This replaces the local session:
- * the current user — anonymous or not — is abandoned on this device, and whoever the
- * provider vouches for takes over. Cloud sync then reconciles by its standing conflict rule
- * (higher tick wins, `cloudSync.ts`), so the adopted account's farther-along farm arrives on
- * its own and a fresh account adopts the local one. Offered only behind an explicit
- * "sign in to an existing account" step so nobody replaces a farm by accident.
- */
-export async function signInToExistingWithOAuth(
-  provider: OAuthProvider,
-): Promise<AccountActionResult> {
-  const client = getSupabaseClient();
-  if (client === null) return { ok: false, reason: 'Cloud accounts are not configured.' };
-
-  try {
-    const { error } = await client.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: returnHere() },
-    });
-    if (error !== null) return { ok: false, reason: error.message };
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-/**
- * Email a magic link that signs this device into an existing account. The session-replacing
- * sibling of `signInToExistingWithOAuth`, with the same warning and the same conflict rule
- * doing the reconciliation; nothing changes locally until the player clicks the link, and
- * the link must be opened in THIS browser — the PKCE verifier it completes lives in this
- * browser's localStorage.
- */
-export async function sendMagicLinkToExisting(email: string): Promise<AccountActionResult> {
-  const client = getSupabaseClient();
-  if (client === null) return { ok: false, reason: 'Cloud accounts are not configured.' };
-
-  try {
-    const { error } = await client.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: returnHere() },
-    });
-    if (error !== null) return { ok: false, reason: error.message };
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-/**
- * Sign out on THIS DEVICE only, and fall back to being a guest.
+ * Sign out on THIS DEVICE only.
  *
  * `scope: 'local'` on purpose: a player signing out of a shared laptop should not be logged
- * out of their own machine at home. The session memo is cleared so the very next
- * `getSession()` — the panel's own follow-up, or cloud sync's next cycle — establishes a
- * fresh anonymous user, which is the state a brand-new player is in. Cloud sync survives
- * this without help: it re-reads the session every cycle and simply starts mirroring the
- * local farm under the new guest.
+ * out of their own machine at home. There is no guest to fall back to any more — the
+ * `onAuthChange` subscription in `play-client.tsx` sees the session go and puts the
+ * sign-in door back up, unmounting whatever was behind it. The local saves stay exactly
+ * where they are; they simply stop syncing until somebody signs in.
  */
 export async function signOut(): Promise<AccountActionResult> {
   const client = getSupabaseClient();
@@ -247,21 +236,15 @@ export async function signOut(): Promise<AccountActionResult> {
 }
 
 /**
- * Forget the memoised sign-in, so the next `getSession()` re-establishes from scratch.
- * The production door for "the session just changed under us" — sign-out uses it above.
+ * Forget the memoised session read, so the next `getSession()` re-reads from scratch.
+ * The production door for "the session just changed under us" — sign-out and the
+ * `onAuthChange` subscription both use it.
  */
 export function clearSessionMemo(): void {
   pending = null;
 }
 
-/** True when the signed-in user has never attached a real identity. Null when unknown. */
-export async function isAnonymous(): Promise<boolean | null> {
-  const session = await getSession();
-  if (session === null) return null;
-  return session.user.is_anonymous ?? null;
-}
-
-/** Forget the memoised sign-in. Tests only; the game goes through `clearSessionMemo`. */
+/** Forget the memoised session. Tests only; the game goes through `clearSessionMemo`. */
 export function resetSession(): void {
   clearSessionMemo();
 }

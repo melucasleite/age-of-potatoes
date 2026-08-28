@@ -30,12 +30,12 @@ import { activeWorldId, conflictKeyFor, currentKeyFor } from './worlds';
 export const CONFLICT_KEY = 'conflict';
 
 /**
- * CLOUD SYNC IS THE ACTIVE WORLD ONLY, and that is this item's stated scope rather than an
- * oversight. There is one row per player per slot on the server (`cloudSync.ts`), the slot is
- * `default`, and mirroring several worlds into one row would be a merge problem with no right
- * answer. So the world you are playing is the world that is mirrored; the front door says so on
- * the cards. Per-world cloud slots are a follow-up, and the seam for them is this one function
- * plus a slot name.
+ * PER-WORLD CLOUD SLOTS ARRIVED WITH WORK ITEM 143. The "cloud sync is the active world
+ * only" narrowing that used to be documented here is gone: every world has its own row
+ * (slot = world id, `cloudSync.ts`), the running world's loop targets it by id, and the lot
+ * picker reconciles the rest (`worldsSync.ts`). `adoptCloudEnvelope` therefore takes an
+ * optional explicit `worldId`; omitting it still means the active world, which is the
+ * running game's case.
  */
 async function activeConflictKey(): Promise<string | null> {
   const id = await activeWorldId();
@@ -71,13 +71,15 @@ export type AdoptOutcome =
  */
 export async function adoptCloudEnvelope(
   envelope: SaveEnvelope,
-  options: { expectedLocalTick: number | null },
+  options: { expectedLocalTick: number | null; worldId?: string },
 ): Promise<AdoptOutcome> {
   if (!isStorageAvailable()) return 'unavailable';
 
   try {
-    const worldId = await activeWorldId();
-    // No active world means the player is standing at the front door with nothing selected.
+    // An explicit id is the picker-reconciliation case ([[143]]): the world is known, named
+    // and not running. Falling back to the active id is the running game's case, unchanged.
+    const worldId = options.worldId ?? (await activeWorldId());
+    // No world at all means the player is standing at the front door with nothing selected.
     // There is nothing for a cloud save to be current *for*, and writing one anyway would
     // install a world into a lot that does not exist.
     if (worldId === null) return 'unavailable';

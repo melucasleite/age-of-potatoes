@@ -23,11 +23,13 @@ export const DISPLAY_NAME_MAX = 32;
 export interface AccountStatus {
   /** Supabase env vars are present and we are in a browser. False means "hide all of it". */
   configured: boolean;
-  /** There is a session at all — anonymous counts. */
+  /**
+   * There is a signed-in account. Since work item 143 there is no anonymous state between
+   * "signed in" and "signed out" — a false here mid-game is a transient (the session just
+   * ended, and the sign-in door is about to take the whole screen).
+   */
   signedIn: boolean;
-  /** Signed in but never linked to anything: the "Playing as guest" state. */
-  isAnonymous: boolean;
-  /** The linked email, when there is one. */
+  /** The account email, when there is one. */
   email: string | null;
   /** Linked identity providers, e.g. `['github']` or `['email', 'google']`. */
   providers: string[];
@@ -36,7 +38,6 @@ export interface AccountStatus {
 const UNCONFIGURED: AccountStatus = {
   configured: false,
   signedIn: false,
-  isAnonymous: false,
   email: null,
   providers: [],
 };
@@ -44,10 +45,10 @@ const UNCONFIGURED: AccountStatus = {
 /**
  * Who is playing right now, for the panel to render and re-render after every action.
  *
- * READS THE SESSION WITHOUT MINTING ONE: `client.auth.getSession()` directly, never this
- * directory's `getSession()`, because a status poll must not be the thing that signs a
- * player in. Never throws — a network failure mid-poll degrades to "signed out", which the
- * next refresh corrects.
+ * `client.auth.getSession()` directly rather than this directory's `getSession()` for
+ * symmetry with the rest of this file: a status poll reads state, it does not establish
+ * it. Never throws — a network failure mid-poll degrades to "signed out", which the next
+ * refresh corrects.
  */
 export async function getAccountStatus(): Promise<AccountStatus> {
   const client = getSupabaseClient();
@@ -57,12 +58,12 @@ export async function getAccountStatus(): Promise<AccountStatus> {
     const { data } = await client.auth.getSession();
     const session = data.session;
     if (session === null) {
-      return { configured: true, signedIn: false, isAnonymous: false, email: null, providers: [] };
+      return { configured: true, signedIn: false, email: null, providers: [] };
     }
 
     // `getUserIdentities` is a server round trip, so the providers list is the live truth —
     // an identity linked in another tab shows up here on the next refresh. When it fails,
-    // an empty list is the honest degraded answer; the email and anonymity above still hold.
+    // an empty list is the honest degraded answer; the email above still holds.
     let providers: string[] = [];
     const identities = await client.auth.getUserIdentities();
     if (identities.error === null && identities.data !== null) {
@@ -72,12 +73,11 @@ export async function getAccountStatus(): Promise<AccountStatus> {
     return {
       configured: true,
       signedIn: true,
-      isAnonymous: session.user.is_anonymous ?? false,
       email: session.user.email ?? null,
       providers,
     };
   } catch {
-    return { configured: true, signedIn: false, isAnonymous: false, email: null, providers: [] };
+    return { configured: true, signedIn: false, email: null, providers: [] };
   }
 }
 
@@ -109,12 +109,12 @@ export async function getOwnProfile(): Promise<{ displayName: string | null }> {
 }
 
 /**
- * Set the name the leaderboard shows for this player, guest or not.
+ * Set the name the leaderboard shows for this player.
  *
  * THE ONE UPSERT: `onConflict: 'user_id'`, because the row's identity IS the user and a
- * second Save must overwrite, never duplicate. Goes through `getSession()` — the minting
- * one — on purpose: naming yourself is a deliberate act, and a player who does it before
- * the boot-path sign-in has settled deserves a session rather than a shrug.
+ * second Save must overwrite, never duplicate. A null session answers "Not signed in" —
+ * which mid-game means the session just ended and the sign-in door is about to say so
+ * with the whole screen.
  */
 export async function setDisplayName(name: string): Promise<AccountActionResult> {
   const trimmed = name.trim();

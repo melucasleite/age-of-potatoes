@@ -434,6 +434,63 @@
   }
 }
 
+/* --- the sign-in door ([[143]]) --------------------------------------------------- */
+
+/*
+ * `SignInDoor.tsx` wears this same stylesheet on purpose: it is the same full-screen farm
+ * backdrop, the same column, the same buttons — one screen earlier in the same flow. Only
+ * the rules no existing class covers live down here.
+ */
+
+.signinRow {
+  display: flex;
+  gap: 8px;
+}
+
+.signinRow .nameInput {
+  flex: 1;
+}
+
+.signinSend {
+  padding: 4px 14px;
+  border: 1px solid #6d5c4d;
+  background: #2b2119;
+  color: #efe2c6;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.signinSend:hover:not(:disabled) {
+  border-color: #b58b4d;
+}
+.signinSend:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.signinSend:focus-visible {
+  outline: 2px solid #4fa3d1;
+  outline-offset: 2px;
+}
+
+/* The one-line answer under an action: a sent link, or a failure in the game's words. */
+.signinNotice {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid #46392f;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.signinNoticeGood {
+  border-color: #4e7c2e;
+  color: #74a340;
+}
+.signinNoticeWarn {
+  border-color: #9e2f27;
+  color: #d94f36;
+}
+
 /* --- the farmer picker ([[079]]) -------------------------------------------------- */
 
 .picker {

@@ -14,6 +14,13 @@
 // (`saveWorld`/`startAutosave` published it before we ever see the false). Leaving anyway
 // would be the one path in this directory that knowingly walks away from unsaved play.
 
+// The exit's cloud hook ([[143]]). `bootstrap.ts` retains the one live sync handle; these
+// two are null-safe, env-gated, and import no SDK, so this dependency costs the exit path
+// nothing on a build with no backend and cannot cycle (bootstrap imports only `env.ts`).
+// Relative rather than `@/supabase/bootstrap` because `exit.test.ts` loads this file under
+// the repo's plain vitest setup, which resolves no path aliases.
+import { flushCloudSyncIfRunning, stopCloudSync } from '../supabase/bootstrap';
+
 import { releaseWorldLease } from './lease';
 import { stopPersistenceWatch } from './persist';
 
@@ -64,6 +71,15 @@ export async function saveBeforeExit(deps: ExitDeps): Promise<boolean> {
 export async function performExit(deps: ExitDeps, leave: () => void): Promise<boolean> {
   const safe = await saveBeforeExit(deps);
   if (!safe) return false;
+  // Mirror the exit save to the cloud BEFORE teardown ([[143]]), and strictly AFTER the
+  // local save was verified — the row should carry the world the player just left, not the
+  // last poll's. Best-effort and bounded (five seconds, `bootstrap.ts`): the local save is
+  // the source of truth and is already safe, so a dead network delays the exit briefly and
+  // never blocks it. The stop follows unconditionally — the world is about to unmount, and
+  // a poll loop pushing a world nobody is playing is cost without a customer; the front
+  // door's reconciliation (`worldsSync.ts`) covers anything this flush did not land.
+  await flushCloudSyncIfRunning();
+  stopCloudSync();
   // Hand the lot back before leaving ([[138]]). The page is about to show the front door and
   // the player may well walk straight back into the same lot; without this, the tab would be
   // refused entry to a world only it is holding. Closing the tab needs no call — the browser

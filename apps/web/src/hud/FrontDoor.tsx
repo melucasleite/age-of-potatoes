@@ -141,6 +141,26 @@ export default function FrontDoor({ onEnter }: FrontDoorProps = {}) {
     void readRegistry().then((value) => {
       if (!cancelled) setRegistry(value);
     });
+
+    // Square every lot with its cloud row while the player reads the cards ([[143]]):
+    // push the lots the cloud has never seen, adopt the ones another device carried
+    // further, give the legacy 'default' row its home. Fire-and-forget and never throws
+    // (`worldsSync.ts`); a dynamic import so this screen only fetches the Supabase chunk
+    // when there is a backend to talk to. The cards repaint only when something changed.
+    if (isCloudSyncConfigured()) {
+      void import('@/supabase/worldsSync')
+        .then((worldsSync) => worldsSync.reconcileCloudWorlds())
+        .then(async (result) => {
+          if (cancelled) return;
+          if (result.pushed > 0 || result.adopted > 0 || result.legacyMoved) {
+            setRegistry(await readRegistry());
+          }
+        })
+        .catch(() => {
+          // A chunk that fails to load is as survivable as a server that is down.
+        });
+    }
+
     return () => {
       cancelled = true;
     };
@@ -285,7 +305,6 @@ export default function FrontDoor({ onEnter }: FrontDoorProps = {}) {
                   busy={busy}
                   cloudOn={cloudOn}
                   isNewest={lot.id === newest?.id}
-                  isActive={lot.id === registry.activeId}
                   confirming={confirming === lot.id}
                   renaming={renaming === lot.id}
                   onOpen={() => void enter(lot.id)}
@@ -346,11 +365,11 @@ export default function FrontDoor({ onEnter }: FrontDoorProps = {}) {
         )}
 
         <p className={s.note}>
-          Lots are saved in this browser.{' '}
           {cloudOn
-            ? 'Cloud backup mirrors the lot you are ' +
-              'playing — the others stay on this machine only.'
-            : 'Cloud backup is not set up ' + 'on this build, so nothing leaves this machine.'}
+            ? 'Every lot is backed up to the cloud under your account and follows you to ' +
+              'any browser you sign into. A copy also lives here, so the game loads ' +
+              'instantly and plays through an outage.'
+            : 'Cloud backup is not set up on this build, so nothing leaves this machine.'}
         </p>
       </div>
     </div>
@@ -437,7 +456,6 @@ interface LotCardProps {
   busy: boolean;
   cloudOn: boolean;
   isNewest: boolean;
-  isActive: boolean;
   confirming: boolean;
   renaming: boolean;
   onOpen: () => void;
@@ -514,8 +532,10 @@ function LotCard(props: LotCardProps) {
         </div>
 
         {props.cloudOn && (
-          <div className={cx(s.cardCloud, props.isActive && s.cardCloudActive)}>
-            {props.isActive ? 'backed up to the cloud' : 'on this machine only'}
+          // Every lot, not just the active one ([[143]]): the running world mirrors live,
+          // and the reconciliation above squares the rest each time this screen opens.
+          <div className={cx(s.cardCloud, s.cardCloudActive)}>
+            {unsaved ? 'backs up to the cloud once it saves' : 'backed up to the cloud'}
           </div>
         )}
 

@@ -4,15 +4,15 @@
 // than the farm.
 //
 // ────────────────────────────────────────────────────────────────────────────────────
-//  THE ANONYMOUS-FIRST CONTRACT, WHICH EVERY BUTTON IN HERE OBEYS. The player was signed
-//  in anonymously the moment the game booted (`supabase/session.ts`), and their cloud save
-//  row hangs off that `user.id`. So the PRIMARY verbs here are all UPGRADES — GitHub and
-//  Google through `linkIdentity`, email through `updateUser` — which attach an identity to
-//  the user the player already is, keeping the id and therefore the save. The one flow
-//  that REPLACES the session (signing into a different, existing account) is deliberately
-//  a second step behind a "sign in to an existing account" switch, with its consequence
-//  written next to it, so nobody swaps farms by accident. Reconciliation after such a swap
-//  is not this panel's job: cloud sync's standing conflict rule (higher tick wins,
+//  ACCOUNTS ARE REQUIRED NOW ([[143]]), WHICH MADE THIS PANEL SIMPLER. The player behind
+//  this window is always a real signed-in account — the sign-in door (`SignInDoor.tsx`)
+//  stands in front of the whole game, so the old guest state, the anonymous "upgrade"
+//  framing, and the play-without-an-account copy are all gone. What remains is plain
+//  account management: the leaderboard name, adding a second sign-in method to the same
+//  account (`linkIdentity` / `updateUser` keep the `user.id`, and therefore the saves),
+//  signing out, and — behind its own deliberate switch — signing this device into a
+//  DIFFERENT account, with its consequence written next to it. Reconciliation after such
+//  a swap is not this panel's job: cloud sync's standing conflict rule (higher tick wins,
 //  `supabase/cloudSync.ts`) already answers it.
 // ────────────────────────────────────────────────────────────────────────────────────
 //
@@ -41,11 +41,10 @@ import {
 import {
   type AccountActionResult,
   type OAuthProvider,
-  getSession,
   linkEmailToCurrentUser,
   linkOAuthToCurrentUser,
-  sendMagicLinkToExisting,
-  signInToExistingWithOAuth,
+  sendMagicLink,
+  signInWithOAuth,
   signOut,
 } from '@/supabase/session';
 
@@ -63,7 +62,7 @@ export function AccountPanel({ onClose }: { onClose: () => void }) {
     <PanelWindow
       title="Account"
       tag="the name on the leaderboard"
-      hint="Esc closes · the farm stays on this device either way"
+      hint="Esc closes · every lot is backed up under this account"
       onClose={onClose}
     >
       <AccountBody />
@@ -76,7 +75,7 @@ function AccountBody() {
   const [savedName, setSavedName] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [email, setEmail] = useState('');
-  const [existingMode, setExistingMode] = useState(false);
+  const [switchMode, setSwitchMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -139,14 +138,25 @@ function AccountBody() {
       <div className={s.accountBody}>
         <div className={s.accountStatusLine}>Cloud accounts are not set up for this build.</div>
         <div className={s.accountNote}>
-          The game plays and saves on this device without them. Configuring Supabase turns this
-          panel on.
+          The game needs its Supabase project configured to run — see apps/web/.env.example.
         </div>
       </div>
     );
   }
 
-  const guest = !status.signedIn || status.isAnonymous;
+  if (!status.signedIn) {
+    // Transient by construction: the sign-in door gates the whole game, so a signed-out
+    // status mid-panel means the session just ended and the door is about to take the
+    // screen. Saying so beats rendering buttons that would all answer "Not signed in".
+    return (
+      <div className={s.accountBody}>
+        <div className={s.accountStatusLine}>Not signed in.</div>
+        <div className={s.accountNote}>
+          The session has ended — the sign-in screen is about to take over.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={s.accountBody}>
@@ -164,68 +174,64 @@ function AccountBody() {
         }}
       />
 
-      {existingMode ? (
-        <ExistingAccountSection
+      {switchMode ? (
+        <SwitchAccountSection
           busy={busy}
           email={email}
           onEmail={setEmail}
           onOAuth={(provider) => {
-            void run(async () => signInToExistingWithOAuth(provider), 'Heading over to sign in…');
+            void run(async () => signInWithOAuth(provider), 'Heading over to sign in…');
           }}
           onMagicLink={() => {
             void run(
-              async () => sendMagicLinkToExisting(email.trim()),
+              async () => sendMagicLink(email.trim()),
               'Magic link sent — open it in this browser.',
             );
           }}
           onBack={() => {
-            setExistingMode(false);
+            setSwitchMode(false);
             setNotice(null);
           }}
         />
       ) : (
         <>
-          {guest ? (
-            <LinkSection
-              busy={busy}
-              email={email}
-              onEmail={setEmail}
-              onOAuth={(provider) => {
-                void run(async () => linkOAuthToCurrentUser(provider), 'Heading over to link…');
-              }}
-              onEmailLink={() => {
-                void run(
-                  async () => linkEmailToCurrentUser(email.trim()),
-                  'Confirmation email sent — click it to finish linking.',
-                );
-              }}
-            />
-          ) : (
-            <SignedInSection
-              busy={busy}
-              onSignOut={() => {
-                void run(async () => {
-                  const result = await signOut();
-                  // Straight back to being a guest: the memo was cleared by `signOut`, so
-                  // this mints the fresh anonymous user rather than waiting for cloud
-                  // sync's next cycle to do it invisibly.
-                  await getSession();
-                  return result;
-                }, 'Signed out. Playing as a fresh guest on this device.');
-              }}
-            />
-          )}
+          <LinkSection
+            busy={busy}
+            email={email}
+            onEmail={setEmail}
+            onOAuth={(provider) => {
+              void run(async () => linkOAuthToCurrentUser(provider), 'Heading over to link…');
+            }}
+            onEmailLink={() => {
+              void run(
+                async () => linkEmailToCurrentUser(email.trim()),
+                'Confirmation email sent — click it to finish linking.',
+              );
+            }}
+          />
+
+          <SignOutSection
+            busy={busy}
+            onSignOut={() => {
+              void run(
+                async () => signOut(),
+                // The gate in `play-client.tsx` hears the session end and puts the
+                // sign-in door up; this sentence exists for the beat before it does.
+                'Signed out on this device. The sign-in screen is on its way.',
+              );
+            }}
+          />
 
           <button
             type="button"
             className={s.accountSwitch}
             onMouseDown={keepFocus}
             onClick={() => {
-              setExistingMode(true);
+              setSwitchMode(true);
               setNotice(null);
             }}
           >
-            sign in to an existing account instead…
+            sign in to a different account instead…
           </button>
         </>
       )}
@@ -246,16 +252,6 @@ function AccountBody() {
 
 /** One line saying who is playing, from the live status — never from a guess. */
 function StatusLine({ status }: { status: AccountStatus }) {
-  if (!status.signedIn) {
-    return (
-      <div className={s.accountStatusLine}>
-        Not signed in yet — a guest session starts on its own.
-      </div>
-    );
-  }
-  if (status.isAnonymous) {
-    return <div className={s.accountStatusLine}>Playing as guest on this device.</div>;
-  }
   const providers = status.providers.filter((p) => p !== 'email');
   return (
     <div>
@@ -269,10 +265,7 @@ function StatusLine({ status }: { status: AccountStatus }) {
   );
 }
 
-/**
- * The leaderboard name. Works for guests too — `profiles` takes any signed-in user — which
- * is on purpose: a player should not have to hand over an email to stop being "a farmer".
- */
+/** The leaderboard name: one row in `profiles`, shown to everyone, written only by you. */
 function NameSection({
   savedName,
   draft,
@@ -314,7 +307,10 @@ function NameSection({
   );
 }
 
-/** The upgrade path: attach an identity to the guest the player already is. */
+/**
+ * Plain account management: attach ANOTHER way into the account the player already has.
+ * `linkIdentity` / `updateUser` keep the `user.id`, so the saves never notice.
+ */
 function LinkSection({
   busy,
   email,
@@ -331,10 +327,10 @@ function LinkSection({
   const emailReady = email.trim().includes('@');
   return (
     <div className={s.accountSection}>
-      <div className={s.accountSectionHead}>Keep this farm</div>
+      <div className={s.accountSectionHead}>Add a sign-in method</div>
       <div className={s.accountNote}>
-        Link an account and this farm — and your name — follow you to any browser. Same farm, same
-        progress, nothing starts over.
+        Same account, one more door into it — so losing access to one provider is not losing the
+        farm.
       </div>
       <div className={s.accountRow}>
         <OAuthButtons busy={busy} onOAuth={onOAuth} />
@@ -342,8 +338,8 @@ function LinkSection({
       <div className={s.accountRow}>
         <TextField
           value={email}
-          placeholder="or link by email"
-          label="Email to link"
+          placeholder="or add an email"
+          label="Email to add"
           onChange={onEmail}
           onEnter={emailReady && !busy ? onEmailLink : undefined}
         />
@@ -361,8 +357,8 @@ function LinkSection({
   );
 }
 
-/** A permanent account's verbs: today, just the door out. */
-function SignedInSection({ busy, onSignOut }: { busy: boolean; onSignOut: () => void }) {
+/** The door out. The sign-in door is what is on the other side of it now. */
+function SignOutSection({ busy, onSignOut }: { busy: boolean; onSignOut: () => void }) {
   return (
     <div className={s.accountSection}>
       <button
@@ -375,7 +371,8 @@ function SignedInSection({ busy, onSignOut }: { busy: boolean; onSignOut: () => 
         sign out on this device
       </button>
       <div className={s.accountNote}>
-        Signing out leaves the farm here and puts you back on a fresh guest session.
+        Signing out closes the game back to the sign-in screen. Your lots stay saved — here and in
+        the cloud — and are all waiting when you sign back in.
       </div>
     </div>
   );
@@ -384,10 +381,10 @@ function SignedInSection({ busy, onSignOut }: { busy: boolean; onSignOut: () => 
 /**
  * The session-REPLACING flow, quarantined behind its own switch with the consequence
  * spelled out. The warning states cloud sync's actual rule rather than a vague "may lose
- * progress": whichever copy of the farm is further along wins, and the other is kept as a
+ * progress": whichever copy of a farm is further along wins, and the other is kept as a
  * conflict stash, never deleted (`cloudSync.ts`, `cloudHandoff.ts`).
  */
-function ExistingAccountSection({
+function SwitchAccountSection({
   busy,
   email,
   onEmail,
@@ -405,10 +402,10 @@ function ExistingAccountSection({
   const emailReady = email.trim().includes('@');
   return (
     <div className={s.accountSection}>
-      <div className={s.accountSectionHead}>Sign in to an existing account</div>
+      <div className={s.accountSectionHead}>Sign in to a different account</div>
       <div className={cx(s.accountNote, s.accountNoteWarn)}>
-        This signs this device into a different account. If that account's farm is further along, it
-        takes over here; the current farm is kept aside, not deleted.
+        This signs this device into another account. If that account&rsquo;s farm is further along,
+        it takes over here; the current farm is kept aside, not deleted.
       </div>
       <div className={s.accountRow}>
         <OAuthButtons busy={busy} onOAuth={onOAuth} />

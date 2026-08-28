@@ -30,6 +30,8 @@ export default async function PlayPage({
   // not about any particular world — so it must not be stopped at a door that exists to ask
   // "which world?". Without this, the flag is unreachable: the door strips nothing, but it
   // also never lets a world-less URL through, and artsheet-without-a-world was the whole idea.
+  // IT BYPASSES ONLY THE LOT DOOR, NEVER THE SIGN-IN GATE ([[143]]): `play-client.tsx`
+  // checks the session before this flag is even consulted.
   const artsheet = 'artsheet' in params;
 
   return (
