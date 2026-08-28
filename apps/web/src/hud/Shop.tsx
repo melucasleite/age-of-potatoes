@@ -80,7 +80,8 @@ export function ShopToggle({ open, onOpen }: { open: boolean; onOpen: () => void
       name="The Stand"
       badge={shop.atStand === 1 ? 'at counter' : 'seeds · kit'}
       hotkey="G"
-      title="The roadside stand — seeds and supplies, at list"
+      title="The roadside stand — buy seeds and supplies at the posted price · G"
+      frame="ui_menu_stand"
       open={open}
       lit={shop.atStand === 1}
       onToggle={onOpen}

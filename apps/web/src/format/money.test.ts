@@ -20,7 +20,13 @@ import {
   ItemId,
 } from '@snack/sim';
 
-import { formatCents, formatCentsWhole, formatRate, groupDigits } from './money';
+import {
+  formatCents,
+  formatCentsWhole,
+  formatCompactRatePerHour,
+  formatRate,
+  groupDigits,
+} from './money';
 
 describe('formatCents', () => {
   it('renders dollars and pennies with separators', () => {
@@ -93,6 +99,52 @@ describe('formatRate', () => {
     expect(formatRate(0)).toBe('$0.00');
     expect(formatRate(3_620)).toBe('+$36.20');
     expect(formatRate(-3_620)).toBe('−$36.20');
+  });
+});
+
+describe('formatCompactRatePerHour ([[149]])', () => {
+  // Inputs are cents per MINUTE — the slice's unit, kept — and the ×60 happens inside. The
+  // fixtures pick per-hour dollar targets divisible by 3 so cents-per-minute stays a whole
+  // number and no assertion leans on floating-point luck.
+  it('multiplies by sixty and renders plain grouped dollars under $10,000/hr', () => {
+    expect(formatCompactRatePerHour(100)).toBe('+$60'); // $1.00/min is $60/hr
+    expect(formatCompactRatePerHour(7_200)).toBe('+$4,320');
+    expect(formatCompactRatePerHour(16_665)).toBe('+$9,999');
+  });
+
+  it('switches to K at exactly $10,000/hr, with one decimal', () => {
+    expect(formatCompactRatePerHour(16_665)).toBe('+$9,999');
+    // 1,000,020 cents/hr → $10,000/hr, the first satisfying number.
+    expect(formatCompactRatePerHour(16_667)).toBe('+$10.0K');
+  });
+
+  it('TRUNCATES the decimal toward zero — a rate never reads higher than it is', () => {
+    // $12,459/hr: 12.459K reads "12.4K", never "12.5K".
+    expect(formatCompactRatePerHour(20_765)).toBe('+$12.4K');
+  });
+
+  it('takes the largest suffix that fits: K, M, B, and T as the guard rail', () => {
+    expect(formatCompactRatePerHour(1_666_665)).toBe('+$999.9K'); // $999,999/hr stays K
+    expect(formatCompactRatePerHour(5_250_000)).toBe('+$3.1M'); // $3,150,000/hr
+    expect(formatCompactRatePerHour(4_000_000_000)).toBe('+$2.4B'); // $2.4B/hr
+    expect(formatCompactRatePerHour(2_500_000_000_000)).toBe('+$1.5T'); // off the top
+  });
+
+  it('keeps its sign in both directions: + on gains, U+2212 on losses', () => {
+    expect(formatCompactRatePerHour(-7_200)).toBe('−$4,320');
+    expect(formatCompactRatePerHour(-20_765)).toBe('−$12.4K');
+    expect(formatCompactRatePerHour(-20_765)).not.toContain('-');
+  });
+
+  it('renders zero unsigned — the Ticker’s idle dash is the caller’s branch, as ever', () => {
+    expect(formatCompactRatePerHour(0)).toBe('$0');
+    expect(formatCompactRatePerHour(-0)).toBe('$0');
+  });
+
+  it('floors sub-dollar hours to $0 rather than inventing pennies', () => {
+    // 1¢/min is 60¢/hr: below a dollar the whole-dollar rendering reads "$0", signed,
+    // exactly as `formatCentsWhole` documents for its own sub-dollar case.
+    expect(formatCompactRatePerHour(1)).toBe('+$0');
   });
 });
 

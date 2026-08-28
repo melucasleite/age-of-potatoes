@@ -38,6 +38,7 @@ import { MilestoneKind } from '@snack/sim';
 import { formatCentsWhole, formatEta, plural } from './format';
 import { keepFocus, PanelRow, PanelWindow } from './PanelFrame';
 import { paintIcon, resolveTechIcon } from './item-art';
+import { consumeFocusedTech, subscribeTechFocus } from './tech-focus';
 import { cx, s } from './styles';
 import { hudStore } from './store';
 import { MAX_ERA, TECH_LEADS_TO } from './derive-tech';
@@ -66,7 +67,8 @@ export function TechToggle({ open, onOpen }: { open: boolean; onOpen: () => void
       name="Research"
       badge={ready > 0 ? `${ready} ready` : `${tech.ownedCount}/${tech.cards.length}`}
       hotkey="T"
-      title="The research tree — what you can build next, and what it costs"
+      title="The research manual — spend money on new technology · T"
+      frame="ui_menu_research"
       open={open}
       lit={ready > 0}
       onToggle={onOpen}
@@ -171,10 +173,30 @@ export function TechPanel({ onClose }: { onClose: () => void }) {
  * and made something else affordable. It seeds on the first publish that has one — which is
  * usually the first render, but not on a cold boot where the panel can open before the world
  * has published — and then stops listening.
+ *
+ * AN EXTERNAL FOCUS OUTRANKS THE FRONTIER ([[148]]): a locked build cell opens this panel
+ * asking for the node that locks it (`tech-focus.ts`), and landing that player on the
+ * frontier instead would answer their question with somebody else's. The request is consumed
+ * — once adopted it is ordinary selection, and the next plain T seeds from the frontier as
+ * ever. The focus effect is declared FIRST so it adopts before the frontier effect runs;
+ * `seeded` is what makes that ordering decisive.
  */
 function useSelection(frontierId: string | null): [string | null, (id: string) => void] {
   const [chosen, setChosen] = useState<string | null>(null);
   const seeded = useRef(false);
+
+  useEffect(() => {
+    const adopt = (): void => {
+      const pendingId = consumeFocusedTech();
+      if (pendingId === '') return;
+      seeded.current = true;
+      setChosen(pendingId);
+    };
+    // Whatever was requested before the panel mounted, then every request while it is open —
+    // a second locked click re-points the open panel rather than being swallowed.
+    adopt();
+    return subscribeTechFocus(adopt);
+  }, []);
 
   useEffect(() => {
     if (seeded.current || frontierId === null) return;

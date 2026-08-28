@@ -16,7 +16,7 @@ import type { CropId, WorldView } from '@snack/sim';
 import { CropId as Crop, Direction, LiquidId, cropSpec, techSatisfied } from '@snack/sim';
 
 import { publishArmedTool } from './armed-tool';
-import { BUILD_GRID_COLS, buildRows, moveGridCursor } from './build-menu';
+import { BUILD_GRID_COLS, armVerdict, buildRows, moveGridCursor } from './build-menu';
 import type { BuildRow, GridDirection } from './build-menu';
 import { publishBuildMenu, registerBuildMenuHooks } from './build-panel';
 import { InputChrome } from './chrome';
@@ -26,6 +26,7 @@ import { firstRunSigns, hotbarDigit } from './first-run';
 import { publishGrabberPanel, resetGrabberPanel } from './grabber-panel';
 import { KeyboardInput } from './keyboard';
 import { publishLod, viewLod, zoomInIndex, zoomOutIndex } from './lod';
+import { requestPanel } from './panels';
 import { publishPauseMenu, registerPauseMenuHooks } from './pause-panel';
 import { PointerInput } from './pointer';
 import { DEFAULT_CROP, ToolMode } from './tools';
@@ -374,14 +375,27 @@ export class InputSystem {
    * exactly one code path that can arm a tool from the menu, the same property the old
    * in-canvas surface kept.
    *
-   * A LOCKED CELL REFUSES rather than arming a tool whose command the sim will throw away.
-   * This is the one place a UI-side legality check is right: it is not deciding what the
-   * world does, it is declining to pretend the player did something.
+   * A TECH-LOCKED CELL GOES TO THE RESEARCH PANEL NOW ([[148]]) rather than refusing in
+   * silence: the menu closes and the HUD is ASKED — through the `panels.ts` seam, because
+   * this layer must not know the panel exists — to open the manual on the node that locks
+   * the row. The sold-out deed keeps the old silence (`armVerdict`, where the whole
+   * decision is pinned), and an unlocked cell arms exactly as it always has. This is still
+   * the one place a UI-side legality check is right: it is not deciding what the world
+   * does, it is declining to pretend the player did something.
    */
   private armMenuIndex(index: number): void {
     if (!this.menuVisible) return;
     const row = this.menuRows[index];
-    if (row === undefined || row.locked) return;
+    if (row === undefined) return;
+    const verdict = armVerdict(row);
+    if (verdict.act === 'refuse') return;
+    if (verdict.act === 'research') {
+      // Close first: the HUD's local openers call `buildMenuClose()` themselves, but going
+      // through our own door keeps the modal state right even if nothing is listening.
+      this.closeBuildMenu();
+      requestPanel('research', { techId: verdict.techId });
+      return;
+    }
     this.menuCursor = index;
     this.host.setTool(row.tool);
     // Same frame as the arming edge, so the held sprite never lags the slot highlight.

@@ -61,6 +61,7 @@ import { pauseMenuOpen } from '@/game/input/pause-panel';
 import { BuildMenuPanel } from './BuildMenu';
 import { toggleBuildPanel } from './build-row';
 import { DebugPanel } from './DebugPanel';
+import { DispatchToggle, DispatchWindow } from './Dispatch';
 import { DockCard } from './DockCard';
 import { requestExit } from './exit';
 import { FieldCard } from './FieldCard';
@@ -94,6 +95,7 @@ import { SaveNotices } from './SaveNotices';
 import { ServiceCard } from './ServiceCard';
 import { ShopPanel, ShopToggle } from './Shop';
 import { StatusRibbon } from './StatusRibbon';
+import { openResearchPanel } from './tech-focus';
 import { TechPanel, TechToggle } from './TechTree';
 import { Ticker } from './Ticker';
 import { Toolbelt } from './Toolbelt';
@@ -229,6 +231,12 @@ export default function HudRoot() {
                   onToggle={panels.toggleZones}
                 />
                 <BuildToggle open={panels.open === 'build'} />
+                {/* Under Build by ruling ([[150]]): Build sells the cart and the depot, and
+                    Dispatch is where they report for duty. */}
+                <DispatchToggle
+                  open={panels.open === 'dispatch'}
+                  onToggle={panels.toggleDispatch}
+                />
               </div>
 
               {/* The at-the-machine cards, in the half of the dock that folds — see
@@ -330,6 +338,8 @@ export default function HudRoot() {
                 <ZonePanel onClose={panels.close} />
               ) : panels.open === 'account' ? (
                 <AccountPanel onClose={panels.close} />
+              ) : panels.open === 'dispatch' ? (
+                <DispatchWindow onClose={panels.close} />
               ) : (
                 <BuildMenuPanel />
               )}
@@ -536,7 +546,8 @@ function ZonesToggle({
       name="The Zones"
       badge={zones === 0 ? 'none drawn' : `${zones} ${zones === 1 ? 'zone' : 'zones'}`}
       hotkey="Z"
-      title="Grow Zones — crop, priority, name"
+      title="The grow zones — set each zone's crop, priority and name · Z"
+      frame="ui_menu_zones"
       open={open}
       onToggle={onToggle}
     />
@@ -557,7 +568,8 @@ function BuildToggle({ open }: { open: boolean }) {
       name="Build"
       badge="place · buy"
       hotkey="B"
-      title="The build menu — everything placeable, priced"
+      title="The build menu — everything you can place on the lot, priced · B"
+      frame="ui_menu_build"
       open={open}
       // WRAPPED, NOT PASSED. `toggleBuildPanel(dispatchKey = dispatchKeydown)` takes an
       // optional first argument as a test seam, so handing it straight to `onClick` makes
@@ -603,6 +615,7 @@ function usePanels(): {
   toggleBag: () => void;
   toggleZones: () => void;
   toggleAccount: () => void;
+  toggleDispatch: () => void;
   close: () => void;
 } {
   // A primitive snapshot (a name or null), so every build-seam publish that is not an
@@ -626,6 +639,9 @@ function usePanels(): {
   const toggleAccount = useCallback(() => {
     togglePanel('account');
   }, []);
+  const toggleDispatch = useCallback(() => {
+    togglePanel('dispatch');
+  }, []);
   const close = useCallback(() => {
     closeLocalPanel();
   }, []);
@@ -635,20 +651,37 @@ function usePanels(): {
       // Auto-repeat is not a state edge — holding the key must not strobe the panel.
       if (event.repeat) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      // The modal's half of the guard ([[126]]): T, G, I and Z are inert while the world is
-      // stopped, or a player could open the bag BEHIND a scrim that dims it and take clicks
-      // in front of it. The input layer's pause guard covers its own keys and not these.
+      // The modal's half of the guard ([[126]]): T, G, I, Z and P are inert while the world
+      // is stopped, or a player could open the bag BEHIND a scrim that dims it and take
+      // clicks in front of it. The input layer's pause guard covers its own keys and not
+      // these.
       if (pauseMenuOpen()) return;
+      // A keystroke aimed at a form control belongs to the form control — the rule the
+      // reports layer kept for P's old home, brought along with the key ([[150]]): the
+      // dispatch panel is made of selects, and typing "P" to jump to an option must not
+      // toggle the panel out from under the caret. The account window's name field earns
+      // the same shelter for the other four letters.
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) {
+          return;
+        }
+      }
       if (event.code === 'KeyT') togglePanel('research');
       else if (event.code === 'KeyG') togglePanel('shop');
       else if (event.code === 'KeyI') togglePanel('bag');
       // Z for zones ([[102]]), taken from what the input layer leaves free: digits, B, R, C,
-      // +, −, Escape, F3, backtick, Space and WASD are spoken for, P belongs to the reports
-      // layer, T/G/I are the three above and `[` folds the dock. Z was unclaimed, and it is
-      // the letter in the word. IT IS BOUND HERE, OUTSIDE THE COLLAPSED BRANCH, and that is
-      // the whole reachability argument: `[` unmounts the sidebar body and every row in it,
-      // but this listener and the `.floatWin` it opens live in the always-mounted half.
+      // +, −, Escape, F3, backtick, Space and WASD are spoken for, T/G/I are the three
+      // above and `[` folds the dock. Z was unclaimed, and it is the letter in the word. IT
+      // IS BOUND HERE, OUTSIDE THE COLLAPSED BRANCH, and that is the whole reachability
+      // argument: `[` unmounts the sidebar body and every row in it, but this listener and
+      // the `.floatWin` it opens live in the always-mounted half.
       else if (event.code === 'KeyZ') togglePanel('zones');
+      // P moved in with dispatch ([[150]]): it was the reports dock's one key — the Shift
+      // Report's, then briefly the Bests tab's — and it follows the panel it now names.
+      // The reports layer binds nothing any more.
+      else if (event.code === 'KeyP') togglePanel('dispatch');
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -656,19 +689,34 @@ function usePanels(): {
     };
   }, []);
 
-  // The input layer's one line to the HUD ([[054]], `input/panels.ts`): a Hand click on the
+  // The input layer's line to the HUD ([[054]], `input/panels.ts`): a Hand click on the
   // sell bin with nothing to sell asks for the stand rather than doing nothing at all. It
   // ASKS — this side still decides, which is why it goes through the same module as the
   // keys. Open, never toggle: a click on the bin means "open it", and toggling would shut
   // the board in the face of a player who clicked the bin twice. A request for the bag
   // opens the floating window, which is what "open the inventory" means since [[089]].
+  // A research request CARRYING A NODE ([[148]]) — a click on a tech-locked build cell —
+  // goes through `tech-focus.ts` so the manual arrives already pointed at the lock.
   useEffect(
     () =>
-      onPanelRequest((panel) => {
+      onPanelRequest((panel, options) => {
+        if (panel === 'research' && options?.techId !== undefined) {
+          openResearchPanel(options.techId);
+          return;
+        }
         openPanel(panel === 'inventory' ? 'bag' : panel);
       }),
     [],
   );
 
-  return { open, toggleResearch, toggleShop, toggleBag, toggleZones, toggleAccount, close };
+  return {
+    open,
+    toggleResearch,
+    toggleShop,
+    toggleBag,
+    toggleZones,
+    toggleAccount,
+    toggleDispatch,
+    close,
+  };
 }

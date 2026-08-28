@@ -28,7 +28,14 @@ import type { WorldView } from '@snack/sim';
 
 import { resolveFrameIcon } from '../../hud/item-art';
 
-import { BUILD_CATALOGUE, BUILD_GRID_COLS, gridPlaces, moveGridCursor } from './build-menu';
+import {
+  BUILD_CATALOGUE,
+  BUILD_GRID_COLS,
+  armVerdict,
+  buildRows,
+  gridPlaces,
+  moveGridCursor,
+} from './build-menu';
 import { primaryCommand } from './pointer';
 import { TOOL_INFO, ToolMode, toolFootprint, toolForMachineKind, toolMachineKind } from './tools';
 
@@ -357,6 +364,68 @@ describe('the build grid ([[071]])', () => {
       expect(places[i]!.col, `${BUILD_CATALOGUE[i]!.group} does not start its row`).toBe(0);
       expect(places[i]!.row).toBeGreaterThan(places[i - 1]!.row);
     }
+  });
+});
+
+// --- what a click on a locked cell does now ([[148]]) --------------------------------------
+//
+// WHAT FAILS QUIETLY HERE is the old behaviour coming back: `armMenuIndex` refusing a
+// tech-locked cell in silence. That was never an error — it was a deliberate early return —
+// so no assertion elsewhere would notice it returning, and the feature would degrade to
+// exactly the dead click the owner reported. The decision is a pure function (`armVerdict`)
+// for the same reason `escapeRung` is one, and these pin all three verdicts plus the slug
+// threading the research verdict depends on.
+
+describe('arming a locked cell opens the manual ([[148]])', () => {
+  it('threads every catalogue entry’s tech slug into its row, untranslated', () => {
+    // The verdict hands this slug to the tech panel as a NODE ID — a label ("needs Belts")
+    // would send the panel hunting for a node called Belts, which does not exist.
+    const rows = buildRows(null);
+    for (let i = 0; i < BUILD_CATALOGUE.length; i++) {
+      expect(rows[i]!.requiresTech).toBe(BUILD_CATALOGUE[i]!.requiresTech);
+    }
+  });
+
+  it('sends a tech-locked row to research, carrying the node that locks it', () => {
+    // A fresh world owns no tech, so every gated row is locked with its slug attached.
+    const rows = buildRows(createWorldView());
+    const locked = rows.filter((row) => row.locked && row.requiresTech !== null);
+    expect(locked.length).toBeGreaterThan(0);
+    for (const row of locked) {
+      expect(armVerdict(row)).toEqual({ act: 'research', techId: row.requiresTech });
+    }
+  });
+
+  it('arms an unlocked row exactly as before', () => {
+    const rows = buildRows(createWorldView());
+    const zones = rows.find((row) => row.tool === ToolMode.PaintZone);
+    expect(zones?.locked).toBe(false);
+    expect(armVerdict(zones)).toEqual({ act: 'arm' });
+
+    // And a gated row whose node is OWNED arms too — the verdict reads the lock, never the
+    // slug's mere presence.
+    const view = createWorldView();
+    const fryerTech = BUILD_CATALOGUE.find(
+      (entry) => entry.tool === ToolMode.PlaceFryer,
+    )!.requiresTech!;
+    view.unlocked.push(fryerTech);
+    const fryer = buildRows(view).find((row) => row.tool === ToolMode.PlaceFryer);
+    expect(fryer?.locked).toBe(false);
+    expect(armVerdict(fryer)).toEqual({ act: 'arm' });
+  });
+
+  it('keeps the sold-out deed a silent no-op — there is nothing to research about it', () => {
+    const view = createWorldView();
+    view.land.nextPriceCents = -1; // the world owns every parcel
+    const deed = buildRows(view).find((row) => row.tool === ToolMode.BuyDeed);
+    expect(deed?.locked).toBe(true);
+    expect(deed?.lockReason).toBe('the whole lot is yours');
+    expect(deed?.requiresTech).toBeNull();
+    expect(armVerdict(deed)).toEqual({ act: 'refuse' });
+  });
+
+  it('refuses an index off the end of the menu', () => {
+    expect(armVerdict(undefined)).toEqual({ act: 'refuse' });
   });
 });
 

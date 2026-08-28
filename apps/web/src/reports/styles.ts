@@ -91,8 +91,7 @@ export type ReportStyle =
   | 'pendingList'
   | 'tabs'
   | 'tab'
-  | 'tabActive'
-  | 'tabKey';
+  | 'tabActive';
 
 export const r = raw as Readonly<Record<ReportStyle, string>>;
 

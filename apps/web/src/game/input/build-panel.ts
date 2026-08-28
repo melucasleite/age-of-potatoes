@@ -100,8 +100,9 @@ function sameMenu(
   for (let i = 0; i < rows.length; i++) {
     const a = current.rows[i]!;
     const b = rows[i]!;
-    // `label`, `hint`, `group` and `frame` are functions of `tool` and never move within a
-    // build; `price`, `locked`, `lockReason` and `affordable` are the live projection.
+    // `label`, `hint`, `group`, `frame` and `requiresTech` are functions of `tool` and never
+    // move within a build; `price`, `locked`, `lockReason` and `affordable` are the live
+    // projection.
     if (
       a.tool !== b.tool ||
       a.price !== b.price ||

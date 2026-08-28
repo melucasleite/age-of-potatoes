@@ -31,6 +31,7 @@ import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 import { formatCents } from './format';
+import { paintIcon, resolveFrameIcon } from './item-art';
 import { cx, s } from './styles';
 
 /**
@@ -56,12 +57,19 @@ export function keepFocus(event: React.MouseEvent): void {
  * whatever the panel wants to say otherwise ("2 READY", "SEEDS · KIT", "1 KIND"). The stand
  * used to spend that word on its counter being in reach; that fact moved into `lit` and into
  * the badge's own text, because one word cannot mean two things four rows in a row.
+ *
+ * THE ICON SLOT ([[151]]) sits before the name: every row hands its `ui_menu_*` atlas frame
+ * and the sprite renders at a quarter of the 64px art — crisp, per `paintIcon`'s ladder. A
+ * frame the atlas has not got degrades to the same quiet lettered chip the bag and the build
+ * menu use, never the renderer's magenta ([[037]]): the six frames exist today, and the rule
+ * is for the seventh row that lands before its art does.
  */
 export function PanelRow({
   name,
   badge,
   hotkey,
   title,
+  frame,
   open,
   lit = false,
   onToggle,
@@ -72,8 +80,10 @@ export function PanelRow({
   badge: string;
   /** The single letter that does the same thing: T, G, I, B. */
   hotkey: string;
-  /** The tooltip — one sentence on what the window is for. */
+  /** The tooltip — one plain sentence on what the window is for, plus the hotkey. */
   title: string;
+  /** The row's `ui_menu_*` atlas frame ([[151]]). Missing art draws the lettered chip. */
+  frame?: string;
   /** Is this row's window up right now. Lights the row and sets `aria-pressed`. */
   open: boolean;
   /** Something is waiting in there. Lights the row while it is closed. */
@@ -89,10 +99,50 @@ export function PanelRow({
       onMouseDown={keepFocus}
       onClick={onToggle}
     >
+      {frame === undefined ? null : <RowIcon frame={frame} name={name} />}
       <span className={s.panelRowName}>{name}</span>
       <span className={s.panelRowBadge}>{open ? 'open' : badge}</span>
       <span className={s.panelRowKey}>{hotkey}</span>
     </button>
+  );
+}
+
+/** How big a row's sprite box is. 64px art draws at ¼ inside it — 16 device-crisp pixels. */
+const ROW_ICON = 16;
+
+/**
+ * The row's picture, or the same lettered chip every other missing frame gets ([[037]]:
+ * never magenta). `CellIcon` in `BuildMenu.tsx` is the template, deliberately — a sidebar
+ * whose missing art degrades differently from the panels it opens would read as two games.
+ */
+function RowIcon({ frame, name }: { frame: string; name: string }) {
+  const source = resolveFrameIcon(frame);
+
+  if (source === null) {
+    return (
+      <span
+        className={cx(s.icon, s.iconBlank)}
+        style={{ width: ROW_ICON, height: ROW_ICON, fontSize: 9 }}
+        aria-hidden="true"
+      >
+        {name.charAt(0).toUpperCase()}
+      </span>
+    );
+  }
+
+  const paint = paintIcon(source, ROW_ICON);
+  return (
+    <span
+      className={s.icon}
+      style={{
+        width: ROW_ICON,
+        height: ROW_ICON,
+        backgroundImage: paint.backgroundImage,
+        backgroundPosition: paint.backgroundPosition,
+        backgroundSize: paint.backgroundSize,
+      }}
+      aria-hidden="true"
+    />
   );
 }
 

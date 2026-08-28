@@ -32,7 +32,18 @@
  */
 export type PanelRequest = 'shop' | 'research' | 'inventory';
 
-export type PanelListener = (panel: PanelRequest) => void;
+/**
+ * What a request may carry beside the panel's name ([[148]]): a locked build row asks for
+ * the research panel OPEN ON THE NODE THAT LOCKS IT, and the id rides the request rather
+ * than a second seam. Still a signal, not state — nothing here remembers the id, and a
+ * listener that subscribes late hears nothing, exactly as the header promises.
+ */
+export interface PanelRequestOptions {
+  /** For `'research'`: the tech node the panel should arrive focused on. */
+  readonly techId?: string;
+}
+
+export type PanelListener = (panel: PanelRequest, options?: PanelRequestOptions) => void;
 
 const listeners = new Set<PanelListener>();
 
@@ -40,8 +51,8 @@ const listeners = new Set<PanelListener>();
  * Ask the HUD to open a panel. A no-op when nothing is listening, which is exactly what
  * should happen in a test, on the server, and in the seconds before the HUD mounts.
  */
-export function requestPanel(panel: PanelRequest): void {
-  for (const listener of listeners) listener(panel);
+export function requestPanel(panel: PanelRequest, options?: PanelRequestOptions): void {
+  for (const listener of listeners) listener(panel, options);
 }
 
 /**

@@ -96,3 +96,48 @@ export function formatRate(centsPerMin: number): string {
   const sign = centsPerMin > 0 ? '+' : '';
   return `${sign}${formatCents(centsPerMin)}`;
 }
+
+/**
+ * The suffix ladder for the hourly rate, largest first. `T` is a guard rather than a goal:
+ * nothing in the balance sheet reaches a trillion dollars an hour, but a formatter that fell
+ * off the top of its own ladder would print "$1,500,000.0B", which is worse than wrong — it
+ * is wrong AND long.
+ */
+const RATE_SUFFIXES: readonly {
+  readonly floor: number;
+  readonly divisor: number;
+  readonly suffix: string;
+}[] = [
+  { floor: 1_000_000_000_000, divisor: 1_000_000_000_000, suffix: 'T' },
+  { floor: 1_000_000_000, divisor: 1_000_000_000, suffix: 'B' },
+  { floor: 1_000_000, divisor: 1_000_000, suffix: 'M' },
+  // K starts at $10,000, not $1,000: "$9,999" reads fine and "$9.9K" hides two digits the
+  // player still cares about at that scale. The suffix kicks in when it gets satisfying
+  // ([[149]] — the big-number fantasy is the point of the game's late economy).
+  { floor: 10_000, divisor: 1_000, suffix: 'K' },
+];
+
+/**
+ * The Ticker's hourly rate ([[149]]): cents per minute in, "$4,320" / "+$12.4K" / "−$3.1M" out.
+ *
+ * THE SLICE STAYS IN CENTS PER MINUTE and the ×60 happens here, at format time — the research
+ * ETA in `TechTree.tsx` divides by the same per-minute field and must keep doing so. Under
+ * $10,000 an hour the rendering is plain grouped whole dollars; at and above it, the largest
+ * suffix that fits, with ONE decimal, truncated toward zero like every other rendering in this
+ * file — a rate never reads higher than it is. The sign follows `formatRate`'s convention: "+"
+ * on a gain, U+2212 on a loss, nothing at zero (the Ticker's idle dash is the caller's branch,
+ * exactly as the header's no-sentinels rule demands).
+ */
+export function formatCompactRatePerHour(centsPerMin: number): string {
+  const perHourCents = centsPerMin * 60;
+  const sign = perHourCents > 0 ? '+' : perHourCents < 0 ? MINUS : '';
+  const dollars = Math.floor(Math.abs(perHourCents) / 100);
+
+  for (const rung of RATE_SUFFIXES) {
+    if (dollars < rung.floor) continue;
+    const whole = Math.floor(dollars / rung.divisor);
+    const tenth = Math.floor(((dollars % rung.divisor) * 10) / rung.divisor);
+    return `${sign}$${groupDigits(whole)}.${String(tenth)}${rung.suffix}`;
+  }
+  return `${sign}$${groupDigits(dollars)}`;
+}

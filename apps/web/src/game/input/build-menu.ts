@@ -324,6 +324,13 @@ export interface BuildRow {
   readonly affordable: boolean;
   /** The atlas frame the cell draws, straight off the entry. See `BuildEntry.frame`. */
   readonly frame: string;
+  /**
+   * The tech slug behind a locked row, straight off the entry ([[148]]) — the id
+   * `armVerdict` hands to the research panel, so a locked click can GO somewhere instead of
+   * dying. `null` for rows no node gates, including the sold-out deed, whose lock is about
+   * the land rather than the tree.
+   */
+  readonly requiresTech: string | null;
 }
 
 /**
@@ -361,9 +368,42 @@ export function buildRows(view: WorldView | null): BuildRow[] {
       lockReason: soldOut ? 'the whole lot is yours' : open ? '' : `needs ${techLabel}`,
       affordable: cost <= 0 || money >= cost,
       frame: entry.frame,
+      requiresTech: entry.requiresTech,
     });
   }
   return rows;
+}
+
+// --- what arming a cell should do ----------------------------------------------------------
+
+/**
+ * The verdict on arming one cell ([[148]]), as a pure function for the same reason
+ * `escapeRung` is one: the decision lives in `InputSystem.armMenuIndex`, which needs a host
+ * and a canvas, and a decision buried there is a decision nothing can pin.
+ */
+export type MenuArmVerdict =
+  | { readonly act: 'arm' }
+  /** Locked behind a node: close the menu, open the manual on that node. */
+  | { readonly act: 'research'; readonly techId: string }
+  /** Locked with nowhere to send the player — the sold-out deed. Stay silent. */
+  | { readonly act: 'refuse' };
+
+/**
+ * A LOCKED CELL USED TO REFUSE, FULL STOP — correct about the world (the sim would discard
+ * the command) and useless to the player, who was told "needs Belts" and left to find Belts
+ * on their own. A lock that names a tech now ANSWERS the click by taking the player to that
+ * node ([[148]], owner: "When I click something in the build menu that is locked behind
+ * research, take me to the research"). The one lock with no tech behind it — a deed row
+ * reading "the whole lot is yours" — keeps the old silence, because there is nothing to
+ * research about owning everything already.
+ */
+export function armVerdict(
+  row: { readonly locked: boolean; readonly requiresTech: string | null } | undefined,
+): MenuArmVerdict {
+  if (row === undefined) return { act: 'refuse' };
+  if (!row.locked) return { act: 'arm' };
+  if (row.requiresTech !== null) return { act: 'research', techId: row.requiresTech };
+  return { act: 'refuse' };
 }
 
 /**

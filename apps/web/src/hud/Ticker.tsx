@@ -1,6 +1,6 @@
 'use client';
 
-// The Ticker — the money on hand, the $/min, and the in-game clock. That is all of it now.
+// The Ticker — the money on hand, the $/hr, and the in-game clock. That is all of it now.
 //
 // THE NEXT-PURCHASE CARD IS GONE, BY RULING ([[076]], owner, 2026-08-15, from play: "This box
 // can go away. I don't think it's adding any value, and it's taking too much space"). The
@@ -14,7 +14,7 @@
 
 import { useEffect, useRef } from 'react';
 
-import { formatCents, formatRate } from './format';
+import { formatCents, formatCompactRatePerHour } from './format';
 import { cx, s } from './styles';
 import { hudStore } from './store';
 import { useHudSlice } from './use-hud';
@@ -45,8 +45,12 @@ export function Ticker() {
       </div>
 
       <div className={s.rateRow}>
+        {/* PER HOUR SINCE [[149]], compact at scale — the slice stays cents/min (the research
+            ETA divides by it); the ×60 and the K/M/B ladder live in `formatCompactRatePerHour`. */}
         <span className={`${s.rate} ${rateClass}`}>
-          {economy.rateSettled === 0 ? '—— / min' : `${formatRate(economy.rateCentsPerMin)} / min`}
+          {economy.rateSettled === 0
+            ? '—— / hr'
+            : `${formatCompactRatePerHour(economy.rateCentsPerMin)} / hr`}
         </span>
         <span className={s.clock} ref={clockRef} />
       </div>

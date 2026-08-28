@@ -107,7 +107,8 @@ export function BagToggle({ open, onToggle }: { open: boolean; onToggle: () => v
             : `${kinds} ${kinds === 1 ? 'kind' : 'kinds'}`
       }
       hotkey="I"
-      title="The bag — everything you are carrying, centred over the lot"
+      title="The bag — everything you are carrying, and the machines you have boxed · I"
+      frame="ui_menu_bag"
       open={open}
       lit={boxed > 0}
       onToggle={onToggle}

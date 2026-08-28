@@ -54,8 +54,15 @@ import { buildMenuClose, buildMenuSnapshot, subscribeBuildMenu } from '../game/i
  * game", which shares that button's known limitation of folding away with the dock. It joins
  * THIS union all the same, because a window over the canvas obeys the one-open invariant no
  * matter what kind of thing it is.
+ *
+ * SEVEN WITH DISPATCH ([[150]]). It lived in the reports dock as a tab; the owner moved it
+ * into the sidebar under Build, so it is a `PanelRow` over a `PanelWindow` now like the
+ * gameplay five — one more name here, one row, one window, no new machinery, exactly the
+ * bar `PanelFrame.tsx` set. Its BODY stays in `reports/` (`CommercePanel`, fed by the
+ * reports store); only the mount and the chrome moved, which is precisely the distinction
+ * this module never cared about.
  */
-export type LocalPanel = 'research' | 'shop' | 'bag' | 'zones' | 'account';
+export type LocalPanel = 'research' | 'shop' | 'bag' | 'zones' | 'account' | 'dispatch';
 /** Everything `panelSnapshot` can answer — the build float's truth lives in the input layer. */
 export type PanelName = LocalPanel | 'build';
 

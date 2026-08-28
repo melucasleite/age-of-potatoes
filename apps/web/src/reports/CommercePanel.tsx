@@ -34,6 +34,13 @@
 // no debug path, and disables its own controls when there is nowhere to send a command —
 // because a button that looks live and does nothing is worse than one that admits it.
 
+// A PANEL BODY SINCE [[150]], NOT A DOCK CARD. The owner moved dispatch out of the reports
+// dock — "Make dispatch it's own menu under build" — so this renders inside the HUD's shared
+// `PanelWindow` (`hud/Dispatch.tsx`) now: the window head carries the title and the shipped
+// figure, the window footer carries the hint, and the old `r.card`/`r.panel` rail chrome is
+// gone. Everything INSIDE is untouched — same rows, same store, same four commands — which
+// is the point: the mount moved, the machine did not.
+
 import { useState } from 'react';
 
 import { formatCents, formatTicks } from './format';
@@ -72,17 +79,7 @@ export function CommercePanel() {
   const chosenDepot = commerce.depots.find((d) => d.id === depotId) ?? fallbackDepot;
 
   return (
-    <div className={cx(r.card, r.panel)}>
-      <div className={r.head}>
-        <span className={r.label}>Dispatch</span>
-        <span className={r.sub}>
-          {commerce.automatedGrossCents > 0
-            ? `${formatCents(commerce.automatedGrossCents)} shipped`
-            : 'prices posted'}
-        </span>
-      </div>
-      <div className={r.rule} />
-
+    <div>
       {/* --- the assisted rung ------------------------------------------------------- */}
 
       <span className={r.label}>Delivery carts</span>

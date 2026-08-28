@@ -7,7 +7,12 @@
 // two-line consolidation look like a fifteen-file change. Import either path; they are the
 // same function.
 
-export { formatCents, formatCentsWhole, formatRate } from '../format/money';
+export {
+  formatCents,
+  formatCentsWhole,
+  formatCompactRatePerHour,
+  formatRate,
+} from '../format/money';
 
 /**
  * Seconds → "~4 min". Deliberately vague: an ETA precise to the second invites the player

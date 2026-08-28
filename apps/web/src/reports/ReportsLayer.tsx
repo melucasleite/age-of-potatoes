@@ -14,13 +14,12 @@
 //   · Everything else lives behind a tab and is closed by default. A report that is always
 //     open stops being read after the second hour.
 //
-// THE KEYBOARD RULE THIS FILE OBEYS. `game/input/keyboard.ts` owns Space, WASD, the arrows,
-// the digits, B, R, C, +/−, Escape, F3 and the backtick. This listener claims exactly one key
-// the game does not use, never calls `preventDefault`, and bails on any modifier or on a
-// keystroke aimed at a form control — so it cannot swallow a keystroke meant for the lot, and
-// it cannot break the select elements in its own panel.
+// NO KEY BELONGS TO THIS LAYER ANY MORE ([[150]]). P was the Shift Report's, briefly the
+// Bests tab's, and it left with dispatch: the sidebar's Dispatch panel wears it now, bound in
+// `HudRoot` beside T, G, I and Z. The two tabs that remain — Bests and Ranks — are read-only
+// ledgers a player visits on purpose, and click-only is the honest price of that.
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 
 // A leaf module, not the `@/hud` barrel — one integer, no React tree. The dock sits at the
 // top of the CANVAS region ([[076]]), and "where the canvas starts" has exactly one home —
@@ -35,15 +34,15 @@ import {
 } from '@/hud/layout';
 
 import { BoardsPanel } from './BoardsPanel';
-import { CommercePanel } from './CommercePanel';
 import { DawnCard } from './DawnCard';
 import { LeaderboardPanel } from './LeaderboardPanel';
 import { r, cx } from './styles';
 
-// Two tabs fewer since item 150: Shift and Diagnostics went with their ledgers and slices,
-// and Dispatch is next to leave — a later item moves it out of the dock into its own
-// sidebar panel under Build.
-type Tab = 'boards' | 'ranks' | 'dispatch';
+// Three tabs fewer since item 150: Shift and Diagnostics went with their ledgers and
+// slices, and Dispatch moved out of the dock entirely — it is a sidebar panel under Build
+// now (`hud/Dispatch.tsx`), because a surface whose every button enqueues a `Command` was
+// never a report.
+type Tab = 'boards' | 'ranks';
 
 const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   { id: 'boards', label: 'Bests' },
@@ -51,44 +50,11 @@ const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   // panel degrades to one quiet sentence when Supabase is absent, so the tab earns its
   // place even in a fork with no backend.
   { id: 'ranks', label: 'Ranks' },
-  { id: 'dispatch', label: 'Dispatch' },
 ];
-
-/** The one key this layer claims. The game does not use it; see the header. */
-const TOGGLE_CODE = 'KeyP';
 
 export default function ReportsLayer() {
   const [open, setOpen] = useState<Tab | null>(null);
   const collapsed = useSyncExternalStore(subscribeSidebar, sidebarCollapsed, sidebarServerSnapshot);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.code !== TOGGLE_CODE) return;
-      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
-
-      // A keystroke aimed at a form control belongs to the form control. Without this, typing
-      // in the contract panel's own selects would toggle the panel out from under the caret.
-      const target = event.target;
-      if (target instanceof HTMLElement) {
-        const tag = target.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) {
-          return;
-        }
-      }
-
-      // Deliberately no `preventDefault()`. Nothing in the browser does anything with a bare
-      // P, and a layer that swallows keys is one bug away from swallowing a key the game
-      // needed.
-      // P opens Bests now that its old meaning (the Shift Report) is gone; a later lane
-      // re-points P to the dispatch panel when dispatch leaves this dock.
-      setOpen((current) => (current === null ? 'boards' : null));
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, []);
 
   return (
     <div className={r.layer}>
@@ -115,14 +81,12 @@ export default function ReportsLayer() {
               }}
             >
               {tab.label}
-              {tab.id === 'boards' ? <span className={r.tabKey}>P</span> : null}
             </button>
           ))}
         </div>
 
         {open === 'boards' ? <BoardsPanel /> : null}
         {open === 'ranks' ? <LeaderboardPanel /> : null}
-        {open === 'dispatch' ? <CommercePanel /> : null}
       </div>
     </div>
   );

@@ -91,8 +91,11 @@ describe('one float at a time — bag versus build', () => {
  * with it the excuse for testing a sample. Twelve orderings, none of them special.
  *
  * The table is the point. A fifth panel is one entry here and it inherits eleven new cases.
+ * DISPATCH IS THAT ENTRY ([[150]]): it moved out of the reports dock into this invariant,
+ * and the row below is the whole of its membership dues — build-then-dispatch and
+ * dispatch-then-build fall out of the pairwise loop like everyone else's.
  */
-const PANELS = ['research', 'shop', 'bag', 'build'] as const;
+const PANELS = ['research', 'shop', 'bag', 'build', 'dispatch'] as const;
 type Panel = (typeof PANELS)[number];
 
 /** Open one, through whichever layer owns it — the asymmetry the invariant has to survive. */
