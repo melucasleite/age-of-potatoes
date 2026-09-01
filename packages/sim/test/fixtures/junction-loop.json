@@ -3,7 +3,7 @@
   "description": "Item 024 instruction 11: a closed belt circuit through two junctions — one splitting one feed across two branches, one merging them back — with the goods circulating forever and both round-robin cursors advancing in the hash. Re-recorded 2026-08-27 on the original loop’s exact geometry: item 145 deleted the Chip Kitchen that fed it, so a Grinder stands on the same 2×2 grinding bought kola nuts, the session opens with klapaucius (the story is the junctions, not the economy), and the powder rides the same belts the bags did. factory.test.ts replays it watching and asserts the alternation and that goods reach every belt in the loop. See scripts/record-junction-loop.ts.",
   "seed": 626262,
   "ticks": 6098,
-  "expectedHash": "cb4fe091",
+  "expectedHash": "bd2f7d19",
   "commands": [
     {
       "tick": 0,

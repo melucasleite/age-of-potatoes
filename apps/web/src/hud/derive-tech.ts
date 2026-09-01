@@ -36,6 +36,7 @@ import {
   UPGRADE_MAX_LEVEL,
   UpgradeDial,
   upgradeCostCents,
+  acceptsUpgradeDial,
   acceptsUpgrades,
   distanceSquaredSubtiles,
   divFloor,
@@ -47,7 +48,7 @@ import {
 } from '@snack/sim';
 import type { MachineSpec, MachineView, TechNode, WorldView } from '@snack/sim';
 
-import { dialCopy, machineLabel, nodeCopy } from './tech-copy';
+import { dialCopy, machineLabel, nodeCopy, pumpSpeedCopy } from './tech-copy';
 import type { BenchDial, TechCard, TechRequirement, TechStatus } from './types';
 
 /** The mutable scratch the store fills each publish, mirroring `BenchSlice` minus its version. */
@@ -168,7 +169,9 @@ export interface TechFields {
  * Machines that run a work cycle — the Assembly Charter's visible half.
  *
  * Mirrors `workingMachineCount` in `tick.ts` by asking the same question of the same spec
- * field, through the sim's own `acceptsUpgrades`. Two callers, one predicate.
+ * field. It reads `workPerOperation` directly, NOT `acceptsUpgrades` — the two said the same
+ * thing until the pump joined the bench with a Speed dial, and a pump on the bench must not
+ * be a machine on the charter.
  */
 function workingMachineCount(view: WorldView): number {
   let count = 0;
@@ -176,7 +179,7 @@ function workingMachineCount(view: WorldView): number {
     // The view carries plain numbers by rule — no enums across the boundary (§12) — so the
     // kind widens on the way out and narrows here, exactly as `Toolbelt` does with tool ids.
     const spec = machineSpec(machine.kind as MachineKind);
-    if (spec !== null && acceptsUpgrades(spec)) count += 1;
+    if (spec !== null && spec.workPerOperation > 0) count += 1;
   }
   return count;
 }
@@ -323,6 +326,19 @@ function secondsPerOperation(spec: MachineSpec, speedLevel: number): string {
   return `${(ticks / TICKS_PER_SECOND).toFixed(1)}s`;
 }
 
+/**
+ * A pump's rated flow at a given Speed level, said in the unit the tank card already speaks.
+ * Same +30%-per-level arithmetic as the sim's `effectivePumpRateMlPerMinute`, restated here
+ * only because that function takes a sim `Machine` and the bench holds a `MachineView`.
+ */
+function pumpLitresPerMinute(spec: MachineSpec, speedLevel: number): string {
+  const ml = divFloor(
+    spec.pumpRateMlPerMinute * (100 + SPEED_RATE_BONUS_PERCENT_PER_LEVEL * speedLevel),
+    100,
+  );
+  return `${Math.floor(ml / 1000).toLocaleString('en-US')} L a minute`;
+}
+
 /** Condition points lost per operation at a given Efficiency level, before the Speed penalty. */
 function wearAt(spec: MachineSpec, efficiencyLevel: number, speedLevel: number): number {
   if (spec.wearPerOperation <= 0) return 0;
@@ -357,11 +373,17 @@ function buildDial(
         : machine.capacityLevel;
 
   const costCents = upgradeCostCents(spec, level, dial as UpgradeDial);
-  const copy = dialCopy(dial);
+  // A pump's Speed dial is a different sentence in every slot: no batches, no wear trade —
+  // it pushes more water, full stop. Copy from the same file every other dial reads.
+  const isPump = spec.workPerOperation <= 0 && spec.pumpRateMlPerMinute > 0;
+  const copy = isPump && dial === UpgradeDial.Speed ? pumpSpeedCopy() : dialCopy(dial);
 
   let now = '';
   let next = '';
-  if (dial === UpgradeDial.Speed) {
+  if (dial === UpgradeDial.Speed && isPump) {
+    now = pumpLitresPerMinute(spec, level);
+    next = level < UPGRADE_MAX_LEVEL ? pumpLitresPerMinute(spec, level + 1) : '';
+  } else if (dial === UpgradeDial.Speed) {
     now = `${secondsPerOperation(spec, level)} a batch`;
     next = level < UPGRADE_MAX_LEVEL ? `${secondsPerOperation(spec, level + 1)} a batch` : '';
   } else if (dial === UpgradeDial.Efficiency) {
@@ -459,20 +481,25 @@ export function deriveBench(view: WorldView, out: BenchFields): BenchFields {
   out.label = machineLabel(best.kind);
   out.conditionPermille = best.conditionPermille;
   out.listPriceCents = bestSpec.priceCents;
-  out.dials = [
-    buildDial(UpgradeDial.Speed, bestSpec, best, view.moneyCents),
-    buildDial(UpgradeDial.Efficiency, bestSpec, best, view.moneyCents),
-    buildDial(UpgradeDial.Capacity, bestSpec, best, view.moneyCents),
-  ];
+  // Only the dials this machine actually takes — the same `acceptsUpgradeDial` the reducer
+  // gates on, so the panel can never offer a level the sim would refuse. A converter gets all
+  // three rows; a pump gets Speed alone, because it has no wear for Efficiency to spare and
+  // no buffer for Capacity to grow.
+  out.dials = [];
+  for (const dial of [UpgradeDial.Speed, UpgradeDial.Efficiency, UpgradeDial.Capacity]) {
+    if (!acceptsUpgradeDial(bestSpec, dial)) continue;
+    out.dials.push(buildDial(dial, bestSpec, best, view.moneyCents));
+  }
 
   // --- can it go in a box right now ---
   //
   // `applyDeconstructMachine` refuses two states and no others: jammed, and mid-batch. The
-  // lamp is the mirror, and it is an exact one HERE and only here — the bench's subject is
-  // always a machine with a work cycle (`acceptsUpgrades` is `workPerOperation > 0`), which in
-  // the current data means always a Converter, and for a Converter the green lamp means
-  // precisely "recipe satisfied, output has room, condition above zero", which is the sim's
-  // `isMachineWorking` word for word.
+  // lamp is the mirror, and for a machine WITH a work cycle it is an exact one — for a
+  // Converter the green lamp means precisely "recipe satisfied, output has room, condition
+  // above zero", which is the sim's `isMachineWorking` word for word. A PUMP is the bench's
+  // one subject without a work cycle, and for it the green lamp means only "water is
+  // flowing" — a state `isMachineWorking` calls vacuously idle and the reducer boxes without
+  // complaint — so the mid-batch half of the mirror applies to work-cycle machines only.
   //
   // ⚠️ AND THE ONE PLACE IT IS NOT EXACT, so nobody has to rediscover it: a machine whose
   // liquid inlet is full but THROTTLED shows amber, while the sim would still call it working.
@@ -481,7 +508,7 @@ export function deriveBench(view: WorldView, out: BenchFields): BenchFields {
   // restating `recipeSatisfied` against `MachineView`, i.e. keeping a copy of the rule the
   // tombstone in this file exists to warn about, which is a worse trade than one dead click.
   const jammed = best.lamp === LampState.Jammed;
-  const working = best.lamp === LampState.Running;
+  const working = bestSpec.workPerOperation > 0 && best.lamp === LampState.Running;
   out.boxable = jammed || working ? 0 : 1;
   out.boxBlocked = jammed
     ? 'Whack the jam out of it first.'

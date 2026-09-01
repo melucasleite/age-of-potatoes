@@ -431,3 +431,19 @@ export const DIAL_COPY: Readonly<Record<number, DialCopy>> = {
 export function dialCopy(dial: number): DialCopy {
   return DIAL_COPY[dial] ?? { name: 'Dial', trade: '', effect: '' };
 }
+
+/**
+ * The pump's Speed dial, which is the one dial in the game with genuinely no trade. The
+ * standard Speed copy promises extra wear, and a pump has none to give — irrigation carries
+ * no wear in this release — so saying so would be inventing a catch, the exact sin the
+ * Capacity note above warns against.
+ */
+export const PUMP_SPEED_COPY: DialCopy = {
+  name: 'Speed',
+  trade: 'More water down the same pipe. Nothing wears, nothing is given up.',
+  effect: 'a stronger rated flow for the whole network to divide',
+};
+
+export function pumpSpeedCopy(): DialCopy {
+  return PUMP_SPEED_COPY;
+}

@@ -9,9 +9,9 @@
 // machine you are actually at.
 //
 // WHY THIS IS A CARD AND NOT A ROW IN THE BENCH is argued at length in `derive-dock.ts`. The short
-// version: `acceptsUpgrades` is `workPerOperation > 0`, a dock's is 0 because its BOT does the
-// work, and letting a dock into the bench means four special cases in a panel whose whole argument
-// is that every control states its trade.
+// version: `acceptsUpgrades` takes machines with a dial worth selling (a work cycle, or the pump's
+// rated flow), a dock has neither because its BOT does the work, and letting a dock into the bench
+// means four special cases in a panel whose whole argument is that every control states its trade.
 //
 // WHAT THE CARD REFUSES TO DO, and it is the same refusal the bag makes:
 //

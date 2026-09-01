@@ -51,6 +51,7 @@ import {
   divFloor,
   createWorldView,
   effectiveInputCapacity,
+  effectivePumpRateMlPerMinute,
   machineHoppers,
   machineRecipes,
   effectiveWastePeriod,
@@ -1097,16 +1098,16 @@ describe('belts', () => {
     // segment is the far view's whole job.
     expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(0);
 
-    // One item in four shoulder-to-shoulder slots: a quarter of the tier's 320.
+    // One item in four shoulder-to-shoulder slots: a quarter of the tier's 400.
     beltInsert(belt, 0, ItemId.RussetPotato);
-    expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(80);
+    expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(100);
 
     // Packed solid: exactly the tier speed, never more — a surface outrunning its goods
     // would be a lie told at the zoom where the player reads circulation.
     beltInsert(belt, 64, ItemId.RussetPotato);
     beltInsert(belt, 128, ItemId.RussetPotato);
     beltInsert(belt, 192, ItemId.RussetPotato);
-    expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(320);
+    expect(view(state, createWorldView()).belts[0]!.throughputSubtilesPer100Ticks).toBe(400);
   });
 
   it('reads throughput, not velocity: a trickle on an express loses to a packed basic', () => {
@@ -1934,6 +1935,35 @@ describe('tech and upgrades', () => {
     expect(state.moneyCents).toBeLessThan(before);
     // Net worth invoices the machine at what it cost, upgrades included.
     expect(kitchen.investedCents).toBeGreaterThan(machineSpec(MachineKind.Washer)!.priceCents);
+  });
+
+  it('sells the pump exactly one dial: Speed moves the flow, the other two are refused', () => {
+    // Owner order 2026-09-01: the pump joins the bench, but with no wear and no buffer it has
+    // nothing for Efficiency or Capacity to change — so the sim refuses those two dials the
+    // way it refuses any dial on a sprinkler, and Speed carries no maintenance trade.
+    const state = createWorld(45);
+    const pump = spawnMachine(state, MachineKind.Pump, 0, 0)!;
+    const spec = machineSpec(MachineKind.Pump)!;
+    standOn(state, 0, 0);
+    state.unlocked = [TechId.UpgradeBench];
+    state.moneyCents = 1_000_000;
+
+    const baseFlow = effectivePumpRateMlPerMinute(spec, pump);
+
+    run(state, [{ type: 'UpgradeMachine', machineId: pump.id, dial: UpgradeDial.Efficiency }]);
+    run(state, [{ type: 'UpgradeMachine', machineId: pump.id, dial: UpgradeDial.Capacity }]);
+    expect(pump.efficiencyLevel).toBe(0);
+    expect(pump.capacityLevel).toBe(0);
+
+    const before = state.moneyCents;
+    run(state, [{ type: 'UpgradeMachine', machineId: pump.id, dial: UpgradeDial.Speed }]);
+    expect(pump.speedLevel).toBe(1);
+    expect(state.moneyCents).toBeLessThan(before);
+    expect(pump.investedCents).toBeGreaterThan(spec.priceCents);
+    // The same +30% every other Speed dial buys, on the one number a pump has.
+    expect(effectivePumpRateMlPerMinute(spec, pump)).toBeGreaterThan(baseFlow);
+    // And no upkeep rides along: a pump has no wear for the Speed penalty to inflate.
+    expect(effectiveWear(spec, pump)).toBe(0);
   });
 });
 

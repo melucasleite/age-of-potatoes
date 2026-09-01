@@ -266,7 +266,7 @@ import {
   techNode,
 } from './tech';
 import {
-  acceptsUpgrades,
+  acceptsUpgradeDial,
   effectiveInputCapacity,
   effectiveOutputCapacity,
   effectivePortCapacityMl,
@@ -1721,7 +1721,9 @@ function applyUpgradeMachine(state: WorldState, command: UpgradeMachineCommand):
   if (machine === null || !withinReachOfMachine(state, machine)) return false;
 
   const spec = machineSpec(machine.kind);
-  if (spec === null || !acceptsUpgrades(spec)) return false;
+  // Per-dial, not per-machine: a pump is on the bench for Speed alone, and a command naming
+  // one of the dials it does not take is refused exactly as a dial on a sprinkler is.
+  if (spec === null || !acceptsUpgradeDial(spec, command.dial)) return false;
 
   const level = upgradeLevel(machine, command.dial);
   if (level >= UPGRADE_MAX_LEVEL) return false;

@@ -3219,8 +3219,8 @@ export interface BeltSpec {
   readonly tier: BeltTier;
   readonly slug: string;
   /**
-   * Subtiles travelled per 100 ticks. Per-100 because 60 items/min at 20 Hz is 3.2
-   * subtiles/tick, and rounding that to 3 would quietly make every belt 6% slow. The
+   * Subtiles travelled per 100 ticks. Per-100 because 120 items/min at 20 Hz is 6.4
+   * subtiles/tick, and rounding that to 6 would quietly make the belt 6% slow. The
    * remainder accrues in the belt's own accumulator, exactly as player movement does.
    */
   readonly speedSubtilesPer100Ticks: number;
@@ -3229,12 +3229,17 @@ export interface BeltSpec {
   readonly requiresTech: string;
 }
 
-/** Plan §5's three tiers: 60 / 120 / 240 items per minute. */
+/**
+ * Plan §5's three tiers, originally 60 / 120 / 240 items per minute. The Basic tier now runs
+ * 25% hotter — 75/min — by owner order (2026-09-01): the first belts a player lays should feel
+ * like an upgrade over walking, not a sidegrade. Fast and Express are untouched, so the ladder
+ * still roughly doubles per rung and the top two rungs keep their exact 2× ratio.
+ */
 export const BELT_SPECS: readonly BeltSpec[] = [
   {
     tier: BeltTier.Basic,
     slug: 'belt-basic',
-    speedSubtilesPer100Ticks: 320,
+    speedSubtilesPer100Ticks: 400,
     priceCentsPerTile: 150,
     requiresTech: TechId.Belts,
   },
@@ -3292,7 +3297,10 @@ export const GRABBER_SPECS: readonly GrabberSpec[] = [
   {
     tier: GrabberTier.Mk1,
     slug: 'grabber-mk1',
-    swingTicks: 10,
+    // 8 rather than the 10 it shipped with (owner order 2026-09-01, the same +25% the Basic
+    // belt got): a full swing is two of these, so 16 ticks a cycle is 75 moves a minute —
+    // exactly the Basic belt's new throughput, which keeps one Mk1 able to feed one belt.
+    swingTicks: 8,
     reachTiles: 1,
     priceCents: 500,
     filterable: false,

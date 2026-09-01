@@ -271,6 +271,7 @@ export type { TechNode } from './tech';
 
 // --- per-machine upgrades ---------------------------------------------------------
 export {
+  acceptsUpgradeDial,
   acceptsUpgrades,
   effectiveInputCapacity,
   effectiveOutputCapacity,

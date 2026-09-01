@@ -37,8 +37,9 @@
 // IT IS NOT THE ONLY DOOR THIS VERB SHOULD HAVE. Item 054's instruction 6 wants a click on a
 // DISTANT machine to walk there first (`IntentAction.Deconstruct` exists in the sim and is
 // exercised by its fixture), and that lives in the input layer's pointer wiring, not here. Until
-// it lands, this button is the whole of it — which also means a machine with no work cycle and
-// therefore no bench (a sprinkler, a tank, a pump) cannot be boxed from the HUD yet.
+// it lands, this button is the whole of it — which also means a machine with no bench (a
+// sprinkler, a tank) cannot be boxed from the HUD yet. The pump graduated off that list when
+// it grew a Speed dial: it has a bench card now, and the box button rides along.
 
 import { useCallback } from 'react';
 

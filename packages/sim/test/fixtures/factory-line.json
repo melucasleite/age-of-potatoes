@@ -3,7 +3,7 @@
   "description": "The chip line, end to end: twenty hand-farmed russets go down Washer → belt → Slicer → Fryer → Seasoner → Bagger with five grabber arms and come out as twenty bagged chips sold at the bin. Opens with klapaucius — item 145 deleted the Chip Kitchen economy the original farmed, and the tech climb is soda-line’s story now — but the potatoes are honestly grown, because they have never been purchasable. Along the way: a deed bought, a Grow Zone created, painted and renamed, an Mk2 arm filtered to washed potatoes, a spare arm turned full circle and removed, a spare belt removed, a Speed dial on the Fryer, and a spare Washer moved, boxed by hand, and scrapped at 40%. Guards the whole factory: belt movement and hand-off, grabber swings, upgrade arithmetic, zone painting, and the machine-management verbs. Re-recorded 2026-08-27; see scripts/record-factory-line.ts.",
   "seed": 70707,
   "ticks": 4411,
-  "expectedHash": "70ab6322",
+  "expectedHash": "524b98e2",
   "commands": [
     {
       "tick": 0,
