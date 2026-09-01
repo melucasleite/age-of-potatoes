@@ -40,10 +40,10 @@ function run(state: WorldState, commands: Command[]): void {
 
 /**
  * How far a Basic belt drifts its goods in the one tick `run` advances after applying the
- * command: floor(320 / 100). Assertions on exact `dist` add it, because a command is applied
+ * command: floor(400 / 100). Assertions on exact `dist` add it, because a command is applied
  * at the tick boundary and the world then moves.
  */
-const DRIFT = 3;
+const DRIFT = 4;
 
 /** Put the player on a tile so the reach-gated rotate is in reach. Position is not a command. */
 function standOn(state: WorldState, tileX: number, tileY: number): void {

@@ -577,6 +577,12 @@ describe('golden story: the supplied drone bay holds the factory steady', () => 
     // counter chain, cut with the Charter) and the two zone auto-replant fields (retired).
     // This watch has no zones, and every machine in it kept doing exactly what it did — every
     // story assertion above still passes untouched, so the move is shape, not behaviour.
-    expect(hashState(state)).toBe('88389c6f');
+    // 88389c6f -> 0dedc630 (2026-09-01): the Basic belt sped up 320 -> 400 subtiles per 100
+    // ticks and the Mk1 grabber's half-swing 10 -> 8 (the tier-1 +25%, owner order). This
+    // watch runs both, so goods genuinely arrive sooner and every position, accumulator and
+    // freshness clock downstream lands differently — a BEHAVIOUR change, wanted and priced.
+    // Every story assertion above still passes: the wrench came due, the drone answered, and
+    // the factory ended the watch healthy, just 25% better fed.
+    expect(hashState(state)).toBe('0dedc630');
   });
 });

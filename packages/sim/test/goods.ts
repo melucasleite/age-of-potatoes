@@ -1415,7 +1415,11 @@ export function containersFilledWorld(seed: number): WorldState {
   fryer.outputCount = 4;
   fryer.overcookedCount = 3;
 
-  const belt = spawnBelt(state, BeltTier.Basic, 2, 12, Direction.East, 4)!;
+  // FAST TIER, AND THE CHOICE IS LOAD-BEARING: the census needs `belts[].moveAccum` filled,
+  // and the Basic belt's 400/100 divides without remainder every tick, so its accumulator is
+  // a permanent zero. Fast's 640 leaves 40 behind after one tick, which is exactly the
+  // fractional carry the field exists to round-trip.
+  const belt = spawnBelt(state, BeltTier.Fast, 2, 12, Direction.East, 4)!;
   beltInsert(belt, 0, ItemId.RussetPotato);
   const grabber = spawnGrabber(state, GrabberTier.Mk1, 7, 12, Direction.East, 0)!;
   grabber.held = ItemId.RussetPotato;

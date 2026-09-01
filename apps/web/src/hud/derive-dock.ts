@@ -16,9 +16,10 @@
 // at it. This file is the reading half of that; `DockCard.tsx` is the pointing half.
 //
 // WHY IT IS NOT PART OF THE BENCH, since `UpgradeBench.tsx` is already the at-the-machine card
-// and a dock is a machine you stand at. `deriveBench` picks its subject with `acceptsUpgrades`,
-// which is `workPerOperation > 0` — and a dock's is 0, in the sim's own spec, because a dock does
-// no work: its BOT does. So a dock could only get into the bench by widening that predicate, and
+// and a dock is a machine you stand at. `deriveBench` picks its subject with `acceptsUpgrades` —
+// a work cycle, or the pump's rated flow — and a dock has neither, in the sim's own spec, because
+// a dock does no work: its BOT does. So a dock could only get into the bench by widening that
+// predicate, and
 // then the bench would be drawing three dials it cannot price, a progress-derived "boxable"
 // mirror off a lamp that never turns green, and a condition bar for a machine whose
 // `wearPerOperation` is 0 while the wear it actually has lives on an entity the bench has never

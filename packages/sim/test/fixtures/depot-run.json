@@ -3,7 +3,7 @@
   "description": "Selling without you. Opens with klapaucius (the story is the hands-off window, not the climb — item 145 deleted the Chip Kitchen economy the original farmed), then builds the original yard on the same tiles: a Grinder fed bought kola nuts, an arm, and a Truck Depot with a standing powder route — plus a second route signed and torn up. **Ends with 5,000 commandless ticks** in which 5 truck runs complete, the money goes up by $55, and every manual touch counter stays exactly where it was. That window is the whole fixture; test/commerce.test.ts replays to its boundary and asserts the counters are frozen across it. Re-recorded 2026-08-27; see scripts/record-depot-run.ts.",
   "seed": 320320,
   "ticks": 5640,
-  "expectedHash": "f760b3cc",
+  "expectedHash": "3e05cb0e",
   "commands": [
     {
       "tick": 0,

@@ -83,16 +83,35 @@ export function upgradeCostCents(
 }
 
 /**
- * Whether a machine is the sort of thing a dial does anything to at all.
+ * Whether a machine is the sort of thing ANY dial does anything to — the bench's
+ * subject-selection predicate, and the coarse half of a two-part question.
  *
- * DELIBERATELY UNCHANGED BY THE LIQUID LAYER. A pump has no work cycle, no wear, and no tank,
- * so two of the three dials would visibly do nothing on it — and a bench that happily sells a
- * dial which changes no number is worse than one that does not offer it. Pumps get their
- * dials when Entropy gives irrigation something to wear out; `effectivePumpRateMlPerMinute`
- * below already honours Speed for the day that happens.
+ * The fine half is `acceptsUpgradeDial` below, and the split exists because the pump joined
+ * the bench with ONE dial rather than three (owner order 2026-09-01). A work-cycle machine
+ * takes all three; a pump has no wear and no tank, so Efficiency and Capacity would visibly
+ * do nothing on it — and a bench that happily sells a dial which changes no number is worse
+ * than one that does not offer it. So the pump gets exactly the dial that moves a number:
+ * Speed, which `effectivePumpRateMlPerMinute` below has honoured all along.
+ *
+ * NOTE this is no longer the Assembly Charter's "runs a work cycle" predicate — that count
+ * reads `workPerOperation > 0` directly in both `tick.ts` and the HUD's `derive-tech.ts`,
+ * because a pump on the bench must not be a machine on the charter.
  */
 export function acceptsUpgrades(spec: MachineSpec): boolean {
-  return spec.workPerOperation > 0;
+  return spec.workPerOperation > 0 || spec.pumpRateMlPerMinute > 0;
+}
+
+/**
+ * Whether one specific dial does anything on this machine. The reducer's gate, and the
+ * bench's row filter — one predicate, read from both sides, so the panel can never offer a
+ * level the sim would refuse.
+ */
+export function acceptsUpgradeDial(spec: MachineSpec, dial: UpgradeDial): boolean {
+  if (spec.workPerOperation > 0) return true;
+  // A pump scales exactly one number: its rated flow. No wear for Efficiency to spare
+  // (irrigation carries none in this release — Entropy is its own), no buffer for Capacity
+  // to grow. Speed only, and no maintenance trade rides along with it.
+  return spec.pumpRateMlPerMinute > 0 && dial === UpgradeDial.Speed;
 }
 
 /**
