@@ -1,0 +1,60 @@
+/*
+ * The splash's one control. THE BUTTON IS THE SCREEN: the wordmark says what the game is, the
+ * two lines say why you would, and everything else on the page exists to make this the thing
+ * the eye lands on. It wears the lot picker's Continue recipe (`hud/FrontDoor.module.css`
+ * `.primary` — umber ground, tater border, chip-gold text) at roughly twice the size, so a
+ * player who has seen one has seen the other, and a player who has seen neither cannot miss it.
+ */
+.play {
+  display: inline-block;
+  padding: 20px 64px;
+  border: 3px solid #b58b4d;
+  background: #2b2119;
+  color: #f5d382;
+  font: inherit;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-decoration: none;
+  box-shadow: 0 6px 0 #14100e;
+  transition:
+    transform 80ms ease-out,
+    box-shadow 80ms ease-out,
+    background 120ms ease-out;
+}
+.play:hover {
+  background: #46392f;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 0 #14100e;
+}
+.play:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #14100e;
+}
+.play:focus-visible {
+  outline: 2px solid #4fa3d1;
+  outline-offset: 3px;
+}
+
+.hook {
+  margin: 0;
+  max-width: 34rem;
+  font-size: 17px;
+  line-height: 1.55;
+  color: #f2e6cf;
+}
+.hookDetail {
+  margin: 0;
+  max-width: 34rem;
+  font-size: 13px;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  color: #cbb99b;
+}
+
+@media (max-width: 480px) {
+  .play {
+    padding: 16px 40px;
+    font-size: 20px;
+  }
+}

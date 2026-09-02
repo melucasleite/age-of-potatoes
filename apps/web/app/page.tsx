@@ -1,5 +1,7 @@
 import Link from 'next/link';
 
+import styles from './page.module.css';
+
 /**
  * The splash: the first thing anyone sees, and the second surface wearing the farm.
  *
@@ -11,8 +13,11 @@ import Link from 'next/link';
  * the barn and the pond keep their light at the edges.
  *
  * Narrower here than on the picker — 230px there covers a 520px column of lot cards; this
- * screen holds a wordmark, one line and a button, so the scrim can close in and give the
- * farm more of the frame.
+ * screen holds a wordmark, two lines and one big button, so the scrim can close in and give
+ * the farm more of the frame.
+ *
+ * THE BUTTON AND THE COPY live in `page.module.css` — the old version was one 12px-ish outlined
+ * link under a tagline about rent, and the owner's note was that it was neither fun nor big.
  */
 const SCRIM = [
   'linear-gradient(' +
@@ -51,20 +56,15 @@ export default function Home() {
         imageRendering: 'pixelated',
       }}
     >
-      <h1 style={{ margin: 0, fontSize: '2.5rem', letterSpacing: '0.05em' }}>AGE OF POTATOES</h1>
-      <p style={{ margin: 0, opacity: 0.7, maxWidth: '32rem', lineHeight: 1.6 }}>
-        Rent&rsquo;s paid through the month. Make chips.
+      <h1 style={{ margin: 0, fontSize: '3rem', letterSpacing: '0.08em' }}>AGE OF POTATOES</h1>
+      <p className={styles.hook}>
+        Turn one weedy roadside lot into a chips-and-soda empire. Starting capital: a sack of seed
+        potatoes and wildly unearned confidence.
       </p>
-      <Link
-        href="/play"
-        style={{
-          padding: '0.75rem 2rem',
-          border: '2px solid var(--ink)',
-          color: 'var(--ink)',
-          textDecoration: 'none',
-          letterSpacing: '0.1em',
-        }}
-      >
+      <p className={styles.hookDetail}>
+        Grow it · Fry it · Bag it · Sell it by the road · Build a factory to do it all while you nap
+      </p>
+      <Link href="/play" className={styles.play} style={{ marginTop: '0.5rem' }}>
         PLAY
       </Link>
     </main>
