@@ -28,7 +28,7 @@ describe('authGateOnSession', () => {
     expect(authGateOnSession('checking', false)).toBe('signed-out');
   });
 
-  it('dismisses the door when the return leg lands — the OAuth/magic-link arrival', () => {
+  it('dismisses the door when the return leg lands — the magic-link arrival', () => {
     expect(authGateOnSession('signed-out', true)).toBe('signed-in');
   });
 

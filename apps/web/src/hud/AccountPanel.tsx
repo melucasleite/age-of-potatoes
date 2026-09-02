@@ -7,11 +7,12 @@
 //  ACCOUNTS ARE REQUIRED NOW ([[143]]), WHICH MADE THIS PANEL SIMPLER. The player behind
 //  this window is always a real signed-in account — the sign-in door (`SignInDoor.tsx`)
 //  stands in front of the whole game, so the old guest state, the anonymous "upgrade"
-//  framing, and the play-without-an-account copy are all gone. What remains is plain
-//  account management: the leaderboard name, adding a second sign-in method to the same
-//  account (`linkIdentity` / `updateUser` keep the `user.id`, and therefore the saves),
-//  signing out, and — behind its own deliberate switch — signing this device into a
-//  DIFFERENT account, with its consequence written next to it. Reconciliation after such
+//  framing, and the play-without-an-account copy are all gone. So are the GitHub and
+//  Google buttons (Lucas's instruction, 2026-09-02): the magic link is the only door, here
+//  and on the sign-in screen. What remains is plain account management: the leaderboard
+//  name, changing the account's email (`updateUser` keeps the `user.id`, and therefore the
+//  saves), signing out, and — behind its own deliberate switch — signing this device into
+//  a DIFFERENT account, with its consequence written next to it. Reconciliation after such
 //  a swap is not this panel's job: cloud sync's standing conflict rule (higher tick wins,
 //  `supabase/cloudSync.ts`) already answers it.
 // ────────────────────────────────────────────────────────────────────────────────────
@@ -40,11 +41,8 @@ import {
 } from '@/supabase/profile';
 import {
   type AccountActionResult,
-  type OAuthProvider,
   linkEmailToCurrentUser,
-  linkOAuthToCurrentUser,
   sendMagicLink,
-  signInWithOAuth,
   signOut,
 } from '@/supabase/session';
 
@@ -179,9 +177,6 @@ function AccountBody() {
           busy={busy}
           email={email}
           onEmail={setEmail}
-          onOAuth={(provider) => {
-            void run(async () => signInWithOAuth(provider), 'Heading over to sign in…');
-          }}
           onMagicLink={() => {
             void run(
               async () => sendMagicLink(email.trim()),
@@ -195,17 +190,14 @@ function AccountBody() {
         />
       ) : (
         <>
-          <LinkSection
+          <EmailSection
             busy={busy}
             email={email}
             onEmail={setEmail}
-            onOAuth={(provider) => {
-              void run(async () => linkOAuthToCurrentUser(provider), 'Heading over to link…');
-            }}
-            onEmailLink={() => {
+            onEmailChange={() => {
               void run(
                 async () => linkEmailToCurrentUser(email.trim()),
-                'Confirmation email sent — click it to finish linking.',
+                'Confirmation email sent — click it to finish the change.',
               );
             }}
           />
@@ -252,15 +244,9 @@ function AccountBody() {
 
 /** One line saying who is playing, from the live status — never from a guess. */
 function StatusLine({ status }: { status: AccountStatus }) {
-  const providers = status.providers.filter((p) => p !== 'email');
   return (
-    <div>
-      <div className={s.accountStatusLine}>
-        Signed in{status.email === null ? '.' : ` as ${status.email}`}
-      </div>
-      {providers.length === 0 ? null : (
-        <div className={s.accountNote}>linked: {providers.join(' · ')}</div>
-      )}
+    <div className={s.accountStatusLine}>
+      Signed in{status.email === null ? '.' : ` as ${status.email}`}
     </div>
   );
 }
@@ -308,47 +294,41 @@ function NameSection({
 }
 
 /**
- * Plain account management: attach ANOTHER way into the account the player already has.
- * `linkIdentity` / `updateUser` keep the `user.id`, so the saves never notice.
+ * Plain account management: move the account to a NEW email address. `updateUser` keeps the
+ * `user.id`, so the saves never notice; Supabase confirms the new address by email first.
  */
-function LinkSection({
+function EmailSection({
   busy,
   email,
   onEmail,
-  onOAuth,
-  onEmailLink,
+  onEmailChange,
 }: {
   busy: boolean;
   email: string;
   onEmail: (value: string) => void;
-  onOAuth: (provider: OAuthProvider) => void;
-  onEmailLink: () => void;
+  onEmailChange: () => void;
 }) {
   const emailReady = email.trim().includes('@');
   return (
     <div className={s.accountSection}>
-      <div className={s.accountSectionHead}>Add a sign-in method</div>
+      <div className={s.accountSectionHead}>Change the account email</div>
       <div className={s.accountNote}>
-        Same account, one more door into it — so losing access to one provider is not losing the
-        farm.
-      </div>
-      <div className={s.accountRow}>
-        <OAuthButtons busy={busy} onOAuth={onOAuth} />
+        Same account, same farm — the magic link just starts landing in a different inbox.
       </div>
       <div className={s.accountRow}>
         <TextField
           value={email}
-          placeholder="or add an email"
-          label="Email to add"
+          placeholder="new email address"
+          label="New email address"
           onChange={onEmail}
-          onEnter={emailReady && !busy ? onEmailLink : undefined}
+          onEnter={emailReady && !busy ? onEmailChange : undefined}
         />
         <button
           type="button"
           className={s.accountButton}
           disabled={busy || !emailReady}
           onMouseDown={keepFocus}
-          onClick={onEmailLink}
+          onClick={onEmailChange}
         >
           send link
         </button>
@@ -388,14 +368,12 @@ function SwitchAccountSection({
   busy,
   email,
   onEmail,
-  onOAuth,
   onMagicLink,
   onBack,
 }: {
   busy: boolean;
   email: string;
   onEmail: (value: string) => void;
-  onOAuth: (provider: OAuthProvider) => void;
   onMagicLink: () => void;
   onBack: () => void;
 }) {
@@ -406,9 +384,6 @@ function SwitchAccountSection({
       <div className={cx(s.accountNote, s.accountNoteWarn)}>
         This signs this device into another account. If that account&rsquo;s farm is further along,
         it takes over here; the current farm is kept aside, not deleted.
-      </div>
-      <div className={s.accountRow}>
-        <OAuthButtons busy={busy} onOAuth={onOAuth} />
       </div>
       <div className={s.accountRow}>
         <TextField
@@ -432,42 +407,6 @@ function SwitchAccountSection({
         ‹ back
       </button>
     </div>
-  );
-}
-
-/** The two provider buttons, identical in both flows — only the verb behind them differs. */
-function OAuthButtons({
-  busy,
-  onOAuth,
-}: {
-  busy: boolean;
-  onOAuth: (provider: OAuthProvider) => void;
-}) {
-  return (
-    <>
-      <button
-        type="button"
-        className={s.accountButton}
-        disabled={busy}
-        onMouseDown={keepFocus}
-        onClick={() => {
-          onOAuth('github');
-        }}
-      >
-        GitHub
-      </button>
-      <button
-        type="button"
-        className={s.accountButton}
-        disabled={busy}
-        onMouseDown={keepFocus}
-        onClick={() => {
-          onOAuth('google');
-        }}
-      >
-        Google
-      </button>
-    </>
   );
 }
 

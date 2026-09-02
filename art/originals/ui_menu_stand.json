@@ -1,10 +1,10 @@
 {
   "id": "ui_menu_stand",
-  "provider": "retro-diffusion",
-  "model": "rd_fast",
-  "seed": 1994407844,
-  "prompt": "a single bold flat game icon of a small wooden roadside produce stand with a striped awning, one simple object centred and filling most of the frame, seen straight on, very large solid areas of flat colour, thick heavy chunky shapes, bold dark outline, no thin lines, no small details, no background, no frame, no border, no badge, no circle behind it, no shadow, transparent background, no text",
-  "promptStyle": "rd_fast__default",
+  "provider": "local",
+  "model": "local:local/ui_menu_stand.png",
+  "seed": null,
+  "prompt": "The sidebar's Stand icon — a striped awning over three items on a wooden counter — authored on a 16x16 grid and scaled 4:1 from the master palette by art/tools/make-ui-menu-stand.mjs. Hand-authored after the Retro Diffusion take: the sidebar draws every menu icon at a QUARTER of its 64px art (16 device pixels), and RD drew the stand as a whole scene at 64px detail that decimated to a brown smudge. The other five icons survive because each is one bold object; a stand is not one object, so its 16px read has to be designed at 16px. Authored pixels are the shipped pixels: nothing is decimated.",
+  "promptStyle": null,
   "native": {
     "width": 64,
     "height": 64
@@ -19,6 +19,6 @@
   "palette": "palette/master.json",
   "anchor": "center",
   "atlasGroup": "ui",
-  "costUsd": 0.017,
-  "generatedAt": "2026-08-28T00:27:57.447Z"
+  "costUsd": 0,
+  "generatedAt": "2026-09-02T14:40:15.708Z"
 }

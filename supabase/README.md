@@ -6,8 +6,9 @@ Three migrations. That is the whole backend.
 "Lucas' Crafts" org (us-east-1, $10/month). All three migrations below are applied to it, and
 `apps/web/.env.local` (gitignored) holds its URL and publishable key.
 
-**The game requires it now** (work item 143, 2026-08-27): every player signs in — GitHub,
-Google, or magic link, no anonymous path — and every world syncs to its own `saves` row
+**The game requires it now** (work item 143, 2026-08-27): every player signs in — by email
+magic link only, since the GitHub and Google doors were removed on 2026-09-02; no anonymous
+path — and every world syncs to its own `saves` row
 (`slot` = the local world id; the old single `'default'` slot is adopted by the client on
 first contact). An unconfigured build shows a "cloud is not configured" screen instead of
 the game. The read path is still local-first — IndexedDB boots the game and a mid-session
@@ -60,17 +61,15 @@ a dashboard setting no client code can change:
    The local copies of those worlds are unaffected and re-push under whatever account
    signs in on that browser. Prune the orphans whenever convenient (Authentication →
    Users → filter Anonymous → delete; `on delete cascade` removes their rows).
-2. **GitHub provider: ON** — needs a GitHub OAuth app's client id + secret. Callback URL:
-   `https://fikglrbievvcutrsgrcp.supabase.co/auth/v1/callback`
-3. **Google provider: ON** — needs a Google Cloud OAuth client id + secret, same callback
-   URL.
-4. **Manual linking: ON** (Authentication → Settings) — `linkIdentity()`, the account
-   panel's "add a sign-in method", errors without it.
-5. **URL Configuration** — Site URL `https://ageofpotatoes.com` (the production origin as
+2. **GitHub and Google providers: OFF** (Authentication → Sign In / Providers). The
+   client no longer calls `signInWithOAuth()` or `linkIdentity()` — the sign-in door and
+   the account panel offer the magic link only — so a provider left on is a door the game
+   never draws. Their OAuth apps can be deleted; nothing references the callback URL.
+3. **URL Configuration** — Site URL `https://ageofpotatoes.com` (the production origin as
    of 2026-08-24, on Vercel project `age-of-potatoes`), with `http://localhost:3000` and
    `http://localhost:3210` on the redirect allow-list. This list must cover EVERY origin
    the game is served from, production and dev both, or the `redirectTo` the sign-in door
-   sends is ignored and OAuth/magic links land on the Site URL instead of back in `/play`.
+   sends is ignored and magic links land on the Site URL instead of back in `/play`.
 
 Email magic links ride the built-in email provider (on by default). The built-in SMTP is
 rate-limited to a couple of messages an hour — that limit now gates SIGN-IN, not just

@@ -19,7 +19,7 @@ import { logDebug, once } from './log';
 
 // One in-flight read per page, shared by every caller. `client.auth.getSession()` awaits
 // the client's initialisation — which, with `detectSessionInUrl: true` in `client.ts`, is
-// where an OAuth or magic-link return leg's `?code=` gets exchanged for a session. Sharing
+// where a magic-link return leg's `?code=` gets exchanged for a session. Sharing
 // the promise keeps a burst of callers from each paying that wait separately.
 let pending: Promise<Session | null> | null = null;
 
@@ -64,7 +64,7 @@ async function establish(): Promise<Session | null> {
 }
 
 /**
- * Run `listen` on every auth state change — sign-in (including the OAuth/magic-link return
+ * Run `listen` on every auth state change — sign-in (including the magic-link return
  * leg landing), sign-out, token refresh. Returns an unsubscribe function.
  *
  * THE GATE'S EAR. `play-client.tsx` subscribes so the sign-in door dismisses itself the
@@ -91,48 +91,22 @@ export function onAuthChange(listen: (session: Session | null) => void): () => v
  */
 export type AccountActionResult = { ok: true } | { ok: false; reason: string };
 
-/** The two OAuth doors the game offers. A union, per the repo's no-`enum` rule. */
-export type OAuthProvider = 'github' | 'google';
-
 /**
- * Where an OAuth redirect or an emailed link should land the player: this page, stripped of
- * query and hash. Stripped because the return trip arrives carrying its own `?code=` — the
- * PKCE exchange in `client.ts` — and a stale query string from the outbound trip would ride
- * along forever. Browser-only by construction: every caller has already checked the client.
+ * Where an emailed link should land the player: this page, stripped of query and hash.
+ * Stripped because the return trip arrives carrying its own `?code=` — the PKCE exchange in
+ * `client.ts` — and a stale query string from the outbound trip would ride along forever.
+ * Browser-only by construction: every caller has already checked the client.
  */
 function returnHere(): string {
   return window.location.origin + window.location.pathname;
 }
 
 /**
- * Sign in with GitHub or Google. THE FRONT HALF OF THE SIGN-IN DOOR.
- *
- * On success the browser NAVIGATES AWAY to the provider — `{ ok: true }` means "the
- * redirect is underway", and the caller is about to stop existing. The return leg lands
- * back on `/play` carrying a `?code=`, `client.ts` exchanges it during initialisation, and
- * the `onAuthChange` subscription dismisses the door.
- */
-export async function signInWithOAuth(provider: OAuthProvider): Promise<AccountActionResult> {
-  const client = getSupabaseClient();
-  if (client === null) return { ok: false, reason: 'Cloud accounts are not configured.' };
-
-  try {
-    const { error } = await client.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: returnHere() },
-    });
-    if (error !== null) return { ok: false, reason: error.message };
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-/**
- * Email a magic link that signs this device in. THE OTHER HALF OF THE SIGN-IN DOOR, and the
- * path for a player with no GitHub or Google. Signing in with an email that has no account
- * yet CREATES the account — `signInWithOtp` with the default `shouldCreateUser` — which is
- * exactly right for a game whose only alternative used to be anonymous play.
+ * Email a magic link that signs this device in. THE WHOLE OF THE SIGN-IN DOOR: the GitHub
+ * and Google OAuth doors were removed on Lucas's instruction (2026-09-02), so an email is the
+ * one way in. Signing in with an email that has no account yet CREATES the account —
+ * `signInWithOtp` with the default `shouldCreateUser` — which is exactly right for a game
+ * whose only alternative used to be anonymous play.
  *
  * Nothing changes locally until the player clicks the link, and the link must be opened in
  * THIS browser — the PKCE verifier it completes lives in this browser's localStorage.
@@ -154,11 +128,12 @@ export async function sendMagicLink(email: string): Promise<AccountActionResult>
 }
 
 /**
- * Attach an email to the CURRENT signed-in user, keeping the same `user.id`.
+ * Change the email on the CURRENT signed-in user, keeping the same `user.id`.
  *
- * Plain account management now: a player who signed in with GitHub adds an email address so
- * a magic link works on a machine where GitHub does not. Same `user.id`, same `saves`
- * rows, no migration. Reports failure because it only ever runs behind a deliberate button.
+ * Plain account management: with the magic link as the only door, this is how a player moves
+ * the account to a new address. Supabase confirms the new address by email before it takes.
+ * Same `user.id`, same `saves` rows, no migration. Reports failure because it only ever runs
+ * behind a deliberate button.
  */
 export async function linkEmailToCurrentUser(email: string): Promise<AccountActionResult> {
   const client = getSupabaseClient();
@@ -169,38 +144,6 @@ export async function linkEmailToCurrentUser(email: string): Promise<AccountActi
 
   try {
     const { error } = await client.auth.updateUser({ email }, { emailRedirectTo: returnHere() });
-    if (error !== null) return { ok: false, reason: error.message };
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-/**
- * Attach a GitHub or Google identity to the CURRENT user, keeping the same `user.id`.
- *
- * The other half of plain account management: a second provider on the same account, so
- * losing access to one is not losing the farm. On success the browser NAVIGATES AWAY to the
- * provider — `{ ok: true }` means "the redirect is underway".
- *
- * `linkIdentity` needs manual linking enabled in the dashboard (Authentication → Settings).
- * When it is not, Supabase answers with an error naming it; that message is surfaced
- * verbatim rather than translated, because it is the one clue the developer needs.
- */
-export async function linkOAuthToCurrentUser(
-  provider: OAuthProvider,
-): Promise<AccountActionResult> {
-  const client = getSupabaseClient();
-  if (client === null) return { ok: false, reason: 'Cloud accounts are not configured.' };
-
-  const session = await getSession();
-  if (session === null) return { ok: false, reason: 'Not signed in.' };
-
-  try {
-    const { error } = await client.auth.linkIdentity({
-      provider,
-      options: { redirectTo: returnHere() },
-    });
     if (error !== null) return { ok: false, reason: error.message };
     return { ok: true };
   } catch (error) {
