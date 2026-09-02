@@ -8,24 +8,22 @@
 // local-only path: Lucas's final-stretch ruling is that every player has an account and
 // every save lives in the cloud, and a door with a side gate is not a door.
 //
-// THIS COMPONENT NEVER DISMISSES ITSELF. Both OAuth buttons navigate away to the provider;
-// the magic link arrives by email and is clicked in this browser. Either way the session
-// materialises via the return leg (`detectSessionInUrl` in `supabase/client.ts` exchanges
-// the `?code=`), the `onAuthChange` subscription in `play-client.tsx` hears it, and the
-// gate swaps this screen for the lot picker. All this file owns is starting the flows and
-// wording their failures.
+// ONE DOOR, NOT THREE. The GitHub and Google OAuth buttons that used to sit above the email
+// field were removed on Lucas's instruction (2026-09-02); the magic link is the only way in,
+// and the only way an account gets created.
+//
+// THIS COMPONENT NEVER DISMISSES ITSELF. The magic link arrives by email and is clicked in
+// this browser; the session materialises via the return leg (`detectSessionInUrl` in
+// `supabase/client.ts` exchanges the `?code=`), the `onAuthChange` subscription in
+// `play-client.tsx` hears it, and the gate swaps this screen for the lot picker. All this
+// file owns is starting the flow and wording its failure.
 //
 // It wears `FrontDoor.module.css` on purpose — same farm backdrop, same column, same
 // buttons, one screen earlier in the same flow.
 
 import { useState } from 'react';
 
-import {
-  type AccountActionResult,
-  type OAuthProvider,
-  sendMagicLink,
-  signInWithOAuth,
-} from '@/supabase/session';
+import { type AccountActionResult, sendMagicLink } from '@/supabase/session';
 
 import raw from './FrontDoor.module.css';
 
@@ -60,33 +58,20 @@ export default function SignInDoor() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
-  /**
-   * One action in flight at a time, its failure put where the player is looking. On OAuth
-   * success the page is about to navigate away, so `busy` deliberately stays true — a
-   * button that re-enables an instant before the browser leaves is an invitation to
-   * double-send.
-   */
+  /** One action in flight at a time, its failure put where the player is looking. */
   const run = async (
     action: () => Promise<AccountActionResult>,
-    doneText: string | null,
+    doneText: string,
   ): Promise<void> => {
     setBusy(true);
     setNotice(null);
     const result = await action();
     if (result.ok) {
-      if (doneText !== null) {
-        setNotice({ tone: 'good', text: doneText });
-        setBusy(false);
-      }
-      // doneText === null is the OAuth case: the redirect is underway. Stay busy.
+      setNotice({ tone: 'good', text: doneText });
     } else {
       setNotice({ tone: 'warn', text: result.reason });
-      setBusy(false);
     }
-  };
-
-  const oauth = (provider: OAuthProvider): void => {
-    void run(async () => signInWithOAuth(provider), null);
+    setBusy(false);
   };
 
   const emailReady = email.trim().includes('@');
@@ -108,31 +93,7 @@ export default function SignInDoor() {
           <span>Sign in to farm</span>
         </div>
 
-        <button
-          type="button"
-          className={s.secondary}
-          // The one auto-focus on this screen, for the same reason Continue has it on the
-          // next one: a returning player presses Enter without reading anything.
-          autoFocus
-          disabled={busy}
-          onClick={() => {
-            oauth('github');
-          }}
-        >
-          CONTINUE WITH GITHUB
-        </button>
-        <button
-          type="button"
-          className={s.secondary}
-          disabled={busy}
-          onClick={() => {
-            oauth('google');
-          }}
-        >
-          CONTINUE WITH GOOGLE
-        </button>
-
-        <p className={s.hint}>or by email — no password, just a link:</p>
+        <p className={s.hint}>by email — no password, just a link:</p>
 
         <div className={s.signinRow}>
           <input
@@ -143,6 +104,10 @@ export default function SignInDoor() {
             aria-label="Email for a magic link"
             spellCheck={false}
             autoComplete="email"
+            // The one auto-focus on this screen, for the same reason Continue has it on the
+            // next one: a returning player types their address and presses Enter without
+            // reading anything.
+            autoFocus
             disabled={busy}
             onChange={(event) => {
               setEmail(event.target.value);
@@ -173,8 +138,8 @@ export default function SignInDoor() {
 
         <p className={s.note}>
           An account is how your lots follow you: every one of them is backed up to the cloud and
-          waiting on any browser you sign into. First time here? Any of the three doors above
-          creates your account on the way through.
+          waiting on any browser you sign into. First time here? Sending yourself a link creates
+          your account on the way through.
         </p>
       </div>
     </div>

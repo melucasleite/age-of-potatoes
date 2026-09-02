@@ -1,7 +1,8 @@
 # Accounts and cloud saves
 
-**Accounts are required** (work item 143, 2026-08-27). Every player signs in — GitHub,
-Google, or an email magic link — before anything else renders, and every world's save
+**Accounts are required** (work item 143, 2026-08-27). Every player signs in — by email
+magic link, the only door since the GitHub and Google OAuth buttons were removed on
+2026-09-02 — before anything else renders, and every world's save
 mirrors to the live Supabase project (`snack-mogul`, ref `fikglrbievvcutrsgrcp`,
 configured through `apps/web/.env.local`). A build with no Supabase env does not play
 local-only; it shows a plain "cloud is not configured" screen instead of the game.
@@ -19,8 +20,8 @@ network error is still swallowed, logged once at debug level, and retried with b
    (`supabase/authGate.ts`, pure and tested) runs before the lot picker, the game, and
    every query-param bypass (`?artsheet` included).
 2. No env → the "cloud is not configured" screen. Env but no session → the sign-in door
-   (`hud/SignInDoor.tsx`): GitHub, Google, magic link. No guest path.
-3. OAuth and magic links use the **PKCE flow** with `detectSessionInUrl: true`
+   (`hud/SignInDoor.tsx`): an email magic link. No OAuth, no guest path.
+3. Magic links use the **PKCE flow** with `detectSessionInUrl: true`
    (`client.ts`): the return leg lands on `/play` carrying a `?code=`, the client
    exchanges it during initialisation, and the gate's `onAuthChange` subscription
    (`session.ts`) dismisses the door. The same subscription re-arms it on sign-out.
@@ -64,10 +65,9 @@ URLs is in [`supabase/README.md`](../../../../supabase/README.md):
 
 1. **Anonymous sign-ins: OFF** — the code no longer calls it, and leaving it on invites
    rows no account can ever reach again.
-2. **GitHub and Google providers: ON**, each with its own OAuth app credentials.
-3. **Manual linking: ON** — `linkIdentity()` (the panel's "add a sign-in method") errors
-   without it.
-4. **URL Configuration** — Site URL plus a redirect allow-list covering production and
+2. **GitHub and Google providers: OFF** — the code no longer calls `signInWithOAuth` or
+   `linkIdentity`; a provider left on is a door the game does not draw.
+3. **URL Configuration** — Site URL plus a redirect allow-list covering production and
    localhost, or the `redirectTo` this code sends is ignored.
 
 ## The rules this directory follows
@@ -89,15 +89,15 @@ save.
 
 ## Files
 
-| File                | What lives there                                                |
-| ------------------- | --------------------------------------------------------------- |
-| `env.ts`            | Which keys we have. Imports no SDK, so the gate is free         |
-| `authGate.ts`       | The sign-in gate's states, pure and import-free                 |
-| `bootstrap.ts`      | The dynamic-import gate, and the retained sync handle           |
-| `client.ts`         | The one browser client, memoised, or `null`                     |
-| `session.ts`        | Session reads, sign-in flows, linking, sign-out, `onAuthChange` |
-| `profile.ts`        | The leaderboard display name, and the account status read       |
-| `cloudSync.ts`      | The running world's loop: push, pull, conflict rule, backoff    |
-| `worldsSync.ts`     | The lot picker reconciliation, and legacy-row adoption          |
-| `worldsSyncPlan.ts` | That reconciliation's decisions, pure and import-free           |
-| `log.ts`            | Deliberately quiet logging, and `once()`                        |
+| File                | What lives there                                                      |
+| ------------------- | --------------------------------------------------------------------- |
+| `env.ts`            | Which keys we have. Imports no SDK, so the gate is free               |
+| `authGate.ts`       | The sign-in gate's states, pure and import-free                       |
+| `bootstrap.ts`      | The dynamic-import gate, and the retained sync handle                 |
+| `client.ts`         | The one browser client, memoised, or `null`                           |
+| `session.ts`        | Session reads, the magic link, email change, sign-out, `onAuthChange` |
+| `profile.ts`        | The leaderboard display name, and the account status read             |
+| `cloudSync.ts`      | The running world's loop: push, pull, conflict rule, backoff          |
+| `worldsSync.ts`     | The lot picker reconciliation, and legacy-row adoption                |
+| `worldsSyncPlan.ts` | That reconciliation's decisions, pure and import-free                 |
+| `log.ts`            | Deliberately quiet logging, and `once()`                              |

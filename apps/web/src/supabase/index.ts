@@ -14,14 +14,12 @@ export {
   clearSessionMemo,
   getSession,
   linkEmailToCurrentUser,
-  linkOAuthToCurrentUser,
   onAuthChange,
   resetSession,
   sendMagicLink,
-  signInWithOAuth,
   signOut,
 } from './session';
-export type { AccountActionResult, OAuthProvider } from './session';
+export type { AccountActionResult } from './session';
 export { DISPLAY_NAME_MAX, getAccountStatus, getOwnProfile, setDisplayName } from './profile';
 export type { AccountStatus } from './profile';
 

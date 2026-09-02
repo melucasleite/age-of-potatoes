@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.303d9af3.png';
-export const ATLAS_JSON_URL = '/art/atlas.303d9af3.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.94383d64.png';
+export const ATLAS_JSON_URL = '/art/atlas.94383d64.json';
 
 export const ATLAS_SIZE = { width: 1024, height: 1024 } as const;
 

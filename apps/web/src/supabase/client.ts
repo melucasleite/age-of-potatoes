@@ -73,7 +73,7 @@ export function getSupabaseClient(): SupabaseClient | null {
       persistSession: true,
       autoRefreshToken: true,
       storageKey: AUTH_STORAGE_KEY,
-      // OAUTH AND MAGIC LINKS ARE THE ONLY WAY IN NOW, so the two flags below are
+      // THE MAGIC LINK IS THE ONLY WAY IN NOW, so the two flags below are
       // load-bearing. PKCE is the flow Supabase documents for a browser SPA
       // (guides/auth/sessions/pkce-flow, verified 2026-08-24, not from memory): the sign-in
       // redirect comes back carrying a `?code=` that is only useful together with the

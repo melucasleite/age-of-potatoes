@@ -31,7 +31,7 @@ export interface AccountStatus {
   signedIn: boolean;
   /** The account email, when there is one. */
   email: string | null;
-  /** Linked identity providers, e.g. `['github']` or `['email', 'google']`. */
+  /** Linked identity providers — `['email']` since the OAuth doors were removed (2026-09-02). */
   providers: string[];
 }
 
