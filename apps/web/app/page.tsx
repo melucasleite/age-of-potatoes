@@ -13,7 +13,7 @@ import styles from './page.module.css';
  * the barn and the pond keep their light at the edges.
  *
  * Narrower here than on the picker — 230px there covers a 520px column of lot cards; this
- * screen holds a wordmark, two lines and one big button, so the scrim can close in and give
+ * screen holds a wordmark, one line and one big button, so the scrim can close in and give
  * the farm more of the frame.
  *
  * THE BUTTON AND THE COPY live in `page.module.css` — the old version was one 12px-ish outlined
@@ -57,13 +57,7 @@ export default function Home() {
       }}
     >
       <h1 style={{ margin: 0, fontSize: '3rem', letterSpacing: '0.08em' }}>AGE OF POTATOES</h1>
-      <p className={styles.hook}>
-        Turn one weedy roadside lot into a chips-and-soda empire. Starting capital: a sack of seed
-        potatoes and wildly unearned confidence.
-      </p>
-      <p className={styles.hookDetail}>
-        Grow it · Fry it · Bag it · Sell it by the road · Build a factory to do it all while you nap
-      </p>
+      <p className={styles.hook}>Build a factory to do it all while you nap.</p>
       <Link href="/play" className={styles.play} style={{ marginTop: '0.5rem' }}>
         PLAY
       </Link>

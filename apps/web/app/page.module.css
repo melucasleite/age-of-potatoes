@@ -4,6 +4,9 @@
  * the eye lands on. It wears the lot picker's Continue recipe (`hud/FrontDoor.module.css`
  * `.primary` — umber ground, tater border, chip-gold text) at roughly twice the size, so a
  * player who has seen one has seen the other, and a player who has seen neither cannot miss it.
+ *
+ * The one line of copy is the one the owner kept out of a longer pitch: it is the whole game
+ * in a sentence, and the sentence is a joke, which is the right register for a splash.
  */
 .play {
   display: inline-block;
@@ -43,15 +46,6 @@
   line-height: 1.55;
   color: #f2e6cf;
 }
-.hookDetail {
-  margin: 0;
-  max-width: 34rem;
-  font-size: 13px;
-  line-height: 1.6;
-  letter-spacing: 0.04em;
-  color: #cbb99b;
-}
-
 @media (max-width: 480px) {
   .play {
     padding: 16px 40px;
