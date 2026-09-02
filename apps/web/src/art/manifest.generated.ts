@@ -16,8 +16,8 @@ export interface AtlasFrame {
 
 // Content-addressed: a regenerated atlas is a different URL, so no browser, CDN, or service
 // worker can serve the previous one. Both names carry the same hash of the packed bytes.
-export const ATLAS_IMAGE_URL = '/art/atlas.94383d64.png';
-export const ATLAS_JSON_URL = '/art/atlas.94383d64.json';
+export const ATLAS_IMAGE_URL = '/art/atlas.e17c0075.png';
+export const ATLAS_JSON_URL = '/art/atlas.e17c0075.json';
 
 export const ATLAS_SIZE = { width: 1024, height: 1024 } as const;
 
@@ -926,6 +926,14 @@ export const ATLAS_FRAMES = {
     anchor: 'bottom-center',
     group: 'machines',
   },
+  machine_sell_bin: {
+    x: 814,
+    y: 336,
+    width: 32,
+    height: 32,
+    anchor: 'bottom-center',
+    group: 'machines',
+  },
   machine_six_packer: {
     x: 325,
     y: 336,
@@ -943,7 +951,7 @@ export const ATLAS_FRAMES = {
     group: 'machines',
   },
   machine_sprinkler: {
-    x: 814,
+    x: 847,
     y: 336,
     width: 32,
     height: 32,
@@ -1311,7 +1319,7 @@ export const ATLAS_FRAMES = {
     group: 'items',
   },
   truck_down: {
-    x: 847,
+    x: 880,
     y: 336,
     width: 32,
     height: 32,
@@ -1319,7 +1327,7 @@ export const ATLAS_FRAMES = {
     group: 'machines',
   },
   truck_side: {
-    x: 880,
+    x: 913,
     y: 336,
     width: 64,
     height: 32,
@@ -1327,7 +1335,7 @@ export const ATLAS_FRAMES = {
     group: 'machines',
   },
   truck_up: {
-    x: 945,
+    x: 978,
     y: 336,
     width: 32,
     height: 32,

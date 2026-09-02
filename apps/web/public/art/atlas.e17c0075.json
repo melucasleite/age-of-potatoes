@@ -2486,6 +2486,28 @@
       "anchorMode": "bottom-center",
       "group": "machines"
     },
+    "machine_sell_bin": {
+      "frame": {
+        "x": 814,
+        "y": 336,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "anchorMode": "bottom-center",
+      "group": "machines"
+    },
     "machine_six_packer": {
       "frame": {
         "x": 325,
@@ -2532,7 +2554,7 @@
     },
     "machine_sprinkler": {
       "frame": {
-        "x": 814,
+        "x": 847,
         "y": 336,
         "w": 32,
         "h": 32
@@ -3544,7 +3566,7 @@
     },
     "truck_down": {
       "frame": {
-        "x": 847,
+        "x": 880,
         "y": 336,
         "w": 32,
         "h": 32
@@ -3566,7 +3588,7 @@
     },
     "truck_side": {
       "frame": {
-        "x": 880,
+        "x": 913,
         "y": 336,
         "w": 64,
         "h": 32
@@ -3588,7 +3610,7 @@
     },
     "truck_up": {
       "frame": {
-        "x": 945,
+        "x": 978,
         "y": 336,
         "w": 32,
         "h": 32
@@ -3809,7 +3831,7 @@
   },
   "meta": {
     "app": "@snack/art-cli",
-    "image": "atlas.94383d64.png",
+    "image": "atlas.e17c0075.png",
     "format": "RGBA8888",
     "size": {
       "w": 1024,
@@ -3869,9 +3891,9 @@
         "group": "machines",
         "x": 0,
         "y": 271,
-        "width": 1006,
+        "width": 1010,
         "height": 129,
-        "count": 33
+        "count": 34
       },
       {
         "group": "overlay",

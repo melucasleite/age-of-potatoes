@@ -75,6 +75,17 @@
       "atlasGroup": "machines"
     },
     {
+      "id": "machine_sell_bin",
+      "provider": "retro-diffusion",
+      "width": 32,
+      "height": 32,
+      "prompt": "a bold simple pixel art roadside farm stand, one small wooden counter box across the bottom half of the frame, one wide red and cream striped awning across the top resting on two thick wooden corner posts, one small heap of three fat brown potatoes sitting on the counter, warm timber and painted red, low three-quarter view, very large solid areas of flat colour, thick heavy chunky shapes, no thin lines, no small details, no slats, no railings, no signs, no fence, no ground, no shadow, centred and filling the frame, transparent background, no text",
+      "promptStyle": "rd_fast__default",
+      "anchor": "bottom-center",
+      "atlasGroup": "machines",
+      "paletteSubset": ["ink", "umber", "bone", "paper", "ramp:wood", "ramp:red", "ramp:starch"]
+    },
+    {
       "id": "machine_piped_sprinkler",
       "provider": "retro-diffusion",
       "width": 32,
