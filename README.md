@@ -8,18 +8,23 @@
 
 _Factorio × Stardew Valley × RimWorld, in your browser._
 
-### [▶ Play now at ageofpotatoes.com](https://ageofpotatoes.com)
-
-Free, in your desktop browser, nothing to install. Sign in with an email link and your lot
-follows you everywhere.
-
 [![Play now](https://img.shields.io/badge/%E2%96%B6%20play%20now-ageofpotatoes.com-c9a13b?style=for-the-badge)](https://ageofpotatoes.com)
 
 [![CI](https://github.com/melucasleite/age-of-potatoes/actions/workflows/ci.yml/badge.svg)](https://github.com/melucasleite/age-of-potatoes/actions/workflows/ci.yml)
 ![TypeScript 6](https://img.shields.io/badge/TypeScript-6.0-3178c6?logo=typescript&logoColor=white)
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs)
+![React 19](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
 ![PixiJS 8](https://img.shields.io/badge/PixiJS-8-e72264)
+![Supabase](https://img.shields.io/badge/Supabase-auth%20%2B%20saves-3ecf8e?logo=supabase&logoColor=white)
 ![Deterministic](https://img.shields.io/badge/sim-bit--exact%20deterministic-c9a13b)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+Free, in your desktop browser, nothing to install. Sign in with an email link and your lot
+follows you everywhere.
+
+**[▶ Play](https://ageofpotatoes.com)** · [The game](#from-dirt-to-dynasty) ·
+[Under the hood](#under-the-hood) · [Run it locally](#running-it-locally) ·
+[Layout](#repository-layout)
 
 </div>
 
@@ -65,9 +70,9 @@ bronzed on a plaque, engraved with the number of tiles you personally watered.
 
 **Nothing rots.** No crop wilts, no good spoils, and dirt is just dirt. It's a sandbox.
 Prices are stable and posted, and the pressure comes from upkeep instead: machines wear
-with use, and a sloppy factory bleeds margin. A well-run one prints money and, because
-every machine's work-cycle sound is quantized to a shared beat grid, **it literally
-grooves.**
+with use (never with time — an idle machine stays pristine), and a sloppy factory bleeds
+margin. A well-run one prints money and, because every machine's work-cycle sound is
+quantized to a shared beat grid, **it literally grooves.**
 
 ## Three eras, twenty-two discoveries
 
@@ -103,7 +108,7 @@ Hydraulics, Fabrication & Logistics, and Commerce & Operations. Each era is seal
 </table>
 
 <details>
-<summary><b>⌨️ Controls</b></summary>
+<summary><b>Controls</b></summary>
 
 | Key                         | Does                                          |
 | --------------------------- | --------------------------------------------- |
@@ -139,69 +144,106 @@ click away.
 This is a hobby game built with a level of engineering paranoia normally reserved for
 flight software. The highlights:
 
-- **🎯 A bit-exact deterministic simulation.** `packages/sim` is pure TypeScript with zero
-  dependencies and no DOM. `Date`, `Math.random`, `async`, `for...in`, and every
-  transcendental (`sin`, `cos`, `exp`, `pow`, `**`…) are banned in there, because JS engines
-  disagree in the last bits and that desyncs replays. IEEE-754 guarantees `+ − × ÷` and
-  `sqrt`. Nothing else gets in.
-- **🔢 Integers all the way down.** 256 subtiles per tile, money in cents, machine progress
+- **A bit-exact deterministic simulation.** `packages/sim` is pure TypeScript with zero
+  dependencies and no DOM lib, running at a fixed 20 ticks per second. `Date`,
+  `Math.random`, `async`, `for...in`, and every transcendental (`sin`, `cos`, `exp`, `pow`,
+  `**`…) are banned in there by lint rules, because JS engines disagree in the last bits
+  and that desyncs replays. IEEE-754 guarantees `+ − × ÷` and `sqrt`. Nothing else gets in.
+- **Integers all the way down.** 256 subtiles per tile, money in cents, machine progress
   in work-points, fluids in millilitres. There are no floats in sim state, so a refactor
-  that reorders `(a*b)+c` can't silently invalidate every stored replay.
-- **🧪 Golden replays on every push.** Twenty pinned worlds (a seed, a frozen command list,
+  that reorders `(a*b)+c` can't silently invalidate every stored replay. The whole world
+  folds into a single FNV-1a state hash.
+- **Golden replays on every push.** Twenty pinned worlds (a seed, a frozen command list,
   a tick count, and the state hash they must produce) replay headless in CI. The day
-  someone introduces non-determinism is the day the build goes red. One of those worlds
-  runs **272,000 ticks**.
-- **📜 Every mutation is a `Command` at a tick.** No debug buttons, no out-of-band writes.
-  Even the cheat console is a command, and it's counted and hashed (cheated saves stay off
-  the public leaderboard).
-- **🎨 The renderer is a one-way street.** Interpolated positions, particle jitter, and lamp
+  someone introduces non-determinism is the day the build goes red. The longest of them
+  runs **272,000 ticks**. The fixture rules live in
+  [`packages/sim/test/fixtures/README.md`](packages/sim/test/fixtures/README.md).
+- **Every mutation is a `Command` at a tick.** No debug buttons, no out-of-band writes.
+  Even the cheat console is a command, and it's counted and hashed.
+- **The renderer is a one-way street.** Interpolated positions, particle jitter, and lamp
   flicker live in `apps/web` and are never read back. Audio follows the sim's integer beat
   grid. `AudioContext.currentTime` never touches the simulation.
-- **🖼️ An AI art pipeline with a hard budget.** `yarn art` generates pixel art (Retro
-  Diffusion, with OpenAI as fallback), locks it to a master palette, and packs the atlas.
-  It **fails the build** if the belt-item atlas spills onto a second texture page, because
-  PixiJS's `ParticleContainer` needs one shared texture.
+- **Zero sound files.** Every effect is synthesized at runtime from oscillators and noise,
+  behind a sample-loader-shaped seam so real recordings can drop in later.
+- **A leaderboard you can only post to by playing.** Three Postgres migrations are the
+  entire backend. Saves sync under Row Level Security, and leaderboard rows are mirrored
+  out of your save by a database trigger: there are no client write grants at all, and a
+  save that ever ran a cheat keeps syncing but drops off the public board. See
+  [`supabase/README.md`](supabase/README.md).
+- **An AI art pipeline with a hard budget.** `yarn art` generates pixel art through Retro
+  Diffusion (or takes a hand-drawn PNG through the exact same path), locks it to a master
+  palette, and packs the atlas. It **fails the build** if the belt-item atlas spills onto a
+  second texture page, because PixiJS's `ParticleContainer` needs one shared texture.
 
 **Stack:** Next.js 16 (App Router, Turbopack) · React 19 · PixiJS 8 as a library, no game
-framework · TypeScript 6 · Vitest 4 · Supabase (auth + cloud saves) · yarn 1 workspaces ·
+framework · TypeScript 6 · Vitest 4 · Supabase (magic-link auth, Postgres, RLS) · IndexedDB
+via `idb` · sharp for the art pipeline · yarn 1 workspaces · deployed on Vercel ·
 ~118k lines of TypeScript across 92 test files.
 
-## Getting started
+## Running it locally
 
 > **Just want to play?** You don't need any of this. The live game is at
 > **[ageofpotatoes.com](https://ageofpotatoes.com)**. The steps below are for running your own copy.
 
+**Prerequisites:** Node 22+ (CI runs Node 24) and yarn 1.22 (classic).
+
 ```bash
+git clone https://github.com/melucasleite/age-of-potatoes.git
+cd age-of-potatoes
 yarn install
-yarn build
 ```
 
-Accounts are required, so the game needs a Supabase project. Copy
-`apps/web/.env.example` to `apps/web/.env.local` and fill in `NEXT_PUBLIC_SUPABASE_URL`
-and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Without them, `/play` shows a "cloud is not
-configured" screen instead of the game. The dashboard switches the code depends on are
-listed in [`supabase/README.md`](supabase/README.md).
+**Accounts are required, so the game needs a Supabase project.**
 
-Then run your dev server and open `/play`.
+1. Copy `apps/web/.env.example` to `apps/web/.env.local` and fill in
+   `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Without them,
+   `/play` shows a "cloud is not configured" screen instead of the game.
+2. Apply the migrations in `supabase/migrations` (for a fresh project:
+   `supabase link --project-ref <ref> && supabase db push`).
+3. Add `http://localhost:3000` to the project's redirect allow-list so magic links land
+   back in `/play`. The rest of the dashboard switches the code depends on are listed in
+   [`supabase/README.md`](supabase/README.md).
 
-| Command          | Does                                             |
-| ---------------- | ------------------------------------------------ |
-| `yarn typecheck` | `tsc --build` across the workspace               |
-| `yarn test`      | Vitest, including the golden determinism replays |
-| `yarn lint`      | The lint rules that enforce sim purity           |
-| `yarn format`    | Prettier (run it after any change)               |
-| `yarn art gen`   | Generate art (`--dry-run` first, it's free)      |
-| `yarn art pack`  | Post-process and pack the atlas                  |
+Then start the dev server and open [localhost:3000/play](http://localhost:3000/play):
 
-## Layout
+```bash
+yarn dev
+```
 
-| Path               | What lives there                                                          |
-| ------------------ | ------------------------------------------------------------------------- |
-| `packages/sim`     | The deterministic simulation. Pure TypeScript, zero dependencies, no DOM. |
-| `packages/art-cli` | Asset pipeline: AI generation → post-processing → atlas packing.          |
-| `apps/web`         | Next.js shell, PixiJS renderer, input, HUD, audio.                        |
-| `art/`             | Master palette, manifest, and committed generated originals.              |
-| `supabase/`        | Migrations and the dashboard checklist for accounts and cloud saves.      |
+| Command              | Does                                                              |
+| -------------------- | ----------------------------------------------------------------- |
+| `yarn dev`           | Next.js dev server on port 3000                                   |
+| `yarn build`         | Production build of `apps/web`                                    |
+| `yarn typecheck`     | `tsc --build` across the workspace, plus the sim's test project   |
+| `yarn test`          | Vitest, including the golden determinism replays                  |
+| `yarn lint`          | The lint rules that enforce sim purity                            |
+| `yarn format`        | Prettier (run it after any change)                                |
+| `yarn goldens:regen` | Re-hash the golden fixtures, only after an intentional sim change |
+| `yarn art gen`       | Generate art (`--dry-run` first, it's free)                       |
+| `yarn art pack`      | Post-process and pack the atlas                                   |
+| `yarn art review`    | Write a self-contained contact sheet of every sprite              |
+
+CI runs exactly `yarn lint`, `yarn typecheck`, `yarn build`, and `yarn test`, with no
+secrets. The atlas is committed, so the art pipeline (and its `RETRODIFFUSION_API_KEY`,
+documented in the root `.env.example`) is only needed if you're making new art.
+
+## Repository layout
+
+| Path                    | What lives there                                                          |
+| ----------------------- | ------------------------------------------------------------------------- |
+| `packages/sim`          | The deterministic simulation. Pure TypeScript, zero dependencies, no DOM. |
+| `packages/sim/test`     | Unit tests and the twenty golden replay fixtures.                         |
+| `packages/art-cli`      | Asset pipeline: AI generation → post-processing → atlas packing.          |
+| `apps/web/app`          | Next.js App Router shell: the splash page and `/play`.                    |
+| `apps/web/src/game`     | PixiJS renderer and input.                                                |
+| `apps/web/src/hud`      | Menus, panels, and the rest of the HUD.                                   |
+| `apps/web/src/audio`    | Synthesized sound bank and the beat-grid scheduler.                       |
+| `apps/web/src/storage`  | Local-first IndexedDB saves and the cloud handoff.                        |
+| `apps/web/src/supabase` | Auth, cloud sync, and profiles.                                           |
+| `apps/web/src/reports`  | Reports, personal bests, and the leaderboard panel.                       |
+| `art/`                  | Master palette, manifest, and committed generated originals.              |
+| `supabase/`             | Migrations and the dashboard checklist for accounts and cloud saves.      |
+| `docs/screenshots/`     | The images in this README.                                                |
 
 ## Contributing
 
