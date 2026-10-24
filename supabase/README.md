@@ -7,8 +7,8 @@ Three migrations. That is the whole backend.
 `apps/web/.env.local` (gitignored) holds its URL and publishable key.
 
 **The game requires it now** (work item 143, 2026-08-27): every player signs in — by email
-magic link only, since the GitHub and Google doors were removed on 2026-09-02; no anonymous
-path — and every world syncs to its own `saves` row
+magic link, or as an anonymous guest (restored 2026-10-23); the GitHub and Google doors were
+removed on 2026-09-02 — and every world syncs to its own `saves` row
 (`slot` = the local world id; the old single `'default'` slot is adopted by the client on
 first contact). An unconfigured build shows a "cloud is not configured" screen instead of
 the game. The read path is still local-first — IndexedDB boots the game and a mid-session
@@ -54,13 +54,12 @@ succeed, and lying to it requires lying to your own save file first.
 The 143 flip (accounts required, no anonymous play) needs these confirmed by hand. Each is
 a dashboard setting no client code can change:
 
-1. **Anonymous sign-ins: OFF** (Authentication → Sign In / Providers). The code no longer
-   calls `signInAnonymously()`, and leaving the switch on invites rows no account can ever
-   reach. **Flipping it off strands the rows already owned by anonymous users** — those
-   user ids can never sign in again, so their `saves`/`profiles` rows are dead weight.
-   The local copies of those worlds are unaffected and re-push under whatever account
-   signs in on that browser. Prune the orphans whenever convenient (Authentication →
-   Users → filter Anonymous → delete; `on delete cascade` removes their rows).
+1. **Anonymous sign-ins: ON** (Authentication → Sign In / Providers) — turned back on
+   2026-10-23 for the sign-in door's "play as a guest" button (`playAsGuest()` in
+   `apps/web/src/supabase/session.ts`). Turning it off breaks that button with an auth error.
+   Guests who sign out or clear site data leave orphaned users; prune them whenever
+   convenient (Authentication → Users → filter Anonymous → delete; `on delete cascade`
+   removes their rows).
 2. **GitHub and Google providers: OFF** (Authentication → Sign In / Providers). The
    client no longer calls `signInWithOAuth()` or `linkIdentity()` — the sign-in door and
    the account panel offer the magic link only — so a provider left on is a door the game

@@ -1,16 +1,16 @@
-// The session: a real, signed-in account, or nothing — and "nothing" means the door.
+// The session: a signed-in account (emailed or guest), or nothing — and "nothing" means the
+// door.
 //
-// THE ANONYMOUS ERA IS OVER (work item 143). This file used to mint an anonymous user the
-// moment the game booted so that sign-in was invisible and optional. Lucas's final-stretch
-// ruling reverses that: every player has an account, every save mirrors to the cloud, and a
-// missing session is not a shrug — it is the sign-in door (`hud/SignInDoor.tsx`), rendered
-// by `app/play/play-client.tsx` before the front door ever mounts.
+// Every player has a session and every save mirrors to the cloud; a missing session is the
+// sign-in door (`hud/SignInDoor.tsx`), rendered by `app/play/play-client.tsx` before the
+// front door ever mounts. The door has two ways through: a magic link, or `playAsGuest()`,
+// which mints an anonymous Supabase user on a deliberate click (Lucas, 2026-10-23: "allow
+// anon login ... like no email"). A guest is a real `user.id` with real `saves` rows; adding
+// an email later (`linkEmailToCurrentUser`) keeps that id, so the farm follows.
 //
-// What survives from the old design: `getSession()` NEVER REJECTS AND NEVER THROWS, every
-// deliberate account action answers `{ ok, reason }` rather than throwing, and nothing in
-// here ever manufactures a user. What is gone: `signInAnonymously`, the "guest" state, and
-// the upgrade-the-anonymous-user framing — linking is now plain account management for a
-// player who is already signed in.
+// `getSession()` NEVER REJECTS AND NEVER THROWS, every deliberate account action answers
+// `{ ok, reason }` rather than throwing, and nothing here manufactures a user unasked —
+// the guest user exists only because the player pressed the button.
 
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 
@@ -128,10 +128,30 @@ export async function sendMagicLink(email: string): Promise<AccountActionResult>
 }
 
 /**
+ * Sign in as a guest: an anonymous Supabase user, no email asked. Requires "Anonymous
+ * sign-ins" ON in the project's auth settings (see `supabase/README.md`).
+ *
+ * The guest lives in THIS browser's localStorage only — sign out or clear site data and that
+ * account is unreachable. Adding an email from the account panel is how a guest keeps it.
+ */
+export async function playAsGuest(): Promise<AccountActionResult> {
+  const client = getSupabaseClient();
+  if (client === null) return { ok: false, reason: 'Cloud accounts are not configured.' };
+
+  try {
+    const { error } = await client.auth.signInAnonymously();
+    if (error !== null) return { ok: false, reason: error.message };
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
  * Change the email on the CURRENT signed-in user, keeping the same `user.id`.
  *
- * Plain account management: with the magic link as the only door, this is how a player moves
- * the account to a new address. Supabase confirms the new address by email before it takes.
+ * For an emailed account this moves it to a new address; for a guest it ATTACHES the first
+ * email, turning the guest into a permanent account. Supabase confirms the new address by email before it takes.
  * Same `user.id`, same `saves` rows, no migration. Reports failure because it only ever runs
  * behind a deliberate button.
  */
