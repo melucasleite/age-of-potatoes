@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/screenshots/splash.png" alt="Age of Potatoes — build a factory to do it all while you nap" width="100%" />
+<a href="https://ageofpotatoes.com"><img src="docs/screenshots/splash.png" alt="Age of Potatoes — build a factory to do it all while you nap. Click to play." width="100%" /></a>
 
 # 🥔 Age of Potatoes
 
@@ -8,7 +8,12 @@
 
 _Factorio × Stardew Valley × RimWorld, in your browser._
 
-[**▶ Play it at ageofpotatoes.com**](https://ageofpotatoes.com)
+### [▶ Play now at ageofpotatoes.com](https://ageofpotatoes.com)
+
+Free, in your desktop browser, nothing to install. Sign in with an email link and your lot
+follows you everywhere.
+
+[![Play now](https://img.shields.io/badge/%E2%96%B6%20play%20now-ageofpotatoes.com-c9a13b?style=for-the-badge)](https://ageofpotatoes.com)
 
 [![CI](https://github.com/melucasleite/age-of-potatoes/actions/workflows/ci.yml/badge.svg)](https://github.com/melucasleite/age-of-potatoes/actions/workflows/ci.yml)
 ![TypeScript 6](https://img.shields.io/badge/TypeScript-6.0-3178c6?logo=typescript&logoColor=white)
@@ -19,7 +24,7 @@ _Factorio × Stardew Valley × RimWorld, in your browser._
 </div>
 
 <p align="center">
-  <img src="docs/screenshots/chip-line.gif" alt="The chip line running: Washer, belt, Slicer, Fryer, Seasoner, Bagger, with grabber arms passing potatoes down the line" width="100%" />
+  <a href="https://ageofpotatoes.com"><img src="docs/screenshots/chip-line.gif" alt="The chip line running: Washer, belt, Slicer, Fryer, Seasoner, Bagger, with grabber arms passing potatoes down the line" width="100%" /></a>
   <br />
   <sub><i>Washer → belt → Slicer → Fryer → Seasoner → Bagger. Five grabber arms, zero hands.
   The farmer is supervising.</i></sub>
@@ -163,6 +168,9 @@ framework · TypeScript 6 · Vitest 4 · Supabase (auth + cloud saves) · yarn 1
 
 ## Getting started
 
+> **Just want to play?** You don't need any of this. The live game is at
+> **[ageofpotatoes.com](https://ageofpotatoes.com)**. The steps below are for running your own copy.
+
 ```bash
 yarn install
 yarn build
@@ -204,6 +212,12 @@ And remember the design gate that outranks everything else in this repo: **a fre
 player should grin the moment the sprinkler waters for them, then immediately want a
 second one.** If a change makes the manual farming less pleasant, it's a regression, no
 matter what it optimizes.
+
+<div align="center">
+
+### 🥔 [Go make chips →](https://ageofpotatoes.com)
+
+</div>
 
 ## License
 
