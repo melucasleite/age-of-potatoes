@@ -205,6 +205,10 @@ player should grin the moment the sprinkler waters for them, then immediately wa
 second one.** If a change makes the manual farming less pleasant, it's a regression, no
 matter what it optimizes.
 
+## License
+
+[MIT](LICENSE) © 2026 Lucas Leite
+
 ---
 
 <sub>Screenshots were captured headlessly with Playwright against a production build. The

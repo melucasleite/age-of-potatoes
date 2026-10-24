@@ -6,7 +6,7 @@ build a chips-and-soda empire from a weedy roadside lot.
 The full design and technology plan lives at
 `~/.claude/plans/i-want-to-create-snuggly-pillow.md` (the filename is an unrelated
 auto-generated slug; the content is this game's design document). Work items live in the
-Obsidian vault at `~/obsidian-vault/Work/age-of-potatoes/`, filed by status.
+maintainer's Obsidian vault, outside this repo, filed by status.
 
 ## The rules that are load-bearing
 
