@@ -24,13 +24,14 @@ export interface AccountStatus {
   /** Supabase env vars are present and we are in a browser. False means "hide all of it". */
   configured: boolean;
   /**
-   * There is a signed-in account. Since work item 143 there is no anonymous state between
-   * "signed in" and "signed out" — a false here mid-game is a transient (the session just
-   * ended, and the sign-in door is about to take the whole screen).
+   * There is a signed-in account, emailed or guest. A false here mid-game is a transient (the
+   * session just ended, and the sign-in door is about to take the whole screen).
    */
   signedIn: boolean;
   /** The account email, when there is one. */
   email: string | null;
+  /** A guest (anonymous) account with no email yet — lost on sign-out unless one is added. */
+  isGuest: boolean;
   /** Linked identity providers — `['email']` since the OAuth doors were removed (2026-09-02). */
   providers: string[];
 }
@@ -39,6 +40,7 @@ const UNCONFIGURED: AccountStatus = {
   configured: false,
   signedIn: false,
   email: null,
+  isGuest: false,
   providers: [],
 };
 
@@ -58,7 +60,7 @@ export async function getAccountStatus(): Promise<AccountStatus> {
     const { data } = await client.auth.getSession();
     const session = data.session;
     if (session === null) {
-      return { configured: true, signedIn: false, email: null, providers: [] };
+      return { configured: true, signedIn: false, email: null, isGuest: false, providers: [] };
     }
 
     // `getUserIdentities` is a server round trip, so the providers list is the live truth —
@@ -74,10 +76,11 @@ export async function getAccountStatus(): Promise<AccountStatus> {
       configured: true,
       signedIn: true,
       email: session.user.email ?? null,
+      isGuest: session.user.is_anonymous === true,
       providers,
     };
   } catch {
-    return { configured: true, signedIn: false, email: null, providers: [] };
+    return { configured: true, signedIn: false, email: null, isGuest: false, providers: [] };
   }
 }
 

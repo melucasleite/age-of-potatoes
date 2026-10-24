@@ -4,12 +4,10 @@
 // than the farm.
 //
 // ────────────────────────────────────────────────────────────────────────────────────
-//  ACCOUNTS ARE REQUIRED NOW ([[143]]), WHICH MADE THIS PANEL SIMPLER. The player behind
-//  this window is always a real signed-in account — the sign-in door (`SignInDoor.tsx`)
-//  stands in front of the whole game, so the old guest state, the anonymous "upgrade"
-//  framing, and the play-without-an-account copy are all gone. So are the GitHub and
-//  Google buttons (Lucas's instruction, 2026-09-02): the magic link is the only door, here
-//  and on the sign-in screen. What remains is plain account management: the leaderboard
+//  THE PLAYER IS ALWAYS SIGNED IN — the sign-in door (`SignInDoor.tsx`) stands in front of
+//  the whole game — but may be a GUEST (anonymous, no email; Lucas, 2026-10-23). For a
+//  guest the email row becomes "add an email to keep this farm", since an anonymous user
+//  is unreachable once this browser forgets it. What remains is account management: the leaderboard
 //  name, changing the account's email (`updateUser` keeps the `user.id`, and therefore the
 //  saves), signing out, and — behind its own deliberate switch — signing this device into
 //  a DIFFERENT account, with its consequence written next to it. Reconciliation after such
@@ -191,6 +189,7 @@ function AccountBody() {
       ) : (
         <>
           <EmailSection
+            guest={status.isGuest}
             busy={busy}
             email={email}
             onEmail={setEmail}
@@ -203,6 +202,7 @@ function AccountBody() {
           />
 
           <SignOutSection
+            guest={status.isGuest}
             busy={busy}
             onSignOut={() => {
               void run(
@@ -246,7 +246,9 @@ function AccountBody() {
 function StatusLine({ status }: { status: AccountStatus }) {
   return (
     <div className={s.accountStatusLine}>
-      Signed in{status.email === null ? '.' : ` as ${status.email}`}
+      {status.isGuest
+        ? 'Playing as a guest.'
+        : `Signed in${status.email === null ? '.' : ` as ${status.email}`}`}
     </div>
   );
 }
@@ -298,11 +300,13 @@ function NameSection({
  * `user.id`, so the saves never notice; Supabase confirms the new address by email first.
  */
 function EmailSection({
+  guest,
   busy,
   email,
   onEmail,
   onEmailChange,
 }: {
+  guest: boolean;
   busy: boolean;
   email: string;
   onEmail: (value: string) => void;
@@ -311,15 +315,19 @@ function EmailSection({
   const emailReady = email.trim().includes('@');
   return (
     <div className={s.accountSection}>
-      <div className={s.accountSectionHead}>Change the account email</div>
-      <div className={s.accountNote}>
-        Same account, same farm — the magic link just starts landing in a different inbox.
+      <div className={s.accountSectionHead}>
+        {guest ? 'Add an email to keep this farm' : 'Change the account email'}
+      </div>
+      <div className={cx(s.accountNote, guest && s.accountNoteWarn)}>
+        {guest
+          ? 'A guest account lives in this browser only — signing out or clearing site data loses it. An email makes it permanent, same farm.'
+          : 'Same account, same farm — the magic link just starts landing in a different inbox.'}
       </div>
       <div className={s.accountRow}>
         <TextField
           value={email}
-          placeholder="new email address"
-          label="New email address"
+          placeholder={guest ? 'your email address' : 'new email address'}
+          label={guest ? 'Email address' : 'New email address'}
           onChange={onEmail}
           onEnter={emailReady && !busy ? onEmailChange : undefined}
         />
@@ -338,7 +346,15 @@ function EmailSection({
 }
 
 /** The door out. The sign-in door is what is on the other side of it now. */
-function SignOutSection({ busy, onSignOut }: { busy: boolean; onSignOut: () => void }) {
+function SignOutSection({
+  guest,
+  busy,
+  onSignOut,
+}: {
+  guest: boolean;
+  busy: boolean;
+  onSignOut: () => void;
+}) {
   return (
     <div className={s.accountSection}>
       <button
@@ -350,10 +366,17 @@ function SignOutSection({ busy, onSignOut }: { busy: boolean; onSignOut: () => v
       >
         sign out on this device
       </button>
-      <div className={s.accountNote}>
-        Signing out closes the game back to the sign-in screen. Your lots stay saved — here and in
-        the cloud — and are all waiting when you sign back in.
-      </div>
+      {guest ? (
+        <div className={cx(s.accountNote, s.accountNoteWarn)}>
+          A guest cannot sign back in. Signing out abandons this guest account; the lots stay in
+          this browser and sync under whichever account signs in next.
+        </div>
+      ) : (
+        <div className={s.accountNote}>
+          Signing out closes the game back to the sign-in screen. Your lots stay saved — here and in
+          the cloud — and are all waiting when you sign back in.
+        </div>
+      )}
     </div>
   );
 }

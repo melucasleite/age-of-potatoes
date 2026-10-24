@@ -2,15 +2,12 @@
 
 // The sign-in door ([[143]]): the screen before every other screen.
 //
-// NOBODY FARMS ANONYMOUSLY ANY MORE. `play-client.tsx` renders this whenever `/play` has no
-// session — first visit, after a sign-out, after a session expires — and nothing else
-// mounts until one exists. There is deliberately NO guest button, no "skip for now", no
-// local-only path: Lucas's final-stretch ruling is that every player has an account and
-// every save lives in the cloud, and a door with a side gate is not a door.
+// `play-client.tsx` renders this whenever `/play` has no session — first visit, after a
+// sign-out, after a session expires — and nothing else mounts until one exists.
 //
-// ONE DOOR, NOT THREE. The GitHub and Google OAuth buttons that used to sit above the email
-// field were removed on Lucas's instruction (2026-09-02); the magic link is the only way in,
-// and the only way an account gets created.
+// TWO WAYS THROUGH. The magic link, or "play as a guest" (Lucas, 2026-10-23: no email
+// required) — an anonymous Supabase user whose saves still sync to the cloud under its own
+// `user.id`. The GitHub and Google OAuth buttons stay removed (2026-09-02).
 //
 // THIS COMPONENT NEVER DISMISSES ITSELF. The magic link arrives by email and is clicked in
 // this browser; the session materialises via the return leg (`detectSessionInUrl` in
@@ -23,7 +20,7 @@
 
 import { useState } from 'react';
 
-import { type AccountActionResult, sendMagicLink } from '@/supabase/session';
+import { type AccountActionResult, playAsGuest, sendMagicLink } from '@/supabase/session';
 
 import raw from './FrontDoor.module.css';
 
@@ -83,6 +80,12 @@ export default function SignInDoor() {
     );
   };
 
+  const guest = (): void => {
+    if (busy) return;
+    // No done text worth reading: the session lands at once and the gate swaps this screen out.
+    void run(async () => playAsGuest(), 'Setting up your lot…');
+  };
+
   return (
     <div className={s.door}>
       <div className={s.inner}>
@@ -126,6 +129,12 @@ export default function SignInDoor() {
           </button>
         </div>
 
+        <p className={s.hint}>or skip the email entirely:</p>
+
+        <button type="button" className={s.secondary} disabled={busy} onClick={guest}>
+          play as a guest
+        </button>
+
         {notice !== null && (
           <p
             className={`${s.signinNotice} ${
@@ -139,7 +148,8 @@ export default function SignInDoor() {
         <p className={s.note}>
           An account is how your lots follow you: every one of them is backed up to the cloud and
           waiting on any browser you sign into. First time here? Sending yourself a link creates
-          your account on the way through.
+          your account on the way through. A guest farm lives in this browser only — add an email
+          from the account panel any time to keep it.
         </p>
       </div>
     </div>
