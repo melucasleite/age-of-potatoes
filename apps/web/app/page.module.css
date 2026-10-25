@@ -10,6 +10,7 @@
  */
 .play {
   display: inline-block;
+  margin-top: 0.5rem;
   padding: 20px 64px;
   border: 3px solid #b58b4d;
   background: #2b2119;
@@ -46,9 +47,155 @@
   line-height: 1.55;
   color: #f2e6cf;
 }
+
+/*
+ * The page itself. Moved out of an inline style because the scrim needs a phone override, and
+ * inline styles cannot hold a media query.
+ *
+ * `svh`, not `vh`: on a phone `100vh` is the height with the URL bar hidden, which pushes the
+ * credit line under the toolbar on first load.
+ */
+.splash {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100svh;
+  gap: 1.5rem;
+  padding: 0 16px 56px;
+  text-align: center;
+  background-color: #141019;
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(20, 16, 25, 0) 0,
+      rgba(20, 16, 25, 0) calc(50% - 320px),
+      rgba(20, 16, 25, 0.86) calc(50% - 170px),
+      rgba(20, 16, 25, 0.86) calc(50% + 170px),
+      rgba(20, 16, 25, 0) calc(50% + 320px),
+      rgba(20, 16, 25, 0) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(20, 16, 25, 0.62) 0%,
+      rgba(20, 16, 25, 0.24) 40%,
+      rgba(20, 16, 25, 0.72) 100%
+    ),
+    url('/art/frontdoor_farm.png');
+  background-repeat: no-repeat;
+  background-position:
+    center,
+    center,
+    center 45%;
+  background-size: cover, cover, cover;
+  /* A 384px source at full-screen scale. Nearest-neighbour or nothing. */
+  image-rendering: pixelated;
+}
+
+.wordmark {
+  margin: 0;
+  font-size: 3rem;
+  letter-spacing: 0.08em;
+}
+
+.kicker {
+  margin: 0;
+  font-size: 13px;
+  color: #c9b896;
+}
+
+/*
+ * The production chain. Sprites at 2x, an integer scale, so a 32px cell stays a crisp 64px.
+ * The arrows are CSS rather than another sprite: the atlas has no arrow, and drawing one for a
+ * page the game never shows is art-pipeline work for a glyph.
+ */
+.chain {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 0.5rem 0 0;
+  padding: 10px 14px;
+  list-style: none;
+  background: rgba(20, 16, 25, 0.72);
+  border: 2px solid #46392f;
+}
+.chain li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+  padding: 0 6px;
+  font-size: 12px;
+  color: #f2e6cf;
+}
+.chain li + li::before {
+  content: '›';
+  position: absolute;
+  margin: 22px 0 0 -10px;
+  color: #b58b4d;
+}
+.chain img {
+  width: 64px;
+  height: 64px;
+  image-rendering: pixelated;
+}
+
+.credit {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  font-size: 12px;
+  color: #a8977a;
+}
+.credit p {
+  margin: 0;
+}
+.credit a {
+  color: #f2e6cf;
+}
+
 @media (max-width: 480px) {
   .play {
     padding: 16px 40px;
     font-size: 20px;
+  }
+  .wordmark {
+    font-size: 2.5rem;
+  }
+  /*
+   * ON A PHONE THE COLUMN IS THE VIEWPORT. The desktop scrim's 340px dark core covered nearly
+   * all of a 390px screen and left the farm as two slivers at the edges. Here the horizontal
+   * scrim goes and the vertical one does the seating alone, a little darker where the text is,
+   * and the picture shifts left so the barn, not the empty path, is what fills the frame.
+   */
+  .splash {
+    gap: 1.1rem;
+    background-image:
+      linear-gradient(
+        180deg,
+        rgba(20, 16, 25, 0.78) 0%,
+        rgba(20, 16, 25, 0.5) 45%,
+        rgba(20, 16, 25, 0.85) 100%
+      ),
+      url('/art/frontdoor_farm.png');
+    background-position:
+      center,
+      12% 45%;
+    background-size: cover, cover;
+  }
+  .wordmark,
+  .hook,
+  .kicker {
+    text-shadow: 0 2px 0 #141019;
+  }
+  .chain img {
+    width: 48px;
+    height: 48px;
+  }
+  .chain li + li::before {
+    margin-top: 14px;
   }
 }

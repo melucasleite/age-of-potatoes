@@ -1,30 +1,18 @@
 <div align="center">
 
-<a href="https://ageofpotatoes.com"><img src="docs/screenshots/splash.png" alt="Age of Potatoes — build a factory to do it all while you nap. Click to play." width="100%" /></a>
+<a href="https://ageofpotatoes.com"><img src="docs/screenshots/splash.png" alt="The Age of Potatoes splash: plant potatoes by hand, then build a factory that fries and bags them while you nap. Click to play." width="100%" /></a>
 
-# 🥔 Age of Potatoes
+# Age of Potatoes
 
 **Build a chips-and-soda empire from a weedy roadside lot.**
 
 _Factorio × Stardew Valley × RimWorld, in your browser._
 
-[![Play now](https://img.shields.io/badge/%E2%96%B6%20play%20now-ageofpotatoes.com-c9a13b?style=for-the-badge)](https://ageofpotatoes.com)
+Free, in your desktop browser, nothing to install. Sign in with an email link and your lot
+follows you everywhere. **[Play it at ageofpotatoes.com](https://ageofpotatoes.com).**
 
 [![CI](https://github.com/melucasleite/age-of-potatoes/actions/workflows/ci.yml/badge.svg)](https://github.com/melucasleite/age-of-potatoes/actions/workflows/ci.yml)
-![TypeScript 6](https://img.shields.io/badge/TypeScript-6.0-3178c6?logo=typescript&logoColor=white)
-![Next.js 16](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs)
-![React 19](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
-![PixiJS 8](https://img.shields.io/badge/PixiJS-8-e72264)
-![Supabase](https://img.shields.io/badge/Supabase-auth%20%2B%20saves-3ecf8e?logo=supabase&logoColor=white)
-![Deterministic](https://img.shields.io/badge/sim-bit--exact%20deterministic-c9a13b)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-
-Free, in your desktop browser, nothing to install. Sign in with an email link and your lot
-follows you everywhere.
-
-**[▶ Play](https://ageofpotatoes.com)** · [The game](#from-dirt-to-dynasty) ·
-[Under the hood](#under-the-hood) · [Run it locally](#running-it-locally) ·
-[Layout](#repository-layout)
 
 </div>
 
@@ -47,7 +35,7 @@ Every system has a manual tier, an assisted tier, and an automated tier, and eve
 automation unlock retires a tool with a small ceremony. Your first watering can ends up
 bronzed on a plaque, engraved with the number of tiles you personally watered.
 
-> Rent's paid through the month. Make chips.
+_Rent's paid through the month. Make chips._
 
 ## From dirt to dynasty
 
@@ -55,13 +43,13 @@ bronzed on a plaque, engraved with the number of tiles you personally watered.
   <tr>
     <td width="50%" valign="top">
       <img src="docs/screenshots/day-one.png" alt="Day one: the farmer with a watering can among freshly planted sprouts" />
-      <p><b>Day one — by hand.</b> Press <kbd>3</kbd> and click the dirt to plant a russet,
+      <p><b>Day one, by hand.</b> Press <kbd>3</kbd> and click the dirt to plant a russet,
       <kbd>2</kbd> to water it. Harvesting a potato hands the seed back, so a field pays for
       itself. Everything you do here, you will one day pay a machine to do instead.</p>
     </td>
     <td width="50%" valign="top">
       <img src="docs/screenshots/soda-farm.png" alt="Day fifteen: a field of potatoes and sugar cane, irrigated by blue pipes, with a soda line running along the top" />
-      <p><b>Day fifteen — the plumbing arrives.</b> A pump on the pond, pipe running up to
+      <p><b>Day fifteen: the plumbing arrives.</b> A pump on the pond, pipe running up to
       the machines, and sugar cane that regrows from the cut stalk. Along the top, the soda
       line: cane pressed, boiled down, mixed, carbonated, and bottled.</p>
     </td>
@@ -70,7 +58,7 @@ bronzed on a plaque, engraved with the number of tiles you personally watered.
 
 **Nothing rots.** No crop wilts, no good spoils, and dirt is just dirt. It's a sandbox.
 Prices are stable and posted, and the pressure comes from upkeep instead: machines wear
-with use (never with time — an idle machine stays pristine), and a sloppy factory bleeds
+with use (never with time; an idle machine stays pristine), and a sloppy factory bleeds
 margin. A well-run one prints money and, because every machine's work-cycle sound is
 quantized to a shared beat grid, **it literally grooves.**
 
@@ -82,7 +70,7 @@ The research atlas lays the whole climb out in front of you, four lanes wide: Ag
 Hydraulics, Fabrication & Logistics, and Commerce & Operations. Each era is sealed by a
 **charter**: pay the fee _and_ prove you've earned it before the next one opens.
 
-| Era     | Name                  | The vibe                                      | You unlock                                                                   |
+| Era     | Name                  | The vibe                                      | You get                                                                      |
 | ------- | --------------------- | --------------------------------------------- | ---------------------------------------------------------------------------- |
 | **I**   | **The Spud Shack**    | _You, a can, and dirt_                        | Sugar cane, the Washer & Slicer, the Fryer, the Seasoner & Bagger            |
 | **II**  | **The Workshop**      | _Machines, and things that move on their own_ | Belts & grabber arms, pumps & pipes, irrigation, the soda line, bots, trucks |
@@ -141,8 +129,9 @@ click away.
 
 ## Under the hood
 
-This is a hobby game built with a level of engineering paranoia normally reserved for
-flight software. The highlights:
+I'm Lucas Leite, and I built this because it's fun and I like potatoes and factories. It is
+a hobby game built with a level of engineering paranoia normally reserved for flight
+software. The highlights:
 
 - **A bit-exact deterministic simulation.** `packages/sim` is pure TypeScript with zero
   dependencies and no DOM lib, running at a fixed 20 ticks per second. `Date`,
@@ -182,8 +171,8 @@ via `idb` · sharp for the art pipeline · yarn 1 workspaces · deployed on Verc
 
 ## Running it locally
 
-> **Just want to play?** You don't need any of this. The live game is at
-> **[ageofpotatoes.com](https://ageofpotatoes.com)**. The steps below are for running your own copy.
+**Just want to play?** You don't need any of this. The live game is at
+**[ageofpotatoes.com](https://ageofpotatoes.com)**. The steps below are for running your own copy.
 
 **Prerequisites:** Node 22+ (CI runs Node 24) and yarn 1.22 (classic).
 
@@ -257,7 +246,7 @@ matter what it optimizes.
 
 <div align="center">
 
-### 🥔 [Go make chips →](https://ageofpotatoes.com)
+### [Go make chips](https://ageofpotatoes.com)
 
 </div>
 
